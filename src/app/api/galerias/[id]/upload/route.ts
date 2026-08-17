@@ -8,7 +8,7 @@ import {
   bytesComprometidos,
   criarMediaPendente,
 } from "@/lib/medias";
-import { montarChave, urlDeUpload, armazenamentoConfigurado } from "@/lib/r2";
+import { montarChaves, urlDeUpload, armazenamentoConfigurado } from "@/lib/r2";
 
 /**
  * Prepara o envio de UM arquivo.
@@ -45,7 +45,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     );
   }
 
-  let corpo: { nome?: string; mime?: string; bytes?: number };
+  let corpo: {
+    nome?: string;
+    mime?: string;
+    bytes?: number;
+    comDerivadas?: boolean;
+    largura?: number;
+    altura?: number;
+  };
   try {
     corpo = await request.json();
   } catch {
@@ -88,17 +95,31 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     );
   }
 
-  const chave = montarChave(tenantId, galeriaId, nome);
+  const chaves = montarChaves(tenantId, galeriaId, nome);
+
+  // O navegador avisa se conseguiu gerar as derivadas. Quando não conseguir
+  // (vídeo, HEIC que ele não decodifica), gravamos null e a grade usa o original.
+  const comDerivadas = tipo === "foto" && corpo.comDerivadas === true;
+
   const media = await criarMediaPendente({
     galeriaId,
     tenantId,
-    chave,
+    chave: chaves.original,
+    chaveThumb: comDerivadas ? chaves.thumb : null,
+    chavePreview: comDerivadas ? chaves.preview : null,
     nomeOriginal: nome,
     tipo,
     mime,
     bytes,
+    largura: Number(corpo.largura) || null,
+    altura: Number(corpo.altura) || null,
   });
 
-  const url = await urlDeUpload(chave, mime);
-  return NextResponse.json({ mediaId: media!.id, url });
+  const [url, urlThumb, urlPreview] = await Promise.all([
+    urlDeUpload(chaves.original, mime),
+    comDerivadas ? urlDeUpload(chaves.thumb, "image/webp") : Promise.resolve(null),
+    comDerivadas ? urlDeUpload(chaves.preview, "image/webp") : Promise.resolve(null),
+  ]);
+
+  return NextResponse.json({ mediaId: media!.id, url, urlThumb, urlPreview });
 }

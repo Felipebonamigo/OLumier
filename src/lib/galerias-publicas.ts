@@ -42,11 +42,15 @@ export async function listarMediasPublicas(galeriaId: string) {
   return consultar<{
     id: string;
     chave: string;
+    chave_thumb: string | null;
+    chave_preview: string | null;
     nome_original: string;
     tipo: "foto" | "video";
     bytes: string;
+    largura: number | null;
+    altura: number | null;
   }>(
-    `select id, chave, nome_original, tipo, bytes
+    `select id, chave, chave_thumb, chave_preview, nome_original, tipo, bytes, largura, altura
        from medias
       where galeria_id = $1 and pronto
       order by ordem, criado_em`,

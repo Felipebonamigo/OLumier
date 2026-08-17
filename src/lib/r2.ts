@@ -37,10 +37,19 @@ function s3(): S3Client {
   return cliente;
 }
 
-/** Caminho do objeto: separa por tenant para o isolamento ser visível no bucket. */
-export function montarChave(tenantId: string, galeriaId: string, nomeArquivo: string) {
+/**
+ * Caminhos dos objetos: separados por tenant para o isolamento ser visível no
+ * bucket. Original e derivadas compartilham o mesmo uuid — dá para achar a
+ * família de um arquivo olhando o prefixo.
+ */
+export function montarChaves(tenantId: string, galeriaId: string, nomeArquivo: string) {
   const ext = nomeArquivo.includes(".") ? nomeArquivo.split(".").pop()!.toLowerCase() : "bin";
-  return `${tenantId}/${galeriaId}/${randomUUID()}.${ext}`;
+  const base = `${tenantId}/${galeriaId}/${randomUUID()}`;
+  return {
+    original: `${base}.${ext}`,
+    thumb: `${base}_thumb.webp`,
+    preview: `${base}_prev.webp`,
+  };
 }
 
 /**
@@ -80,4 +89,14 @@ export async function conferirObjeto(chave: string) {
 
 export async function apagarObjeto(chave: string) {
   await s3().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: chave }));
+}
+
+/** true se o objeto existe no bucket. */
+export async function objetoExiste(chave: string): Promise<boolean> {
+  try {
+    await s3().send(new HeadObjectCommand({ Bucket: BUCKET, Key: chave }));
+    return true;
+  } catch {
+    return false;
+  }
 }

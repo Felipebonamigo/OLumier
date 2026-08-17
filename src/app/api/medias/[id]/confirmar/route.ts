@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
-import { buscarMedia, confirmarMedia, apagarMedia } from "@/lib/medias";
-import { conferirObjeto, apagarObjeto } from "@/lib/r2";
+import { buscarMedia, confirmarMedia, apagarMedia, anularDerivadas } from "@/lib/medias";
+import { conferirObjeto, apagarObjeto, objetoExiste } from "@/lib/r2";
 
 /**
  * Confirma que o arquivo chegou ao bucket.
@@ -24,8 +24,23 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
   try {
     const { bytes } = await conferirObjeto(media.chave);
+
+    // Derivada que não chegou vira null: a grade cai no original em vez de
+    // mostrar imagem quebrada. Uma falha aqui NÃO invalida o upload.
+    const [temThumb, temPreview] = await Promise.all([
+      media.chave_thumb ? objetoExiste(media.chave_thumb) : Promise.resolve(true),
+      media.chave_preview ? objetoExiste(media.chave_preview) : Promise.resolve(true),
+    ]);
+    if (!temThumb || !temPreview) {
+      await anularDerivadas(mediaId, { thumb: !temThumb, preview: !temPreview });
+    }
+
     const atualizada = await confirmarMedia(mediaId, tenantId, bytes);
-    return NextResponse.json({ ok: true, bytes: Number(atualizada!.bytes) });
+    return NextResponse.json({
+      ok: true,
+      bytes: Number(atualizada!.bytes),
+      derivadas: temThumb && temPreview,
+    });
   } catch {
     // Não chegou ao bucket: some com a reserva para não travar a quota do cliente.
     await apagarMedia(mediaId, tenantId);
@@ -46,11 +61,12 @@ export async function DELETE(
   if (!removida) return NextResponse.json({ erro: "Arquivo não encontrado." }, { status: 404 });
 
   // O banco é a fonte da verdade: se o objeto já não existir no bucket, tudo bem.
-  try {
-    await apagarObjeto(removida.chave);
-  } catch {
-    /* objeto já não estava lá */
-  }
+  // Apaga a família inteira (original + derivadas) para não deixar lixo pago.
+  await Promise.all(
+    [removida.chave, removida.chave_thumb, removida.chave_preview]
+      .filter((c): c is string => Boolean(c))
+      .map((c) => apagarObjeto(c).catch(() => {})),
+  );
 
   return NextResponse.json({ ok: true });
 }

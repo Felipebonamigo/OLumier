@@ -69,16 +69,33 @@ export default async function GaleriaPublicaPage({ params }: Props) {
 
   const medias = await listarMediasPublicas(galeria.id);
 
-  // URLs assinadas de 6h: o objeto nunca fica público no armazenamento.
+  /*
+   * Três tamanhos por foto, cada um no seu lugar:
+   *   grade     → thumb (~50 KB) — é o que faz a galeria abrir rápido
+   *   lightbox  → preview (~400 KB) — nítido em tela cheia
+   *   download  → original — só quando o cliente pede de fato
+   * Derivada nula (vídeo, foto antiga) cai no original, sem quebrar nada.
+   */
+  const VALIDADE = 6 * 3600;
   const itens: ItemGaleria[] = await Promise.all(
-    medias.map(async (m) => ({
-      id: m.id,
-      nome: m.nome_original,
-      tipo: m.tipo,
-      bytes: Number(m.bytes),
-      url: await urlDeLeitura(m.chave, 6 * 3600),
-      urlDownload: await urlDeLeitura(m.chave, 6 * 3600, m.nome_original),
-    })),
+    medias.map(async (m) => {
+      const [thumb, preview, download] = await Promise.all([
+        urlDeLeitura(m.chave_thumb ?? m.chave, VALIDADE),
+        urlDeLeitura(m.chave_preview ?? m.chave, VALIDADE),
+        urlDeLeitura(m.chave, VALIDADE, m.nome_original),
+      ]);
+      return {
+        id: m.id,
+        nome: m.nome_original,
+        tipo: m.tipo,
+        bytes: Number(m.bytes),
+        largura: m.largura,
+        altura: m.altura,
+        url: thumb,
+        urlGrande: preview,
+        urlDownload: download,
+      };
+    }),
   );
 
   const cabecalhos = await headers();

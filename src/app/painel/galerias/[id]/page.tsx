@@ -33,13 +33,14 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
   const acessos = await resumoAcessos(galeria.id);
 
   // URLs assinadas com validade curta: o objeto no bucket nunca fica público.
+  // Aqui também usamos a miniatura — o painel de quem tem 600 fotos precisa abrir rápido.
   const exibidas: MediaExibida[] = await Promise.all(
     medias.map(async (m) => ({
       id: m.id,
       nome: m.nome_original,
       tipo: m.tipo,
       bytes: Number(m.bytes),
-      url: await urlDeLeitura(m.chave, 3600),
+      url: await urlDeLeitura(m.chave_thumb ?? m.chave, 3600),
     })),
   );
 

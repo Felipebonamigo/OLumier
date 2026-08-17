@@ -6,9 +6,15 @@ export interface ItemGaleria {
   id: string;
   nome: string;
   tipo: "foto" | "video";
+  /** miniatura da grade (~50 KB) */
   url: string;
+  /** versão do lightbox (~400 KB) */
+  urlGrande: string;
+  /** original, com nome de arquivo para salvar */
   urlDownload: string;
   bytes: number;
+  largura: number | null;
+  altura: number | null;
 }
 
 /**
@@ -53,6 +59,19 @@ export function GaleriaCliente({
       document.body.style.overflow = "";
     };
   }, [aberto, fechar, anterior, proximo]);
+
+  /**
+   * Pré-carrega a foto seguinte e a anterior enquanto o visitante olha a atual.
+   * Quem navega de seta em seta vê a próxima aparecer instantaneamente, em vez
+   * de esperar o download a cada clique.
+   */
+  useEffect(() => {
+    if (aberto === null || itens.length < 2) return;
+    for (const i of [(aberto + 1) % itens.length, (aberto - 1 + itens.length) % itens.length]) {
+      const vizinho = itens[i];
+      if (vizinho.tipo === "foto") new Image().src = vizinho.urlGrande;
+    }
+  }, [aberto, itens]);
 
   const registrar = (acao: string, mediaId?: string) => {
     // keepalive: o registro sobrevive à navegação que o download dispara.
@@ -139,7 +158,13 @@ export function GaleriaCliente({
                   <img
                     src={it.url}
                     alt={it.nome}
-                    loading="lazy"
+                    // As primeiras já aparecem na tela: carregar na hora evita o
+                    // "pisca cinza" de quem chega. O resto vem sob demanda.
+                    loading={i < 8 ? "eager" : "lazy"}
+                    fetchPriority={i < 4 ? "high" : "auto"}
+                    decoding="async"
+                    width={it.largura ?? undefined}
+                    height={it.altura ?? undefined}
                     className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
                   />
                 ) : (
@@ -198,13 +223,14 @@ export function GaleriaCliente({
             {item.tipo === "foto" ? (
               // eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária
               <img
-                src={item.url}
+                src={item.urlGrande}
                 alt={item.nome}
+                fetchPriority="high"
                 className="max-h-full max-w-full rounded-lg object-contain"
               />
             ) : (
               <video
-                src={item.url}
+                src={item.urlGrande}
                 controls
                 autoPlay
                 playsInline

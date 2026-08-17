@@ -6,10 +6,14 @@ export interface Media {
   galeria_id: string;
   tenant_id: string;
   chave: string;
+  chave_thumb: string | null;
+  chave_preview: string | null;
   nome_original: string;
   tipo: "foto" | "video";
   mime: string;
   bytes: string;
+  largura: number | null;
+  altura: number | null;
   ordem: number;
   pronto: boolean;
   criado_em: Date;
@@ -58,10 +62,14 @@ export async function criarMediaPendente(dados: {
   galeriaId: string;
   tenantId: string;
   chave: string;
+  chaveThumb?: string | null;
+  chavePreview?: string | null;
   nomeOriginal: string;
   tipo: "foto" | "video";
   mime: string;
   bytes: number;
+  largura?: number | null;
+  altura?: number | null;
 }) {
   const proxima = await consultarUm<{ n: number }>(
     "select coalesce(max(ordem), -1) + 1 as n from medias where galeria_id = $1",
@@ -69,20 +77,34 @@ export async function criarMediaPendente(dados: {
   );
 
   return consultarUm<Media>(
-    `insert into medias (galeria_id, tenant_id, chave, nome_original, tipo, mime, bytes, ordem, pronto)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, false)
+    `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
+                         nome_original, tipo, mime, bytes, largura, altura, ordem, pronto)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false)
      returning *`,
     [
       dados.galeriaId,
       dados.tenantId,
       dados.chave,
+      dados.chaveThumb ?? null,
+      dados.chavePreview ?? null,
       dados.nomeOriginal,
       dados.tipo,
       dados.mime,
       dados.bytes,
+      dados.largura ?? null,
+      dados.altura ?? null,
       proxima?.n ?? 0,
     ],
   );
+}
+
+/** Anula as chaves de derivadas que não chegaram ao bucket — a grade cai no original. */
+export async function anularDerivadas(mediaId: string, quais: { thumb?: boolean; preview?: boolean }) {
+  const partes: string[] = [];
+  if (quais.thumb) partes.push("chave_thumb = null");
+  if (quais.preview) partes.push("chave_preview = null");
+  if (partes.length === 0) return;
+  await consultarUm(`update medias set ${partes.join(", ")} where id = $1`, [mediaId]);
 }
 
 /** Marca como pronta usando o tamanho REAL vindo do bucket — nunca o que o navegador declarou. */

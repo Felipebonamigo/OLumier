@@ -2,8 +2,9 @@
 
 import { useCallback, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { gerarDerivadas } from "@/lib/derivadas-client";
 
-type Situacao = "esperando" | "enviando" | "pronto" | "erro";
+type Situacao = "esperando" | "preparando" | "enviando" | "pronto" | "erro";
 
 interface ItemFila {
   id: string;
@@ -20,7 +21,7 @@ interface ItemFila {
  * arquivo grande, barra de progresso não é enfeite: sem ela o usuário acha que
  * travou e recarrega a página no meio.
  */
-function enviarComProgresso(url: string, arquivo: File, aoProgredir: (pct: number) => void) {
+function enviarComProgresso(url: string, arquivo: Blob, aoProgredir: (pct: number) => void) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
@@ -80,19 +81,41 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
         const arquivo = arquivos[i];
         const item = novos[i];
         try {
-          atualizar(item.id, { situacao: "enviando" });
+          // 1) Miniaturas geradas aqui mesmo, antes de subir. É o que faz a
+          // galeria abrir rápido: a grade vai carregar ~50 KB por foto.
+          atualizar(item.id, { situacao: "preparando" });
+          const derivadas = await gerarDerivadas(arquivo);
 
+          atualizar(item.id, { situacao: "enviando" });
           const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nome: arquivo.name, mime: arquivo.type, bytes: arquivo.size }),
+            body: JSON.stringify({
+              nome: arquivo.name,
+              mime: arquivo.type,
+              bytes: arquivo.size,
+              comDerivadas: Boolean(derivadas),
+              largura: derivadas?.largura,
+              altura: derivadas?.altura,
+            }),
           });
           const dados = await preparo.json();
           if (!preparo.ok) throw new Error(dados.erro ?? "não foi possível preparar o envio");
 
+          // 2) O original manda no progresso — é ele que pesa.
           await enviarComProgresso(dados.url, arquivo, (pct) =>
             atualizar(item.id, { progresso: pct }),
           );
+
+          // 3) Derivadas depois, em paralelo (juntas somam ~5% do original).
+          // Se falharem, o upload continua válido: o servidor anula as chaves
+          // na confirmação e a grade cai no original.
+          if (derivadas && dados.urlThumb && dados.urlPreview) {
+            await Promise.allSettled([
+              enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}),
+              enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}),
+            ]);
+          }
 
           const confirmacao = await fetch(`/api/medias/${dados.mediaId}/confirmar`, {
             method: "POST",
@@ -119,7 +142,7 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
 
   const enviados = fila.filter((i) => i.situacao === "pronto").length;
   const comErro = fila.filter((i) => i.situacao === "erro");
-  const emAndamento = fila.some((i) => i.situacao === "enviando" || i.situacao === "esperando");
+  const emAndamento = fila.some((i) => i.situacao !== "pronto" && i.situacao !== "erro");
 
   return (
     <section className="mt-8">
@@ -187,6 +210,8 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
                       <span className="text-erro">{item.erro}</span>
                     ) : item.situacao === "pronto" ? (
                       <span className="text-ok">enviado</span>
+                    ) : item.situacao === "preparando" ? (
+                      <span>preparando…</span>
                     ) : (
                       `${item.progresso}% · ${formatar(item.bytes)}`
                     )}
