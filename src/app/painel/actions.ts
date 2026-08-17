@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { criarGaleria, apagarGaleria } from "@/lib/tenants";
+import { consultar } from "@/lib/db";
+import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -31,6 +33,49 @@ export async function criarGaleriaAction(
   const galeria = await criarGaleria({ tenantId, titulo, subtitulo, dataEvento });
   revalidatePath("/painel");
   redirect(`/painel/galerias/${galeria!.id}`);
+}
+
+/**
+ * Salva os controles de entrega. Recebe só o que mudou: a tela alterna uma coisa
+ * por vez, e campo ausente significa "não mexer" — não "apagar".
+ */
+export async function salvarPublicacaoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+
+  const campos: string[] = [];
+  const valores: unknown[] = [];
+
+  const publicada = form.get("publicada");
+  if (publicada !== null) {
+    valores.push(publicada === "1");
+    campos.push(`publicada = $${valores.length}`);
+  }
+
+  const permiteDownload = form.get("permite_download");
+  if (permiteDownload !== null) {
+    valores.push(permiteDownload === "1");
+    campos.push(`permite_download = $${valores.length}`);
+  }
+
+  if (form.get("mexeu_senha") === "1") {
+    const senha = String(form.get("senha") ?? "").trim();
+    // Campo vazio tira a senha; com texto, grava o hash.
+    valores.push(senha ? gerarHashSenhaGaleria(senha) : null);
+    campos.push(`senha_hash = $${valores.length}`);
+  }
+
+  if (campos.length === 0) return;
+
+  valores.push(galeriaId, tenantId);
+  await consultar(
+    `update galerias set ${campos.join(", ")}, atualizado_em = now()
+      where id = $${valores.length - 1} and tenant_id = $${valores.length}`,
+    valores,
+  );
+
+  revalidatePath(`/painel/galerias/${galeriaId}`);
 }
 
 export async function apagarGaleriaAction(form: FormData) {

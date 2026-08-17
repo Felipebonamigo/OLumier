@@ -6,8 +6,10 @@ import { consultarUm } from "@/lib/db";
 import { formatarBytes, type Galeria } from "@/lib/tenants";
 import { listarMedias } from "@/lib/medias";
 import { urlDeLeitura } from "@/lib/r2";
+import { resumoAcessos } from "@/lib/galerias-publicas";
 import { EnviarArquivos } from "@/components/enviar-arquivos";
 import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
+import { PublicarGaleria } from "@/components/publicar-galeria";
 import { apagarGaleriaAction } from "../../actions";
 
 export const metadata: Metadata = { title: "Galeria" };
@@ -19,13 +21,16 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
   if (!tenantId) redirect("/entrar");
 
   // O tenant_id no where é a autorização: id de outro estúdio simplesmente não existe aqui.
-  const galeria = await consultarUm<Galeria>(
-    "select * from galerias where id = $1 and tenant_id = $2",
+  const galeria = await consultarUm<Galeria & { estudio_slug: string }>(
+    `select g.*, t.slug as estudio_slug
+       from galerias g join tenants t on t.id = g.tenant_id
+      where g.id = $1 and g.tenant_id = $2`,
     [id, tenantId],
   );
   if (!galeria) notFound();
 
   const medias = await listarMedias(galeria.id);
+  const acessos = await resumoAcessos(galeria.id);
 
   // URLs assinadas com validade curta: o objeto no bucket nunca fica público.
   const exibidas: MediaExibida[] = await Promise.all(
@@ -78,7 +83,12 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
             valor: `${fotos} ${fotos === 1 ? "foto" : "fotos"}${videos ? ` · ${videos} vídeo${videos > 1 ? "s" : ""}` : ""}`,
           },
           { rotulo: "Espaço", valor: formatarBytes(galeria.bytes_total) },
-          { rotulo: "Endereço", valor: `/${galeria.slug}` },
+          {
+            rotulo: "Acessos do cliente",
+            valor: acessos
+              ? `${acessos.aberturas} ${acessos.aberturas === 1 ? "abertura" : "aberturas"} · ${acessos.downloads} download${acessos.downloads === 1 ? "" : "s"}`
+              : "—",
+          },
         ].map((item) => (
           <div key={item.rotulo} className="rounded-xl border border-linha bg-carbon px-4 py-3">
             <dt className="font-mono text-[10px] uppercase tracking-widest text-texto-faint">
@@ -88,6 +98,14 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
           </div>
         ))}
       </dl>
+
+      <PublicarGaleria
+        galeriaId={galeria.id}
+        caminho={`/g/${galeria.estudio_slug}/${galeria.slug}`}
+        publicada={galeria.publicada}
+        temSenha={Boolean(galeria.senha_hash)}
+        permiteDownload={galeria.permite_download}
+      />
 
       <EnviarArquivos galeriaId={galeria.id} />
       <GradeMedias medias={exibidas} />

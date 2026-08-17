@@ -38,6 +38,7 @@
   --color-alerta: var(--alerta);
   --color-erro: var(--erro);
   --font-sans: var(--font-sans-app), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: var(--font-serif-app), "Iowan Old Style", Palatino, Georgia, serif;
   --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
 }
 
