@@ -1,0 +1,109 @@
+import "server-only";
+import { consultar, consultarUm } from "./db";
+
+export interface Secao {
+  id: string;
+  galeria_id: string;
+  nome: string;
+  ordem: number;
+  total?: number;
+}
+
+/** Sugestões de capítulo — o fotógrafo cria os seis com um clique. */
+export const CAPITULOS_SUGERIDOS = [
+  "Making Of",
+  "Cerimônia",
+  "Decoração",
+  "Recepção",
+  "Festa",
+  "Ensaio",
+];
+
+export async function listarSecoes(galeriaId: string) {
+  return consultar<Secao>(
+    `select s.*, (select count(*)::int from medias m where m.secao_id = s.id and m.pronto) as total
+       from secoes s
+      where s.galeria_id = $1
+      order by s.ordem, s.criado_em`,
+    [galeriaId],
+  );
+}
+
+/** Confere que a galeria é do tenant antes de qualquer escrita em seção. */
+async function galeriaDoTenant(galeriaId: string, tenantId: string) {
+  return consultarUm<{ id: string }>(
+    "select id from galerias where id = $1 and tenant_id = $2",
+    [galeriaId, tenantId],
+  );
+}
+
+export async function criarSecao(galeriaId: string, tenantId: string, nome: string) {
+  if (!(await galeriaDoTenant(galeriaId, tenantId))) return null;
+  const limpo = nome.trim().slice(0, 60);
+  if (!limpo) return null;
+
+  const prox = await consultarUm<{ n: number }>(
+    "select coalesce(max(ordem), -1) + 1 as n from secoes where galeria_id = $1",
+    [galeriaId],
+  );
+  return consultarUm<Secao>(
+    "insert into secoes (galeria_id, nome, ordem) values ($1, $2, $3) returning *",
+    [galeriaId, limpo, prox?.n ?? 0],
+  );
+}
+
+export async function renomearSecao(secaoId: string, tenantId: string, nome: string) {
+  const limpo = nome.trim().slice(0, 60);
+  if (!limpo) return;
+  await consultar(
+    `update secoes s set nome = $1
+       from galerias g
+      where s.id = $2 and s.galeria_id = g.id and g.tenant_id = $3`,
+    [limpo, secaoId, tenantId],
+  );
+}
+
+/** Apaga o capítulo; as fotos ficam (viram "sem capítulo") pelo on delete set null. */
+export async function apagarSecao(secaoId: string, tenantId: string) {
+  await consultar(
+    `delete from secoes s
+      using galerias g
+      where s.id = $1 and s.galeria_id = g.id and g.tenant_id = $2`,
+    [secaoId, tenantId],
+  );
+}
+
+export async function moverSecao(secaoId: string, tenantId: string, direcao: "cima" | "baixo") {
+  const atual = await consultarUm<Secao>(
+    `select s.* from secoes s join galerias g on g.id = s.galeria_id
+      where s.id = $1 and g.tenant_id = $2`,
+    [secaoId, tenantId],
+  );
+  if (!atual) return;
+
+  // Troca de posição com a vizinha na direção pedida.
+  const vizinha = await consultarUm<Secao>(
+    `select * from secoes
+      where galeria_id = $1 and ordem ${direcao === "cima" ? "<" : ">"} $2
+      order by ordem ${direcao === "cima" ? "desc" : "asc"} limit 1`,
+    [atual.galeria_id, atual.ordem],
+  );
+  if (!vizinha) return;
+
+  await consultar("update secoes set ordem = $1 where id = $2", [vizinha.ordem, atual.id]);
+  await consultar("update secoes set ordem = $1 where id = $2", [atual.ordem, vizinha.id]);
+}
+
+/** Move fotos para um capítulo (ou para fora dele, com secaoId null). */
+export async function moverMediasParaSecao(
+  mediaIds: string[],
+  secaoId: string | null,
+  tenantId: string,
+) {
+  if (mediaIds.length === 0) return;
+  await consultar(
+    `update medias set secao_id = $1
+      where id = any($2::uuid[]) and tenant_id = $3`,
+    [secaoId, mediaIds, tenantId],
+  );
+}

@@ -19,6 +19,13 @@ export interface ItemGaleria {
   altura: number | null;
 }
 
+export interface CapituloGaleria {
+  id: string;
+  nome: string;
+  /** índices em `itens` — o lightbox continua percorrendo a galeria inteira */
+  indices: number[];
+}
+
 /**
  * A galeria que o cliente final vê. Fotos em grade, lightbox com teclado,
  * vídeo com player, download individual e em lote.
@@ -28,11 +35,13 @@ export function GaleriaCliente({
   permiteDownload,
   galeriaId,
   aparencia,
+  capitulos,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
   galeriaId: string;
   aparencia: Aparencia;
+  capitulos: CapituloGaleria[];
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
   const [baixandoTudo, setBaixandoTudo] = useState(false);
@@ -145,16 +154,53 @@ export function GaleriaCliente({
         </div>
       )}
 
-      <div id="fotos" className="mt-8 scroll-mt-4">
-        <GaleriaGrade
-          aparencia={aparencia}
-          quantidade={itens.length}
-          proporcao={(i) => {
-            const it = itens[i];
-            return it.largura && it.altura ? it.largura / it.altura : 4 / 5;
+      {/* Menu de capítulos — o cliente pula direto ao momento que quer ver. */}
+      {capitulos.length > 1 && (
+        <nav
+          className="sticky top-0 z-20 -mx-4 mt-8 overflow-x-auto px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
+          style={{
+            background: "color-mix(in srgb, var(--g-fundo) 88%, transparent)",
+            borderBottom: "1px solid var(--g-linha)",
           }}
-          render={(i, estilo, classe) => {
-            const it = itens[i];
+          aria-label="Capítulos da galeria"
+        >
+          <ul className="flex justify-center gap-1 whitespace-nowrap">
+            {capitulos.map((c) => (
+              <li key={c.id}>
+                <a
+                  href={`#cap-${c.id}`}
+                  className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
+                  style={{ color: "var(--g-suave)" }}
+                >
+                  {c.nome}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      <div id="fotos" className="mt-8 scroll-mt-4">
+        {capitulos.map((cap) => (
+          <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
+            {cap.nome && (
+              <h2
+                className="mb-4 text-center font-mono text-[11px] uppercase tracking-[0.3em]"
+                style={{ color: "var(--g-destaque)" }}
+              >
+                {cap.nome}
+              </h2>
+            )}
+            <GaleriaGrade
+              aparencia={aparencia}
+              quantidade={cap.indices.length}
+              proporcao={(k) => {
+                const it = itens[cap.indices[k]];
+                return it.largura && it.altura ? it.largura / it.altura : 4 / 5;
+              }}
+              render={(k, estilo, classe) => {
+                const i = cap.indices[k];
+                const it = itens[i];
             // "linhas" e "editorial" definem a altura; nas outras a proporção
             // da própria foto manda, para o mural não ficar todo igual.
             const alturaPeloLayout =
@@ -208,9 +254,11 @@ export function GaleriaCliente({
                   </span>
                 )}
               </button>
-            );
-          }}
-        />
+                );
+              }}
+            />
+          </section>
+        ))}
       </div>
 
       {item && (

@@ -14,6 +14,7 @@ export interface Media {
   bytes: string;
   largura: number | null;
   altura: number | null;
+  secao_id: string | null;
   ordem: number;
   pronto: boolean;
   criado_em: Date;

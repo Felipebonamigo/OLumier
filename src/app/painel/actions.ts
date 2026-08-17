@@ -7,6 +7,14 @@ import { criarGaleria, apagarGaleria } from "@/lib/tenants";
 import { consultar } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { lerAparencia } from "@/config/aparencia";
+import {
+  CAPITULOS_SUGERIDOS,
+  apagarSecao,
+  criarSecao,
+  moverMediasParaSecao,
+  moverSecao,
+  renomearSecao,
+} from "@/lib/secoes";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -120,6 +128,56 @@ export async function definirCapaAction(form: FormData) {
   );
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+// --- capítulos --------------------------------------------------------------
+
+export async function criarSecaoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const nome = String(form.get("nome") ?? "");
+  await criarSecao(galeriaId, tenantId, nome);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/** Cria os capítulos sugeridos de uma vez — a estrutura típica de um casamento. */
+export async function criarCapitulosSugeridosAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  for (const nome of CAPITULOS_SUGERIDOS) {
+    await criarSecao(galeriaId, tenantId, nome);
+  }
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+export async function renomearSecaoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  await renomearSecao(String(form.get("secao_id") ?? ""), tenantId, String(form.get("nome") ?? ""));
+  revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+export async function apagarSecaoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  await apagarSecao(String(form.get("secao_id") ?? ""), tenantId);
+  revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+export async function moverSecaoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const direcao = form.get("direcao") === "cima" ? "cima" : "baixo";
+  await moverSecao(String(form.get("secao_id") ?? ""), tenantId, direcao);
+  revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+export async function moverMediasAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const ids = String(form.get("media_ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const destino = String(form.get("secao_id") ?? "");
+  await moverMediasParaSecao(ids, destino || null, tenantId);
+  revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
 }
 
 export async function apagarGaleriaAction(form: FormData) {

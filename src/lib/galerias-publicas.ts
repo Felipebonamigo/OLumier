@@ -51,11 +51,19 @@ export async function listarMediasPublicas(galeriaId: string) {
     bytes: string;
     largura: number | null;
     altura: number | null;
+    secao_id: string | null;
   }>(
-    `select id, chave, chave_thumb, chave_preview, nome_original, tipo, bytes, largura, altura
-       from medias
-      where galeria_id = $1 and pronto
-      order by ordem, criado_em`,
+    /*
+     * A ordem já sai agrupada por capítulo (seções pela ordem definida pelo
+     * fotógrafo, fotos soltas primeiro). Assim os índices ficam contíguos por
+     * capítulo e o lightbox anda na mesma ordem que a página mostra.
+     */
+    `select m.id, m.chave, m.chave_thumb, m.chave_preview, m.nome_original,
+            m.tipo, m.bytes, m.largura, m.altura, m.secao_id
+       from medias m
+       left join secoes s on s.id = m.secao_id
+      where m.galeria_id = $1 and m.pronto
+      order by (m.secao_id is not null), s.ordem nulls first, m.ordem, m.criado_em`,
     [galeriaId],
   );
 }

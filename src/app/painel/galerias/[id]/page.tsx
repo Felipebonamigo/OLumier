@@ -11,6 +11,8 @@ import { EnviarArquivos } from "@/components/enviar-arquivos";
 import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
 import { PublicarGaleria } from "@/components/publicar-galeria";
 import { EditorAparencia } from "@/components/editor-aparencia";
+import { EditorSecoes } from "@/components/editor-secoes";
+import { listarSecoes } from "@/lib/secoes";
 import { lerAparencia } from "@/config/aparencia";
 import { apagarGaleriaAction } from "../../actions";
 
@@ -33,6 +35,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
 
   const medias = await listarMedias(galeria.id);
   const acessos = await resumoAcessos(galeria.id);
+  const secoes = await listarSecoes(galeria.id);
 
   // URLs assinadas com validade curta: o objeto no bucket nunca fica público.
   // Aqui também usamos a miniatura — o painel de quem tem 600 fotos precisa abrir rápido.
@@ -42,6 +45,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       nome: m.nome_original,
       tipo: m.tipo,
       bytes: Number(m.bytes),
+      secaoId: m.secao_id,
       url: await urlDeLeitura(m.chave_thumb ?? m.chave, 3600),
     })),
   );
@@ -116,8 +120,19 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         inicial={lerAparencia(galeria.aparencia)}
       />
 
+      <EditorSecoes
+        galeriaId={galeria.id}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
+        semCapitulo={medias.filter((m) => !m.secao_id).length}
+      />
+
       <EnviarArquivos galeriaId={galeria.id} />
-      <GradeMedias medias={exibidas} galeriaId={galeria.id} capaId={galeria.capa_media_id} />
+      <GradeMedias
+        medias={exibidas}
+        galeriaId={galeria.id}
+        capaId={galeria.capa_media_id}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
+      />
 
       <section className="mt-12 border-t border-linha pt-6">
         <h2 className="text-sm font-semibold">Apagar galeria</h2>

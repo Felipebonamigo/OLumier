@@ -9,7 +9,12 @@ import {
   temAcessoLiberado,
   registrarAcesso,
 } from "@/lib/galerias-publicas";
-import { GaleriaCliente, type ItemGaleria } from "@/components/galeria-cliente";
+import { listarSecoes } from "@/lib/secoes";
+import {
+  GaleriaCliente,
+  type ItemGaleria,
+  type CapituloGaleria,
+} from "@/components/galeria-cliente";
 import { GaleriaCapa } from "@/components/galeria-capa";
 import { lerAparencia, TEMAS } from "@/config/aparencia";
 import { PortaoDeSenha } from "./portao";
@@ -118,6 +123,33 @@ export default async function GaleriaPublicaPage({ params }: Props) {
 
   const aparencia = lerAparencia(galeria.aparencia);
 
+  /*
+   * Agrupa as fotos em capítulos preservando os índices do array original: o
+   * lightbox continua percorrendo a galeria INTEIRA de ponta a ponta, mesmo
+   * quem abriu uma foto no meio da "Festa" chega no "Making Of" pela seta.
+   */
+  const secoes = await listarSecoes(galeria.id);
+  const indicePorId = new Map(medias.map((m, i) => [m.id, i]));
+
+  const semCapitulo = medias
+    .filter((m) => !m.secao_id)
+    .map((m) => indicePorId.get(m.id)!)
+    .filter((i) => i !== undefined);
+
+  const capitulos: CapituloGaleria[] = [];
+  // Fotos soltas abrem a galeria, sem título — não inventamos um "Diversos".
+  if (semCapitulo.length > 0) {
+    capitulos.push({ id: "sem-capitulo", nome: "", indices: semCapitulo });
+  }
+  for (const s of secoes) {
+    const indices = medias
+      .filter((m) => m.secao_id === s.id)
+      .map((m) => indicePorId.get(m.id)!)
+      .filter((i) => i !== undefined);
+    // Capítulo vazio não vira seção em branco na página do cliente.
+    if (indices.length > 0) capitulos.push({ id: s.id, nome: s.nome, indices });
+  }
+
   // Capa escolhida pelo fotógrafo; sem escolha, a primeira foto da galeria.
   const capa =
     medias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
@@ -157,6 +189,7 @@ export default async function GaleriaPublicaPage({ params }: Props) {
             permiteDownload={galeria.permite_download}
             galeriaId={galeria.id}
             aparencia={aparencia}
+            capitulos={capitulos}
           />
         )}
       </div>
