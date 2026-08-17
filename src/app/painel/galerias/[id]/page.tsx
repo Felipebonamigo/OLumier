@@ -4,6 +4,10 @@ import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { consultarUm } from "@/lib/db";
 import { formatarBytes, type Galeria } from "@/lib/tenants";
+import { listarMedias } from "@/lib/medias";
+import { urlDeLeitura } from "@/lib/r2";
+import { EnviarArquivos } from "@/components/enviar-arquivos";
+import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
 import { apagarGaleriaAction } from "../../actions";
 
 export const metadata: Metadata = { title: "Galeria" };
@@ -21,6 +25,19 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
   );
   if (!galeria) notFound();
 
+  const medias = await listarMedias(galeria.id);
+
+  // URLs assinadas com validade curta: o objeto no bucket nunca fica público.
+  const exibidas: MediaExibida[] = await Promise.all(
+    medias.map(async (m) => ({
+      id: m.id,
+      nome: m.nome_original,
+      tipo: m.tipo,
+      bytes: Number(m.bytes),
+      url: await urlDeLeitura(m.chave, 3600),
+    })),
+  );
+
   const dataEvento = galeria.data_evento
     ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -29,8 +46,11 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       })
     : null;
 
+  const fotos = medias.filter((m) => m.tipo === "foto").length;
+  const videos = medias.length - fotos;
+
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="mx-auto max-w-4xl px-6 py-10">
       <Link href="/painel" className="text-sm text-texto-soft hover:text-texto">
         ← Galerias
       </Link>
@@ -44,9 +64,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         </div>
         <span
           className={`rounded-full border px-3 py-1 text-xs ${
-            galeria.publicada
-              ? "border-ok/40 bg-ok/10 text-ok"
-              : "border-linha text-texto-faint"
+            galeria.publicada ? "border-ok/40 bg-ok/10 text-ok" : "border-linha text-texto-faint"
           }`}
         >
           {galeria.publicada ? "publicada" : "rascunho"}
@@ -55,7 +73,10 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
 
       <dl className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
-          { rotulo: "Arquivos", valor: "0" },
+          {
+            rotulo: "Arquivos",
+            valor: `${fotos} ${fotos === 1 ? "foto" : "fotos"}${videos ? ` · ${videos} vídeo${videos > 1 ? "s" : ""}` : ""}`,
+          },
           { rotulo: "Espaço", valor: formatarBytes(galeria.bytes_total) },
           { rotulo: "Endereço", valor: `/${galeria.slug}` },
         ].map((item) => (
@@ -68,15 +89,10 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         ))}
       </dl>
 
-      <section className="mt-8 rounded-xl border border-dashed border-linha-forte bg-carbon px-6 py-12 text-center">
-        <p className="text-base font-medium">O envio de fotos e vídeos entra aqui</p>
-        <p className="mx-auto mt-2 max-w-[46ch] text-sm text-texto-soft">
-          É o próximo passo: os arquivos vão direto do seu navegador para o armazenamento, sem
-          passar pelo servidor — por isso aguentam um filme inteiro sem travar.
-        </p>
-      </section>
+      <EnviarArquivos galeriaId={galeria.id} />
+      <GradeMedias medias={exibidas} />
 
-      <section className="mt-10 border-t border-linha pt-6">
+      <section className="mt-12 border-t border-linha pt-6">
         <h2 className="text-sm font-semibold">Apagar galeria</h2>
         <p className="mt-1 max-w-[52ch] text-xs text-texto-faint">
           Remove a galeria e todos os arquivos dela. Não dá para desfazer.
