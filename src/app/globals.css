@@ -1,26 +1,76 @@
 @import "tailwindcss";
 
+/*
+  Fotônio — tokens visuais.
+  A paleta nasce do conceito: fóton = partícula da luz. Fundo escuro para a foto
+  brilhar (é a matéria-prima do produto), âmbar como único acento.
+  Os valores espelham src/config/marca.ts — mudar lá e aqui juntos.
+*/
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --void: #0d0b09;
+  --carbon: #16120e;
+  --carbon-2: #1d1813;
+  --luz: #f0c268;
+  --luz-alta: #ffe9bf;
+  --texto: #ece4d6;
+  --texto-soft: #b3a58f;
+  --texto-faint: #7d715f;
+  --linha: rgba(240, 221, 190, 0.14);
+  --linha-forte: rgba(240, 221, 190, 0.28);
+  --ok: #6fbf73;
+  --alerta: #e0a33e;
+  --erro: #e06c6c;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-void: var(--void);
+  --color-carbon: var(--carbon);
+  --color-carbon-2: var(--carbon-2);
+  --color-luz: var(--luz);
+  --color-luz-alta: var(--luz-alta);
+  --color-texto: var(--texto);
+  --color-texto-soft: var(--texto-soft);
+  --color-texto-faint: var(--texto-faint);
+  --color-linha: var(--linha);
+  --color-linha-forte: var(--linha-forte);
+  --color-ok: var(--ok);
+  --color-alerta: var(--alerta);
+  --color-erro: var(--erro);
+  --font-sans: var(--font-sans-app), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* A marca é escura por definição — não seguimos o tema do sistema. */
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--void);
+  color: var(--texto);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+::selection {
+  background: color-mix(in srgb, var(--luz) 28%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--luz);
+  outline-offset: 2px;
 }
