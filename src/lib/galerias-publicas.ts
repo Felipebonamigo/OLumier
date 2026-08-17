@@ -18,6 +18,8 @@ export interface GaleriaPublica {
   senha_hash: string | null;
   permite_download: boolean;
   expira_em: Date | null;
+  aparencia: unknown;
+  capa_media_id: string | null;
   // do estúdio dono — a marca que aparece é a dele, não a nossa
   estudio_nome: string;
   estudio_slug: string;
@@ -28,7 +30,7 @@ export interface GaleriaPublica {
 export async function buscarGaleriaPublica(estudioSlug: string, galeriaSlug: string) {
   return consultarUm<GaleriaPublica>(
     `select g.id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
-            g.permite_download, g.expira_em,
+            g.permite_download, g.expira_em, g.aparencia, g.capa_media_id,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug,
             t.logo_url as estudio_logo, t.cor_destaque as estudio_cor
        from galerias g

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { GaleriaGrade } from "./galeria-grade";
+import type { Aparencia } from "@/config/aparencia";
 
 export interface ItemGaleria {
   id: string;
@@ -25,10 +27,12 @@ export function GaleriaCliente({
   itens,
   permiteDownload,
   galeriaId,
+  aparencia,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
   galeriaId: string;
+  aparencia: Aparencia;
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
   const [baixandoTudo, setBaixandoTudo] = useState(false);
@@ -128,31 +132,45 @@ export function GaleriaCliente({
             type="button"
             onClick={baixarTudo}
             disabled={baixandoTudo}
-            className="rounded-lg bg-luz px-5 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta disabled:opacity-60"
+            className="rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85 disabled:opacity-60"
+            style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
           >
             {baixandoTudo
               ? `Baixando ${progressoLote} de ${itens.length}…`
               : `↓ Baixar tudo (${itens.length})`}
           </button>
-          <span className="text-xs text-texto-faint">
+          <span className="text-xs" style={{ color: "var(--g-tenue)" }}>
             sem limite de downloads — baixe quantas vezes quiser
           </span>
         </div>
       )}
 
-      <ul className="mt-8 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-        {itens.map((it, i) => (
-          <li key={it.id}>
-            <button
-              type="button"
-              onClick={() => {
-                setAberto(i);
-                registrar(it.tipo === "video" ? "assistiu" : "abriu", it.id);
-              }}
-              className="group relative block w-full overflow-hidden rounded-lg border border-linha bg-carbon-2"
-              aria-label={`Abrir ${it.nome}`}
-            >
-              <span className="block aspect-[4/5]">
+      <div id="fotos" className="mt-8 scroll-mt-4">
+        <GaleriaGrade
+          aparencia={aparencia}
+          quantidade={itens.length}
+          proporcao={(i) => {
+            const it = itens[i];
+            return it.largura && it.altura ? it.largura / it.altura : 4 / 5;
+          }}
+          render={(i, estilo, classe) => {
+            const it = itens[i];
+            // "linhas" e "editorial" definem a altura; nas outras a proporção
+            // da própria foto manda, para o mural não ficar todo igual.
+            const alturaPeloLayout =
+              aparencia.grade === "linhas" || aparencia.grade === "editorial";
+            return (
+              <button
+                key={it.id}
+                type="button"
+                onClick={() => {
+                  setAberto(i);
+                  registrar(it.tipo === "video" ? "assistiu" : "abriu", it.id);
+                }}
+                style={estilo}
+                className={`group relative overflow-hidden rounded-md ${classe}`}
+                aria-label={`Abrir ${it.nome}`}
+              >
                 {it.tipo === "foto" ? (
                   // eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária
                   <img
@@ -165,20 +183,35 @@ export function GaleriaCliente({
                     decoding="async"
                     width={it.largura ?? undefined}
                     height={it.altura ?? undefined}
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                    className={`transition duration-500 group-hover:scale-[1.03] ${
+                      alturaPeloLayout
+                        ? "h-full w-full object-cover"
+                        : aparencia.grade === "quadrada"
+                          ? "h-full w-full object-cover"
+                          : "block h-auto w-full"
+                    }`}
                   />
                 ) : (
-                  <span className="grid h-full w-full place-items-center bg-gradient-to-br from-carbon-2 to-void">
-                    <span className="grid h-14 w-14 place-items-center rounded-full border border-luz-alta/70">
-                      <span className="ml-1 border-y-[9px] border-l-[15px] border-y-transparent border-l-luz-alta" />
+                  <span
+                    className="grid h-full min-h-[180px] w-full place-items-center"
+                    style={{ background: "var(--g-superficie)" }}
+                  >
+                    <span
+                      className="grid h-14 w-14 place-items-center rounded-full"
+                      style={{ border: "1px solid var(--g-destaque)" }}
+                    >
+                      <span
+                        className="ml-1 border-y-[9px] border-y-transparent border-l-[15px]"
+                        style={{ borderLeftColor: "var(--g-destaque)" }}
+                      />
                     </span>
                   </span>
                 )}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+              </button>
+            );
+          }}
+        />
+      </div>
 
       {item && (
         <div

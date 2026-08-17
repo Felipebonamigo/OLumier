@@ -6,6 +6,7 @@ import { sessaoAtual } from "@/lib/auth";
 import { criarGaleria, apagarGaleria } from "@/lib/tenants";
 import { consultar } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
+import { lerAparencia } from "@/config/aparencia";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -73,6 +74,49 @@ export async function salvarPublicacaoAction(form: FormData) {
     `update galerias set ${campos.join(", ")}, atualizado_em = now()
       where id = $${valores.length - 1} and tenant_id = $${valores.length}`,
     valores,
+  );
+
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/** Salva a aparência. Valida antes de gravar — o JSON vem do navegador. */
+export async function salvarAparenciaAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(String(form.get("aparencia") ?? "{}"));
+  } catch {
+    return;
+  }
+
+  // lerAparencia descarta qualquer chave desconhecida ou valor inválido:
+  // o que é gravado é sempre um objeto que o renderizador sabe desenhar.
+  const limpa = lerAparencia(bruto);
+
+  await consultar(
+    `update galerias set aparencia = $1, atualizado_em = now()
+      where id = $2 and tenant_id = $3`,
+    [JSON.stringify(limpa), galeriaId, tenantId],
+  );
+
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/** Define qual foto abre a galeria. */
+export async function definirCapaAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const mediaId = String(form.get("media_id") ?? "");
+  if (!galeriaId || !mediaId) return;
+
+  await consultar(
+    `update galerias g set capa_media_id = $1, atualizado_em = now()
+      where g.id = $2 and g.tenant_id = $3
+        and exists (select 1 from medias m where m.id = $1 and m.galeria_id = g.id)`,
+    [mediaId, galeriaId, tenantId],
   );
 
   revalidatePath(`/painel/galerias/${galeriaId}`);

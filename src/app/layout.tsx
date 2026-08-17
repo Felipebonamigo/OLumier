@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Montserrat, Cormorant_Garamond } from "next/font/google";
+import { Montserrat, Cormorant_Garamond, Great_Vibes } from "next/font/google";
 import { marca } from "@/config/marca";
 import "./globals.css";
 
@@ -18,6 +18,14 @@ const cormorant = Cormorant_Garamond({
   display: "swap",
 });
 
+// Usada só na tipografia "manuscrita" das galerias — clima de convite de casamento.
+const greatVibes = Great_Vibes({
+  variable: "--font-script-app",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: {
     default: `${marca.nome} — ${marca.tagline}`,
@@ -29,7 +37,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className={`${montserrat.variable} ${cormorant.variable} antialiased`}>{children}</body>
+      <body
+        className={`${montserrat.variable} ${cormorant.variable} ${greatVibes.variable} antialiased`}
+      >
+        {children}
+      </body>
     </html>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { definirCapaAction } from "@/app/painel/actions";
 
 export interface MediaExibida {
   id: string;
@@ -23,9 +24,31 @@ const formatar = (b: number) => {
   return `${v.toFixed(v < 10 ? 1 : 0)} ${u[i]}`;
 };
 
-export function GradeMedias({ medias }: { medias: MediaExibida[] }) {
+export function GradeMedias({
+  medias,
+  galeriaId,
+  capaId,
+}: {
+  medias: MediaExibida[];
+  galeriaId: string;
+  capaId: string | null;
+}) {
   const [removendo, setRemovendo] = useState<string | null>(null);
+  const [definindoCapa, setDefinindoCapa] = useState<string | null>(null);
   const router = useRouter();
+
+  async function definirCapa(m: MediaExibida) {
+    setDefinindoCapa(m.id);
+    try {
+      const f = new FormData();
+      f.set("galeria_id", galeriaId);
+      f.set("media_id", m.id);
+      await definirCapaAction(f);
+      router.refresh();
+    } finally {
+      setDefinindoCapa(null);
+    }
+  }
 
   async function remover(m: MediaExibida) {
     if (!confirm(`Remover “${m.nome}”? Não dá para desfazer.`)) return;
@@ -78,15 +101,34 @@ export function GradeMedias({ medias }: { medias: MediaExibida[] }) {
               </span>
             </div>
 
-            <button
-              type="button"
-              onClick={() => remover(m)}
-              disabled={removendo === m.id}
-              aria-label={`Remover ${m.nome}`}
-              className="absolute right-1.5 top-1.5 rounded-md bg-void/80 px-2 py-1 text-[11px] text-texto opacity-0 transition focus-visible:opacity-100 group-hover:opacity-100 disabled:opacity-50"
-            >
-              {removendo === m.id ? "…" : "remover"}
-            </button>
+            {capaId === m.id && (
+              <span className="absolute left-1.5 top-1.5 rounded-md bg-luz px-2 py-0.5 text-[10px] font-semibold text-void">
+                capa
+              </span>
+            )}
+
+            <span className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+              {m.tipo === "foto" && capaId !== m.id && (
+                <button
+                  type="button"
+                  onClick={() => definirCapa(m)}
+                  disabled={definindoCapa === m.id}
+                  aria-label={`Usar ${m.nome} como capa`}
+                  className="rounded-md bg-void/80 px-2 py-1 text-[11px] text-texto disabled:opacity-50"
+                >
+                  {definindoCapa === m.id ? "…" : "capa"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => remover(m)}
+                disabled={removendo === m.id}
+                aria-label={`Remover ${m.nome}`}
+                className="rounded-md bg-void/80 px-2 py-1 text-[11px] text-texto disabled:opacity-50"
+              >
+                {removendo === m.id ? "…" : "remover"}
+              </button>
+            </span>
           </li>
         ))}
       </ul>

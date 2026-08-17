@@ -10,6 +10,8 @@ import {
   registrarAcesso,
 } from "@/lib/galerias-publicas";
 import { GaleriaCliente, type ItemGaleria } from "@/components/galeria-cliente";
+import { GaleriaCapa } from "@/components/galeria-capa";
+import { lerAparencia, TEMAS } from "@/config/aparencia";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -114,29 +116,39 @@ export default async function GaleriaPublicaPage({ params }: Props) {
       })
     : null;
 
-  return (
-    <main className="min-h-dvh pb-20">
-      {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
-      <header className="border-b border-linha px-6 py-14 text-center">
-        <p
-          className="font-mono text-[11px] uppercase tracking-[0.3em]"
-          style={{ color: galeria.estudio_cor }}
-        >
-          {galeria.estudio_nome}
-        </p>
-        <h1 className="mx-auto mt-5 max-w-[18ch] text-balance font-serif text-4xl font-bold tracking-tight sm:text-5xl">
-          {galeria.titulo}
-        </h1>
-        {(dataEvento || galeria.subtitulo) && (
-          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.2em] text-texto-soft">
-            {[dataEvento, galeria.subtitulo].filter(Boolean).join(" · ")}
-          </p>
-        )}
-      </header>
+  const aparencia = lerAparencia(galeria.aparencia);
 
-      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+  // Capa escolhida pelo fotógrafo; sem escolha, a primeira foto da galeria.
+  const capa =
+    medias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
+    medias.find((m) => m.tipo === "foto");
+  const urlCapa = capa ? await urlDeLeitura(capa.chave_preview ?? capa.chave, VALIDADE) : null;
+
+  return (
+    /*
+     * O tema vive em variáveis CSS neste elemento. Assim a galeria pode ser
+     * clara enquanto o painel segue escuro, sem um tema brigar com o outro —
+     * e trocar de tema é trocar cinco valores, não reescrever componentes.
+     */
+    <main
+      className="min-h-dvh pb-20"
+      style={{ ...TEMAS[aparencia.tema], background: "var(--g-fundo)", color: "var(--g-texto)" }}
+    >
+      {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
+      <GaleriaCapa
+        aparencia={aparencia}
+        dados={{
+          titulo: galeria.titulo,
+          subtitulo: galeria.subtitulo,
+          dataFormatada: dataEvento,
+          estudio: galeria.estudio_nome,
+          urlImagem: urlCapa,
+        }}
+      />
+
+      <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
         {itens.length === 0 ? (
-          <p className="py-20 text-center text-sm text-texto-soft">
+          <p className="py-20 text-center text-sm" style={{ color: "var(--g-suave)" }}>
             As fotos ainda estão sendo preparadas. Volte em breve.
           </p>
         ) : (
@@ -144,13 +156,20 @@ export default async function GaleriaPublicaPage({ params }: Props) {
             itens={itens}
             permiteDownload={galeria.permite_download}
             galeriaId={galeria.id}
+            aparencia={aparencia}
           />
         )}
       </div>
 
       <footer className="mt-20 text-center">
-        <span className="inline-flex items-center gap-2 rounded-full border border-linha px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-texto-faint">
-          <span className="grid h-4 w-4 place-items-center rounded-[3px] border border-linha-forte text-[8px] font-bold text-luz">
+        <span
+          className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em]"
+          style={{ border: "1px solid var(--g-linha)", color: "var(--g-tenue)" }}
+        >
+          <span
+            className="grid h-4 w-4 place-items-center rounded-[3px] text-[8px] font-bold"
+            style={{ border: "1px solid var(--g-linha)", color: "var(--g-destaque)" }}
+          >
             {marca.simbolo}
           </span>
           entregue com {marca.nome}

@@ -10,6 +10,8 @@ import { resumoAcessos } from "@/lib/galerias-publicas";
 import { EnviarArquivos } from "@/components/enviar-arquivos";
 import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
 import { PublicarGaleria } from "@/components/publicar-galeria";
+import { EditorAparencia } from "@/components/editor-aparencia";
+import { lerAparencia } from "@/config/aparencia";
 import { apagarGaleriaAction } from "../../actions";
 
 export const metadata: Metadata = { title: "Galeria" };
@@ -108,8 +110,14 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         permiteDownload={galeria.permite_download}
       />
 
+      <EditorAparencia
+        galeriaId={galeria.id}
+        caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}`}
+        inicial={lerAparencia(galeria.aparencia)}
+      />
+
       <EnviarArquivos galeriaId={galeria.id} />
-      <GradeMedias medias={exibidas} />
+      <GradeMedias medias={exibidas} galeriaId={galeria.id} capaId={galeria.capa_media_id} />
 
       <section className="mt-12 border-t border-linha pt-6">
         <h2 className="text-sm font-semibold">Apagar galeria</h2>
