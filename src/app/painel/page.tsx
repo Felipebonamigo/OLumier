@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { sessaoAtual } from "@/lib/auth";
 import { listarGalerias, formatarBytes } from "@/lib/tenants";
+import { diasAteArquivar } from "@/config/prazos";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Galerias" };
@@ -10,11 +11,22 @@ export const dynamic = "force-dynamic";
 const formatarData = (d: Date | null) =>
   d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : null;
 
-function Etiqueta({ galeria }: { galeria: { publicada: boolean; estado: string } }) {
+function Etiqueta({ galeria }: { galeria: { publicada: boolean; estado: string; expira_em: Date | null } }) {
   if (galeria.estado === "arquivada") {
     return (
       <span className="rounded-full border border-linha px-2 py-0.5 text-[11px] text-texto-faint">
         no cofre
+      </span>
+    );
+  }
+
+  // Avisa antes de vencer: descobrir que a galeria saiu do ar pelo cliente
+  // reclamando seria o pior jeito de saber.
+  const dias = diasAteArquivar(galeria.expira_em);
+  if (dias !== null && dias <= 30) {
+    return (
+      <span className="rounded-full border border-alerta/40 bg-alerta/10 px-2 py-0.5 text-[11px] text-alerta">
+        {dias > 0 ? `cofre em ${dias}d` : "vence hoje"}
       </span>
     );
   }

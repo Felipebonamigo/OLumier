@@ -14,6 +14,8 @@ import { EditorAparencia } from "@/components/editor-aparencia";
 import { EditorSecoes } from "@/components/editor-secoes";
 import { listarSecoes } from "@/lib/secoes";
 import { lerAparencia } from "@/config/aparencia";
+import { PrazoCofre } from "@/components/prazo-cofre";
+import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
 import { apagarGaleriaAction } from "../../actions";
 
 export const metadata: Metadata = { title: "Galeria" };
@@ -112,6 +114,14 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         publicada={galeria.publicada}
         temSenha={Boolean(galeria.senha_hash)}
         permiteDownload={galeria.permite_download}
+      />
+
+      <PrazoCofre
+        galeriaId={galeria.id}
+        arquivada={galeria.estado === "arquivada"}
+        mesesAtual={mesesEquivalentes(galeria.expira_em)}
+        diasRestantes={diasAteArquivar(galeria.expira_em)}
+        arquivadaEm={galeria.arquivada_em ? String(galeria.arquivada_em) : null}
       />
 
       <EditorAparencia

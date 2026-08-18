@@ -7,6 +7,8 @@ import { criarGaleria, apagarGaleria } from "@/lib/tenants";
 import { consultar } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { lerAparencia } from "@/config/aparencia";
+import { PRAZOS } from "@/config/prazos";
+import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
 import {
   CAPITULOS_SUGERIDOS,
   apagarSecao,
@@ -178,6 +180,40 @@ export async function moverMediasAction(form: FormData) {
   const destino = String(form.get("secao_id") ?? "");
   await moverMediasParaSecao(ids, destino || null, tenantId);
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+// --- cofre ----------------------------------------------------------------
+
+export async function definirPrazoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+
+  const bruto = String(form.get("meses") ?? "");
+  // "" significa sem prazo; qualquer outro valor precisa estar na lista oferecida.
+  const meses = bruto === "" ? null : Number(bruto);
+  if (meses !== null && !PRAZOS.some((p) => p.meses === meses)) return;
+
+  await definirPrazo(galeriaId, tenantId, meses);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+export async function arquivarAgoraAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+  await arquivarAgora(galeriaId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  revalidatePath("/painel");
+}
+
+export async function reativarAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+  await reativar(galeriaId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  revalidatePath("/painel");
 }
 
 export async function apagarGaleriaAction(form: FormData) {

@@ -30,6 +30,8 @@ export interface Galeria {
   senha_hash: string | null;
   permite_download: boolean;
   bytes_total: string;
+  expira_em: Date | null;
+  arquivada_em: Date | null;
   aparencia: unknown;
   capa_media_id: string | null;
   criado_em: Date;
