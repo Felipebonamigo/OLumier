@@ -50,6 +50,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     mime?: string;
     bytes?: number;
     comDerivadas?: boolean;
+    secaoId?: string;
     largura?: number;
     altura?: number;
   };
@@ -95,6 +96,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     );
   }
 
+  // Capítulo de destino: confere que pertence a ESTA galeria antes de usar, senão
+  // um id chutado jogaria a foto no capítulo de outra galeria.
+  let secaoId: string | null = null;
+  if (corpo.secaoId) {
+    const s = await consultarUm<{ id: string }>(
+      "select id from secoes where id = $1 and galeria_id = $2",
+      [corpo.secaoId, galeriaId],
+    );
+    secaoId = s?.id ?? null;
+  }
+
   const chaves = montarChaves(tenantId, galeriaId, nome);
 
   // O navegador avisa se conseguiu gerar as derivadas. Quando não conseguir
@@ -113,6 +125,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     bytes,
     largura: Number(corpo.largura) || null,
     altura: Number(corpo.altura) || null,
+    secaoId,
   });
 
   const [url, urlThumb, urlPreview] = await Promise.all([

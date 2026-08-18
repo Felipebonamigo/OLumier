@@ -71,6 +71,7 @@ export async function criarMediaPendente(dados: {
   bytes: number;
   largura?: number | null;
   altura?: number | null;
+  secaoId?: string | null;
 }) {
   const proxima = await consultarUm<{ n: number }>(
     "select coalesce(max(ordem), -1) + 1 as n from medias where galeria_id = $1",
@@ -79,8 +80,8 @@ export async function criarMediaPendente(dados: {
 
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
-                         nome_original, tipo, mime, bytes, largura, altura, ordem, pronto)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false)
+                         nome_original, tipo, mime, bytes, largura, altura, secao_id, ordem, pronto)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false)
      returning *`,
     [
       dados.galeriaId,
@@ -94,6 +95,7 @@ export async function criarMediaPendente(dados: {
       dados.bytes,
       dados.largura ?? null,
       dados.altura ?? null,
+      dados.secaoId ?? null,
       proxima?.n ?? 0,
     ],
   );

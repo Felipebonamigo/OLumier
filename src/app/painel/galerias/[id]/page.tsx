@@ -126,7 +126,10 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         semCapitulo={medias.filter((m) => !m.secao_id).length}
       />
 
-      <EnviarArquivos galeriaId={galeria.id} />
+      <EnviarArquivos
+        galeriaId={galeria.id}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
+      />
       <GradeMedias
         medias={exibidas}
         galeriaId={galeria.id}

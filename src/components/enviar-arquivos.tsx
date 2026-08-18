@@ -1,8 +1,17 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
+import {
+  PARALELOS,
+  arquivosDeArrasto,
+  arquivoAceito,
+  comRetentativa,
+  emParalelo,
+  manterAcordado,
+  ordenarNatural,
+} from "@/lib/fila-upload";
 
 type Situacao = "esperando" | "preparando" | "enviando" | "pronto" | "erro";
 
@@ -12,7 +21,13 @@ interface ItemFila {
   bytes: number;
   progresso: number;
   situacao: Situacao;
+  tentativa: number;
   erro?: string;
+}
+
+export interface SecaoDestino {
+  id: string;
+  nome: string;
 }
 
 /**
@@ -52,18 +67,51 @@ const formatar = (b: number) => {
   return `${v.toFixed(v < 10 ? 1 : 0)} ${u[i]}`;
 };
 
-export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
+const duracao = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+};
+
+export function EnviarArquivos({
+  galeriaId,
+  secoes,
+}: {
+  galeriaId: string;
+  secoes: SecaoDestino[];
+}) {
   const [fila, setFila] = useState<ItemFila[]>([]);
   const [arrastando, setArrastando] = useState(false);
-  const [, startTransition] = useTransition();
+  const [rodando, setRodando] = useState(false);
+  const [destino, setDestino] = useState("");
+  const [inicio, setInicio] = useState<number | null>(null);
+  const [agora, setAgora] = useState(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
+  const pastaRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   const atualizar = (id: string, mudanca: Partial<ItemFila>) =>
     setFila((f) => f.map((i) => (i.id === id ? { ...i, ...mudanca } : i)));
 
+  // Relógio só enquanto a fila roda — alimenta a estimativa de tempo restante.
+  useEffect(() => {
+    if (!rodando) return;
+    const t = setInterval(() => setAgora(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [rodando]);
+
+  // Fechar a aba no meio de 600 fotos perde o que faltava: avisa antes.
+  useEffect(() => {
+    if (!rodando) return;
+    const avisar = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [rodando]);
+
   const processar = useCallback(
-    async (arquivos: File[]) => {
+    async (brutos: File[]) => {
+      const arquivos = ordenarNatural(brutos.filter(arquivoAceito));
       if (arquivos.length === 0) return;
 
       const novos: ItemFila[] = arquivos.map((a, i) => ({
@@ -72,58 +120,66 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
         bytes: a.size,
         progresso: 0,
         situacao: "esperando",
+        tentativa: 0,
       }));
       setFila((f) => [...f, ...novos]);
+      setRodando(true);
+      setInicio((atual) => atual ?? Date.now());
 
-      // Um de cada vez, de propósito: envio em paralelo satura o link de subida
-      // (que é bem menor que o de descida) e deixa cada arquivo mais lento.
-      for (let i = 0; i < arquivos.length; i++) {
-        const arquivo = arquivos[i];
+      const soltar = await manterAcordado();
+
+      // Vários ao mesmo tempo: um por vez faria 600 fotos levarem horas.
+      await emParalelo(arquivos, PARALELOS, async (arquivo, i) => {
         const item = novos[i];
         try {
-          // 1) Miniaturas geradas aqui mesmo, antes de subir. É o que faz a
-          // galeria abrir rápido: a grade vai carregar ~50 KB por foto.
-          atualizar(item.id, { situacao: "preparando" });
-          const derivadas = await gerarDerivadas(arquivo);
+          await comRetentativa(
+            async () => {
+              atualizar(item.id, { situacao: "preparando", progresso: 0 });
+              const derivadas = await gerarDerivadas(arquivo);
 
-          atualizar(item.id, { situacao: "enviando" });
-          const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              nome: arquivo.name,
-              mime: arquivo.type,
-              bytes: arquivo.size,
-              comDerivadas: Boolean(derivadas),
-              largura: derivadas?.largura,
-              altura: derivadas?.altura,
-            }),
-          });
-          const dados = await preparo.json();
-          if (!preparo.ok) throw new Error(dados.erro ?? "não foi possível preparar o envio");
+              atualizar(item.id, { situacao: "enviando" });
+              const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  nome: arquivo.name,
+                  mime: arquivo.type,
+                  bytes: arquivo.size,
+                  comDerivadas: Boolean(derivadas),
+                  largura: derivadas?.largura,
+                  altura: derivadas?.altura,
+                  secaoId: destino || undefined,
+                }),
+              });
+              const dados = await preparo.json();
+              if (!preparo.ok) {
+                // Sem espaço, tipo recusado ou arquivo grande demais: insistir não resolve.
+                if (preparo.status === 507 || preparo.status === 415 || preparo.status === 413) {
+                  throw Object.assign(new Error(dados.erro), { definitivo: true });
+                }
+                throw new Error(dados.erro ?? "não foi possível preparar o envio");
+              }
 
-          // 2) O original manda no progresso — é ele que pesa.
-          await enviarComProgresso(dados.url, arquivo, (pct) =>
-            atualizar(item.id, { progresso: pct }),
+              await enviarComProgresso(dados.url, arquivo, (pct) =>
+                atualizar(item.id, { progresso: pct }),
+              );
+
+              // Derivadas juntas: somam ~5% do original e não travam a fila se falharem.
+              if (derivadas && dados.urlThumb && dados.urlPreview) {
+                await Promise.allSettled([
+                  enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}),
+                  enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}),
+                ]);
+              }
+
+              const conf = await fetch(`/api/medias/${dados.mediaId}/confirmar`, { method: "POST" });
+              if (!conf.ok) {
+                const c = await conf.json();
+                throw new Error(c.erro ?? "o arquivo não foi confirmado");
+              }
+            },
+            (tentativa) => atualizar(item.id, { tentativa, situacao: "esperando", progresso: 0 }),
           );
-
-          // 3) Derivadas depois, em paralelo (juntas somam ~5% do original).
-          // Se falharem, o upload continua válido: o servidor anula as chaves
-          // na confirmação e a grade cai no original.
-          if (derivadas && dados.urlThumb && dados.urlPreview) {
-            await Promise.allSettled([
-              enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}),
-              enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}),
-            ]);
-          }
-
-          const confirmacao = await fetch(`/api/medias/${dados.mediaId}/confirmar`, {
-            method: "POST",
-          });
-          if (!confirmacao.ok) {
-            const c = await confirmacao.json();
-            throw new Error(c.erro ?? "o arquivo não foi confirmado");
-          }
 
           atualizar(item.id, { situacao: "pronto", progresso: 100 });
         } catch (e) {
@@ -132,46 +188,98 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
             erro: e instanceof Error ? e.message : "falhou",
           });
         }
-      }
+      });
 
-      // Recarrega a grade e a barra de espaço com os dados do servidor.
-      startTransition(() => router.refresh());
+      soltar();
+      setRodando(false);
+      router.refresh();
     },
-    [galeriaId, router],
+    [galeriaId, destino, router],
   );
 
   const enviados = fila.filter((i) => i.situacao === "pronto").length;
   const comErro = fila.filter((i) => i.situacao === "erro");
-  const emAndamento = fila.some((i) => i.situacao !== "pronto" && i.situacao !== "erro");
+  const restantes = fila.length - enviados - comErro.length;
+  const bytesEnviados = fila
+    .filter((i) => i.situacao === "pronto")
+    .reduce((s, i) => s + i.bytes, 0);
+
+  // Estimativa pela média já observada — mais honesta que fingir precisão.
+  const decorrido = inicio ? agora - inicio : 0;
+  const restante =
+    enviados >= 2 && restantes > 0 ? duracao((decorrido / enviados) * restantes) : null;
 
   return (
     <section className="mt-8">
+      {secoes.length > 0 && (
+        <label className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-texto-soft">Enviar para o capítulo:</span>
+          <select
+            value={destino}
+            onChange={(e) => setDestino(e.target.value)}
+            disabled={rodando}
+            className="rounded-lg border border-linha bg-void px-3 py-1.5 text-sm focus:border-luz focus:outline-none disabled:opacity-50"
+          >
+            <option value="">— sem capítulo —</option>
+            {secoes.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.nome}
+              </option>
+            ))}
+          </select>
+          <span className="text-xs text-texto-faint">dá para mover depois</span>
+        </label>
+      )}
+
       <div
         onDragOver={(e) => {
           e.preventDefault();
           setArrastando(true);
         }}
         onDragLeave={() => setArrastando(false)}
-        onDrop={(e) => {
+        onDrop={async (e) => {
           e.preventDefault();
           setArrastando(false);
-          processar(Array.from(e.dataTransfer.files));
+          processar(await arquivosDeArrasto(e.dataTransfer));
         }}
         className={`rounded-xl border border-dashed px-6 py-12 text-center transition ${
           arrastando ? "border-luz bg-luz/5" : "border-linha-forte bg-carbon"
         }`}
       >
-        <p className="text-base font-medium">Arraste as fotos e o filme aqui</p>
-        <p className="mx-auto mt-2 max-w-[44ch] text-sm text-texto-soft">
-          Vão direto do seu navegador para o armazenamento — sem passar pelo nosso servidor.
+        <p className="text-base font-medium">Arraste a pasta do casamento aqui</p>
+        <p className="mx-auto mt-2 max-w-[46ch] text-sm text-texto-soft">
+          Pode ser a pasta inteira, com subpastas. Os arquivos vão direto do seu navegador para o
+          armazenamento — sem passar pelo nosso servidor.
         </p>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="mt-5 rounded-lg bg-luz px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta"
-        >
-          Escolher arquivos
-        </button>
+
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => pastaRef.current?.click()}
+            className="rounded-lg bg-luz px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta"
+          >
+            Escolher pasta
+          </button>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="rounded-lg border border-linha-forte px-4 py-2.5 text-sm transition hover:bg-carbon-2"
+          >
+            Escolher arquivos
+          </button>
+        </div>
+
+        <input
+          ref={pastaRef}
+          type="file"
+          multiple
+          {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
+          className="hidden"
+          onChange={(e) => {
+            processar([...(e.target.files ?? [])]);
+            e.target.value = "";
+          }}
+        />
         <input
           ref={inputRef}
           type="file"
@@ -179,28 +287,47 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
           accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
           className="hidden"
           onChange={(e) => {
-            processar(Array.from(e.target.files ?? []));
+            processar([...(e.target.files ?? [])]);
             e.target.value = "";
           }}
         />
+
         <p className="mt-4 text-xs text-texto-faint">
-          JPG, PNG, WEBP, HEIC · MP4, MOV, WEBM · até 5 GB por arquivo
+          JPG, PNG, WEBP, HEIC · MP4, MOV, WEBM · até 5 GB por arquivo · {PARALELOS} de cada vez
         </p>
       </div>
 
       {fila.length > 0 && (
         <div className="mt-4 rounded-xl border border-linha bg-carbon p-4">
-          <div className="flex items-baseline justify-between text-sm">
-            <span className="font-medium">
-              {emAndamento ? "Enviando…" : "Envio concluído"}
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <span className="text-sm font-medium">
+              {rodando
+                ? "Enviando…"
+                : comErro.length > 0
+                  ? "Envio concluído com falhas"
+                  : "Envio concluído"}
             </span>
-            <span className="text-xs text-texto-soft tabular-nums">
+            <span className="text-xs tabular-nums text-texto-soft">
               {enviados} de {fila.length}
               {comErro.length > 0 ? ` · ${comErro.length} com erro` : ""}
+              {restante ? ` · ~${restante} restantes` : ""}
             </span>
           </div>
 
-          <ul className="mt-3 flex flex-col gap-2">
+          {/* Progresso do conjunto: numa fila de 600, o total importa mais que cada linha. */}
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-carbon-2">
+            <div
+              className="h-full rounded-full bg-luz transition-[width]"
+              style={{ width: `${fila.length ? (enviados / fila.length) * 100 : 0}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-[11px] text-texto-faint">
+            {formatar(bytesEnviados)} enviados
+            {rodando && " · mantenha esta aba aberta"}
+          </p>
+
+          {/* Lista com altura limitada: sem isso, 600 itens esticariam a página sem fim. */}
+          <ul className="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
             {fila.map((item) => (
               <li key={item.id} className="text-xs">
                 <div className="flex items-baseline justify-between gap-3">
@@ -210,8 +337,10 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
                       <span className="text-erro">{item.erro}</span>
                     ) : item.situacao === "pronto" ? (
                       <span className="text-ok">enviado</span>
+                    ) : item.tentativa > 0 ? (
+                      <span className="text-alerta">tentando de novo ({item.tentativa})…</span>
                     ) : item.situacao === "preparando" ? (
-                      <span>preparando…</span>
+                      "preparando…"
                     ) : (
                       `${item.progresso}% · ${formatar(item.bytes)}`
                     )}
@@ -232,6 +361,16 @@ export function EnviarArquivos({ galeriaId }: { galeriaId: string }) {
               </li>
             ))}
           </ul>
+
+          {!rodando && comErro.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFila((f) => f.filter((i) => i.situacao !== "erro"))}
+              className="mt-3 rounded-lg border border-linha px-3 py-1.5 text-xs text-texto-soft transition hover:bg-carbon-2"
+            >
+              Limpar os que falharam
+            </button>
+          )}
         </div>
       )}
     </section>
