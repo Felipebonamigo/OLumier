@@ -8,6 +8,10 @@ import { consultar } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { lerAparencia } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
+import { marca } from "@/config/marca";
+import { planoPorId } from "@/config/planos";
+import { buscarTenantPorId } from "@/lib/tenants";
+import { asaasConfigurado, garantirCliente, criarAssinatura } from "@/lib/asaas";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
 import {
   CAPITULOS_SUGERIDOS,
@@ -180,6 +184,60 @@ export async function moverMediasAction(form: FormData) {
   const destino = String(form.get("secao_id") ?? "");
   await moverMediasParaSecao(ids, destino || null, tenantId);
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+// --- cobranca --------------------------------------------------------------
+
+/**
+ * Cria a assinatura no Asaas para o estudio logado.
+ * Guarda os ids no banco: sem isso, uma segunda chamada criaria assinatura
+ * duplicada e o fotografo pagaria duas vezes.
+ */
+export async function criarAssinaturaAction(): Promise<{ erro?: string } | void> {
+  const tenantId = await exigirTenant();
+
+  if (!asaasConfigurado()) return { erro: "A cobranca ainda nao foi ligada." };
+
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { erro: "Conta nao encontrada." };
+  if (tenant.asaas_assinatura_id) return; // ja tem
+
+  const plano = planoPorId(tenant.plano_id);
+  if (!plano) return { erro: "Plano invalido." };
+
+  try {
+    const cliente = await garantirCliente({
+      tenantId,
+      nome: tenant.nome_estudio,
+      email: tenant.email,
+    });
+
+    // Primeiro vencimento quando o teste acabar; se ja acabou, em 3 dias.
+    const fimTrial = tenant.trial_ate ? new Date(tenant.trial_ate) : new Date();
+    const minimo = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    const vencimento = fimTrial > minimo ? fimTrial : minimo;
+
+    const assinatura = await criarAssinatura({
+      clienteAsaasId: cliente.id,
+      tenantId,
+      planoId: plano.id,
+      precoCentavos: plano.precoCentavos,
+      descricao: `${marca.nome} — ${plano.nome}`,
+      primeiroVencimento: vencimento,
+    });
+
+    await consultar(
+      `update tenants
+          set asaas_cliente_id = $1, asaas_assinatura_id = $2,
+              assinatura_criada_em = now(), atualizado_em = now()
+        where id = $3`,
+      [cliente.id, assinatura.id, tenantId],
+    );
+
+    revalidatePath("/painel/conta");
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "nao consegui criar a assinatura" };
+  }
 }
 
 // --- cofre ----------------------------------------------------------------
