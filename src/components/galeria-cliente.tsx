@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
+import {
+  LOTE_MAXIMO,
+  baixarNoComputador,
+  deveOferecerSalvar,
+  salvarNoCelular,
+} from "@/lib/salvar-client";
+import { usarSwipe } from "@/lib/usar-swipe";
 
 export interface ItemGaleria {
   id: string;
@@ -36,16 +43,25 @@ export function GaleriaCliente({
   galeriaId,
   aparencia,
   capitulos,
+  celularProvavel,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
   galeriaId: string;
   aparencia: Aparencia;
   capitulos: CapituloGaleria[];
+  /** Palpite do servidor pelo user-agent, só para a primeira pintura não piscar. */
+  celularProvavel: boolean;
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
   const [baixandoTudo, setBaixandoTudo] = useState(false);
   const [progressoLote, setProgressoLote] = useState(0);
+  const [aviso, setAviso] = useState<string | null>(null);
+  /* O servidor chuta pelo user-agent para a primeira pintura já sair certa; ao
+     montar, a detecção de recurso (canShare) corrige o palpite. Sem o chute, o
+     celular mostraria "Baixar" por um instante antes de virar "Salvar". */
+  const [modoSalvar, setModoSalvar] = useState(celularProvavel);
+  useEffect(() => setModoSalvar(deveOferecerSalvar()), []);
 
   const fechar = useCallback(() => setAberto(null), []);
   const anterior = useCallback(
@@ -96,60 +112,103 @@ export function GaleriaCliente({
     }).catch(() => {});
   };
 
-  function baixarUm(item: ItemGaleria) {
-    registrar("baixou", item.id);
-    const a = document.createElement("a");
-    a.href = item.urlDownload;
-    a.download = item.nome;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  /**
+   * Uma foto: no celular abre o menu nativo (onde existe "Salvar imagem", que
+   * grava nas Fotos); no computador baixa direto.
+   */
+  async function salvarUm(it: ItemGaleria) {
+    registrar("baixou", it.id);
+    if (!modoSalvar) {
+      baixarNoComputador(it.urlDownload, it.nome);
+      return;
+    }
+    setAviso("preparando…");
+    try {
+      const r = await salvarNoCelular([{ url: it.urlDownload, nome: it.nome }]);
+      setAviso(r === "salvou" ? "salvo ✓" : null);
+      if (r === "sem-suporte") baixarNoComputador(it.urlDownload, it.nome);
+    } catch {
+      setAviso(null);
+      baixarNoComputador(it.urlDownload, it.nome);
+    } finally {
+      setTimeout(() => setAviso(null), 2500);
+    }
   }
 
   /**
-   * Download em lote, um arquivo por vez.
+   * Galeria inteira.
    *
-   * Não geramos um ZIP no servidor de propósito: os arquivos ficam no
-   * armazenamento e vão direto de lá para o cliente. Empacotar exigiria puxar
-   * tudo para o nosso servidor primeiro — lento para o casal e caro para nós.
+   * No celular, vai em lotes pelo menu nativo: a memória não aguenta 600 fotos
+   * de uma vez, e cada lote termina nas Fotos em vez do app Arquivos.
+   * No computador, dispara os downloads em sequência.
+   *
+   * Não geramos ZIP no servidor de propósito: empacotar exigiria puxar a galeria
+   * inteira para o nosso servidor antes — lento para o casal e caro para nós.
    */
-  async function baixarTudo() {
+  async function salvarTudo() {
     setBaixandoTudo(true);
     setProgressoLote(0);
     registrar("baixou_tudo");
-    for (let i = 0; i < itens.length; i++) {
-      const a = document.createElement("a");
-      a.href = itens[i].urlDownload;
-      a.download = itens[i].nome;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setProgressoLote(i + 1);
-      // Intervalo curto: o navegador ignora downloads disparados todos de uma vez.
-      await new Promise((r) => setTimeout(r, 700));
+
+    try {
+      if (modoSalvar) {
+        for (let inicio = 0; inicio < itens.length; inicio += LOTE_MAXIMO) {
+          const lote = itens.slice(inicio, inicio + LOTE_MAXIMO);
+          const r = await salvarNoCelular(
+            lote.map((it) => ({ url: it.urlDownload, nome: it.nome })),
+            (baixados) => setProgressoLote(inicio + baixados),
+          );
+          // Fechou o menu: entende-se como "chega", e não como erro.
+          if (r === "cancelou") break;
+          if (r === "sem-suporte") {
+            for (const it of lote) baixarNoComputador(it.urlDownload, it.nome);
+          }
+          setProgressoLote(inicio + lote.length);
+        }
+      } else {
+        for (let i = 0; i < itens.length; i++) {
+          baixarNoComputador(itens[i].urlDownload, itens[i].nome);
+          setProgressoLote(i + 1);
+          // Intervalo curto: o navegador ignora downloads disparados todos juntos.
+          await new Promise((r) => setTimeout(r, 700));
+        }
+      }
+    } catch {
+      setAviso("não consegui salvar tudo. Tente em partes.");
+      setTimeout(() => setAviso(null), 4000);
+    } finally {
+      setBaixandoTudo(false);
     }
-    setBaixandoTudo(false);
   }
+
+  // Arrastar para o lado troca de foto — o gesto que todo app de fotos tem.
+  const swipe = usarSwipe(proximo, anterior);
 
   const item = aberto === null ? null : itens[aberto];
 
   return (
     <>
       {permiteDownload && itens.length > 0 && (
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-8 flex flex-col items-center gap-2">
           <button
             type="button"
-            onClick={baixarTudo}
+            onClick={salvarTudo}
             disabled={baixandoTudo}
             className="rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85 disabled:opacity-60"
             style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
           >
             {baixandoTudo
-              ? `Baixando ${progressoLote} de ${itens.length}…`
-              : `↓ Baixar tudo (${itens.length})`}
+              ? `${modoSalvar ? "Salvando" : "Baixando"} ${progressoLote} de ${itens.length}…`
+              : modoSalvar
+                ? `Salvar as ${itens.length} fotos no celular`
+                : `↓ Baixar tudo (${itens.length})`}
           </button>
-          <span className="text-xs" style={{ color: "var(--g-tenue)" }}>
-            sem limite de downloads — baixe quantas vezes quiser
+
+          <span className="text-center text-xs" style={{ color: "var(--g-tenue)" }}>
+            {aviso ??
+              (modoSalvar
+                ? "vai abrir o menu do seu celular — toque em “Salvar imagem”"
+                : "sem limite de downloads — baixe quantas vezes quiser")}
           </span>
         </div>
       )}
@@ -279,11 +338,11 @@ export function GaleriaCliente({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    baixarUm(item);
+                    salvarUm(item);
                   }}
                   className="rounded-lg border border-linha-forte px-3 py-1.5 text-xs transition hover:bg-carbon"
                 >
-                  ↓ Baixar
+                  {modoSalvar ? "Salvar no celular" : "↓ Baixar"}
                 </button>
               )}
               <button
@@ -299,6 +358,7 @@ export function GaleriaCliente({
 
           <div
             className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4"
+            {...swipe}
             onClick={(e) => e.stopPropagation()}
           >
             {item.tipo === "foto" ? (

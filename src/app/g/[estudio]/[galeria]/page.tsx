@@ -113,6 +113,10 @@ export default async function GaleriaPublicaPage({ params }: Props) {
     userAgent: cabecalhos.get("user-agent"),
   });
 
+  // Palpite pelo user-agent só para a primeira pintura já sair com o botão certo;
+  // no navegador, a detecção de recurso corrige se o palpite estiver errado.
+  const celularProvavel = /android|iphone|ipad|ipod/i.test(cabecalhos.get("user-agent") ?? "");
+
   const dataEvento = galeria.data_evento
     ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -190,6 +194,7 @@ export default async function GaleriaPublicaPage({ params }: Props) {
             galeriaId={galeria.id}
             aparencia={aparencia}
             capitulos={capitulos}
+            celularProvavel={celularProvavel}
           />
         )}
       </div>
