@@ -3,20 +3,67 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * No Next 16 o antigo `middleware.ts` passou a se chamar `proxy.ts`.
  *
- * Aqui fazemos APENAS a checagem otimista que a documentação recomenda: existe
- * um cookie de sessão? Isso evita renderizar o painel para quem claramente não
- * entrou, e é barato porque roda em toda requisição.
+ * Faz duas coisas:
  *
- * A validação de verdade (assinatura HMAC + validade + tenant existe) fica no
- * layout do painel, que roda em Node e tem acesso ao banco. Ou seja: um cookie
- * falsificado passa por aqui e é barrado lá — nunca chega em dado nenhum.
+ * 1. Checagem otimista de sessão — só olha se o cookie existe, como a
+ *    documentação recomenda. A validação de verdade (assinatura HMAC + validade
+ *    + estúdio existe) fica no layout do painel, que roda em Node e tem banco.
+ *    Cookie falsificado passa por aqui e morre lá, antes de tocar em dado.
+ *
+ * 2. Subdomínio por estúdio — `siriusfotografia.fotonio.com.br/lu-marino` é
+ *    reescrito para a rota interna `/g/siriusfotografia/lu-marino`. É reescrita,
+ *    não redirecionamento: o visitante continua vendo o endereço bonito.
  */
 
 const NOME_COOKIE = "fotonio_sessao";
+const DOMINIO_BASE = "fotonio.com.br";
+
+/** Subdomínios que são da plataforma, não de estúdio. */
+const RESERVADOS = new Set(["www", "app", "admin", "api", "painel", "mail", "email", "ftp"]);
+
+/** Devolve o slug do estúdio quando o endereço é um subdomínio dele. */
+function estudioDoEndereco(host: string | null): string | null {
+  if (!host) return null;
+  const nome = host.split(":")[0].toLowerCase();
+
+  const sufixo = `.${DOMINIO_BASE}`;
+  if (!nome.endsWith(sufixo)) return null;
+
+  const slug = nome.slice(0, -sufixo.length);
+  // Sub-subdomínio (a.b.fotonio.com.br) não é o nosso formato.
+  if (!slug || slug.includes(".") || RESERVADOS.has(slug)) return null;
+  return slug;
+}
 
 export function proxy(request: NextRequest) {
-  const temCookie = Boolean(request.cookies.get(NOME_COOKIE)?.value);
   const { pathname, search } = request.nextUrl;
+
+  // --- subdomínio do estúdio ------------------------------------------------
+  const estudio = estudioDoEndereco(request.headers.get("host"));
+  if (estudio) {
+    // Rotas internas seguem intactas — reescrever /api ou /_next quebraria tudo.
+    const interna =
+      pathname.startsWith("/api") ||
+      pathname.startsWith("/_next") ||
+      pathname.startsWith("/g/") ||
+      pathname === "/favicon.ico";
+
+    if (!interna) {
+      // O painel mora só no domínio principal: quem tenta entrar por um
+      // subdomínio de estúdio é mandado para lá, senão haveria dois endereços
+      // para a mesma tela e o cookie de sessão não valeria nos dois.
+      if (pathname.startsWith("/painel") || pathname === "/entrar" || pathname === "/cadastrar") {
+        return NextResponse.redirect(new URL(pathname + search, `https://${DOMINIO_BASE}`));
+      }
+
+      const galeria = pathname.replace(/^\/+|\/+$/g, "");
+      const destino = galeria ? `/g/${estudio}/${galeria}` : `/e/${estudio}`;
+      return NextResponse.rewrite(new URL(destino + search, request.url));
+    }
+  }
+
+  // --- sessão ---------------------------------------------------------------
+  const temCookie = Boolean(request.cookies.get(NOME_COOKIE)?.value);
 
   if (pathname.startsWith("/painel") && !temCookie) {
     const url = new URL("/entrar", request.url);
@@ -33,5 +80,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/painel/:path*", "/entrar", "/cadastrar"],
+  // Precisa ver todas as rotas para reconhecer o subdomínio; as exceções ficam
+  // de fora aqui mesmo, para não pagar o custo em arquivo estático.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
