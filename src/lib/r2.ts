@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { S3Client, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 
@@ -99,4 +107,60 @@ export async function objetoExiste(chave: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// --- envio em partes (multipart) --------------------------------------------
+
+/**
+ * Arquivo acima de 5 GB não cabe num PUT único — o protocolo S3 exige quebrar
+ * em partes. É o que destrava filme de casamento em 4K, que passa fácil disso.
+ *
+ * O fluxo tem três etapas: abrir o envio, mandar cada parte com sua própria URL
+ * assinada, e fechar informando a lista de partes na ordem. Se o processo for
+ * interrompido no meio, as partes ficam ocupando espaço até serem abortadas —
+ * por isso existe `abortarEnvioEmPartes`, e o bucket tem regra que limpa
+ * envios inacabados depois de 7 dias.
+ */
+
+export async function abrirEnvioEmPartes(chave: string, mime: string): Promise<string> {
+  const r = await s3().send(
+    new CreateMultipartUploadCommand({ Bucket: BUCKET, Key: chave, ContentType: mime }),
+  );
+  if (!r.UploadId) throw new Error("o armazenamento não devolveu o identificador do envio");
+  return r.UploadId;
+}
+
+export function urlDaParte(chave: string, uploadId: string, numero: number, expiraSeg = 6 * 3600) {
+  return getSignedUrl(
+    s3(),
+    new UploadPartCommand({ Bucket: BUCKET, Key: chave, UploadId: uploadId, PartNumber: numero }),
+    { expiresIn: expiraSeg },
+  );
+}
+
+export async function fecharEnvioEmPartes(
+  chave: string,
+  uploadId: string,
+  partes: { numero: number; etag: string }[],
+) {
+  await s3().send(
+    new CompleteMultipartUploadCommand({
+      Bucket: BUCKET,
+      Key: chave,
+      UploadId: uploadId,
+      MultipartUpload: {
+        // A ordem importa: o S3 remonta o arquivo pela sequência dos números.
+        Parts: partes
+          .slice()
+          .sort((a, b) => a.numero - b.numero)
+          .map((p) => ({ PartNumber: p.numero, ETag: p.etag })),
+      },
+    }),
+  );
+}
+
+export async function abortarEnvioEmPartes(chave: string, uploadId: string) {
+  await s3().send(
+    new AbortMultipartUploadCommand({ Bucket: BUCKET, Key: chave, UploadId: uploadId }),
+  );
 }

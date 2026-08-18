@@ -5,10 +5,17 @@ import { buscarTenantPorId } from "@/lib/tenants";
 import {
   TIPOS_ACEITOS,
   LIMITE_POR_ARQUIVO,
+  LIMITE_PUT_UNICO,
+  TAMANHO_PARTE,
   bytesComprometidos,
   criarMediaPendente,
 } from "@/lib/medias";
-import { montarChaves, urlDeUpload, armazenamentoConfigurado } from "@/lib/r2";
+import {
+  montarChaves,
+  urlDeUpload,
+  abrirEnvioEmPartes,
+  armazenamentoConfigurado,
+} from "@/lib/r2";
 
 /**
  * Prepara o envio de UM arquivo.
@@ -79,7 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
   if (bytes > LIMITE_POR_ARQUIVO) {
     return NextResponse.json(
-      { erro: `“${nome}” passa de 5 GB, o limite por arquivo hoje.` },
+      { erro: `“${nome}” passa de 100 GB, o limite por arquivo.` },
       { status: 413 },
     );
   }
@@ -128,11 +135,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     secaoId,
   });
 
-  const [url, urlThumb, urlPreview] = await Promise.all([
-    urlDeUpload(chaves.original, mime),
+  const [urlThumb, urlPreview] = await Promise.all([
     comDerivadas ? urlDeUpload(chaves.thumb, "image/webp") : Promise.resolve(null),
     comDerivadas ? urlDeUpload(chaves.preview, "image/webp") : Promise.resolve(null),
   ]);
 
-  return NextResponse.json({ mediaId: media!.id, url, urlThumb, urlPreview });
+  // Acima de 5 GB o PUT único não serve: abre o envio em partes e o navegador
+  // pede as URLs de cada pedaço conforme avança.
+  if (bytes > LIMITE_PUT_UNICO) {
+    const uploadId = await abrirEnvioEmPartes(chaves.original, mime);
+    await consultarUm("update medias set upload_id = $1 where id = $2", [uploadId, media!.id]);
+    return NextResponse.json({
+      mediaId: media!.id,
+      emPartes: true,
+      tamanhoParte: TAMANHO_PARTE,
+      urlThumb,
+      urlPreview,
+    });
+  }
+
+  const url = await urlDeUpload(chaves.original, mime);
+  return NextResponse.json({ mediaId: media!.id, emPartes: false, url, urlThumb, urlPreview });
 }

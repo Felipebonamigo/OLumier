@@ -34,11 +34,23 @@ export const TIPOS_ACEITOS: Record<string, "foto" | "video"> = {
 };
 
 /**
- * Limite por arquivo. O R2 aceita até 5 GiB num único PUT; acima disso exige
- * envio em partes (multipart), que ainda não implementamos. Filme de casamento
- * costuma passar disso — é o primeiro item a evoluir aqui.
+ * Acima deste tamanho, o envio vai em partes. O R2 aceita até 5 GiB num PUT
+ * único; passando disso, o protocolo S3 exige quebrar o arquivo.
  */
-export const LIMITE_POR_ARQUIVO = 5 * 1024 ** 3;
+export const LIMITE_PUT_UNICO = 5 * 1024 ** 3;
+
+/**
+ * Teto por arquivo. Filme de casamento em 4K costuma ficar entre 10 e 40 GB;
+ * 100 GB dá folga sem virar convite para alguém subir um backup inteiro.
+ */
+export const LIMITE_POR_ARQUIVO = 100 * 1024 ** 3;
+
+/**
+ * Tamanho de cada parte. O S3 aceita no máximo 10.000 partes, então 100 MB
+ * cobre até 1 TB; acima disso o cliente aumenta a parte para não estourar.
+ */
+export const TAMANHO_PARTE = 100 * 1024 ** 2;
+export const MAX_PARTES = 10_000;
 
 export async function listarMedias(galeriaId: string) {
   return consultar<Media>(

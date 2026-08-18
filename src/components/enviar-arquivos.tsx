@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
+import { enviarEmPartes } from "@/lib/multipart-client";
 import {
   PARALELOS,
   arquivosDeArrasto,
@@ -160,9 +161,16 @@ export function EnviarArquivos({
                 throw new Error(dados.erro ?? "não foi possível preparar o envio");
               }
 
-              await enviarComProgresso(dados.url, arquivo, (pct) =>
-                atualizar(item.id, { progresso: pct }),
-              );
+              // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
+              if (dados.emPartes) {
+                await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
+                  atualizar(item.id, { progresso: pct }),
+                );
+              } else {
+                await enviarComProgresso(dados.url, arquivo, (pct) =>
+                  atualizar(item.id, { progresso: pct }),
+                );
+              }
 
               // Derivadas juntas: somam ~5% do original e não travam a fila se falharem.
               if (derivadas && dados.urlThumb && dados.urlPreview) {
@@ -172,10 +180,13 @@ export function EnviarArquivos({
                 ]);
               }
 
-              const conf = await fetch(`/api/medias/${dados.mediaId}/confirmar`, { method: "POST" });
-              if (!conf.ok) {
-                const c = await conf.json();
-                throw new Error(c.erro ?? "o arquivo não foi confirmado");
+              // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
+              if (!dados.emPartes) {
+                const conf = await fetch(`/api/medias/${dados.mediaId}/confirmar`, { method: "POST" });
+                if (!conf.ok) {
+                  const c = await conf.json();
+                  throw new Error(c.erro ?? "o arquivo não foi confirmado");
+                }
               }
             },
             (tentativa) => atualizar(item.id, { tentativa, situacao: "esperando", progresso: 0 }),
@@ -293,7 +304,7 @@ export function EnviarArquivos({
         />
 
         <p className="mt-4 text-xs text-texto-faint">
-          JPG, PNG, WEBP, HEIC · MP4, MOV, WEBM · até 5 GB por arquivo · {PARALELOS} de cada vez
+          JPG, PNG, WEBP, HEIC · MP4, MOV, WEBM · filmes de até 100 GB · {PARALELOS} de cada vez
         </p>
       </div>
 
