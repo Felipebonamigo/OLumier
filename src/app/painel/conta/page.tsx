@@ -5,6 +5,7 @@ import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais } from "@/config/planos";
 import { asaasConfigurado, asaasEmProducao, proximaCobranca } from "@/lib/asaas";
+import { conferirConfiguracao } from "@/config/socios";
 import { AssinaturaBotao } from "@/components/assinatura-botao";
 
 export const metadata: Metadata = { title: "Conta" };
@@ -40,6 +41,10 @@ export default async function ContaPage() {
     asaasConfigurado() && tenant.asaas_assinatura_id
       ? await proximaCobranca(tenant.asaas_assinatura_id).catch(() => null)
       : null;
+
+  // Estado da divisão entre sócios — carteira faltando não quebra a cobrança,
+  // mas precisa ficar visível para não passar despercebido.
+  const { ok: splitOk, avisos: avisosSplit } = conferirConfiguracao();
 
   const situacao = SITUACOES[tenant.status] ?? { texto: tenant.status, cor: "text-texto-soft" };
 
@@ -89,6 +94,21 @@ export default async function ContaPage() {
             temAssinatura={Boolean(tenant.asaas_assinatura_id)}
             cobrancaLigada={asaasConfigurado()}
           />
+        )}
+
+        {/* Aviso só quando a cobrança está ligada mas o split não foi configurado:
+            enquanto tudo fica na conta principal, é fácil esquecer que os sócios
+            não estão recebendo. */}
+        {asaasConfigurado() && !splitOk && (
+          <div className="mt-3 rounded-lg border border-linha bg-void px-3 py-2 text-xs text-texto-faint">
+            <p className="font-medium text-texto-soft">Divisão entre sócios ainda não configurada</p>
+            <ul className="mt-1 list-disc pl-4">
+              {avisosSplit.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+            <p className="mt-1">Por enquanto, o valor inteiro fica na conta principal.</p>
+          </div>
         )}
 
         {asaasConfigurado() && !asaasEmProducao() && (
