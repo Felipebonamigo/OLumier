@@ -97,6 +97,14 @@ ExecStart=/usr/local/bin/node /opt/fotonio/node_modules/next/dist/bin/next start
 Isso não está em nenhum script do repositório — foi criado à mão direto no
 servidor. Se o serviço for recriado do zero, lembrar deste detalhe.
 
+**Efeito colateral:** com `-H localhost`, o Next passou a escutar só em
+`[::1]:3300` (IPv6), não mais em `127.0.0.1`. Isso quebrou o `ask` global do
+`on_demand_tls` no Caddyfile, que estava fixo em `http://127.0.0.1:3300` —
+o porteiro do certificado ficava com "connection refused" e negava tudo.
+Precisou trocar esse `ask` para `http://localhost:3300` também (mesma regra:
+todo endereço que aponta para o app do Fotônio usa `localhost`, nunca
+`127.0.0.1`, em qualquer lugar do servidor).
+
 ### O porteiro (`/api/tls/permitir`)
 
 Sem ele, o Caddy tentaria emitir certificado para **qualquer** domínio apontado

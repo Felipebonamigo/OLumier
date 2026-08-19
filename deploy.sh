@@ -39,5 +39,5 @@ systemctl is-active $SERVICO
 REMOTE
 
 echo "→ conferindo"
-ssh "$VPS" "curl -s -o /dev/null -w 'HTTP %{http_code}\n' --max-time 20 http://127.0.0.1:3300/entrar"
+ssh "$VPS" "curl -s -o /dev/null -w 'HTTP %{http_code}\n' --max-time 20 http://localhost:3300/entrar"
 echo "✓ publicado"
