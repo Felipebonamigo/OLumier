@@ -23,7 +23,7 @@ const RECURSOS = [
   },
   {
     titulo: "Cofre automático",
-    texto: "No prazo combinado, os originais migram sozinhos para um armazenamento mais barato — a galeria continua no ar.",
+    texto: "No prazo que você definir, a galeria sai do ar sozinha e vai para o cofre. Nada é apagado — você reativa quando o cliente pedir.",
   },
   {
     titulo: "A aparência que você quiser",
