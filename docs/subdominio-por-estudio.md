@@ -11,22 +11,42 @@
 | Registros DNS na Cloudflare + troca de nameservers | ✅ feito, delegação confirmada no `.br` |
 | Bind do Next (`-H`) compatível com a reescrita | ✅ corrigido — ver armadilha #2 abaixo |
 | Certificado emitido de ponta a ponta (tenant real) | ✅ testado com tenant descartável, depois removido |
-| DNSSEC (DS novo publicado no Registro.br) | ❌ **opcional — falta você publicar** |
+| DNSSEC (DS da Cloudflare publicado no Registro.br) | ✅ publicado 19/08/2026, validando |
 
-## DNSSEC — opcional, mas foi deixado pra trás na migração
+## DNSSEC
 
-A troca de nameservers para a Cloudflare tirou o DS antigo do Registro.br e o
-novo nunca foi publicado. O site funciona normal assim (sem DNSSEC, não é
-"quebrado" — só perdeu essa camada extra). Pra religar, no Registro.br, no
-mesmo lugar onde os nameservers foram trocados, tem um bloco `+ DNSSEC`:
+A troca de nameservers para a Cloudflare deixou o DS antigo órfão, e por um
+tempo o domínio ficou sem DNSSEC nenhum (funcionando, mas sem essa camada).
+Resolvido publicando o DS da *Cloudflare* no Registro.br:
 
 - **Keytag:** `2371`
 - **Digest:** `03CACB526C0D9A80421A5D8268542720688B71864041F16BFE5274B7BD1002AF`
-- Algoritmo `13`, tipo de digest `2` (SHA-256)
+- Algoritmo `13` (ECDSA P-256), tipo de digest `2` (SHA-256)
 
-Conferir se ainda bate com a chave publicada antes de colar (a Cloudflare pode
-ter rotacionado): `dig DNSKEY fotonio.com.br @dayana.ns.cloudflare.com` no
-servidor, e recalcular com `dnssec-dsfromkey` se mudou.
+O Registro.br leva alguns minutos para publicar na zona do `.br` (aqui foram
+~4min30). Conferir com:
+
+```bash
+dig +short DS fotonio.com.br @a.dns.br      # o DS chegou na zona do .br
+dig fotonio.com.br +dnssec @1.1.1.1         # precisa aparecer a flag "ad"
+```
+
+A flag **`ad`** (*authenticated data*) é a prova real: sem ela o DS está lá mas
+a validação não fecha. Só `dig +short DS` não basta.
+
+⚠️ **Se a Cloudflare rotacionar a chave**, esse DS vira inválido e o domínio
+para de resolver (SERVFAIL, não "site fora do ar" — sintoma bem confuso).
+Recalcular e republicar:
+
+```bash
+dig DNSKEY fotonio.com.br @dayana.ns.cloudflare.com +noall +answer > /tmp/k.txt
+dnssec-dsfromkey -f /tmp/k.txt fotonio.com.br
+```
+
+Ao preencher o formulário, cuidado com **espaço invisível grudado no digest** —
+passa despercebido na tela e quebra a validação. E o campo do DS fica no *mesmo*
+formulário dos nameservers: conferir que eles continuam apontando pra Cloudflare
+antes de salvar.
 
 ## Como funciona o certificado (e por que NÃO é curinga)
 
