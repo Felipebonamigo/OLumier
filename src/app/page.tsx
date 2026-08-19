@@ -1,104 +1,163 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import { marca } from "@/config/marca";
-import { planos, formatarReais } from "@/config/planos";
-import { testarConexao } from "@/lib/db";
-import { armazenamentoConfigurado, BUCKET } from "@/lib/r2";
+import { planos, formatarReais, type Plano } from "@/config/planos";
+import { MarcaTile } from "@/components/marca-tile";
 
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: `${marca.nome} — ${marca.tagline}`,
+};
 
-function Item({ ok, titulo, detalhe }: { ok: boolean; titulo: string; detalhe: string }) {
+const RECURSOS = [
+  {
+    titulo: "Seu próprio endereço",
+    texto: "Cada estúdio ganha um subdomínio — seuestudio.fotonio.com.br. Nada de link genérico.",
+  },
+  {
+    titulo: "Vai para a galeria do celular",
+    texto: 'Um toque e a foto cai no rolo do iPhone ou Android — não em "Arquivos", onde ninguém acha depois.',
+  },
+  {
+    titulo: "Envio em massa",
+    texto: "Suba centenas de fotos de uma vez. Se a conexão cair no meio, o envio retoma sozinho de onde parou.",
+  },
+  {
+    titulo: "Cofre automático",
+    texto: "No prazo combinado, os originais migram sozinhos para um armazenamento mais barato — a galeria continua no ar.",
+  },
+  {
+    titulo: "A aparência que você quiser",
+    texto: "Quatro estilos prontos, ou combine capa, tema, tipografia e grade do seu jeito.",
+  },
+  {
+    titulo: "Sem limite de download",
+    texto: "A galeria é do seu cliente. Ele baixa quantas fotos quiser, quantas vezes quiser.",
+  },
+];
+
+export default function Home() {
+  const foto = planos.filter((p) => p.segmento === "foto");
+  const filme = planos.filter((p) => p.segmento === "filme");
+
   return (
-    <li className="flex items-start gap-3 border-b border-linha py-3 last:border-b-0">
-      <span
-        aria-hidden
-        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${ok ? "bg-ok" : "bg-alerta"}`}
-      />
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">
-          {titulo}{" "}
-          <span className={`text-xs font-normal ${ok ? "text-ok" : "text-alerta"}`}>
-            {ok ? "pronto" : "pendente"}
-          </span>
+    <main>
+      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-8">
+        <span className="flex items-center gap-3">
+          <MarcaTile tamanho={40} />
+          <span className="text-lg font-bold tracking-tight">{marca.nome}</span>
         </span>
-        <span className="mt-0.5 block text-xs text-texto-faint">{detalhe}</span>
-      </span>
-    </li>
-  );
-}
-
-export default async function Home() {
-  const banco = await testarConexao();
-
-  return (
-    <main className="mx-auto max-w-3xl px-6 py-16">
-      <header className="flex items-center gap-4">
-        <div className="grid h-16 w-16 place-items-center rounded-xl border border-linha-forte bg-carbon-2 text-2xl font-bold text-luz-alta">
-          {marca.simbolo}
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{marca.nome}</h1>
-          <p className="font-mono text-[11px] uppercase tracking-[0.26em] text-texto-soft">
-            galerias de entrega
-          </p>
-        </div>
+        <nav className="flex items-center gap-6 text-sm">
+          <Link href="/entrar" className="text-texto-soft hover:text-texto">
+            Entrar
+          </Link>
+          <Link
+            href="/cadastrar"
+            className="rounded-full bg-luz px-4 py-2 font-medium text-void hover:bg-luz-alta"
+          >
+            Criar conta
+          </Link>
+        </nav>
       </header>
 
-      <p className="mt-8 max-w-[46ch] text-lg text-luz italic">{marca.tagline}</p>
-
-      <section className="mt-12 rounded-xl border border-linha bg-carbon p-6">
-        <h2 className="text-sm font-semibold">Estado da instalação</h2>
-        <p className="mt-1 text-xs text-texto-faint">
-          Esta tela é temporária — sai quando o painel do fotógrafo entrar no lugar.
+      <section className="mx-auto max-w-3xl px-6 pb-20 pt-12 text-center sm:pt-20">
+        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-texto-faint">
+          Galerias de entrega
         </p>
-        <ul className="mt-4">
-          <Item
-            ok={armazenamentoConfigurado}
-            titulo="Armazenamento (Cloudflare R2)"
-            detalhe={
-              armazenamentoConfigurado
-                ? `bucket "${BUCKET}" configurado`
-                : "faltam R2_ACCESS_KEY_ID e R2_SECRET_ACCESS_KEY no .env.local"
-            }
-          />
-          <Item
-            ok={banco.ok}
-            titulo="Banco de dados (Postgres)"
-            detalhe={banco.ok ? "conectado" : (banco.erro ?? "sem conexão")}
-          />
-          <Item ok={false} titulo="Login do fotógrafo" detalhe="próximo passo do roadmap" />
-          <Item ok={false} titulo="Upload e galeria pública" detalhe="na sequência" />
+        <h1 className="mt-4 font-serif text-4xl font-bold tracking-tight sm:text-6xl">
+          {marca.tagline}
+        </h1>
+        <p className="mx-auto mt-6 max-w-[46ch] text-lg text-texto-soft">{marca.descricao}</p>
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+          <Link
+            href="/cadastrar"
+            className="rounded-full bg-luz px-6 py-3 font-medium text-void hover:bg-luz-alta"
+          >
+            Criar conta grátis
+          </Link>
+          <Link
+            href="#planos"
+            className="text-sm text-texto-soft underline underline-offset-4 hover:text-texto"
+          >
+            Ver planos
+          </Link>
+        </div>
+        <p className="mt-4 text-xs text-texto-faint">14 dias grátis, sem cartão.</p>
+      </section>
+
+      <section className="mx-auto max-w-5xl px-6 pb-24">
+        <ul className="grid gap-px overflow-hidden rounded-2xl border border-linha bg-linha sm:grid-cols-2 lg:grid-cols-3">
+          {RECURSOS.map((r) => (
+            <li key={r.titulo} className="bg-carbon p-6">
+              <h3 className="font-semibold">{r.titulo}</h3>
+              <p className="mt-2 text-sm text-texto-soft">{r.texto}</p>
+            </li>
+          ))}
         </ul>
       </section>
 
-      <section className="mt-8">
-        <h2 className="text-sm font-semibold">Planos carregados</h2>
-        <p className="mt-1 text-xs text-texto-faint">
-          Vindos da planilha de custos validada — conferência rápida de que os preços estão certos.
-        </p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[420px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-linha text-left font-mono text-[10px] uppercase tracking-widest text-texto-faint">
-                <th className="py-2 pr-4 font-normal">Plano</th>
-                <th className="py-2 pr-4 text-right font-normal">Galeria</th>
-                <th className="py-2 pr-4 text-right font-normal">Cofre</th>
-                <th className="py-2 text-right font-normal">Preço</th>
-              </tr>
-            </thead>
-            <tbody className="tabular-nums">
-              {planos.map((p) => (
-                <tr key={p.id} className="border-b border-linha last:border-b-0">
-                  <td className="py-2 pr-4">{p.nome}</td>
-                  <td className="py-2 pr-4 text-right text-texto-soft">{p.quotaGb} GB</td>
-                  <td className="py-2 pr-4 text-right text-texto-soft">{p.cofreGb} GB</td>
-                  <td className="py-2 text-right font-medium text-luz-alta">
-                    {formatarReais(p.precoCentavos)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <section id="planos" className="mx-auto max-w-5xl scroll-mt-8 px-6 pb-24">
+        <div className="text-center">
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-texto-faint">Planos</p>
+          <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight">
+            Um plano pra cada tamanho de entrega
+          </h2>
+          <p className="mx-auto mt-3 max-w-[50ch] text-texto-soft">
+            Todos incluem galeria com a sua marca, downloads ilimitados e cofre automático depois do
+            prazo.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-10 sm:grid-cols-2">
+          <PlanoGrupo titulo="Foto" planos={foto} />
+          <PlanoGrupo titulo="Filme" planos={filme} />
         </div>
       </section>
+
+      <section className="mx-auto max-w-3xl px-6 pb-24 text-center">
+        <h2 className="font-serif text-2xl font-bold tracking-tight">Pronto pra entregar do seu jeito?</h2>
+        <Link
+          href="/cadastrar"
+          className="mt-6 inline-block rounded-full bg-luz px-6 py-3 font-medium text-void hover:bg-luz-alta"
+        >
+          Criar conta grátis
+        </Link>
+      </section>
+
+      <footer className="border-t border-linha px-6 py-10 text-center text-xs text-texto-faint">
+        <p>
+          {marca.nome} · {marca.email}
+        </p>
+        <p className="mt-1">© {new Date().getFullYear()}</p>
+      </footer>
     </main>
+  );
+}
+
+function PlanoGrupo({ titulo, planos }: { titulo: string; planos: Plano[] }) {
+  return (
+    <div>
+      <h3 className="font-mono text-[11px] uppercase tracking-[0.28em] text-texto-faint">{titulo}</h3>
+      <ul className="mt-4 divide-y divide-linha rounded-xl border border-linha">
+        {planos.map((p) => (
+          <li key={p.id} className="relative flex items-center justify-between gap-4 p-5">
+            {p.destaque && (
+              <span className="absolute -top-3 left-5 rounded-full bg-luz px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-void">
+                Mais pedido
+              </span>
+            )}
+            <div>
+              <p className="font-semibold">{p.nome}</p>
+              <p className="text-xs text-texto-soft">
+                galeria + {p.cofreGb >= 1000 ? `${p.cofreGb / 1000} TB` : `${p.cofreGb} GB`} de cofre
+              </p>
+            </div>
+            <p className="whitespace-nowrap text-lg font-bold text-luz-alta">
+              {formatarReais(p.precoCentavos)}
+              <span className="text-xs font-normal text-texto-faint">/mês</span>
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

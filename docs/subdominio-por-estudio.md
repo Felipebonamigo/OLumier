@@ -8,40 +8,25 @@
 |---|---|
 | Código (roteamento, página do estúdio, porteiro do certificado) | ✅ pronto e testado |
 | Caddy no servidor | ✅ configurado, todos os sites verificados no ar |
-| Registros DNS na Cloudflare | ❌ **falta você criar** |
-| Troca de nameservers | ❌ **falta você fazer** |
+| Registros DNS na Cloudflare + troca de nameservers | ✅ feito, delegação confirmada no `.br` |
+| Bind do Next (`-H`) compatível com a reescrita | ✅ corrigido — ver armadilha #2 abaixo |
+| Certificado emitido de ponta a ponta (tenant real) | ✅ testado com tenant descartável, depois removido |
+| DNSSEC (DS novo publicado no Registro.br) | ❌ **opcional — falta você publicar** |
 
-## O que falta — na ordem (a ordem importa!)
+## DNSSEC — opcional, mas foi deixado pra trás na migração
 
-### 1. Criar os registros NA CLOUDFLARE (antes de trocar qualquer coisa)
+A troca de nameservers para a Cloudflare tirou o DS antigo do Registro.br e o
+novo nunca foi publicado. O site funciona normal assim (sem DNSSEC, não é
+"quebrado" — só perdeu essa camada extra). Pra religar, no Registro.br, no
+mesmo lugar onde os nameservers foram trocados, tem um bloco `+ DNSSEC`:
 
-A zona da Cloudflare está **vazia de registros A** — ela só importou os MX/TXT
-que existiam quando o site foi adicionado. Os registros A você criou depois, no
-Registro.br. **Trocar os nameservers agora derrubaria o domínio.**
+- **Keytag:** `2371`
+- **Digest:** `03CACB526C0D9A80421A5D8268542720688B71864041F16BFE5274B7BD1002AF`
+- Algoritmo `13`, tipo de digest `2` (SHA-256)
 
-Cloudflare → `fotonio.com.br` → DNS → Add record:
-
-| Tipo | Nome | Conteúdo | Proxy |
-|---|---|---|---|
-| A | `@` | `179.197.233.184` | **DNS only (cinza)** |
-| A | `www` | `179.197.233.184` | **DNS only (cinza)** |
-| A | `*` | `179.197.233.184` | **DNS only (cinza)** |
-
-O `*` é o motivo de precisarmos da Cloudflare: o Registro.br **não aceita
-curinga** (a tela dele avisa: *"Não são aceitos os caracteres '@' e '*'"*).
-
-⚠️ Nuvem **cinza**. Com o proxy laranja, o Caddy não consegue emitir certificado.
-
-### 2. Desativar o DNSSEC no Registro.br
-
-Trocar os nameservers com DNSSEC ativo faz o domínio **parar de resolver**, com
-erro difícil de diagnosticar.
-
-### 3. Trocar os nameservers no Registro.br
-
-Para `dayana.ns.cloudflare.com` e `rodrigo.ns.cloudflare.com`.
-
-Como os registros já vão estar esperando na Cloudflare, a troca é sem queda.
+Conferir se ainda bate com a chave publicada antes de colar (a Cloudflare pode
+ter rotacionado): `dig DNSKEY fotonio.com.br @dayana.ns.cloudflare.com` no
+servidor, e recalcular com `dnssec-dsfromkey` se mudou.
 
 ## Como funciona o certificado (e por que NÃO é curinga)
 
@@ -78,6 +63,39 @@ https:// {
 ```
 
 Assim o Caddy não tenta certificado curinga; cada subdomínio recebe o seu.
+
+### A armadilha que já nos mordeu (2): `-H 127.0.0.1` quebra a reescrita
+
+Depois do DNS pronto, o primeiro acesso real a um subdomínio devolvia
+**HTTP 500**, com esse erro no log do serviço:
+
+```
+Failed to proxy https://localhost:3300/e/estudio-teste Error: write EPROTO ...wrong version number...
+```
+
+O domínio principal funcionava normal — só a reescrita de subdomínio quebrava.
+Causa: no Next 16, `proxy.ts` roda como uma camada de rede de verdade (não mais
+in-process como o antigo `middleware.ts`). Quando `NextResponse.rewrite()`
+aponta para o mesmo servidor, o Next decide isso comparando a origem da
+reescrita com a URL "de si mesmo" que ele monta a partir do bind (`-H`) e do
+`X-Forwarded-Proto` que o Caddy envia (`https`, já que o Caddy termina o TLS).
+
+O problema: o Next normaliza `127.0.0.1` para `localhost` numa parte do
+código, mas não na outra. Com `ExecStart` usando `-H 127.0.0.1`, as duas URLs
+ficam diferentes (`https://127.0.0.1:3300` vs `https://localhost:3300`) — o
+Next conclui que o destino é "externo" e tenta buscar a página com uma conexão
+HTTPS de verdade contra a própria porta 3300, que só fala HTTP puro (quem
+termina TLS é o Caddy). Daí o `wrong version number`.
+
+**Correção:** usar `-H localhost` no `ExecStart` do systemd, não `-H 127.0.0.1`.
+Mesma segurança (só escuta em loopback), mas sem a normalização inconsistente.
+
+```
+ExecStart=/usr/local/bin/node /opt/fotonio/node_modules/next/dist/bin/next start -H localhost -p 3300
+```
+
+Isso não está em nenhum script do repositório — foi criado à mão direto no
+servidor. Se o serviço for recriado do zero, lembrar deste detalhe.
 
 ### O porteiro (`/api/tls/permitir`)
 
