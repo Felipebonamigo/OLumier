@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { criarSessao, encerrarSessao } from "@/lib/auth";
 import { autenticar, criarTenant, emailJaUsado } from "@/lib/tenants";
 import { planoPorId, planos } from "@/config/planos";
+import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 
 export interface EstadoForm {
   erro?: string;
@@ -21,10 +22,24 @@ export async function entrarAction(_estado: EstadoForm, form: FormData): Promise
 
   if (!email || !senha) return { erro: "Preencha e-mail e senha." };
 
+  // Freio por e-mail: é o alvo de quem tenta adivinhar a senha de uma conta.
+  const chave = `login:${email.toLowerCase()}`;
+  const antes = podeTentar(chave);
+  if (!antes.permitido) {
+    return { erro: `Muitas tentativas. Tente de novo em ${emPalavras(antes.esperarSeg!)}.` };
+  }
+
   const tenant = await autenticar(email, senha);
   // Mensagem única de propósito: dizer "esse e-mail não existe" entrega quem é cliente nosso.
-  if (!tenant) return { erro: "E-mail ou senha incorretos." };
+  if (!tenant) {
+    const depois = registrarErro(chave);
+    if (!depois.permitido) {
+      return { erro: `Muitas tentativas. Tente de novo em ${emPalavras(depois.esperarSeg!)}.` };
+    }
+    return { erro: "E-mail ou senha incorretos." };
+  }
 
+  limparTentativas(chave);
   await criarSessao(tenant.id);
   redirect(destinoSeguro(form.get("proximo")));
 }
