@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Fotônio
 
-## Getting Started
+Galerias de entrega para fotógrafos e filmakers. Multi-tenant: cada estúdio tem
+seu endereço (`siriusfotografia.fotonio.com.br`), sua marca e seu espaço.
 
-First, run the development server:
+## Rodar
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+.\tunel.ps1          # túnel SSH para o Postgres do VPS (deixe aberto)
+npm run dev          # http://localhost:3040
+npm test             # as 16 suítes
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local` a partir de `.env.local.example`. O banco de desenvolvimento é
+`fotonio_dev`, no mesmo servidor do de produção — os testes **recusam** rodar
+contra qualquer banco que não termine em `_dev`/`_teste`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Como está organizado
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Pasta | O que vive ali |
+|---|---|
+| `src/config/` | Decisões de negócio: planos, marca, aparência, sócios, subdomínios reservados |
+| `src/lib/` | Banco, armazenamento (R2), sessão, cofre, cobrança, quota |
+| `src/app/(auth)/` | Entrar e cadastrar |
+| `src/app/painel/` | O que o fotógrafo usa |
+| `src/app/g/`, `src/app/e/` | O que o cliente final vê |
+| `src/proxy.ts` | Roteamento por subdomínio (o antigo `middleware.ts`) |
+| `db/migracoes/` | Mudanças de estrutura, aplicadas por `scripts/migrar.mjs` |
+| `ops/` | Backup e vigia — versionados aqui, instalados no servidor |
+| `scripts/` | Testes e ferramentas de manutenção |
 
-## Learn More
+**A marca fica só em `src/config/marca.ts`.** Nada mais escreve "Fotônio"
+direto; bucket, tabelas e pastas usam termos neutros, para o nome poder mudar
+sem migração.
 
-To learn more about Next.js, take a look at the following resources:
+## Publicar
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+bash deploy.sh
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Publica o que está **commitado**. Recusa se houver migração pendente em
+produção, se o build falhar, ou se o app subir sem falar com banco e R2.
 
-## Deploy on Vercel
+## Documentação
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [`docs/operacao.md`](docs/operacao.md) — o que roda sozinho, ferramentas, o que falta
+- [`docs/backup.md`](docs/backup.md) — backup e restauração (ensaiada)
+- [`docs/subdominio-por-estudio.md`](docs/subdominio-por-estudio.md) — DNS, TLS e as armadilhas
+- [`docs/ligar-cobranca.md`](docs/ligar-cobranca.md) — passo a passo do Asaas
+- [`docs/experiencia-galeria.md`](docs/experiencia-galeria.md) — decisões da galeria pública
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Next 16
+
+Este projeto usa Next 16, onde `middleware.ts` virou `proxy.ts` e `params` é uma
+Promise. Ver `AGENTS.md` — os guias oficiais estão em `node_modules/next/dist/docs/`.

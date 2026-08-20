@@ -125,6 +125,15 @@ export default function Home() {
 
       <footer className="border-t border-linha px-6 py-10 text-center text-xs text-texto-faint">
         <p>
+          <Link href="/privacidade" className="hover:text-texto-soft">
+            Privacidade
+          </Link>
+          {" · "}
+          <Link href="/termos" className="hover:text-texto-soft">
+            Termos de uso
+          </Link>
+        </p>
+        <p className="mt-2">
           {marca.nome} · {marca.email}
         </p>
         <p className="mt-1">© {new Date().getFullYear()}</p>
