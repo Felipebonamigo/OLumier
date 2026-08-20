@@ -1,0 +1,12 @@
+[Unit]
+Description=Fotonio - backup diario do banco
+
+[Timer]
+# 03:40 — depois do backup do Atomatiza (03:10) para os dois nao disputarem
+# disco e rede, e fora do horario em que alguem estaria subindo fotos.
+OnCalendar=*-*-* 03:40:00
+# Se o servidor estava desligado na hora, roda assim que voltar.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

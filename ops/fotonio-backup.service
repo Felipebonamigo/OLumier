@@ -1,0 +1,8 @@
+[Unit]
+Description=Fotonio - backup diario do banco
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fotonio-backup.sh

@@ -27,8 +27,12 @@ echo "→ enviando"
 scp -q /tmp/fotonio-deploy.tar.gz "$VPS:/tmp/fotonio.tar.gz"
 
 echo "→ instalando e construindo no servidor"
+# pipefail nao e detalhe: sem ele, `npm run build | tail -3` devolve o status do
+# TAIL (sempre 0), o `set -e` nao ve falha nenhuma e o servico reinicia com build
+# quebrado. O `set -euo pipefail` da linha 9 vale so para a maquina local — este
+# heredoc roda em outro shell, no servidor, e nao herda nada.
 ssh "$VPS" "bash -s" <<REMOTE
-set -e
+set -eo pipefail
 tar -xzf /tmp/fotonio.tar.gz -C $DESTINO
 cd $DESTINO
 npm ci --no-audit --no-fund >/dev/null 2>&1
@@ -38,6 +42,20 @@ sleep 6
 systemctl is-active $SERVICO
 REMOTE
 
+# Conferir /entrar so provava que o Next respondia: aquela pagina nao toca banco
+# nem R2. A raiz e renderizada no servidor e a de conta exige sessao — juntas,
+# provam que o processo subiu de pe. O banco tem prova propria logo abaixo.
 echo "→ conferindo"
-ssh "$VPS" "curl -s -o /dev/null -w 'HTTP %{http_code}\n' --max-time 20 http://localhost:3300/entrar"
+ssh "$VPS" "
+  set -e
+  for r in / /entrar; do
+    c=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 http://localhost:3300\$r)
+    echo \"  \$r -> HTTP \$c\"
+    [ \"\$c\" = 200 ] || { echo '  ! resposta inesperada'; exit 1; }
+  done
+  # Bate numa rota que consulta o banco de verdade (o porteiro do TLS faz SELECT).
+  c=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 'http://localhost:3300/api/tls/permitir?domain=fotonio.com.br')
+  echo \"  banco (via /api/tls/permitir) -> HTTP \$c\"
+  [ \"\$c\" = 200 ] || { echo '  ! o app subiu mas nao fala com o banco'; exit 1; }
+"
 echo "✓ publicado"
