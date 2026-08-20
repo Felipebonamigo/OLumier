@@ -1,0 +1,11 @@
+[Unit]
+Description=Fotonio - vigia de saude (a cada 5 min)
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+# Espalha um pouco para nao bater junto com outros timers do servidor.
+RandomizedDelaySec=30s
+
+[Install]
+WantedBy=timers.target

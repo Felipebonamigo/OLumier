@@ -109,6 +109,31 @@ export async function objetoExiste(chave: string): Promise<boolean> {
   }
 }
 
+/**
+ * O bucket responde e aceita nossa credencial?
+ *
+ * NÃO dá para usar `objetoExiste` para isso: ela engole qualquer erro e devolve
+ * false, então credencial revogada ficaria indistinguível de "arquivo não
+ * existe" — e a checagem de saúde diria que está tudo bem com o armazenamento
+ * inteiro fora do ar.
+ *
+ * Aqui um 404 é justamente o resultado ESPERADO: prova que a requisição chegou,
+ * foi autenticada e o bucket respondeu. Qualquer outro erro é problema de
+ * verdade.
+ */
+export async function conferirAcesso(): Promise<{ ok: boolean; erro?: string }> {
+  if (!armazenamentoConfigurado) return { ok: false, erro: "credenciais ausentes" };
+  try {
+    await s3().send(new HeadObjectCommand({ Bucket: BUCKET, Key: "_healthz/nao-existe" }));
+    return { ok: true }; // improvável, mas seria uma resposta boa também
+  } catch (e) {
+    const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
+    const status = err.$metadata?.httpStatusCode;
+    if (status === 404 || err.name === "NotFound") return { ok: true };
+    return { ok: false, erro: err.name ? `${err.name} (${status ?? "sem status"})` : "falha no bucket" };
+  }
+}
+
 // --- envio em partes (multipart) --------------------------------------------
 
 /**

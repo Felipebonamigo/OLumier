@@ -1,0 +1,7 @@
+[Unit]
+Description=Fotonio - vigia de saude
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/fotonio-vigia.sh
