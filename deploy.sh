@@ -53,9 +53,10 @@ ssh "$VPS" "
     echo \"  \$r -> HTTP \$c\"
     [ \"\$c\" = 200 ] || { echo '  ! resposta inesperada'; exit 1; }
   done
-  # Bate numa rota que consulta o banco de verdade (o porteiro do TLS faz SELECT).
-  c=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 'http://localhost:3300/api/tls/permitir?domain=fotonio.com.br')
-  echo \"  banco (via /api/tls/permitir) -> HTTP \$c\"
-  [ \"\$c\" = 200 ] || { echo '  ! o app subiu mas nao fala com o banco'; exit 1; }
+  # O healthz testa banco E R2 de verdade — se ele passa, o app trabalha mesmo.
+  corpo=\$(curl -s --max-time 25 http://localhost:3300/api/healthz)
+  c=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 25 http://localhost:3300/api/healthz)
+  echo \"  /api/healthz -> HTTP \$c \$corpo\"
+  [ \"\$c\" = 200 ] || { echo '  ! o app subiu mas alguma dependencia esta fora'; exit 1; }
 "
 echo "✓ publicado"

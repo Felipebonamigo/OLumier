@@ -141,9 +141,55 @@ export async function criarGaleria(dados: {
   );
 }
 
+/**
+ * Apaga a galeria — no banco E no bucket.
+ *
+ * O `delete` sozinho levava as linhas de `medias` junto (cascade) mas deixava os
+ * arquivos no R2 para sempre: sumiam do painel, do relatório de uso e da quota,
+ * e continuavam sendo cobrados todo mês. Lixo invisível que só apareceria na
+ * fatura, meses depois, sem ninguém saber de onde veio.
+ *
+ * As chaves são lidas ANTES do delete — depois dele não haveria mais como saber
+ * o que apagar.
+ */
 export async function apagarGaleria(tenantId: string, galeriaId: string) {
   // O tenant_id no where não é redundante: impede que um id adivinhado apague galeria de outro.
-  await consultar("delete from galerias where id = $1 and tenant_id = $2", [galeriaId, tenantId]);
+  const chaves = await consultar<{
+    chave: string;
+    chave_thumb: string | null;
+    chave_preview: string | null;
+  }>(
+    `select m.chave, m.chave_thumb, m.chave_preview
+       from medias m
+       join galerias g on g.id = m.galeria_id
+      where m.galeria_id = $1 and g.tenant_id = $2`,
+    [galeriaId, tenantId],
+  );
+
+  const apagou = await consultar<{ id: string }>(
+    "delete from galerias where id = $1 and tenant_id = $2 returning id",
+    [galeriaId, tenantId],
+  );
+  // Não era dele: não mexe em arquivo nenhum.
+  if (apagou.length === 0) return;
+
+  const todas = chaves.flatMap((m) =>
+    [m.chave, m.chave_thumb, m.chave_preview].filter((c): c is string => Boolean(c)),
+  );
+  if (todas.length === 0) return;
+
+  // O banco já é a fonte da verdade e a galeria já sumiu para o usuário. Se o
+  // bucket falhar aqui, registramos e seguimos: derrubar a ação faria a pessoa
+  // tentar de novo numa galeria que não existe mais.
+  const { apagarObjetos } = await import("./r2");
+  try {
+    await apagarObjetos(todas);
+  } catch (e) {
+    console.error(
+      `[apagarGaleria] ${todas.length} objeto(s) da galeria ${galeriaId} podem ter ficado no bucket:`,
+      e,
+    );
+  }
 }
 
 /** Formata bytes para leitura humana. bigint como string porque acima de 8 PB o Number perde precisão. */

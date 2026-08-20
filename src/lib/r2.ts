@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   S3Client,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
   HeadObjectCommand,
   CreateMultipartUploadCommand,
   UploadPartCommand,
@@ -97,6 +99,60 @@ export async function conferirObjeto(chave: string) {
 
 export async function apagarObjeto(chave: string) {
   await s3().send(new DeleteObjectCommand({ Bucket: BUCKET, Key: chave }));
+}
+
+/**
+ * Apaga muitos objetos de uma vez (galeria inteira).
+ *
+ * Usa DeleteObjects, que aceita até 1000 chaves por chamada: uma galeria de 600
+ * fotos com derivadas passa de 1800 objetos, e 1800 requisições separadas
+ * levariam minutos e custariam à toa.
+ *
+ * Não lança por objeto que já não existe — apagar o que já não está lá é
+ * exatamente o resultado desejado.
+ */
+export async function apagarObjetos(chaves: string[]) {
+  const unicas = [...new Set(chaves)].filter(Boolean);
+  for (let i = 0; i < unicas.length; i += 1000) {
+    const lote = unicas.slice(i, i + 1000);
+    const r = await s3().send(
+      new DeleteObjectsCommand({
+        Bucket: BUCKET,
+        Delete: { Objects: lote.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    // Com Quiet: true só voltam os que FALHARAM. Silêncio aqui esconderia
+    // arquivo pago ficando para trás.
+    if (r.Errors?.length) {
+      throw new Error(
+        `${r.Errors.length} objeto(s) não foram apagados (ex.: ${r.Errors[0].Key} — ${r.Errors[0].Message})`,
+      );
+    }
+  }
+}
+
+/**
+ * Lista todas as chaves do bucket (páginas de 1000, seguindo o cursor).
+ *
+ * Existe para a varredura de órfãos: comparar o que está no bucket com o que o
+ * banco conhece é a única forma de achar arquivo pago que ninguém mais
+ * referencia. Não é usado no caminho normal do app.
+ */
+export async function listarChaves(prefixo?: string): Promise<string[]> {
+  const chaves: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const r = await s3().send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET,
+        Prefix: prefixo,
+        ContinuationToken: cursor,
+      }),
+    );
+    for (const o of r.Contents ?? []) if (o.Key) chaves.push(o.Key);
+    cursor = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (cursor);
+  return chaves;
 }
 
 /** true se o objeto existe no bucket. */
