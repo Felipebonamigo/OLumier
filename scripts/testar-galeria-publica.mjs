@@ -198,6 +198,73 @@ await etapa("com download liberado, a URL do original volta a aparecer", async (
   return "link presente quando deve estar";
 });
 
+/*
+ * A prévia do painel aponta para a rota pública, e o fotógrafo escolhe a
+ * aparência enquanto a galeria ainda é RASCUNHO — antes ela mostrava a página de
+ * 404, fazendo o recurso parecer quebrado no momento em que era mais útil.
+ *
+ * A permissão vem da SESSÃO, nunca do parâmetro. Estes testes existem para o
+ * `?previa=1` não virar, por descuido, um jeito de abrir rascunho alheio.
+ */
+const sessaoDe = (tenantId) => {
+  const exp = Date.now() + 300000;
+  const d = `${tenantId}.${exp}`;
+  return `fotonio_sessao=${d}.${createHmac("sha256", SESSION_SECRET).update(d).digest("hex")}`;
+};
+
+await etapa("prévia: rascunho com senha abre para o DONO e para mais ninguém", async () => {
+  const { rows: t } = await db.query("select tenant_id from galerias where id = $1", [galeriaId]);
+  const dono = t[0].tenant_id;
+
+  await db.query("update galerias set publicada = false, senha_hash = $1 where id = $2", [
+    hashDaSenha(SENHA),
+    galeriaId,
+  ]);
+
+  const outro = await db.query(
+    `insert into tenants (slug,nome_estudio,email,senha_hash) values ($1,'Outro',$2,'x') returning id`,
+    [`previa-${Date.now()}`, `previa-${Date.now()}@teste`],
+  );
+
+  try {
+    const status = async (u, cookie) =>
+      (await fetch(u, { headers: cookie ? { cookie } : {}, redirect: "manual" })).status;
+
+    if ((await status(url)) !== 404) throw new Error("rascunho abriu para visitante comum");
+    if ((await status(`${url}?previa=1`)) !== 404) {
+      throw new Error("o parâmetro sozinho abriu o rascunho — vira porta dos fundos");
+    }
+    if ((await status(`${url}?previa=1`, sessaoDe(outro.rows[0].id))) !== 404) {
+      throw new Error("sessão de OUTRO estúdio abriu o rascunho");
+    }
+    if ((await status(`${url}?previa=1`, sessaoDe(dono))) !== 200) {
+      throw new Error("o dono não conseguiu ver a própria prévia");
+    }
+    return "só a sessão do dono abre";
+  } finally {
+    await db.query("delete from tenants where id = $1", [outro.rows[0].id]);
+    await db.query("update galerias set publicada = true, senha_hash = null where id = $1", [galeriaId]);
+  }
+});
+
+await etapa("prévia do dono NÃO conta como abertura do cliente", async () => {
+  // O número de aberturas é a prova de que o casal recebeu; o fotógrafo
+  // conferindo o próprio trabalho não pode inflar essa prova.
+  const { rows: t } = await db.query("select tenant_id from galerias where id = $1", [galeriaId]);
+  const conta = async () =>
+    (await db.query("select count(*)::int n from acessos where galeria_id = $1", [galeriaId]))
+      .rows[0].n;
+
+  const antes = await conta();
+  await fetch(`${url}?previa=1`, { headers: { cookie: sessaoDe(t[0].tenant_id) } });
+  if ((await conta()) !== antes) throw new Error("a prévia do dono foi contada como entrega");
+
+  // E o visitante comum CONTINUA sendo contado.
+  await fetch(url);
+  if ((await conta()) <= antes) throw new Error("parou de contar o visitante de verdade");
+  return "conta o casal, não o fotógrafo";
+});
+
 await etapa("galeria no cofre avisa em vez de sumir", async () => {
   await db.query("update galerias set estado = 'arquivada' where id = $1", [galeriaId]);
   const r = await fetch(url);

@@ -165,7 +165,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
 
       <EditorAparencia
         galeriaId={galeria.id}
-        caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}`}
+        caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
         inicial={lerAparencia(galeria.aparencia)}
       />
 

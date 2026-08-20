@@ -11,6 +11,7 @@ import { consultar, consultarUm } from "./db";
 
 export interface GaleriaPublica {
   id: string;
+  tenant_id: string;
   titulo: string;
   subtitulo: string | null;
   data_evento: Date | null;
@@ -27,16 +28,30 @@ export interface GaleriaPublica {
   estudio_cor: string;
 }
 
-export async function buscarGaleriaPublica(estudioSlug: string, galeriaSlug: string) {
+/**
+ * A galeria como o visitante a vê.
+ *
+ * `incluirRascunho` só é usado pela PRÉVIA do painel, e quem chama precisa ter
+ * conferido antes que a sessão é do dono. A prévia existe porque o fotógrafo
+ * escolhe a aparência justamente enquanto a galeria ainda é rascunho — e até
+ * agora ela mostrava a página de 404, o que fazia o recurso parecer quebrado no
+ * exato momento em que era mais útil.
+ */
+export async function buscarGaleriaPublica(
+  estudioSlug: string,
+  galeriaSlug: string,
+  incluirRascunho = false,
+) {
   return consultarUm<GaleriaPublica>(
-    `select g.id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
+    `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
             g.permite_download, g.expira_em, g.aparencia, g.capa_media_id,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug,
             t.logo_url as estudio_logo, t.cor_destaque as estudio_cor
        from galerias g
        join tenants t on t.id = g.tenant_id
-      where t.slug = $1 and g.slug = $2 and g.publicada`,
-    [estudioSlug, galeriaSlug],
+      where t.slug = $1 and g.slug = $2
+        and ($3::boolean or g.publicada)`,
+    [estudioSlug, galeriaSlug, incluirRascunho],
   );
 }
 

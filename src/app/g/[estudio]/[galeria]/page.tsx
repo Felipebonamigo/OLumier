@@ -10,6 +10,7 @@ import {
   registrarAcesso,
 } from "@/lib/galerias-publicas";
 import { listarSecoes } from "@/lib/secoes";
+import { sessaoAtual } from "@/lib/auth";
 import {
   GaleriaCliente,
   type ItemGaleria,
@@ -21,7 +22,10 @@ import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ estudio: string; galeria: string }> };
+type Props = {
+  params: Promise<{ estudio: string; galeria: string }>;
+  searchParams: Promise<{ previa?: string }>;
+};
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { estudio, galeria } = await params;
@@ -34,10 +38,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function GaleriaPublicaPage({ params }: Props) {
+export default async function GaleriaPublicaPage({ params, searchParams }: Props) {
   const { estudio, galeria: galeriaSlug } = await params;
+  const { previa } = await searchParams;
 
-  const galeria = await buscarGaleriaPublica(estudio, galeriaSlug);
+  /*
+   * PRÉVIA DO DONO.
+   *
+   * O fotógrafo escolhe a aparência enquanto a galeria ainda é rascunho — e até
+   * agora a prévia do painel mostrava a página de 404, fazendo o recurso parecer
+   * quebrado no momento em que era mais útil.
+   *
+   * A permissão vem da SESSÃO, não do parâmetro: `?previa=1` sozinho não abre
+   * nada. Só quem está logado como o dono daquela galeria vê o rascunho — e,
+   * mais abaixo, também pula o portão de senha, porque pedir a própria senha
+   * para o dono conferir o próprio trabalho não faz sentido.
+   */
+  const rascunho = await buscarGaleriaPublica(estudio, galeriaSlug, true);
+  const sessao = previa && rascunho ? await sessaoAtual() : null;
+  const ehDono = Boolean(sessao && rascunho && sessao === rascunho.tenant_id);
+
+  const galeria = ehDono ? rascunho : await buscarGaleriaPublica(estudio, galeriaSlug);
   if (!galeria) notFound();
 
   if (galeria.estado === "arquivada") {
@@ -63,7 +84,8 @@ export default async function GaleriaPublicaPage({ params }: Props) {
     );
   }
 
-  if (galeria.senha_hash && !(await temAcessoLiberado(galeria.id, galeria.senha_hash))) {
+  // O dono não precisa passar pela própria senha para conferir o próprio trabalho.
+  if (!ehDono && galeria.senha_hash && !(await temAcessoLiberado(galeria.id, galeria.senha_hash))) {
     return (
       <PortaoDeSenha
         estudio={estudio}
@@ -118,12 +140,16 @@ export default async function GaleriaPublicaPage({ params }: Props) {
   );
 
   const cabecalhos = await headers();
-  await registrarAcesso({
-    galeriaId: galeria.id,
-    acao: "abriu",
-    ip: cabecalhos.get("x-forwarded-for") ?? cabecalhos.get("x-real-ip"),
-    userAgent: cabecalhos.get("user-agent"),
-  });
+  // O fotógrafo conferindo a própria prévia NÃO conta como entrega: o número de
+  // aberturas é a prova de que o casal recebeu, e ele inflado não prova nada.
+  if (!ehDono) {
+    await registrarAcesso({
+      galeriaId: galeria.id,
+      acao: "abriu",
+      ip: cabecalhos.get("x-forwarded-for") ?? cabecalhos.get("x-real-ip"),
+      userAgent: cabecalhos.get("user-agent"),
+    });
+  }
 
   // Palpite pelo user-agent só para a primeira pintura já sair com o botão certo;
   // no navegador, a detecção de recurso corrige se o palpite estiver errado.
