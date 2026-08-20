@@ -7,6 +7,7 @@ import { planoPorId, formatarReais } from "@/config/planos";
 import { asaasConfigurado, asaasEmProducao, proximaCobranca } from "@/lib/asaas";
 import { conferirConfiguracao } from "@/config/socios";
 import { AssinaturaBotao } from "@/components/assinatura-botao";
+import { situacaoDoTenant } from "@/lib/assinatura";
 
 export const metadata: Metadata = { title: "Conta" };
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export default async function ContaPage() {
   const { ok: splitOk, avisos: avisosSplit } = conferirConfiguracao();
 
   const situacao = SITUACOES[tenant.status] ?? { texto: tenant.status, cor: "text-texto-soft" };
+  const situacaoEnvio = situacaoDoTenant(tenant, asaasConfigurado());
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
@@ -93,6 +95,7 @@ export default async function ContaPage() {
           <AssinaturaBotao
             temAssinatura={Boolean(tenant.asaas_assinatura_id)}
             cobrancaLigada={asaasConfigurado()}
+            documentoSalvo={tenant.cpf_cnpj}
           />
         )}
 
@@ -109,6 +112,17 @@ export default async function ContaPage() {
             </ul>
             <p className="mt-1">Por enquanto, o valor inteiro fica na conta principal.</p>
           </div>
+        )}
+
+        {/* Quando o envio está travado, dizer aqui — senão a pessoa só descobre
+            no meio de um upload que falha, sem entender por quê. */}
+        {!situacaoEnvio.podeEnviar && (
+          <p
+            role="status"
+            className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta"
+          >
+            {situacaoEnvio.recado}
+          </p>
         )}
 
         {asaasConfigurado() && !asaasEmProducao() && (

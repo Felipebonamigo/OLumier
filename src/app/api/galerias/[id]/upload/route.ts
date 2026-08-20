@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
 import { consultarUm } from "@/lib/db";
 import { buscarTenantPorId } from "@/lib/tenants";
+import { situacaoDoTenant } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
 import {
   TIPOS_ACEITOS,
   LIMITE_POR_ARQUIVO,
@@ -93,6 +95,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
+
+  // Trial vencido / inadimplente / cancelado não envia mais nada. O que já foi
+  // publicado continua no ar — ver src/lib/assinatura.ts.
+  const situacao = situacaoDoTenant(tenant, asaasConfigurado());
+  if (!situacao.podeEnviar) {
+    return NextResponse.json({ erro: situacao.recado }, { status: 402 });
+  }
 
   const comprometido = await bytesComprometidos(tenantId);
   const quota = BigInt(tenant.quota_bytes);

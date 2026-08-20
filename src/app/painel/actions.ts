@@ -12,6 +12,7 @@ import { marca } from "@/config/marca";
 import { planoPorId } from "@/config/planos";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { asaasConfigurado, garantirCliente, criarAssinatura } from "@/lib/asaas";
+import { conferirDocumento, soDigitos } from "@/lib/documento";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
 import {
   CAPITULOS_SUGERIDOS,
@@ -193,7 +194,9 @@ export async function moverMediasAction(form: FormData) {
  * Guarda os ids no banco: sem isso, uma segunda chamada criaria assinatura
  * duplicada e o fotografo pagaria duas vezes.
  */
-export async function criarAssinaturaAction(): Promise<{ erro?: string } | void> {
+export async function criarAssinaturaAction(
+  documento: string,
+): Promise<{ erro?: string } | void> {
   const tenantId = await exigirTenant();
 
   if (!asaasConfigurado()) return { erro: "A cobranca ainda nao foi ligada." };
@@ -205,12 +208,26 @@ export async function criarAssinaturaAction(): Promise<{ erro?: string } | void>
   const plano = planoPorId(tenant.plano_id);
   if (!plano) return { erro: "Plano invalido." };
 
+  // O Asaas recusa cliente sem CPF/CNPJ. Conferir aqui em vez de deixar a API
+  // devolver erro em inglês que não diz à pessoa o que fazer.
+  const doc = soDigitos(documento || tenant.cpf_cnpj || "");
+  const problema = conferirDocumento(doc);
+  if (problema) return { erro: problema };
+
   try {
     const cliente = await garantirCliente({
       tenantId,
       nome: tenant.nome_estudio,
       email: tenant.email,
+      cpfCnpj: doc,
     });
+
+    // Guardar só depois do Asaas aceitar: documento recusado não deve ficar
+    // gravado como se fosse válido.
+    await consultar("update tenants set cpf_cnpj = $1, atualizado_em = now() where id = $2", [
+      doc,
+      tenantId,
+    ]);
 
     // Primeiro vencimento quando o teste acabar; se ja acabou, em 3 dias.
     const fimTrial = tenant.trial_ate ? new Date(tenant.trial_ate) : new Date();

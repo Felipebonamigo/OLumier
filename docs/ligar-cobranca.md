@@ -1,14 +1,27 @@
 # Ligar a cobrança — passo a passo
 
-*O código está pronto e testado, mas **adormecido**: sem `ASAAS_API_KEY` no
-ambiente, nada é cobrado e o uso segue liberado. Este documento é o roteiro para
-quando você quiser ligar.*
+*A cobrança está **adormecida**: sem `ASAAS_API_KEY` no ambiente, nada é cobrado
+e o uso segue liberado. Este documento é o roteiro para quando você quiser ligar.*
 
-## Estado de hoje (18/08/2026)
+> ⚠️ **Correção de 20/08/2026.** Este documento dizia "pronto e testado" e estava
+> errado, de um jeito que só apareceria no pior momento: o `scripts/testar-cobranca.mjs`
+> nunca chamou a API do Asaas — ele dispara eventos no nosso próprio webhook e
+> confere a matemática do split. O caminho de SAÍDA (criar cliente e assinatura)
+> tinha zero cobertura, e estava quebrado: ninguém coletava CPF/CNPJ, que o Asaas
+> exige. Dava para cumprir o checklist inteiro abaixo e a cobrança continuar no
+> chão. **Corrigido**: `db/migracoes/006-documento.sql`, `src/lib/documento.ts` e
+> o campo na tela de Conta. Ainda assim, o passo do sandbox continua obrigatório —
+> a criação de assinatura só terá sido provada de verdade quando rodar contra a
+> API real.
+
+## Estado de hoje (20/08/2026)
 
 | Item | Situação |
 |---|---|
-| Código de cobrança, split e webhook | ✅ pronto e testado |
+| Webhook e matemática do split | ✅ testado (`scripts/testar-cobranca.mjs`) |
+| Criar cliente/assinatura no Asaas | ⚠️ código pronto, **nunca rodou contra a API** |
+| CPF/CNPJ do titular | ✅ coletado e validado ao ativar a assinatura |
+| Trial vencido / inadimplência travam o envio | ✅ `src/lib/assinatura.ts` |
 | Conta do Asaas | usar a **mesma do Atomatiza** (decisão do Felipe) |
 | Carteiras dos sócios | ❌ Carol e Sirius ainda não têm conta no Asaas |
 | Percentuais do lucro | ⚠️ 50/25/25 é **proposta**, não acordo |

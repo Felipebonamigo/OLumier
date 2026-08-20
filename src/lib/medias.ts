@@ -63,11 +63,16 @@ export async function listarMedias(galeriaId: string) {
  * Espaço já comprometido pelo tenant: conta também o que está subindo agora
  * (pronto = false). Sem isso, vários envios em paralelo furariam a quota juntos.
  */
-export async function bytesComprometidos(tenantId: string): Promise<bigint> {
-  const r = await consultarUm<{ total: string }>(
-    "select coalesce(sum(bytes),0)::text as total from medias where tenant_id = $1",
-    [tenantId],
-  );
+export async function bytesComprometidos(tenantId: string, exceto?: string): Promise<bigint> {
+  const r = exceto
+    ? await consultarUm<{ total: string }>(
+        "select coalesce(sum(bytes),0)::text as total from medias where tenant_id = $1 and id <> $2",
+        [tenantId, exceto],
+      )
+    : await consultarUm<{ total: string }>(
+        "select coalesce(sum(bytes),0)::text as total from medias where tenant_id = $1",
+        [tenantId],
+      );
   return BigInt(r?.total ?? "0");
 }
 

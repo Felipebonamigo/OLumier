@@ -1,15 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
 import { consultarUm } from "@/lib/db";
-import { buscarMedia, confirmarMedia, apagarMedia, MAX_PARTES } from "@/lib/medias";
+import {
+  buscarMedia,
+  confirmarMedia,
+  apagarMedia,
+  anularDerivadas,
+  bytesComprometidos,
+  MAX_PARTES,
+} from "@/lib/medias";
+import { buscarTenantPorId } from "@/lib/tenants";
 import {
   urlDaParte,
   fecharEnvioEmPartes,
   abortarEnvioEmPartes,
   conferirObjeto,
   objetoExiste,
+  apagarObjeto,
 } from "@/lib/r2";
-import { anularDerivadas } from "@/lib/medias";
 
 /**
  * Envio em partes de um arquivo grande (filme 4K).
@@ -95,6 +103,27 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Mesmo cuidado do envio simples: o tamanho vem do bucket, não do navegador.
     const { bytes } = await conferirObjeto(dados.media.chave);
+
+    // E a mesma reconferência de quota: o filme montado pode ter saído bem maior
+    // do que o navegador declarou lá no preparo.
+    const tenant = await buscarTenantPorId(tenantId);
+    if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
+
+    const outros = await bytesComprometidos(tenantId, id);
+    if (outros + BigInt(bytes) > BigInt(tenant.quota_bytes)) {
+      await apagarMedia(id, tenantId);
+      await Promise.all(
+        [dados.media.chave, dados.media.chave_thumb, dados.media.chave_preview]
+          .filter((c): c is string => Boolean(c))
+          .map((c) => apagarObjeto(c).catch(() => {})),
+      );
+      return NextResponse.json(
+        {
+          erro: `“${dados.media.nome_original}” tem ${(bytes / 1024 ** 3).toFixed(1)} GB e não cabe no espaço que sobrou do seu plano.`,
+        },
+        { status: 507 },
+      );
+    }
 
     const [temThumb, temPreview] = await Promise.all([
       dados.media.chave_thumb ? objetoExiste(dados.media.chave_thumb) : Promise.resolve(true),

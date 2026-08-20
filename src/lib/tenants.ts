@@ -15,6 +15,7 @@ export interface Tenant {
   usado_bytes: string;
   status: string;
   trial_ate: Date | null;
+  cpf_cnpj: string | null;
   asaas_cliente_id: string | null;
   asaas_assinatura_id: string | null;
   criado_em: Date;

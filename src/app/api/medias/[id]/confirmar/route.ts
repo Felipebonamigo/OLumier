@@ -1,6 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
-import { buscarMedia, confirmarMedia, apagarMedia, anularDerivadas } from "@/lib/medias";
+import {
+  buscarMedia,
+  confirmarMedia,
+  apagarMedia,
+  anularDerivadas,
+  bytesComprometidos,
+} from "@/lib/medias";
+import { buscarTenantPorId } from "@/lib/tenants";
 import { conferirObjeto, apagarObjeto, objetoExiste } from "@/lib/r2";
 
 /**
@@ -24,6 +31,32 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
   try {
     const { bytes } = await conferirObjeto(media.chave);
+
+    // O tamanho declarado no preparo era um palpite do navegador; ESTE é o real.
+    // Reconferir a quota agora é o que fecha o furo: sem isso bastava declarar
+    // "1 byte", subir 50 GB e confirmar — a linha virava pronta com 50 GB e o
+    // plano era estourado. Só o `exceto` importa: a reserva desta mídia ainda
+    // está somada com o valor declarado e contaria em dobro.
+    const tenant = await buscarTenantPorId(tenantId);
+    if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
+
+    const outros = await bytesComprometidos(tenantId, mediaId);
+    if (outros + BigInt(bytes) > BigInt(tenant.quota_bytes)) {
+      // Recusar e limpar: deixar o objeto no bucket seria pagar por um arquivo
+      // que o dono não pode usar.
+      await apagarMedia(mediaId, tenantId);
+      await Promise.all(
+        [media.chave, media.chave_thumb, media.chave_preview]
+          .filter((c): c is string => Boolean(c))
+          .map((c) => apagarObjeto(c).catch(() => {})),
+      );
+      return NextResponse.json(
+        {
+          erro: `“${media.nome_original}” tem ${(bytes / 1024 ** 3).toFixed(1)} GB e não cabe no espaço que sobrou do seu plano.`,
+        },
+        { status: 507 },
+      );
+    }
 
     // Derivada que não chegou vira null: a grade cai no original em vez de
     // mostrar imagem quebrada. Uma falha aqui NÃO invalida o upload.
