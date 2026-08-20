@@ -69,15 +69,31 @@ export async function enviarEmPartes(
   const total = Math.ceil(arquivo.size / tamanhoParte);
   const numeros = Array.from({ length: total }, (_, i) => i + 1);
 
-  // Pede as URLs em lotes: assinar 400 de uma vez faria uma resposta enorme e
-  // boa parte venceria antes de ser usada.
+  /*
+   * As URLs são pedidas SOB DEMANDA, não todas no começo.
+   *
+   * Pedir em lotes já era melhor que assinar 400 de uma vez, mas ainda buscava
+   * tudo antes de enviar o primeiro byte — e as assinadas vencem em 6 horas. Um
+   * filme de 40 GB numa conexão de casamento leva mais que isso, então as
+   * primeiras partes venciam antes de chegar a vez delas e o envio morria já no
+   * fim, com quase tudo enviado. O pior momento possível.
+   *
+   * Agora cada lote é buscado quando a primeira parte dele vai subir, e uma URL
+   * recusada é renovada em vez de derrubar o envio.
+   */
   const urlPorNumero = new Map<number, string>();
-  for (let i = 0; i < numeros.length; i += LOTE_URLS) {
-    const lote = numeros.slice(i, i + LOTE_URLS);
+  const lotesPedidos = new Set<number>();
+
+  const pedirLote = async (numero: number, renovar = false) => {
+    const lote = Math.floor((numero - 1) / LOTE_URLS);
+    if (lotesPedidos.has(lote) && !renovar) return;
+    const inicio = lote * LOTE_URLS;
+    const desteLote = numeros.slice(inicio, inicio + LOTE_URLS);
+
     const r = await fetch(`/api/medias/${mediaId}/partes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ numeros: lote }),
+      body: JSON.stringify({ numeros: desteLote }),
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
@@ -85,7 +101,8 @@ export async function enviarEmPartes(
     }
     const { urls } = (await r.json()) as { urls: { numero: number; url: string }[] };
     for (const u of urls) urlPorNumero.set(u.numero, u.url);
-  }
+    lotesPedidos.add(lote);
+  };
 
   const enviadas: ParteEnviada[] = [];
   let bytesEnviados = 0;
@@ -93,16 +110,31 @@ export async function enviarEmPartes(
   await emParalelo(numeros, PARTES_PARALELAS, async (numero) => {
     const inicio = (numero - 1) * tamanhoParte;
     const pedaco = arquivo.slice(inicio, Math.min(inicio + tamanhoParte, arquivo.size));
-    const url = urlPorNumero.get(numero);
-    if (!url) throw new Error(`faltou a URL da parte ${numero}`);
+    await pedirLote(numero);
+
+    const avancar = (delta: number) => {
+      bytesEnviados += delta;
+      aoProgredir(Math.min(99, Math.round((bytesEnviados / arquivo.size) * 100)));
+    };
 
     // Retentativa por PARTE: uma queda de rede reenvia 100 MB, não o filme todo.
-    const etag = await comRetentativa(() =>
-      enviarParte(url, pedaco, (delta) => {
-        bytesEnviados += delta;
-        aoProgredir(Math.min(99, Math.round((bytesEnviados / arquivo.size) * 100)));
-      }),
-    );
+    const etag = await comRetentativa(async () => {
+      const url = urlPorNumero.get(numero);
+      if (!url) throw new Error(`faltou a URL da parte ${numero}`);
+      try {
+        return await enviarParte(url, pedaco, avancar);
+      } catch (e) {
+        /*
+         * 403 aqui quer dizer assinatura vencida, e insistir com a MESMA URL
+         * falharia para sempre. Renovar o lote e deixar a retentativa seguir é
+         * o que salva um envio longo que já está quase no fim.
+         */
+        if (e instanceof Error && e.message.includes("403")) {
+          await pedirLote(numero, true);
+        }
+        throw e;
+      }
+    });
     enviadas.push({ numero, etag });
   });
 

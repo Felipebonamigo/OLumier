@@ -41,20 +41,43 @@ export async function comRetentativa<T>(
   throw ultimoErro;
 }
 
-/** Processa a lista com no máximo `limite` tarefas simultâneas. */
+/**
+ * Processa a lista com no máximo `limite` tarefas simultâneas.
+ *
+ * Quando uma tarefa falha, os outros trabalhadores PARAM e são esperados antes
+ * do erro subir. Antes não era assim: o `Promise.all` rejeitava na hora e os
+ * demais seguiam consumindo a fila sem ninguém esperando por eles — continuavam
+ * enviando partes de um upload já dado como perdido, e se um deles falhasse
+ * depois virava rejeição não tratada, que no navegador aparece como erro solto
+ * no console e no Node derruba o processo.
+ */
 export async function emParalelo<T>(
   itens: T[],
   limite: number,
   tarefa: (item: T, indice: number) => Promise<void>,
 ): Promise<void> {
   let proximo = 0;
+  let falha: unknown = null;
+
   const trabalhadores = Array.from({ length: Math.min(limite, itens.length) }, async () => {
     while (proximo < itens.length) {
+      if (falha) return; // outro trabalhador já falhou: não começar mais nada
       const i = proximo++;
-      await tarefa(itens[i], i);
+      try {
+        await tarefa(itens[i], i);
+      } catch (e) {
+        // Guarda o PRIMEIRO erro: é o que explica a causa. Os seguintes
+        // costumam ser consequência (conexão já caiu, envio já abortado).
+        falha ??= e;
+        return;
+      }
     }
   });
-  await Promise.all(trabalhadores);
+
+  // allSettled, não all: espera todos terminarem antes de propagar, para não
+  // deixar requisição em voo depois que quem chamou já desistiu.
+  await Promise.allSettled(trabalhadores);
+  if (falha) throw falha;
 }
 
 const EXTENSOES = /\.(jpe?g|png|webp|avif|heic|heif|mp4|mov|webm)$/i;

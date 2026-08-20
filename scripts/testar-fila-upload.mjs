@@ -52,6 +52,50 @@ await etapa("processa TODOS os itens da fila", async () => {
   return "25 de 25";
 });
 
+await etapa("uma tarefa que falha PARA a fila, sem deixar trabalhador solto", async () => {
+  /*
+   * Antes o Promise.all rejeitava na hora e os outros trabalhadores seguiam
+   * consumindo a fila sem ninguém esperando: continuavam enviando partes de um
+   * upload já dado como perdido, e uma falha posterior deles virava rejeição
+   * não tratada.
+   */
+  let iniciadas = 0;
+  let emVoo = 0;
+  let vooDepoisDoErro = 0;
+  const itens = Array.from({ length: 40 }, (_, i) => i);
+
+  let erro = null;
+  try {
+    await mod.emParalelo(itens, 3, async (it) => {
+      iniciadas++;
+      emVoo++;
+      try {
+        await new Promise((r) => setTimeout(r, 5));
+        if (it === 4) throw new Error("parte recusada");
+      } finally {
+        emVoo--;
+      }
+    });
+  } catch (e) {
+    erro = e;
+  }
+
+  if (!erro) throw new Error("a falha não foi propagada");
+  if (erro.message !== "parte recusada") throw new Error(`erro trocado: ${erro.message}`);
+
+  // Ninguém pode estar em voo depois que emParalelo devolveu.
+  if (emVoo !== 0) throw new Error(`${emVoo} tarefa(s) ainda rodando após o erro`);
+
+  // E não pode ter varrido a fila inteira depois da falha.
+  if (iniciadas >= itens.length) {
+    throw new Error(`continuou a fila: ${iniciadas} de ${itens.length} iniciadas`);
+  }
+
+  await new Promise((r) => setTimeout(r, 40));
+  if (vooDepoisDoErro > 0) throw new Error("trabalhador solto continuou depois");
+  return `parou em ${iniciadas} de ${itens.length}, nada em voo`;
+});
+
 await etapa("tenta de novo e vence na segunda", async () => {
   let tentativas = 0;
   const r = await mod.comRetentativa(async () => {
