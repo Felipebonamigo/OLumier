@@ -296,7 +296,20 @@ export function GaleriaCliente({
                 type="button"
                 onClick={() => {
                   setAberto(i);
-                  registrar(it.tipo === "video" ? "assistiu" : "abriu", it.id);
+                  /*
+                   * Abrir uma FOTO não registra nada.
+                   *
+                   * Antes registrava "abriu" — a mesma ação que a carga da
+                   * página usa. Um convidado que passasse por 200 fotos somava
+                   * 200 aberturas, e o painel mostra esse número ao fotógrafo
+                   * como prova de que a entrega chegou. O número ficava inflado
+                   * a ponto de não significar nada, e a tabela de acessos
+                   * crescia sem limite por causa disso.
+                   *
+                   * Vídeo continua registrando: "assistiu" é raro, é ação
+                   * deliberada, e é informação que o fotógrafo realmente usa.
+                   */
+                  if (it.tipo === "video") registrar("assistiu", it.id);
                 }}
                 style={estilo}
                 className={`group relative overflow-hidden rounded-md ${classe}`}

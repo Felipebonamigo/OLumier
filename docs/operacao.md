@@ -94,6 +94,22 @@ Roda as 15 suítes. As que dependem do servidor de desenvolvimento são **pulada
 e a traduzir o atalho `@/`. Sem isso, nenhum script conseguia importar nada de
 `src/lib` — e o que é difícil de testar acaba não sendo testado.
 
+## Uma decisão que ficou pendente de propósito
+
+**A tabela `acessos` não tem política de retenção.** Ela cresce com as entregas,
+e o motivo de eu não ter cortado é honesto: o painel mostra "N aberturas · M
+downloads" contando essas linhas, e apagar as antigas faria o número **cair
+sozinho** — o fotógrafo veria a prova de entrega dele encolher sem explicação.
+
+O crescimento já foi muito reduzido: até 20/08/2026 cada clique numa foto
+gravava uma linha `abriu`, então um convidado que passasse por 200 fotos somava
+200 aberturas (e inflava o contador que o fotógrafo lê como prova). Agora só a
+abertura da página conta; vídeo ainda registra `assistiu`, que é raro e
+deliberado.
+
+Quando isso virar problema de verdade, o caminho é guardar um agregado por
+galeria e só então poder descartar o detalhe — não o contrário.
+
 ## O que falta
 
 - **"Esqueci minha senha" self-service** — depende de um remetente verificado no

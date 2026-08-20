@@ -132,6 +132,25 @@ export function EnviarArquivos({
       // Vários ao mesmo tempo: um por vez faria 600 fotos levarem horas.
       await emParalelo(arquivos, PARALELOS, async (arquivo, i) => {
         const item = novos[i];
+
+        /*
+         * O preparo acontece UMA vez, mesmo com várias tentativas.
+         *
+         * Antes ele estava dentro do `comRetentativa`: uma queda de rede durante
+         * o envio fazia a tentativa seguinte chamar /upload de novo e nascer uma
+         * SEGUNDA linha em `medias`. A primeira ficava pendente para sempre,
+         * segurando espaço da quota por um arquivo que nunca existiu — e o dono
+         * não tinha como ver nem soltar isso pelo painel.
+         */
+        // União discriminada em vez de campos opcionais: `url` só existe no
+        // envio simples e `tamanhoParte` só no envio em partes. Assim o
+        // compilador cobra a checagem do `emPartes` antes de usar cada um.
+        type Preparo = { mediaId: string; urlThumb?: string; urlPreview?: string } & (
+          | { emPartes: true; tamanhoParte: number }
+          | { emPartes: false; url: string }
+        );
+        let preparado: Preparo | null = null;
+
         try {
           await comRetentativa(
             async () => {
@@ -139,27 +158,32 @@ export function EnviarArquivos({
               const derivadas = await gerarDerivadas(arquivo);
 
               atualizar(item.id, { situacao: "enviando" });
-              const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  nome: arquivo.name,
-                  mime: arquivo.type,
-                  bytes: arquivo.size,
-                  comDerivadas: Boolean(derivadas),
-                  largura: derivadas?.largura,
-                  altura: derivadas?.altura,
-                  secaoId: destino || undefined,
-                }),
-              });
-              const dados = await preparo.json();
-              if (!preparo.ok) {
-                // Sem espaço, tipo recusado ou arquivo grande demais: insistir não resolve.
-                if (preparo.status === 507 || preparo.status === 415 || preparo.status === 413) {
-                  throw Object.assign(new Error(dados.erro), { definitivo: true });
+
+              if (!preparado) {
+                const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    nome: arquivo.name,
+                    mime: arquivo.type,
+                    bytes: arquivo.size,
+                    comDerivadas: Boolean(derivadas),
+                    largura: derivadas?.largura,
+                    altura: derivadas?.altura,
+                    secaoId: destino || undefined,
+                  }),
+                });
+                const corpo = await preparo.json();
+                if (!preparo.ok) {
+                  // Sem espaço, tipo recusado ou grande demais: insistir não resolve.
+                  if (preparo.status === 507 || preparo.status === 415 || preparo.status === 413) {
+                    throw Object.assign(new Error(corpo.erro), { definitivo: true });
+                  }
+                  throw new Error(corpo.erro ?? "não foi possível preparar o envio");
                 }
-                throw new Error(dados.erro ?? "não foi possível preparar o envio");
+                preparado = corpo;
               }
+              const dados = preparado!;
 
               // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
               if (dados.emPartes) {
@@ -194,6 +218,19 @@ export function EnviarArquivos({
 
           atualizar(item.id, { situacao: "pronto", progresso: 100 });
         } catch (e) {
+          /*
+           * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
+           * preso até a limpeza diária passar. Quem acabou de ver um envio
+           * falhar costuma tentar de novo no minuto seguinte — e encontrar
+           * "sem espaço" por causa da tentativa anterior seria absurdo.
+           */
+          const p = preparado as { mediaId: string; emPartes: boolean } | null;
+          if (p?.mediaId) {
+            const rota = p.emPartes
+              ? `/api/medias/${p.mediaId}/partes`
+              : `/api/medias/${p.mediaId}/confirmar`;
+            await fetch(rota, { method: "DELETE" }).catch(() => {});
+          }
           atualizar(item.id, {
             situacao: "erro",
             erro: e instanceof Error ? e.message : "falhou",

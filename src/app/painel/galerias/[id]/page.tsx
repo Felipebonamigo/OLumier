@@ -63,6 +63,22 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
   const fotos = medias.filter((m) => m.tipo === "foto").length;
   const videos = medias.length - fotos;
 
+  /*
+   * HEIC que não virou prévia é entrega quebrada esperando acontecer.
+   *
+   * As prévias são geradas no NAVEGADOR do fotógrafo. O Safari decodifica HEIC;
+   * Chrome e Firefox no Windows, não — e aí a foto fica sem prévia e a galeria
+   * cai no arquivo .heic original. Só que <img src="foto.heic"> não renderiza em
+   * Chrome, Firefox nem Android: o convidado vê imagem quebrada.
+   *
+   * O fotógrafo não descobriria sozinho — no painel dele o problema é o mesmo,
+   * mas entre centenas de miniaturas ninguém repara. Por isso o aviso conta
+   * quantas são e diz o que fazer.
+   */
+  const heicSemPrevia = medias.filter(
+    (m) => /heic|heif/i.test(m.mime) && !m.chave_preview,
+  ).length;
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-10">
       <Link href="/painel" className="text-sm text-texto-soft hover:text-texto">
@@ -84,6 +100,29 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
           {galeria.publicada ? "publicada" : "rascunho"}
         </span>
       </header>
+
+      {heicSemPrevia > 0 && (
+        <div
+          role="alert"
+          className="mt-6 rounded-xl border border-alerta/40 bg-alerta/10 px-4 py-3 text-sm text-alerta"
+        >
+          <p className="font-medium">
+            {heicSemPrevia} {heicSemPrevia === 1 ? "foto pode não aparecer" : "fotos podem não aparecer"}{" "}
+            para seus clientes
+          </p>
+          <p className="mt-1 text-xs">
+            {heicSemPrevia === 1 ? "Ela está" : "Elas estão"} em HEIC (o formato padrão do iPhone) e
+            o navegador que você usou para enviar não conseguiu gerar a prévia. Quem abrir a galeria
+            no Chrome, no Firefox ou num Android vai ver espaço em branco no lugar{" "}
+            {heicSemPrevia === 1 ? "dela" : "delas"}.
+          </p>
+          <p className="mt-1.5 text-xs">
+            <strong>Como resolver:</strong> reexporte {heicSemPrevia === 1 ? "essa foto" : "essas fotos"}{" "}
+            como JPG e envie de novo — ou reenvie pelo Safari, que lê HEIC e gera a prévia
+            normalmente.
+          </p>
+        </div>
+      )}
 
       <dl className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
