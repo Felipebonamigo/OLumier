@@ -84,37 +84,88 @@ function segredo(): string {
  * e a página é aberta por dezenas de convidados ao mesmo tempo — scrypt (que
  * gasta memória de propósito) viraria um jeito fácil de derrubar o servidor.
  */
-export function gerarHashSenhaGaleria(senha: string): string {
+/*
+ * O SAL É POR GALERIA (prefixo "g2:").
+ *
+ * Antes o sal vinha só do SESSION_SECRET, igual para todas: duas galerias com a
+ * senha "anaepedro" tinham hashes IDÊNTICOS. Quem visse o banco saberia quais
+ * entregas compartilham senha, e uma única tabela pré-calculada contra o nosso
+ * sal abriria todas de uma vez. Com o id da galeria no sal, quebrar uma não
+ * ajuda em nada nas outras.
+ *
+ * O prefixo existe para as senhas já gravadas continuarem valendo: hash sem
+ * prefixo é conferido pela regra antiga. Sem isso, ligar esta mudança trancaria
+ * todo casal que já tinha a senha na mão — um estrago maior que o problema.
+ */
+const PREFIXO_V2 = "g2:";
+
+function hashAntigo(senha: string): string {
   const sal = createHash("sha256").update(segredo()).digest("hex").slice(0, 16);
   return createHash("sha256").update(sal + senha).digest("hex");
 }
 
-export function conferirSenhaGaleria(senha: string, hashGuardado: string): boolean {
-  const a = Buffer.from(gerarHashSenhaGaleria(senha));
+export function gerarHashSenhaGaleria(senha: string, galeriaId: string): string {
+  const sal = createHash("sha256")
+    .update(`${segredo()}:${galeriaId}`)
+    .digest("hex")
+    .slice(0, 32);
+  return PREFIXO_V2 + createHash("sha256").update(sal + senha).digest("hex");
+}
+
+export function conferirSenhaGaleria(
+  senha: string,
+  hashGuardado: string,
+  galeriaId: string,
+): boolean {
+  const esperado = hashGuardado.startsWith(PREFIXO_V2)
+    ? gerarHashSenhaGaleria(senha, galeriaId)
+    : hashAntigo(senha);
+  const a = Buffer.from(esperado);
   const b = Buffer.from(hashGuardado);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
 const cookieDaGaleria = (galeriaId: string) => `g_${galeriaId.slice(0, 8)}`;
 
-function assinarLiberacao(galeriaId: string, expira: number): string {
-  return createHmac("sha256", segredo()).update(`${galeriaId}.${expira}`).digest("hex");
+/**
+ * A assinatura da liberação inclui uma MARCA da senha atual.
+ *
+ * Assim, trocar a senha invalida na hora todos os acessos já liberados. Antes
+ * não invalidava: o fotógrafo que descobrisse o link vazado trocava a senha e
+ * quem já tinha entrado continuava dentro por até sete dias — exatamente as
+ * pessoas de quem ele queria tirar o acesso.
+ */
+function marcaDaSenha(senhaHash: string | null): string {
+  return createHash("sha256").update(senhaHash ?? "sem-senha").digest("hex").slice(0, 12);
+}
+
+function assinarLiberacao(galeriaId: string, expira: number, senhaHash: string | null): string {
+  return createHmac("sha256", segredo())
+    .update(`${galeriaId}.${expira}.${marcaDaSenha(senhaHash)}`)
+    .digest("hex");
 }
 
 /** Guarda que este visitante já acertou a senha — 7 dias, para não pedir a cada visita. */
-export async function liberarAcesso(galeriaId: string) {
+export async function liberarAcesso(galeriaId: string, senhaHash: string | null) {
   const expira = Date.now() + 7 * 24 * 60 * 60 * 1000;
   const jar = await cookies();
-  jar.set(cookieDaGaleria(galeriaId), `${expira}.${assinarLiberacao(galeriaId, expira)}`, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 7 * 24 * 60 * 60,
-  });
+  jar.set(
+    cookieDaGaleria(galeriaId),
+    `${expira}.${assinarLiberacao(galeriaId, expira, senhaHash)}`,
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60,
+    },
+  );
 }
 
-export async function temAcessoLiberado(galeriaId: string): Promise<boolean> {
+export async function temAcessoLiberado(
+  galeriaId: string,
+  senhaHash: string | null,
+): Promise<boolean> {
   const jar = await cookies();
   const valor = jar.get(cookieDaGaleria(galeriaId))?.value;
   if (!valor) return false;
@@ -123,7 +174,7 @@ export async function temAcessoLiberado(galeriaId: string): Promise<boolean> {
   if (!expira || !assinatura) return false;
   if (Number(expira) < Date.now()) return false;
 
-  const esperada = assinarLiberacao(galeriaId, Number(expira));
+  const esperada = assinarLiberacao(galeriaId, Number(expira), senhaHash);
   const a = Buffer.from(assinatura);
   const b = Buffer.from(esperada);
   return a.length === b.length && timingSafeEqual(a, b);

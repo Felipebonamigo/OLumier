@@ -63,7 +63,7 @@ export default async function GaleriaPublicaPage({ params }: Props) {
     );
   }
 
-  if (galeria.senha_hash && !(await temAcessoLiberado(galeria.id))) {
+  if (galeria.senha_hash && !(await temAcessoLiberado(galeria.id, galeria.senha_hash))) {
     return (
       <PortaoDeSenha
         estudio={estudio}

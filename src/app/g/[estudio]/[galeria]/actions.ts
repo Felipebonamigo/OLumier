@@ -41,7 +41,7 @@ export async function entrarNaGaleriaAction(
     };
   }
 
-  if (!conferirSenhaGaleria(senha, galeria.senha_hash)) {
+  if (!conferirSenhaGaleria(senha, galeria.senha_hash, galeria.id)) {
     const depois = registrarErro(chave);
     if (!depois.permitido) {
       return {
@@ -52,7 +52,7 @@ export async function entrarNaGaleriaAction(
   }
 
   limparTentativas(chave);
-  await liberarAcesso(galeria.id);
+  await liberarAcesso(galeria.id, galeria.senha_hash);
   revalidatePath(`/g/${estudio}/${galeriaSlug}`);
   return {};
 }

@@ -8,6 +8,7 @@ import { asaasConfigurado, asaasEmProducao, proximaCobranca } from "@/lib/asaas"
 import { conferirConfiguracao } from "@/config/socios";
 import { AssinaturaBotao } from "@/components/assinatura-botao";
 import { situacaoDoTenant } from "@/lib/assinatura";
+import { PlanoConta } from "@/components/plano-conta";
 
 export const metadata: Metadata = { title: "Conta" };
 export const dynamic = "force-dynamic";
@@ -74,6 +75,11 @@ export default async function ContaPage() {
             tenant.plano_id
           )}
         </p>
+
+        <PlanoConta
+          planoAtual={tenant.plano_id}
+          temAssinatura={Boolean(tenant.asaas_assinatura_id)}
+        />
 
         {cobranca ? (
           <div className="mt-4 rounded-lg border border-linha bg-void px-4 py-3">

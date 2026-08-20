@@ -9,11 +9,18 @@ import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { lerAparencia } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
-import { planoPorId } from "@/config/planos";
+import { planoPorId, GB } from "@/config/planos";
 import { buscarTenantPorId } from "@/lib/tenants";
-import { asaasConfigurado, garantirCliente, criarAssinatura } from "@/lib/asaas";
+import {
+  asaasConfigurado,
+  garantirCliente,
+  criarAssinatura,
+  atualizarAssinatura,
+  cancelarAssinatura,
+} from "@/lib/asaas";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
+import { usoDoEstudio } from "@/lib/medias";
 import {
   CAPITULOS_SUGERIDOS,
   apagarSecao,
@@ -78,7 +85,7 @@ export async function salvarPublicacaoAction(form: FormData) {
   if (form.get("mexeu_senha") === "1") {
     const senha = String(form.get("senha") ?? "").trim();
     // Campo vazio tira a senha; com texto, grava o hash.
-    valores.push(senha ? gerarHashSenhaGaleria(senha) : null);
+    valores.push(senha ? gerarHashSenhaGaleria(senha, galeriaId) : null);
     campos.push(`senha_hash = $${valores.length}`);
   }
 
@@ -255,6 +262,108 @@ export async function criarAssinaturaAction(
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "nao consegui criar a assinatura" };
   }
+}
+
+/**
+ * Muda o plano do estúdio.
+ *
+ * O erro de quota manda "aumente o plano" desde sempre — e até agora não havia
+ * como fazer isso dentro do app. A pessoa lia uma instrução impossível de
+ * cumprir.
+ *
+ * DESCER de plano só é permitido se o que já está guardado couber no tamanho
+ * novo. Aceitar e deixar o estúdio instantaneamente acima do limite criaria uma
+ * conta travada que ninguém sabe destravar — pior que recusar com clareza.
+ */
+export async function trocarPlanoAction(
+  novoPlanoId: string,
+): Promise<{ erro?: string; ok?: string } | void> {
+  const tenantId = await exigirTenant();
+
+  const plano = planoPorId(novoPlanoId);
+  if (!plano) return { erro: "Plano inválido." };
+
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { erro: "Conta não encontrada." };
+  if (tenant.plano_id === plano.id) return { erro: "Você já está neste plano." };
+
+  const novaQuotaAr = BigInt(plano.quotaGb) * BigInt(GB);
+  const novaQuotaCofre = BigInt(plano.cofreGb) * BigInt(GB);
+  const uso = await usoDoEstudio(tenantId);
+
+  if (uso.noAr > novaQuotaAr) {
+    const excesso = Number(uso.noAr - novaQuotaAr) / 1024 ** 3;
+    return {
+      erro: `Suas galerias no ar ocupam ${excesso.toFixed(1)} GB a mais do que o ${plano.nome} permite. Arquive ou apague algo antes de descer de plano.`,
+    };
+  }
+  if (uso.noCofre > novaQuotaCofre) {
+    const excesso = Number(uso.noCofre - novaQuotaCofre) / 1024 ** 3;
+    return {
+      erro: `Seu cofre ocupa ${excesso.toFixed(1)} GB a mais do que o ${plano.nome} permite. Apague algo do cofre antes de descer de plano.`,
+    };
+  }
+
+  // A assinatura primeiro: se o Asaas recusar, o plano no banco não muda e o
+  // estúdio não fica com espaço que ninguém está cobrando.
+  if (asaasConfigurado() && tenant.asaas_assinatura_id) {
+    try {
+      await atualizarAssinatura({
+        assinaturaId: tenant.asaas_assinatura_id,
+        planoId: plano.id,
+        precoCentavos: plano.precoCentavos,
+        descricao: `${marca.nome} — ${plano.nome}`,
+      });
+    } catch (e) {
+      return { erro: e instanceof Error ? e.message : "não consegui atualizar a assinatura" };
+    }
+  }
+
+  await consultar(
+    `update tenants
+        set plano_id = $1, quota_bytes = $2, quota_cofre_bytes = $3, atualizado_em = now()
+      where id = $4`,
+    [plano.id, novaQuotaAr.toString(), novaQuotaCofre.toString(), tenantId],
+  );
+
+  revalidatePath("/painel/conta");
+  revalidatePath("/painel");
+  return { ok: `Agora você está no ${plano.nome}.` };
+}
+
+/**
+ * Cancela a assinatura.
+ *
+ * O `cancelarAssinatura` existia no código desde o início e nunca foi chamado
+ * por ninguém — não havia como cancelar pelo painel, só escrevendo para o
+ * suporte. Os Termos prometem "cancele quando quiser"; agora é verdade.
+ *
+ * O conteúdo NÃO é apagado: o estúdio deixa de poder enviar coisa nova, e o que
+ * já foi entregue continua no ar. Apagar foto de casamento por causa de um
+ * cancelamento seria punir o casal por uma decisão do fotógrafo.
+ */
+export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: string } | void> {
+  const tenantId = await exigirTenant();
+
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { erro: "Conta não encontrada." };
+  if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+
+  try {
+    await cancelarAssinatura(tenant.asaas_assinatura_id);
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "não consegui cancelar no Asaas" };
+  }
+
+  await consultar(
+    `update tenants
+        set status = 'cancelado', asaas_assinatura_id = null, atualizado_em = now()
+      where id = $1`,
+    [tenantId],
+  );
+
+  revalidatePath("/painel/conta");
+  return { ok: "Assinatura cancelada. Suas galerias publicadas continuam no ar." };
 }
 
 // --- cofre ----------------------------------------------------------------

@@ -136,6 +136,40 @@ export async function criarAssinatura(dados: {
   });
 }
 
+/**
+ * Troca o valor da assinatura quando o estúdio muda de plano.
+ *
+ * Recalcula o split junto — e isso importa: o split é gravado na assinatura no
+ * momento em que ela nasce, então uma assinatura criada quando os sócios ainda
+ * não tinham carteira ficaria sem divisão para sempre. Passar por aqui é o que
+ * traz essa assinatura de volta para a regra atual.
+ *
+ * `updatePendingPayments` faz a cobrança já emitida e não paga acompanhar o
+ * novo valor. Sem isso, quem sobe de plano hoje pagaria o preço antigo neste
+ * mês e o novo só no seguinte — e quem desce pagaria caro por mais um ciclo.
+ */
+export async function atualizarAssinatura(dados: {
+  assinaturaId: string;
+  planoId: string;
+  precoCentavos: number;
+  descricao: string;
+}): Promise<AssinaturaAsaas> {
+  const fatias = montarFatias(dados.planoId, dados.precoCentavos);
+
+  return chamar<AssinaturaAsaas>(`/subscriptions/${dados.assinaturaId}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      value: dados.precoCentavos / 100,
+      description: dados.descricao,
+      updatePendingPayments: true,
+      split: fatias.map((f) => ({
+        walletId: f.carteira,
+        fixedValue: f.centavos / 100,
+      })),
+    }),
+  });
+}
+
 export async function cancelarAssinatura(assinaturaId: string) {
   return chamar(`/subscriptions/${assinaturaId}`, { method: "DELETE" });
 }

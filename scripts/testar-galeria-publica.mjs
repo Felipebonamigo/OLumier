@@ -101,18 +101,52 @@ await etapa("cookie forjado não abre a galeria", async () => {
   return "barrado";
 });
 
-await etapa("cookie assinado corretamente abre", async () => {
-  const expira = Date.now() + 60000;
+/*
+ * A assinatura da liberação inclui uma MARCA da senha atual. É o que faz trocar
+ * a senha expulsar quem já entrou — antes o cookie sobrevivia à troca por sete
+ * dias, mantendo dentro exatamente quem o fotógrafo queria barrar.
+ */
+const marcaDaSenha = (h) =>
+  createHash("sha256").update(h ?? "sem-senha").digest("hex").slice(0, 12);
+
+const cookieLiberado = (senhaHash, expira = Date.now() + 60000) => {
   const assinatura = createHmac("sha256", SESSION_SECRET)
-    .update(`${galeriaId}.${expira}`)
+    .update(`${galeriaId}.${expira}.${marcaDaSenha(senhaHash)}`)
     .digest("hex");
-  const r = await fetch(url, {
-    headers: { cookie: `g_${galeriaId.slice(0, 8)}=${expira}.${assinatura}` },
-  });
+  return `g_${galeriaId.slice(0, 8)}=${expira}.${assinatura}`;
+};
+
+await etapa("cookie assinado corretamente abre", async () => {
+  const { rows: s } = await db.query("select senha_hash from galerias where id = $1", [galeriaId]);
+  const r = await fetch(url, { headers: { cookie: cookieLiberado(s[0].senha_hash) } });
   const txt = await textoDe(r);
   if (txt.includes("protegida")) throw new Error("ainda pede senha");
   if (!txt.includes(titulo)) throw new Error("não mostrou a galeria");
   return "galeria liberada";
+});
+
+await etapa("TROCAR a senha invalida quem já tinha entrado", async () => {
+  const { rows: s } = await db.query("select senha_hash from galerias where id = $1", [galeriaId]);
+  const cookieAntigo = cookieLiberado(s[0].senha_hash);
+
+  // O fotógrafo descobre que o link vazou e troca a senha.
+  await db.query("update galerias set senha_hash = $1 where id = $2", [
+    hashDaSenha("senha-nova-depois-do-vazamento"),
+    galeriaId,
+  ]);
+
+  const r = await fetch(url, { headers: { cookie: cookieAntigo } });
+  const txt = await textoDe(r);
+  if (!txt.includes("protegida")) {
+    throw new Error("o cookie antigo ainda abre — trocar a senha não expulsou ninguém");
+  }
+
+  // Devolve a senha original para as etapas seguintes.
+  await db.query("update galerias set senha_hash = $1 where id = $2", [
+    hashDaSenha(SENHA),
+    galeriaId,
+  ]);
+  return "cookie antigo deixa de valer";
 });
 
 /*

@@ -53,7 +53,19 @@ function s3(): S3Client {
  * família de um arquivo olhando o prefixo.
  */
 export function montarChaves(tenantId: string, galeriaId: string, nomeArquivo: string) {
-  const ext = nomeArquivo.includes(".") ? nomeArquivo.split(".").pop()!.toLowerCase() : "bin";
+  /*
+   * A extensão entra na CHAVE do objeto, e o nome do arquivo vem do navegador —
+   * ou seja, é texto escolhido por quem envia. Sem limpar, um nome como
+   * `foto.jpg?x=/../../outro` levaria caracteres de caminho e de query para
+   * dentro da chave; no mínimo geraria objeto com nome esquisito, e no pior
+   * confundiria quem depois interpreta esse caminho.
+   *
+   * Só letras e números, no máximo 10 caracteres: nenhuma extensão real de foto
+   * ou vídeo passa disso, e o que não couber vira "bin" — que funciona, porque
+   * o tipo de verdade é o `Content-Type`, não o sufixo.
+   */
+  const bruta = nomeArquivo.includes(".") ? nomeArquivo.split(".").pop()!.toLowerCase() : "";
+  const ext = /^[a-z0-9]{1,10}$/.test(bruta) ? bruta : "bin";
   const base = `${tenantId}/${galeriaId}/${randomUUID()}`;
   return {
     original: `${base}.${ext}`,
@@ -74,6 +86,25 @@ export function urlDeUpload(chave: string, mime: string, expiraSeg = 3600) {
 }
 
 /**
+ * Monta o `Content-Disposition` do download sem deixar o nome do arquivo virar
+ * cabeçalho injetado.
+ *
+ * O nome vem do navegador de quem enviou. Tirar só as aspas não bastava: quebra
+ * de linha no meio do nome permitiria emendar OUTRO cabeçalho na resposta, e
+ * acento simplesmente não é válido num header — "Ana & Pedro — Cerimônia.jpg"
+ * chegaria corrompido ou faria a requisição falhar.
+ *
+ * Por isso duas formas, como o padrão prevê: `filename` só com ASCII seguro,
+ * para navegador antigo, e `filename*` em UTF-8, que os atuais preferem — e que
+ * preserva o acento e o nome real que o casal espera ver.
+ */
+function dispositionSegura(nome: string): string {
+  const limpo = nome.replace(/[\r\n"\\]/g, "").slice(0, 200) || "arquivo";
+  const soAscii = limpo.replace(/[^\x20-\x7E]/g, "_");
+  return `attachment; filename="${soAscii}"; filename*=UTF-8''${encodeURIComponent(limpo)}`;
+}
+
+/**
  * URL temporária de leitura. Galeria privada nunca expõe o objeto direto:
  * o link é assinado, curto e só vale para quem já passou pela senha.
  */
@@ -84,7 +115,7 @@ export function urlDeLeitura(chave: string, expiraSeg = 3600, baixarComoNome?: s
       Bucket: BUCKET,
       Key: chave,
       ...(baixarComoNome
-        ? { ResponseContentDisposition: `attachment; filename="${baixarComoNome.replace(/"/g, "")}"` }
+        ? { ResponseContentDisposition: dispositionSegura(baixarComoNome) }
         : {}),
     }),
     { expiresIn: expiraSeg },
