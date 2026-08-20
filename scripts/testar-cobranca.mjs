@@ -43,7 +43,16 @@ const statusDoTenant = async () => {
   return r[0].status;
 };
 
+// Sem token a rota inteira responde 503 de propósito (porta fechada é o padrão
+// seguro), então aqui ele é obrigatório em vez de opcional.
 const token = process.env.ASAAS_WEBHOOK_TOKEN;
+if (!token) {
+  console.error(
+    "✗ falta ASAAS_WEBHOOK_TOKEN no .env.local — gere com:\n" +
+      '  node -e "console.log(require(\'crypto\').randomBytes(24).toString(\'hex\'))"',
+  );
+  process.exit(1);
+}
 
 console.log("Isolamento do Atomatiza (a conta do Asaas é a mesma):\n");
 
@@ -127,18 +136,26 @@ await etapa("referência nossa com estúdio inexistente não quebra", async () =
   return "HTTP 200";
 });
 
-if (token) {
-  await etapa("token errado é recusado", async () => {
-    const r = await enviarEvento(
-      { event: "PAYMENT_CONFIRMED", payment: { externalReference: `fotonio:${tenantId}` } },
-      "token-inventado",
-    );
-    if (r.status !== 401) throw new Error(`esperava 401, veio ${r.status}`);
-    return "HTTP 401";
-  });
-} else {
-  console.log("  · token do webhook não configurado — teste de autenticação pulado");
-}
+// Antes isto ficava dentro de um `if (token)` e o teste era PULADO em silêncio
+// quando a variável estava vazia — que era justamente o caso em que a rota
+// aceitava qualquer POST anônimo. O teste passava verde por cima do furo.
+await etapa("token errado é recusado", async () => {
+  const r = await enviarEvento(
+    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `fotonio:${tenantId}` } },
+    "token-inventado",
+  );
+  if (r.status !== 401) throw new Error(`esperava 401, veio ${r.status}`);
+  return "HTTP 401";
+});
+
+await etapa("requisição SEM token nenhum é recusada", async () => {
+  const r = await enviarEvento(
+    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `fotonio:${tenantId}` } },
+    undefined,
+  );
+  if (r.status !== 401) throw new Error(`esperava 401, veio ${r.status}`);
+  return "HTTP 401";
+});
 
 console.log("\nDivisão do dinheiro:\n");
 

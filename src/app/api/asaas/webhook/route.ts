@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { consultar, consultarUm } from "@/lib/db";
 import { eventoEhNosso, tenantDaReferencia } from "@/lib/asaas";
 
@@ -28,9 +29,26 @@ const ACABOU = new Set([
 
 export async function POST(request: NextRequest) {
   // O Asaas manda um token fixo que você define no painel dele.
-  const token = request.headers.get("asaas-access-token");
+  //
+  // Antes isto era `if (esperado && token !== esperado)`: com a variável vazia a
+  // condição era falsa e a rota processava QUALQUER POST da internet. Como só é
+  // preciso saber o uuid do tenant, dava para marcar qualquer estúdio como ativo
+  // ou inadimplente de fora. Sem token configurado, agora a porta fica fechada —
+  // é o mesmo que o webhook do Atomatiza já faz.
   const esperado = process.env.ASAAS_WEBHOOK_TOKEN;
-  if (esperado && token !== esperado) {
+  if (!esperado) {
+    return NextResponse.json(
+      { erro: "webhook sem token configurado" },
+      { status: 503 },
+    );
+  }
+
+  const token = request.headers.get("asaas-access-token") ?? "";
+  // timingSafeEqual em vez de !==: a comparação de string sai no primeiro byte
+  // diferente, e esse tempo entrega o token caractere a caractere.
+  const a = Buffer.from(token);
+  const b = Buffer.from(esperado);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) {
     return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
   }
 

@@ -20,7 +20,8 @@ export interface ItemGaleria {
   /** versão do lightbox (~400 KB) */
   urlGrande: string;
   /** original, com nome de arquivo para salvar */
-  urlDownload: string;
+  /** null quando a galeria nao permite download — ver page.tsx */
+  urlDownload: string | null;
   bytes: number;
   largura: number | null;
   altura: number | null;
@@ -117,19 +118,24 @@ export function GaleriaCliente({
    * grava nas Fotos); no computador baixa direto.
    */
   async function salvarUm(it: ItemGaleria) {
+    // Sem URL = galeria com download bloqueado. O servidor nem gerou o link,
+    // então não há o que baixar — e é assim que tem que ser.
+    const url = it.urlDownload;
+    if (!url) return;
+
     registrar("baixou", it.id);
     if (!modoSalvar) {
-      baixarNoComputador(it.urlDownload, it.nome);
+      baixarNoComputador(url, it.nome);
       return;
     }
     setAviso("preparando…");
     try {
-      const r = await salvarNoCelular([{ url: it.urlDownload, nome: it.nome }]);
+      const r = await salvarNoCelular([{ url, nome: it.nome }]);
       setAviso(r === "salvou" ? "salvo ✓" : null);
-      if (r === "sem-suporte") baixarNoComputador(it.urlDownload, it.nome);
+      if (r === "sem-suporte") baixarNoComputador(url, it.nome);
     } catch {
       setAviso(null);
-      baixarNoComputador(it.urlDownload, it.nome);
+      baixarNoComputador(url, it.nome);
     } finally {
       setTimeout(() => setAviso(null), 2500);
     }
@@ -146,28 +152,34 @@ export function GaleriaCliente({
    * inteira para o nosso servidor antes — lento para o casal e caro para nós.
    */
   async function salvarTudo() {
+    // Só o que tem link de verdade. Numa galeria bloqueada a lista fica vazia e
+    // o laço não roda — nada a baixar, nenhuma exceção.
+    const baixaveis = itens
+      .map((it) => ({ url: it.urlDownload, nome: it.nome }))
+      .filter((x): x is { url: string; nome: string } => Boolean(x.url));
+    if (baixaveis.length === 0) return;
+
     setBaixandoTudo(true);
     setProgressoLote(0);
     registrar("baixou_tudo");
 
     try {
       if (modoSalvar) {
-        for (let inicio = 0; inicio < itens.length; inicio += LOTE_MAXIMO) {
-          const lote = itens.slice(inicio, inicio + LOTE_MAXIMO);
-          const r = await salvarNoCelular(
-            lote.map((it) => ({ url: it.urlDownload, nome: it.nome })),
-            (baixados) => setProgressoLote(inicio + baixados),
+        for (let inicio = 0; inicio < baixaveis.length; inicio += LOTE_MAXIMO) {
+          const lote = baixaveis.slice(inicio, inicio + LOTE_MAXIMO);
+          const r = await salvarNoCelular(lote, (baixados) =>
+            setProgressoLote(inicio + baixados),
           );
           // Fechou o menu: entende-se como "chega", e não como erro.
           if (r === "cancelou") break;
           if (r === "sem-suporte") {
-            for (const it of lote) baixarNoComputador(it.urlDownload, it.nome);
+            for (const it of lote) baixarNoComputador(it.url, it.nome);
           }
           setProgressoLote(inicio + lote.length);
         }
       } else {
-        for (let i = 0; i < itens.length; i++) {
-          baixarNoComputador(itens[i].urlDownload, itens[i].nome);
+        for (let i = 0; i < baixaveis.length; i++) {
+          baixarNoComputador(baixaveis[i].url, baixaveis[i].nome);
           setProgressoLote(i + 1);
           // Intervalo curto: o navegador ignora downloads disparados todos juntos.
           await new Promise((r) => setTimeout(r, 700));

@@ -101,6 +101,30 @@ export async function moverMediasParaSecao(
   tenantId: string,
 ) {
   if (mediaIds.length === 0) return;
+
+  /*
+   * O filtro por tenant nas MÍDIAS não bastava: o `secaoId` vinha do formulário
+   * e ia direto para o update. Um fotógrafo logado podia mandar o id de um
+   * capítulo de OUTRO estúdio, e as fotos dele passavam a apontar para lá —
+   * escrita cruzada entre contas, visível no painel da vítima.
+   *
+   * A tabela `secoes` não tem `tenant_id`, então o dono se descobre pela galeria.
+   * Exigir também a MESMA galeria evita o caso mais bobo: jogar foto no capítulo
+   * de outra galeria do próprio estúdio, onde ela sumiria da grade.
+   */
+  if (secaoId) {
+    const destino = await consultarUm<{ id: string }>(
+      `select s.id
+         from secoes s
+         join galerias g on g.id = s.galeria_id
+        where s.id = $1
+          and g.tenant_id = $2
+          and s.galeria_id = (select galeria_id from medias where id = $3)`,
+      [secaoId, tenantId, mediaIds[0]],
+    );
+    if (!destino) return;
+  }
+
   await consultar(
     `update medias set secao_id = $1
       where id = any($2::uuid[]) and tenant_id = $3`,

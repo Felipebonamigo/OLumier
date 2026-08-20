@@ -111,6 +111,55 @@ await etapa("cookie assinado corretamente abre", async () => {
   return "galeria liberada";
 });
 
+/*
+ * "Não permitir download" precisa APAGAR o link, não só esconder o botão.
+ *
+ * Antes, a página assinava a URL do original para toda mídia e o componente só
+ * escondia os botões — o link ia no HTML do mesmo jeito, válido por 6 horas.
+ * Bastava abrir "ver código-fonte" para baixar tudo em resolução cheia numa
+ * galeria com download bloqueado.
+ */
+await etapa("com download bloqueado, o original de foto COM prévia não vai no HTML", async () => {
+  await db.query(
+    "update galerias set permite_download = false, senha_hash = null, publicada = true, estado = 'online' where id = $1",
+    [galeriaId],
+  );
+  const bruto = await (await fetch(url)).text();
+
+  // Só as que TÊM derivada. Foto sem prévia é exibida a partir do próprio
+  // original — o link precisa estar lá, senão a foto não carrega. Ver o aviso
+  // em src/components/publicar-galeria.tsx sobre o alcance real deste botão.
+  const { rows } = await db.query(
+    `select chave from medias
+      where galeria_id = $1 and pronto and chave_preview is not null`,
+    [galeriaId],
+  );
+  if (rows.length === 0) throw new Error("a galeria de teste não tem foto com prévia gerada");
+
+  for (const r of rows) {
+    const original = encodeURIComponent(r.chave).replace(/%2F/g, "/");
+    if (bruto.includes(original)) {
+      throw new Error(`o link do original vazou mesmo com download bloqueado: ${r.chave}`);
+    }
+  }
+  return `${rows.length} original(is) fora do HTML`;
+});
+
+await etapa("com download liberado, a URL do original volta a aparecer", async () => {
+  await db.query("update galerias set permite_download = true where id = $1", [galeriaId]);
+  const bruto = await (await fetch(url)).text();
+  const { rows } = await db.query(
+    `select chave from medias
+      where galeria_id = $1 and pronto and chave_preview is not null limit 1`,
+    [galeriaId],
+  );
+  const original = encodeURIComponent(rows[0].chave).replace(/%2F/g, "/");
+  if (!bruto.includes(original)) {
+    throw new Error("o download está liberado mas o link não foi gerado");
+  }
+  return "link presente quando deve estar";
+});
+
 await etapa("galeria no cofre avisa em vez de sumir", async () => {
   await db.query("update galerias set estado = 'arquivada' where id = $1", [galeriaId]);
   const r = await fetch(url);

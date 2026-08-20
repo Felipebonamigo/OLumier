@@ -84,12 +84,24 @@ export default async function GaleriaPublicaPage({ params }: Props) {
    * Derivada nula (vídeo, foto antiga) cai no original, sem quebrar nada.
    */
   const VALIDADE = 6 * 3600;
+
+  /*
+   * A URL do ORIGINAL só é gerada quando o download é permitido.
+   *
+   * Antes ela era gerada sempre e o componente apenas escondia os botões — mas o
+   * link ia no HTML da página do mesmo jeito, válido por 6 horas. Quem abrisse
+   * "ver código-fonte" baixava tudo em resolução cheia numa galeria com download
+   * bloqueado. Esconder o botão não é proteger: o interruptor precisa apagar o
+   * link, não só o desenho dele.
+   */
   const itens: ItemGaleria[] = await Promise.all(
     medias.map(async (m) => {
       const [thumb, preview, download] = await Promise.all([
         urlDeLeitura(m.chave_thumb ?? m.chave, VALIDADE),
         urlDeLeitura(m.chave_preview ?? m.chave, VALIDADE),
-        urlDeLeitura(m.chave, VALIDADE, m.nome_original),
+        galeria.permite_download
+          ? urlDeLeitura(m.chave, VALIDADE, m.nome_original)
+          : Promise.resolve(null),
       ]);
       return {
         id: m.id,

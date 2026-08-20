@@ -96,6 +96,18 @@ export function PublicarGaleria({
           <span className="block text-xs text-texto-faint">
             Sem limite de vezes — não custa nada a mais.
           </span>
+          {/*
+            Dizer o alcance real em vez de deixar a pessoa supor que é blindagem.
+            Desligado, o arquivo em resolução cheia deixa de ser entregue — mas a
+            foto ainda precisa aparecer na tela, e o que está na tela sempre pode
+            virar uma captura. Prometer "ninguém copia" seria mentira.
+          */}
+          {!permiteDownload && (
+            <span className="mt-1 block text-xs text-texto-faint">
+              Desligado, o botão de baixar some e o arquivo original não é mais
+              entregue. Não impede print da tela nem salvar a imagem que aparece.
+            </span>
+          )}
         </span>
       </label>
 

@@ -62,6 +62,18 @@ ASAAS_CARTEIRA_CAROL=<walletId>
 ASAAS_CARTEIRA_SIRIUS=<walletId>
 ```
 
+Gerar o token com:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+```
+
+> **`ASAAS_WEBHOOK_TOKEN` é obrigatório.** Sem ele o webhook responde 503 e não
+> processa nada. Antes ele era opcional na prática — a checagem era
+> `if (esperado && token !== esperado)`, então variável vazia significava porta
+> aberta: qualquer POST da internet, sabendo só o uuid do estúdio, marcava a
+> conta como ativa ou inadimplente. Hoje a porta fechada é o padrão.
+
 Depois: `systemctl restart fotonio`.
 
 ⚠️ Comece com `ASAAS_AMBIENTE=sandbox` e faça uma assinatura de teste antes de
