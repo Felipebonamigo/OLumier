@@ -171,6 +171,8 @@ export function EnviarArquivos({
                     largura: derivadas?.largura,
                     altura: derivadas?.altura,
                     secaoId: destino || undefined,
+                    // A ordem que o fotógrafo escolheu é a narrativa do casamento.
+                    indice: i,
                   }),
                 });
                 const corpo = await preparo.json();

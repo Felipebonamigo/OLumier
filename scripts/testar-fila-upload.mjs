@@ -159,7 +159,64 @@ await etapa("ordena como o fotógrafo espera (2 antes de 10)", async () => {
 
 const { DATABASE_URL, SESSION_SECRET } = process.env;
 if (DATABASE_URL && SESSION_SECRET) {
-  console.log("\nEnvio direto para o capítulo:\n");
+  console.log("\nOrdem das fotos:\n");
+
+await etapa("a ordem do fotógrafo sobrevive ao envio em PARALELO", async () => {
+  /*
+   * O bug: `max(ordem)+1` calculado no servidor. Três arquivos sobem ao mesmo
+   * tempo, os três leem o mesmo máximo e recebem a MESMA posição — e
+   * "foto_1, foto_2, foto_3" chegava ao casal fora de ordem. O fotógrafo ordena
+   * de propósito antes de enviar; essa ordem é a narrativa do casamento.
+   */
+  const { criarMediaPendente, confirmarMedia, listarMedias } = await import("../src/lib/medias.ts");
+
+  // Conexão própria: o `db` desta suíte é local de outra etapa.
+  const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await db.connect();
+
+  const t = (await db.query("select id from tenants order by criado_em limit 1")).rows[0];
+  const g = await db.query(
+    `insert into galerias (tenant_id, slug, titulo) values ($1,$2,'Ordem') returning id`,
+    [t.id, `ordem-${Date.now()}`],
+  );
+  const galeriaId = g.rows[0].id;
+
+  try {
+    const nomes = Array.from({ length: 12 }, (_, i) => `foto_${String(i + 1).padStart(2, "0")}.jpg`);
+
+    // Cria os 12 EM PARALELO, como o envio real faz.
+    const criadas = await Promise.all(
+      nomes.map((nome, indice) =>
+        criarMediaPendente({
+          galeriaId,
+          tenantId: t.id,
+          chave: `ordem/${galeriaId}/${nome}`,
+          nomeOriginal: nome,
+          tipo: "foto",
+          mime: "image/jpeg",
+          bytes: 10,
+          indice,
+        }),
+      ),
+    );
+
+    // Confirma fora de ordem de propósito: a rede não devolve na ordem do envio.
+    for (const m of [...criadas].reverse()) await confirmarMedia(m.id, t.id, 10);
+
+    const final = (await listarMedias(galeriaId)).map((m) => m.nome_original);
+    const esperado = nomes.join(",");
+    if (final.join(",") !== esperado) {
+      throw new Error(`ordem embaralhou:\n     esperado: ${esperado}\n     veio:     ${final.join(",")}`);
+    }
+    return `${nomes.length} fotos em paralelo, ordem intacta`;
+  } finally {
+    await db.query("delete from galerias where id = $1", [galeriaId]);
+    // Sem fechar, o processo do teste nunca encerra.
+    await db.end();
+  }
+});
+
+console.log("\nEnvio direto para o capítulo:\n");
   const db = new pg.Client({ connectionString: DATABASE_URL });
   await db.connect();
 

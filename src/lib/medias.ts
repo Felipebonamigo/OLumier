@@ -117,11 +117,27 @@ export async function criarMediaPendente(dados: {
   largura?: number | null;
   altura?: number | null;
   secaoId?: string | null;
+  /** Posição do arquivo na lista que o fotógrafo ordenou. */
+  indice?: number;
 }) {
+  /*
+   * A ORDEM vem do navegador (a posição do arquivo na lista já ordenada por
+   * nome), somada à última posição CONFIRMADA da galeria.
+   *
+   * O `max(ordem)` sozinho embaralhava: três arquivos sobem em paralelo, os três
+   * leem o mesmo máximo e recebem a mesma posição — e "foto_1, foto_2, foto_3"
+   * chegava ao casal fora de ordem. O fotógrafo ordena os arquivos de propósito
+   * antes de enviar; essa ordem é a narrativa do casamento.
+   *
+   * O filtro `pronto` é o que torna a base estável durante o envio: as linhas
+   * pendentes do próprio lote não mexem no cálculo, então os três paralelos
+   * chegam ao mesmo ponto de partida e cada um soma o seu índice.
+   */
   const proxima = await consultarUm<{ n: number }>(
-    "select coalesce(max(ordem), -1) + 1 as n from medias where galeria_id = $1",
+    "select coalesce(max(ordem), -1) + 1 as n from medias where galeria_id = $1 and pronto",
     [dados.galeriaId],
   );
+  const posicao = (proxima?.n ?? 0) + (dados.indice ?? 0);
 
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
@@ -141,7 +157,7 @@ export async function criarMediaPendente(dados: {
       dados.largura ?? null,
       dados.altura ?? null,
       dados.secaoId ?? null,
-      proxima?.n ?? 0,
+      posicao,
     ],
   );
 }

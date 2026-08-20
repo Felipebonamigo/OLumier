@@ -118,6 +118,52 @@ const okAcesso = semAcesso === "sem-acesso";
 if (!okAcesso) falhou = true;
 console.log(`  ${okAcesso ? "✓" : "✗"} arquivo bloqueado por CORS devolve "sem-acesso" (cai no download)`);
 
+console.log("\nLotes por memória (o que impede o celular de travar):\n");
+
+const MB = 1024 * 1024;
+const arq = (nome, mb) => ({ url: `http://x/${nome}`, nome, bytes: mb * MB });
+
+{
+  const ok = (nome, cond) => {
+    if (!cond) falhou = true;
+    console.log(`  ${cond ? "✓" : "✗"} ${nome}`);
+  };
+
+  // 30 fotos de 8 MB = 240 MB: não pode ir tudo num lote só.
+  const fotos = Array.from({ length: 30 }, (_, i) => arq(`f${i}.jpg`, 8));
+  const r1 = mod.montarLotes(fotos);
+  const maiorLote = Math.max(...r1.lotes.map((l) => l.reduce((s, a) => s + a.bytes, 0)));
+  ok(
+    `30 fotos de 8 MB viram ${r1.lotes.length} lotes, nenhum acima do orçamento`,
+    r1.lotes.length > 1 && maiorLote <= mod.ORCAMENTO_LOTE,
+  );
+  ok(
+    "nenhuma foto se perde no caminho",
+    r1.lotes.flat().length + r1.grandes.length === fotos.length,
+  );
+
+  // O caso que derrubava o aparelho: um vídeo de casamento.
+  const comVideo = [arq("a.jpg", 5), arq("filme.mp4", 5000), arq("b.jpg", 5)];
+  const r2 = mod.montarLotes(comVideo);
+  ok(
+    "vídeo de 5 GB NÃO entra no menu nativo (iria inteiro para a memória)",
+    r2.grandes.length === 1 && r2.grandes[0].nome === "filme.mp4",
+  );
+  ok(
+    "as fotos ao lado do vídeo continuam indo pelo menu",
+    r2.lotes.flat().length === 2,
+  );
+
+  // Um arquivo sozinho acima do orçamento não pode gerar lote vazio nem sumir.
+  const r3 = mod.montarLotes([arq("grande.jpg", 120)]);
+  ok(
+    "arquivo entre o teto individual e o orçamento vira lote próprio",
+    r3.grandes.length === 1 || (r3.lotes.length === 1 && r3.lotes[0].length === 1),
+  );
+
+  ok("lista vazia não gera lote vazio", mod.montarLotes([]).lotes.length === 0);
+}
+
 // Lote respeita o máximo
 const okLote = mod.LOTE_MAXIMO > 0 && mod.LOTE_MAXIMO <= 30;
 if (!okLote) falhou = true;

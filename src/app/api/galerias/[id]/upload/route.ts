@@ -62,6 +62,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     secaoId?: string;
     largura?: number;
     altura?: number;
+    indice?: number;
   };
   try {
     corpo = await request.json();
@@ -142,6 +143,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     largura: Number(corpo.largura) || null,
     altura: Number(corpo.altura) || null,
     secaoId,
+    // Posição na lista que o fotógrafo ordenou — ver criarMediaPendente.
+    indice: Number.isInteger(corpo.indice) ? corpo.indice : undefined,
   });
 
   const [urlThumb, urlPreview] = await Promise.all([

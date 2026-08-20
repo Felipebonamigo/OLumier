@@ -16,6 +16,56 @@
 /** Quantas fotos cabem num único menu de compartilhamento sem travar o celular. */
 export const LOTE_MAXIMO = 20;
 
+/**
+ * Teto de MEMÓRIA por lote, e por arquivo.
+ *
+ * Contar arquivos não basta: para abrir o menu nativo é preciso ter os arquivos
+ * carregados como Blob, ou seja, na memória. Vinte fotos de 8 MB já são 160 MB;
+ * um único vídeo de casamento passa de 5 GB e derrubaria a aba do celular na
+ * hora — o casal veria a página morrer no meio do "salvar tudo".
+ *
+ * Arquivo acima do teto individual nem tenta o menu: vai pelo download comum,
+ * que o navegador transmite direto para o disco sem passar pela memória.
+ */
+export const ORCAMENTO_LOTE = 150 * 1024 * 1024;
+export const LIMITE_POR_ARQUIVO = 80 * 1024 * 1024;
+
+export interface ArquivoParaSalvar {
+  url: string;
+  nome: string;
+  bytes: number;
+}
+
+/**
+ * Divide a lista em lotes que cabem na memória, e separa o que é grande demais
+ * para o menu nativo.
+ */
+export function montarLotes(arquivos: ArquivoParaSalvar[]): {
+  lotes: ArquivoParaSalvar[][];
+  grandes: ArquivoParaSalvar[];
+} {
+  const grandes = arquivos.filter((a) => a.bytes > LIMITE_POR_ARQUIVO);
+  const cabem = arquivos.filter((a) => a.bytes <= LIMITE_POR_ARQUIVO);
+
+  const lotes: ArquivoParaSalvar[][] = [];
+  let atual: ArquivoParaSalvar[] = [];
+  let soma = 0;
+
+  for (const a of cabem) {
+    const estouraria = soma + a.bytes > ORCAMENTO_LOTE || atual.length >= LOTE_MAXIMO;
+    if (atual.length > 0 && estouraria) {
+      lotes.push(atual);
+      atual = [];
+      soma = 0;
+    }
+    atual.push(a);
+    soma += a.bytes;
+  }
+  if (atual.length > 0) lotes.push(atual);
+
+  return { lotes, grandes };
+}
+
 export function ehCelular(): boolean {
   if (typeof navigator === "undefined") return false;
   // Ponteiro grosso = dedo. Mais confiável que farejar o user agent, e pega

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
-  LOTE_MAXIMO,
+  montarLotes,
   baixarNoComputador,
   deveOferecerSalvar,
   salvarNoCelular,
@@ -163,8 +163,8 @@ export function GaleriaCliente({
     // Só o que tem link de verdade. Numa galeria bloqueada a lista fica vazia e
     // o laço não roda — nada a baixar, nenhuma exceção.
     const baixaveis = itens
-      .map((it) => ({ url: it.urlDownload, nome: it.nome }))
-      .filter((x): x is { url: string; nome: string } => Boolean(x.url));
+      .map((it) => ({ url: it.urlDownload, nome: it.nome, bytes: it.bytes }))
+      .filter((x): x is { url: string; nome: string; bytes: number } => Boolean(x.url));
     if (baixaveis.length === 0) return;
 
     setBaixandoTudo(true);
@@ -173,8 +173,23 @@ export function GaleriaCliente({
 
     try {
       if (modoSalvar) {
-        for (let inicio = 0; inicio < baixaveis.length; inicio += LOTE_MAXIMO) {
-          const lote = baixaveis.slice(inicio, inicio + LOTE_MAXIMO);
+        /*
+         * Lotes por MEMÓRIA, não por contagem. O menu nativo precisa dos
+         * arquivos carregados como Blob; vinte fotos de 8 MB já são 160 MB, e um
+         * vídeo de casamento sozinho derrubaria a aba. O que é grande demais vai
+         * pelo download comum, que o navegador escreve direto no disco.
+         */
+        const { lotes, grandes } = montarLotes(baixaveis);
+        let feitos = 0;
+
+        for (const g of grandes) {
+          baixarNoComputador(g.url, g.nome);
+          setProgressoLote(++feitos);
+          await new Promise((r) => setTimeout(r, 700));
+        }
+
+        for (const lote of lotes) {
+          const inicio = feitos;
           const r = await salvarNoCelular(lote, (baixados) =>
             setProgressoLote(inicio + baixados),
           );
@@ -189,7 +204,8 @@ export function GaleriaCliente({
               setAviso("baixados — procure em Arquivos");
             }
           }
-          setProgressoLote(inicio + lote.length);
+          feitos += lote.length;
+          setProgressoLote(feitos);
         }
       } else {
         for (let i = 0; i < baixaveis.length; i++) {
