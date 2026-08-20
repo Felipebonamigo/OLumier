@@ -78,6 +78,46 @@ const okSem = semSuporte === "sem-suporte";
 if (!okSem) falhou = true;
 console.log(`  ${okSem ? "✓" : "✗"} navegador sem Web Share devolve "sem-suporte" (cai no download)`);
 
+/*
+ * iPhone recusando o menu por perda do "gesto do usuário".
+ *
+ * O Safari exige que share() seja chamado logo depois do toque, e baixar vinte
+ * fotos numa rede de celular passa dessa janela. Não dá para segurar o gesto
+ * durante um await — o que dá é reconhecer a recusa e cair no download comum,
+ * em vez de estourar uma exceção que vira mensagem vermelha e deixa o casal sem
+ * as fotos.
+ */
+montarAmbiente(cenarios[0]);
+globalThis.fetch = async () => ({ ok: true, blob: async () => ({ type: "image/jpeg" }) });
+globalThis.navigator.share = async () => {
+  throw Object.assign(new globalThis.DOMException("sem gesto"), { name: "NotAllowedError" });
+};
+try {
+  const r = await mod.salvarNoCelular([{ url: "http://x/a.jpg", nome: "a.jpg" }]);
+  const ok = r === "expirou";
+  if (!ok) falhou = true;
+  console.log(`  ${ok ? "✓" : "✗"} iPhone recusando por gesto expirado devolve "expirou" (cai no download)`);
+} catch {
+  falhou = true;
+  console.log('  ✗ "gesto expirado" virou exceção — o cliente veria erro e ficaria sem a foto');
+}
+
+/*
+ * Arquivo inacessível — na prática, CORS.
+ *
+ * O endereço do estúdio (siriusfotografia.fotonio.com.br) é uma origem
+ * diferente do domínio principal; se o bucket não autorizar, o fetch morre.
+ * O download comum continua funcionando porque é navegação, não fetch.
+ */
+montarAmbiente(cenarios[0]);
+globalThis.fetch = async () => {
+  throw new TypeError("Failed to fetch");
+};
+const semAcesso = await mod.salvarNoCelular([{ url: "http://x/a.jpg", nome: "a.jpg" }]);
+const okAcesso = semAcesso === "sem-acesso";
+if (!okAcesso) falhou = true;
+console.log(`  ${okAcesso ? "✓" : "✗"} arquivo bloqueado por CORS devolve "sem-acesso" (cai no download)`);
+
 // Lote respeita o máximo
 const okLote = mod.LOTE_MAXIMO > 0 && mod.LOTE_MAXIMO <= 30;
 if (!okLote) falhou = true;

@@ -20,6 +20,31 @@ if [ -n "$(git status --porcelain)" ]; then
   [[ "$r" =~ ^[sS]$ ]] || exit 1
 fi
 
+# Publicar código que depende de uma coluna que ninguém criou quebra para o
+# USUÁRIO, não para quem publicou. Conferir antes é barato; descobrir depois, não.
+echo "→ conferindo migrações do banco"
+# O `|| true` e o teste de existência não são frouxidão: na PRIMEIRA publicação
+# depois desta mudança o script ainda não existe no servidor, e abortar aí
+# impediria justamente o deploy que o instala.
+ESTADO=$(ssh "$VPS" "
+  if [ -f /opt/fotonio/scripts/migrar.mjs ]; then
+    cd /opt/fotonio && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs >/dev/null 2>&1
+    echo \$?
+  else
+    echo ausente
+  fi
+")
+if [ "$ESTADO" = "2" ]; then
+  echo "! Há migração pendente em produção. Aplique ANTES de publicar:"
+  echo "    ssh $VPS '/opt/fotonio-backup.sh'"
+  echo "    ssh $VPS 'cd /opt/fotonio && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar'"
+  exit 1
+elif [ "$ESTADO" = "ausente" ]; then
+  echo "  (controle de migrações ainda não instalado — será nesta publicação)"
+else
+  echo "  banco em dia"
+fi
+
 echo "→ empacotando $(git rev-parse --short HEAD)"
 git archive --format=tar.gz -o /tmp/fotonio-deploy.tar.gz HEAD
 

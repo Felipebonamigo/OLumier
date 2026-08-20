@@ -5,6 +5,8 @@ export interface DadosCapa {
   subtitulo: string | null;
   dataFormatada: string | null;
   estudio: string;
+  /** Logo do estúdio; quando existe, substitui o nome em texto. */
+  logoUrl?: string | null;
   urlImagem: string | null;
 }
 
@@ -14,10 +16,35 @@ export interface DadosCapa {
  */
 export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia: Aparencia }) {
   const fonteTitulo = FONTES_TITULO[aparencia.tipografia];
-  const { titulo, subtitulo, dataFormatada, estudio, urlImagem } = dados;
+  const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl } = dados;
   const legenda = [dataFormatada, subtitulo].filter(Boolean).join(" · ");
 
-  const Estudio = ({ className = "" }: { className?: string }) => (
+  /*
+   * A logo, quando existe, SUBSTITUI o nome em texto — não acompanha.
+   *
+   * Mostrar os dois é o erro clássico: quase toda logo de fotógrafo já contém o
+   * nome do estúdio desenhado, e o resultado é o nome aparecendo duas vezes,
+   * uma embaixo da outra. Quem carregou uma logo quer que ela seja a marca.
+   *
+   * `alt` recebe o nome do estúdio: para quem usa leitor de tela, a logo É o
+   * nome — deixar vazio apagaria essa informação da página.
+   */
+  const Estudio = ({ className = "" }: { className?: string }) =>
+    logoUrl ? (
+      // eslint-disable-next-line @next/next/no-img-element -- URL externa do estúdio, sem otimização nossa
+      <img
+        src={logoUrl}
+        alt={estudio}
+        // inline-block em vez de mx-auto: assim o alinhamento vem do pai, e a
+        // capa "dividida" (texto à esquerda no desktop) não fica com a logo
+        // centralizada sozinha no meio da coluna.
+        className={`inline-block max-h-14 w-auto object-contain ${className}`}
+      />
+    ) : (
+      <TextoEstudio className={className} />
+    );
+
+  const TextoEstudio = ({ className = "" }: { className?: string }) => (
     <p
       className={`font-mono text-[11px] uppercase tracking-[0.3em] ${className}`}
       style={{ color: "var(--g-destaque)" }}

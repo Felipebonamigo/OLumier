@@ -190,6 +190,7 @@ export default async function GaleriaPublicaPage({ params }: Props) {
           subtitulo: galeria.subtitulo,
           dataFormatada: dataEvento,
           estudio: galeria.estudio_nome,
+          logoUrl: galeria.estudio_logo,
           urlImagem: urlCapa,
         }}
       />

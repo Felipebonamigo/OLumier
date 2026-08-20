@@ -47,7 +47,14 @@ async function baixarComoArquivo(url: string, nome: string): Promise<File> {
   return new File([blob], nome, { type: blob.type || "image/jpeg" });
 }
 
-export type ResultadoSalvar = "salvou" | "cancelou" | "sem-suporte";
+/**
+ * - `salvou`      — o menu nativo abriu e a pessoa concluiu
+ * - `cancelou`    — fechou o menu; NÃO é erro
+ * - `sem-suporte` — navegador não compartilha arquivo; cai no download comum
+ * - `expirou`     — o navegador recusou o menu por perda do "gesto do usuário"
+ * - `sem-acesso`  — não consegui buscar o arquivo (CORS ou rede)
+ */
+export type ResultadoSalvar = "salvou" | "cancelou" | "sem-suporte" | "expirou" | "sem-acesso";
 
 /**
  * Abre o menu de compartilhamento com as fotos já carregadas.
@@ -61,9 +68,20 @@ export async function salvarNoCelular(
   if (!podeCompartilharArquivos()) return "sem-suporte";
 
   const prontos: File[] = [];
-  for (const a of arquivos) {
-    prontos.push(await baixarComoArquivo(a.url, a.nome));
-    aoProgredir?.(prontos.length);
+  try {
+    for (const a of arquivos) {
+      prontos.push(await baixarComoArquivo(a.url, a.nome));
+      aoProgredir?.(prontos.length);
+    }
+  } catch {
+    /*
+     * Buscar o arquivo falhou. A causa mais provável não é rede: é CORS.
+     * O bucket precisa autorizar a origem que está pedindo, e o endereço do
+     * estúdio (siriusfotografia.fotonio.com.br) é uma origem diferente do
+     * domínio principal. Quem chama cai no download comum — que funciona,
+     * porque é navegação e não passa por CORS.
+     */
+    return "sem-acesso";
   }
 
   // Alguns navegadores só aceitam a lista depois de montada; confere de novo.
@@ -73,8 +91,19 @@ export async function salvarNoCelular(
     await navigator.share({ files: prontos });
     return "salvou";
   } catch (e) {
-    // AbortError = a pessoa fechou o menu. Silêncio é a resposta certa.
-    if (e instanceof DOMException && e.name === "AbortError") return "cancelou";
+    if (e instanceof DOMException) {
+      // AbortError = a pessoa fechou o menu. Silêncio é a resposta certa.
+      if (e.name === "AbortError") return "cancelou";
+      /*
+       * NotAllowedError = o navegador não considera mais que houve um gesto do
+       * usuário. Acontece no iPhone: o Safari exige que `share()` seja chamado
+       * logo depois do toque, e baixar vinte fotos numa rede de celular leva
+       * mais tempo que essa janela. Não há como segurar o gesto durante um
+       * await — então o certo é reconhecer, cair no download comum e dizer a
+       * verdade em vez de mostrar um erro sem explicação.
+       */
+      if (e.name === "NotAllowedError") return "expirou";
+    }
     throw e;
   }
 }

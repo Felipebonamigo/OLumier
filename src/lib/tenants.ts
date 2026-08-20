@@ -2,6 +2,7 @@ import "server-only";
 import { consultar, consultarUm } from "./db";
 import { gerarHashSenha, conferirSenha } from "./auth";
 import { planoPorId, GB } from "@/config/planos";
+import { slugReservado } from "@/config/subdominios";
 
 export interface Tenant {
   id: string;
@@ -79,10 +80,18 @@ export async function criarTenant(dados: {
   const plano = planoPorId(dados.planoId);
   if (!plano) throw new Error("Plano inválido");
 
-  // Slug único: se "ana-fotografia" existir, vira "ana-fotografia-2", e assim por diante.
+  /*
+   * Slug único E não reservado.
+   *
+   * O sufixo numérico resolve os dois casos de uma vez: "ana-fotografia" já
+   * usado vira "ana-fotografia-2", e um estúdio que geraria "www" vira "www-2",
+   * que é um endereço válido e não sequestra o site principal.
+   */
   const base = gerarSlug(dados.nomeEstudio) || "estudio";
   let slug = base;
-  for (let i = 2; !(await slugDisponivel(slug)); i++) slug = `${base}-${i}`;
+  for (let i = 2; slugReservado(slug) || !(await slugDisponivel(slug)); i++) {
+    slug = `${base}-${i}`;
+  }
 
   const senhaHash = await gerarHashSenha(dados.senha);
   const quota = BigInt(plano.quotaGb) * BigInt(GB);

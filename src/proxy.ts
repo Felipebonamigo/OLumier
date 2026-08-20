@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { SUBDOMINIOS_RESERVADOS } from "@/config/subdominios";
 
 /**
  * No Next 16 o antigo `middleware.ts` passou a se chamar `proxy.ts`.
@@ -18,8 +19,8 @@ import { NextResponse, type NextRequest } from "next/server";
 const NOME_COOKIE = "fotonio_sessao";
 const DOMINIO_BASE = "fotonio.com.br";
 
-/** Subdomínios que são da plataforma, não de estúdio. */
-const RESERVADOS = new Set(["www", "app", "admin", "api", "painel", "mail", "email", "ftp"]);
+// A lista mora em config/subdominios.ts para o CADASTRO usar a mesma: antes ela
+// só existia aqui, e nada impedia um estúdio nascer com o slug "www".
 
 /** Devolve o slug do estúdio quando o endereço é um subdomínio dele. */
 function estudioDoEndereco(host: string | null): string | null {
@@ -31,7 +32,7 @@ function estudioDoEndereco(host: string | null): string | null {
 
   const slug = nome.slice(0, -sufixo.length);
   // Sub-subdomínio (a.b.fotonio.com.br) não é o nosso formato.
-  if (!slug || slug.includes(".") || RESERVADOS.has(slug)) return null;
+  if (!slug || slug.includes(".") || SUBDOMINIOS_RESERVADOS.has(slug)) return null;
   return slug;
 }
 

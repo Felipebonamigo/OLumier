@@ -131,8 +131,16 @@ export function GaleriaCliente({
     setAviso("preparando…");
     try {
       const r = await salvarNoCelular([{ url, nome: it.nome }]);
-      setAviso(r === "salvou" ? "salvo ✓" : null);
-      if (r === "sem-suporte") baixarNoComputador(url, it.nome);
+      if (r === "salvou") {
+        setAviso("salvo ✓");
+      } else if (r === "cancelou") {
+        setAviso(null);
+      } else {
+        // sem-suporte, expirou ou sem-acesso: o menu nativo não rolou, mas a
+        // foto não pode simplesmente não vir. Cai no download comum.
+        baixarNoComputador(url, it.nome);
+        setAviso(r === "expirou" ? "baixado — procure em Arquivos" : null);
+      }
     } catch {
       setAviso(null);
       baixarNoComputador(url, it.nome);
@@ -172,8 +180,14 @@ export function GaleriaCliente({
           );
           // Fechou o menu: entende-se como "chega", e não como erro.
           if (r === "cancelou") break;
-          if (r === "sem-suporte") {
+          if (r !== "salvou") {
+            // Antes só "sem-suporte" caía no download; "expirou" e "sem-acesso"
+            // viravam erro vermelho e o casal ficava sem as fotos. Qualquer
+            // desfecho que não seja "salvou" precisa entregar os arquivos.
             for (const it of lote) baixarNoComputador(it.url, it.nome);
+            if (r === "expirou") {
+              setAviso("baixados — procure em Arquivos");
+            }
           }
           setProgressoLote(inicio + lote.length);
         }

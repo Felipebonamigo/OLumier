@@ -21,12 +21,21 @@ if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) 
   process.exit(1);
 }
 
+/*
+ * O curinga NÃO é preciosismo: cada estúdio tem seu subdomínio
+ * (siriusfotografia.fotonio.com.br), e é nesse endereço que o casal abre a
+ * galeria. Sem ele, "salvar na galeria do celular" quebra — essa função busca o
+ * arquivo com `fetch` antes de abrir o menu nativo, e o navegador bloqueia a
+ * requisição por CORS. O download no computador continuaria funcionando (é uma
+ * navegação, não um fetch), então o defeito apareceria SÓ no celular e SÓ no
+ * endereço do estúdio: a combinação mais difícil de perceber testando.
+ */
 const ORIGENS = [
   "http://localhost:3040",
   "http://localhost:3000",
   "https://fotonio.com.br",
   "https://www.fotonio.com.br",
-  "https://app.fotonio.com.br",
+  "https://*.fotonio.com.br",
 ];
 
 const s3 = new S3Client({
