@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PRAZOS } from "@/config/prazos";
 import { definirPrazoAction, arquivarAgoraAction, reativarAction } from "@/app/painel/actions";
@@ -27,16 +27,35 @@ export function PrazoCofre({
   arquivadaEm: string | null;
 }) {
   const [ocupado, iniciar] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
   const router = useRouter();
 
-  const executar = (acao: (f: FormData) => Promise<void>, extra: Record<string, string> = {}) =>
+  // Arquivar e reativar podem RECUSAR agora (cofre cheio, ou sem espaço no ar
+  // para trazer de volta). Engolir esse retorno deixaria a pessoa clicando de
+  // novo sem entender por que nada acontece.
+  const executar = (
+    acao: (f: FormData) => Promise<void | { erro?: string }>,
+    extra: Record<string, string> = {},
+  ) =>
     iniciar(async () => {
+      setErro(null);
       const f = new FormData();
       f.set("galeria_id", galeriaId);
       for (const [k, v] of Object.entries(extra)) f.set(k, v);
-      await acao(f);
+      const r = await acao(f);
+      if (r?.erro) {
+        setErro(r.erro);
+        return;
+      }
       router.refresh();
     });
+
+  const Aviso = () =>
+    erro ? (
+      <p role="alert" className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta">
+        {erro}
+      </p>
+    ) : null;
 
   if (arquivada) {
     return (
@@ -60,6 +79,7 @@ export function PrazoCofre({
         <p className="mt-2 text-[11px] text-texto-faint">
           Volta com mais 12 meses no ar, contados de hoje.
         </p>
+        <Aviso />
       </section>
     );
   }
@@ -118,6 +138,7 @@ export function PrazoCofre({
       >
         Guardar no cofre agora
       </button>
+      <Aviso />
     </section>
   );
 }

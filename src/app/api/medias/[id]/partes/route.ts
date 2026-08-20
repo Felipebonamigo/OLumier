@@ -6,7 +6,7 @@ import {
   confirmarMedia,
   apagarMedia,
   anularDerivadas,
-  bytesComprometidos,
+  bytesNoAr,
   MAX_PARTES,
 } from "@/lib/medias";
 import { buscarTenantPorId } from "@/lib/tenants";
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const tenant = await buscarTenantPorId(tenantId);
     if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
 
-    const outros = await bytesComprometidos(tenantId, id);
+    const outros = await bytesNoAr(tenantId, id);
     if (outros + BigInt(bytes) > BigInt(tenant.quota_bytes)) {
       await apagarMedia(id, tenantId);
       await Promise.all(

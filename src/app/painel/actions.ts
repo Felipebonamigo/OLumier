@@ -273,20 +273,28 @@ export async function definirPrazoAction(form: FormData) {
   revalidatePath(`/painel/galerias/${galeriaId}`);
 }
 
-export async function arquivarAgoraAction(form: FormData) {
+export async function arquivarAgoraAction(form: FormData): Promise<{ erro?: string } | void> {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");
   if (!galeriaId) return;
-  await arquivarAgora(galeriaId, tenantId);
+
+  // O resultado precisa chegar à tela: "não coube no cofre" resolvido em
+  // silêncio deixaria a pessoa clicando de novo sem entender por que nada muda.
+  const r = await arquivarAgora(galeriaId, tenantId);
+  if (!r.ok) return { erro: r.erro };
+
   revalidatePath(`/painel/galerias/${galeriaId}`);
   revalidatePath("/painel");
 }
 
-export async function reativarAction(form: FormData) {
+export async function reativarAction(form: FormData): Promise<{ erro?: string } | void> {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");
   if (!galeriaId) return;
-  await reativar(galeriaId, tenantId);
+
+  const r = await reativar(galeriaId, tenantId);
+  if (!r.ok) return { erro: r.erro };
+
   revalidatePath(`/painel/galerias/${galeriaId}`);
   revalidatePath("/painel");
 }

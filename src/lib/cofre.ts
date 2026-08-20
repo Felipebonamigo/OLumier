@@ -1,6 +1,7 @@
 import "server-only";
 import { consultar, consultarUm } from "./db";
 import { calcularVencimento } from "@/config/prazos";
+import { usoDoEstudio } from "./medias";
 
 /**
  * Cofre: a galeria fica um tempo no ar e depois desce, sem nada ser apagado.
@@ -33,21 +34,89 @@ export async function definirPrazo(
   );
 }
 
-/** Manda a galeria para o cofre agora, sem esperar o prazo. */
-export async function arquivarAgora(galeriaId: string, tenantId: string) {
+export interface ResultadoCofre {
+  ok: boolean;
+  erro?: string;
+}
+
+/** Quanto a galeria ocupa — o que vai mudar de balde ao arquivar ou reativar. */
+async function tamanhoDaGaleria(galeriaId: string, tenantId: string): Promise<bigint | null> {
+  const r = await consultarUm<{ existe: boolean; bytes: string }>(
+    `select true as existe,
+            coalesce((select sum(m.bytes) from medias m where m.galeria_id = g.id), 0)::text as bytes
+       from galerias g where g.id = $1 and g.tenant_id = $2`,
+    [galeriaId, tenantId],
+  );
+  return r ? BigInt(r.bytes) : null;
+}
+
+/**
+ * Manda a galeria para o cofre agora, sem esperar o prazo.
+ *
+ * RECUSA quando não cabe no cofre. Aqui o fotógrafo está clicando um botão e
+ * esperando uma resposta — dizer "não coube" na hora é melhor que aceitar e
+ * deixá-lo descobrir depois que estourou o plano.
+ *
+ * (O arquivamento AUTOMÁTICO por prazo se comporta diferente de propósito — ver
+ * `arquivarVencidas`.)
+ */
+export async function arquivarAgora(
+  galeriaId: string,
+  tenantId: string,
+): Promise<ResultadoCofre> {
+  const tamanho = await tamanhoDaGaleria(galeriaId, tenantId);
+  if (tamanho === null) return { ok: false, erro: "Galeria não encontrada." };
+
+  const tenant = await consultarUm<{ quota_cofre_bytes: string }>(
+    "select quota_cofre_bytes from tenants where id = $1",
+    [tenantId],
+  );
+  const { noCofre } = await usoDoEstudio(tenantId);
+  const limite = BigInt(tenant?.quota_cofre_bytes ?? "0");
+
+  if (noCofre + tamanho > limite) {
+    const faltam = Number(noCofre + tamanho - limite) / 1024 ** 3;
+    return {
+      ok: false,
+      erro: `Esta galeria não cabe no seu cofre — faltam ${faltam.toFixed(1)} GB. Reative uma galeria antiga para liberar espaço, ou aumente o plano.`,
+    };
+  }
+
   await consultar(
     `update galerias
         set estado = 'arquivada', arquivada_em = now(), atualizado_em = now()
       where id = $1 and tenant_id = $2 and estado = 'online'`,
     [galeriaId, tenantId],
   );
+  return { ok: true };
 }
 
 /**
  * Tira a galeria do cofre. Estende o prazo por mais 12 meses a partir de hoje —
  * reativar e a galeria vencer de novo na semana seguinte seria uma armadilha.
+ *
+ * Recusa quando não há espaço no ar: colocar de volta o que não cabe deixaria o
+ * estúdio acima da quota sem ele ter enviado nada.
  */
-export async function reativar(galeriaId: string, tenantId: string) {
+export async function reativar(galeriaId: string, tenantId: string): Promise<ResultadoCofre> {
+  const tamanho = await tamanhoDaGaleria(galeriaId, tenantId);
+  if (tamanho === null) return { ok: false, erro: "Galeria não encontrada." };
+
+  const tenant = await consultarUm<{ quota_bytes: string }>(
+    "select quota_bytes from tenants where id = $1",
+    [tenantId],
+  );
+  const { noAr } = await usoDoEstudio(tenantId);
+  const limite = BigInt(tenant?.quota_bytes ?? "0");
+
+  if (noAr + tamanho > limite) {
+    const faltam = Number(noAr + tamanho - limite) / 1024 ** 3;
+    return {
+      ok: false,
+      erro: `Não há espaço no ar para esta galeria — faltam ${faltam.toFixed(1)} GB. Arquive outra galeria ou aumente o plano.`,
+    };
+  }
+
   await consultar(
     `update galerias
         set estado = 'online',
@@ -58,11 +127,19 @@ export async function reativar(galeriaId: string, tenantId: string) {
       where id = $1 and tenant_id = $2 and estado = 'arquivada'`,
     [galeriaId, tenantId],
   );
+  return { ok: true };
 }
 
 /**
  * Arquiva tudo que venceu. Chamada pelo temporizador diário do servidor.
  * Devolve o que arquivou para o log — silêncio total esconde tarefa quebrada.
+ *
+ * NÃO recusa por falta de espaço no cofre, ao contrário do arquivamento manual.
+ * A diferença é deliberada: o prazo foi combinado com o casal e prometido pelo
+ * fotógrafo. Segurar a galeria no ar por falta de espaço quebraria esse combinado
+ * E continuaria consumindo a quota das galerias no ar — dois prejuízos em vez de
+ * um. O cofre passa do limite, e quem está acima é devolvido aqui para o log e o
+ * aviso; a decisão de apagar algo continua sendo do dono.
  */
 export async function arquivarVencidas() {
   return consultar<{ id: string; titulo: string; estudio: string }>(
@@ -77,16 +154,33 @@ export async function arquivarVencidas() {
   );
 }
 
-/** Espaço no ar × espaço no cofre — o fotógrafo vê os dois separados. */
-export async function usoPorEstado(tenantId: string) {
-  const r = await consultarUm<{ no_ar: string; no_cofre: string }>(
-    `select
-       coalesce(sum(m.bytes) filter (where g.estado = 'online'), 0)::text     as no_ar,
-       coalesce(sum(m.bytes) filter (where g.estado = 'arquivada'), 0)::text  as no_cofre
-     from medias m
-     join galerias g on g.id = m.galeria_id
-     where m.tenant_id = $1 and m.pronto`,
-    [tenantId],
+/** Quem passou do cofre contratado — para o log da tarefa diária avisar. */
+export async function estudiosAcimaDoCofre() {
+  return consultar<{
+    nome_estudio: string;
+    email: string;
+    usado: string;
+    limite: string;
+  }>(
+    `select t.nome_estudio, t.email,
+            coalesce(sum(m.bytes),0)::text as usado,
+            t.quota_cofre_bytes::text      as limite
+       from tenants t
+       join galerias g on g.tenant_id = t.id and g.estado = 'arquivada'
+       join medias   m on m.galeria_id = g.id
+      group by t.id, t.nome_estudio, t.email, t.quota_cofre_bytes
+     having coalesce(sum(m.bytes),0) > t.quota_cofre_bytes`,
   );
-  return { noAr: BigInt(r?.no_ar ?? "0"), noCofre: BigInt(r?.no_cofre ?? "0") };
+}
+
+/**
+ * Espaço no ar × espaço no cofre — o fotógrafo vê os dois separados.
+ *
+ * Delega para `usoDoEstudio` de propósito: antes esta consulta era uma cópia
+ * quase igual que contava só `pronto = true`, então a tela mostrava um número e
+ * a quota usava outro — e o fotógrafo veria "sobra espaço" no exato momento em
+ * que o envio fosse recusado. A tela precisa mostrar o que de fato limita.
+ */
+export async function usoPorEstado(tenantId: string) {
+  return usoDoEstudio(tenantId);
 }

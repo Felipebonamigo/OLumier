@@ -132,22 +132,23 @@ export default async function ContaPage() {
         )}
       </section>
 
-      {/* Espaço */}
+      {/* Espaço — dois baldes independentes, cada um com seu limite. */}
       <section className="mt-6 rounded-xl border border-linha bg-carbon p-5">
         <h2 className="text-sm font-semibold">Espaço</h2>
-        <dl className="mt-3 grid grid-cols-2 gap-3">
-          <div>
-            <dt className="text-xs text-texto-faint">No ar</dt>
-            <dd className="mt-0.5 text-sm font-medium">{formatarBytes(uso.noAr)}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-texto-faint">No cofre</dt>
-            <dd className="mt-0.5 text-sm font-medium">{formatarBytes(uso.noCofre)}</dd>
-          </div>
-        </dl>
-        <p className="mt-3 text-xs text-texto-faint">
-          Limite do plano: {formatarBytes(tenant.quota_bytes)}
-        </p>
+        <div className="mt-4 space-y-4">
+          <Balde
+            rotulo="Galerias no ar"
+            usado={uso.noAr}
+            limite={BigInt(tenant.quota_bytes)}
+            nota="O que seus clientes conseguem abrir agora."
+          />
+          <Balde
+            rotulo="Cofre"
+            usado={uso.noCofre}
+            limite={BigInt(tenant.quota_cofre_bytes)}
+            nota="Guardado, fora do ar. Mandar para cá libera espaço nas galerias."
+          />
+        </div>
       </section>
 
       {/* Dados */}
@@ -166,5 +167,56 @@ export default async function ContaPage() {
         </dl>
       </section>
     </main>
+  );
+}
+
+/**
+ * Uma barra de uso. Mostra a porcentagem porque "2,1 TB de 5 TB" exige conta de
+ * cabeça, e a pessoa só quer saber se está perto do fim.
+ *
+ * Acima do limite a barra fica cheia e muda de cor em vez de estourar o
+ * contêiner — passar do cofre é possível (o arquivamento automático não recusa,
+ * ver src/lib/cofre.ts) e a tela precisa mostrar isso com clareza.
+ */
+function Balde({
+  rotulo,
+  usado,
+  limite,
+  nota,
+}: {
+  rotulo: string;
+  usado: bigint;
+  limite: bigint;
+  nota: string;
+}) {
+  const pct = limite > BigInt(0) ? Number((usado * BigInt(1000)) / limite) / 10 : 0;
+  const estourou = usado > limite;
+  const apertado = pct >= 85;
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span className="text-xs font-medium text-texto-soft">{rotulo}</span>
+        <span
+          className={`font-mono text-[11px] tabular-nums ${
+            estourou ? "text-erro" : apertado ? "text-alerta" : "text-texto-faint"
+          }`}
+        >
+          {formatarBytes(usado)} de {formatarBytes(limite)}
+          {limite > BigInt(0) && ` · ${pct.toFixed(0)}%`}
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-void">
+        <div
+          className={`h-full rounded-full ${
+            estourou ? "bg-erro" : apertado ? "bg-alerta" : "bg-luz"
+          }`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </div>
+      <p className="mt-1 text-[11px] text-texto-faint">
+        {estourou ? "Acima do limite do plano — libere espaço ou aumente o plano." : nota}
+      </p>
+    </div>
   );
 }

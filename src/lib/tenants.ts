@@ -12,6 +12,7 @@ export interface Tenant {
   cor_destaque: string;
   plano_id: string;
   quota_bytes: string; // bigint chega como string do pg — nunca converter cegamente para Number
+  quota_cofre_bytes: string;
   usado_bytes: string;
   status: string;
   trial_ate: Date | null;
@@ -85,12 +86,22 @@ export async function criarTenant(dados: {
 
   const senhaHash = await gerarHashSenha(dados.senha);
   const quota = BigInt(plano.quotaGb) * BigInt(GB);
+  const quotaCofre = BigInt(plano.cofreGb) * BigInt(GB);
 
   const linha = await consultarUm<Tenant>(
-    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id,
+                          quota_bytes, quota_cofre_bytes)
+     values ($1, $2, $3, $4, $5, $6, $7)
      returning *`,
-    [slug, dados.nomeEstudio, dados.email.toLowerCase(), senhaHash, plano.id, quota.toString()],
+    [
+      slug,
+      dados.nomeEstudio,
+      dados.email.toLowerCase(),
+      senhaHash,
+      plano.id,
+      quota.toString(),
+      quotaCofre.toString(),
+    ],
   );
   return linha!;
 }

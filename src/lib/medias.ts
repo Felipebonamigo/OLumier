@@ -63,17 +63,45 @@ export async function listarMedias(galeriaId: string) {
  * Espaço já comprometido pelo tenant: conta também o que está subindo agora
  * (pronto = false). Sem isso, vários envios em paralelo furariam a quota juntos.
  */
-export async function bytesComprometidos(tenantId: string, exceto?: string): Promise<bigint> {
-  const r = exceto
-    ? await consultarUm<{ total: string }>(
-        "select coalesce(sum(bytes),0)::text as total from medias where tenant_id = $1 and id <> $2",
-        [tenantId, exceto],
-      )
-    : await consultarUm<{ total: string }>(
-        "select coalesce(sum(bytes),0)::text as total from medias where tenant_id = $1",
-        [tenantId],
-      );
-  return BigInt(r?.total ?? "0");
+export interface UsoDoEstudio {
+  /** Galerias no ar — é isto que a quota do plano limita. */
+  noAr: bigint;
+  /** Galerias arquivadas — limitado pela quota do cofre. */
+  noCofre: bigint;
+}
+
+/**
+ * Espaço usado, separado em dois baldes.
+ *
+ * Conta também o que está SUBINDO agora (`pronto = false`): a reserva existe
+ * justamente para dois envios simultâneos não furarem a quota juntos, e ignorá-la
+ * aqui recriaria o furo. Como reserva presa é soltada pela limpeza diária
+ * (scripts/limpar-pendentes.mjs), contá-la não prende espaço para sempre.
+ *
+ * `exceto` serve para a confirmação de upload: ali a reserva da própria mídia
+ * ainda está somada com o tamanho DECLARADO, e contá-la junto com o tamanho real
+ * recusaria um arquivo que na verdade cabe.
+ */
+export async function usoDoEstudio(tenantId: string, exceto?: string): Promise<UsoDoEstudio> {
+  const r = await consultarUm<{ no_ar: string; no_cofre: string }>(
+    `select
+       coalesce(sum(m.bytes) filter (where g.estado <> 'arquivada'), 0)::text as no_ar,
+       coalesce(sum(m.bytes) filter (where g.estado =  'arquivada'), 0)::text as no_cofre
+     from medias m
+     join galerias g on g.id = m.galeria_id
+     where m.tenant_id = $1
+       and ($2::uuid is null or m.id <> $2::uuid)`,
+    [tenantId, exceto ?? null],
+  );
+  return {
+    noAr: BigInt(r?.no_ar ?? "0"),
+    noCofre: BigInt(r?.no_cofre ?? "0"),
+  };
+}
+
+/** Atalho para o caminho de upload, que só se importa com o espaço no ar. */
+export async function bytesNoAr(tenantId: string, exceto?: string): Promise<bigint> {
+  return (await usoDoEstudio(tenantId, exceto)).noAr;
 }
 
 export async function criarMediaPendente(dados: {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
+import { usoDoEstudio } from "@/lib/medias";
 import { MarcaLockup } from "@/components/marca-tile";
 import { sairAction } from "../(auth)/actions";
 
@@ -14,7 +15,15 @@ export default async function PainelLayout({ children }: { children: React.React
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) redirect("/entrar");
 
-  const usado = Number(tenant.usado_bytes);
+  /*
+   * A barra do topo mostra só o espaço NO AR, que é o que a quota do plano
+   * limita. Usar `tenant.usado_bytes` (mantido pelo trigger) somaria o cofre
+   * junto: um estúdio com 250 GB guardados apareceria como "250 GB de 200 GB"
+   * aqui e "0 GB de 200 GB" na tela de Conta — a mesma pessoa vendo dois
+   * números diferentes para a mesma coisa.
+   */
+  const { noAr } = await usoDoEstudio(tenantId);
+  const usado = Number(noAr);
   const quota = Number(tenant.quota_bytes);
   const proporcao = quota > 0 ? Math.min(usado / quota, 1) : 0;
   const perto = proporcao >= 0.8;
