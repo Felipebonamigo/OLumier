@@ -50,6 +50,19 @@ node --env-file=.env.production --experimental-strip-types \
 Sorteia uma senha nova e mostra **uma vez**. Não existe "esqueci minha senha" no
 app ainda — ver "O que falta" abaixo.
 
+### Depois de mudar um plano em `planos.ts`
+
+```bash
+node --env-file=.env.production --experimental-strip-types \
+     --import ./scripts/registrar-ts.mjs scripts/sincronizar-quotas.mjs           # previsão
+node ... scripts/sincronizar-quotas.mjs --aplicar                                  # aplica
+```
+
+As quotas moram no banco em bytes, mas a fonte da verdade é `src/config/planos.ts`.
+Conta já criada não muda sozinha quando o plano cresce — este script alinha.
+Estúdio com `plano_id` que não existe mais é **pulado**, nunca reduzido: inventar
+quota ali poderia tirar espaço de alguém sem querer.
+
 ### Arquivo pago que ninguém referencia
 
 ```bash
