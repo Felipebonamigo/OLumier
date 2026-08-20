@@ -14,8 +14,12 @@
  */
 import { createHmac } from "node:crypto";
 import pg from "pg";
+import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { conferirDocumento, cpfValido, cnpjValido, soDigitos } from "../src/lib/documento.ts";
 import { situacaoDoTenant } from "../src/lib/assinatura.ts";
+
+// Os testes abaixo publicam galeria, removem senha e apagam midia.
+exigirBancoDeTeste();
 
 let falhou = false;
 const etapa = async (nome, fn) => {

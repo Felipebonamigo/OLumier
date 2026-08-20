@@ -7,7 +7,11 @@
  * dá para simular `siriusfotografia.fotonio.com.br` batendo no servidor local.
  */
 import pg from "pg";
+import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import http from "node:http";
+
+// Os testes abaixo publicam galeria, removem senha e apagam midia.
+exigirBancoDeTeste();
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });

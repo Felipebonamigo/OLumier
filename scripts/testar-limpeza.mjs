@@ -11,8 +11,12 @@
  *   --import ./scripts/registrar-ts.mjs
  */
 import pg from "pg";
+import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { apagarObjetos, listarChaves, objetoExiste, BUCKET } from "../src/lib/r2.ts";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+
+// Os testes abaixo publicam galeria, removem senha e apagam midia.
+exigirBancoDeTeste();
 
 let falhou = false;
 const etapa = async (nome, fn) => {

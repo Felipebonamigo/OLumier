@@ -8,6 +8,10 @@
  * virar um botão que não faz nada visível.
  */
 import pg from "pg";
+import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+
+// Os testes abaixo publicam galeria, removem senha e apagam midia.
+exigirBancoDeTeste();
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });

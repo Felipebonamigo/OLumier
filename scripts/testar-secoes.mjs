@@ -7,6 +7,10 @@
  * apagar um capítulo sem medo de levar as fotos junto.
  */
 import pg from "pg";
+import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+
+// Os testes abaixo publicam galeria, removem senha e apagam midia.
+exigirBancoDeTeste();
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
