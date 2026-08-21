@@ -38,6 +38,42 @@ errado na metade dos casos:
 Aviso repetido é silenciado por 1h — um problema de madrugada viraria 100 e-mails
 e a pessoa acordaria com a caixa entupida em vez de informada.
 
+## Como o deploy funciona
+
+```bash
+bash deploy.sh
+```
+
+Cada publicação vira uma **release** em `/opt/fotonio-releases/<data>-<sha>`,
+construída ao lado enquanto a versão atual continua servindo. Só no fim o link
+`/opt/fotonio` passa a apontar para a nova, com uma troca atômica (`ln` ao lado
++ `mv -T`) — um `rm && ln` deixaria uma fresta em que `/opt/fotonio` não existe.
+
+Antes o deploy extraía por cima da pasta viva e rodava `npm ci` ali mesmo: por
+um minuto o processo servia uma árvore **sem `node_modules`** e com o `.next`
+sendo reescrito por baixo. Quem estivesse usando tomava erro a cada publicação.
+
+O deploy **recusa** quando há migração pendente, quando o build falha, ou quando
+o app sobe sem falar com banco e R2.
+
+| Caminho | O que é |
+|---|---|
+| `/opt/fotonio` | link para a release no ar |
+| `/opt/fotonio-releases/` | as 3 últimas releases (as antigas são podadas) |
+| `/opt/fotonio-shared/.env.production` | o que persiste entre releases |
+| `/opt/fotonio-antes-das-releases/` | a pasta antiga, guardada como rede de segurança |
+
+### Voltar para a release anterior
+
+```bash
+ssh root@179.197.233.184 "ls -1t /opt/fotonio-releases/"
+ssh root@179.197.233.184 "ln -sfn /opt/fotonio-releases/<a-anterior> /opt/fotonio.novo && mv -Tf /opt/fotonio.novo /opt/fotonio && systemctl restart fotonio"
+```
+
+> A pasta `/opt/fotonio-antes-das-releases` (662 MB) é de antes desta mudança e
+> pode ser apagada quando você quiser — deixei porque apagar 662 MB de produção
+> não é decisão minha.
+
 ## Ferramentas manuais
 
 ### Alguém perdeu a senha
