@@ -75,6 +75,27 @@ export function montarChaves(tenantId: string, galeriaId: string, nomeArquivo: s
 }
 
 /**
+ * Caminho da logo do estúdio.
+ *
+ * Fica em `<tenant>/marca/`, fora de qualquer galeria: a logo é do estúdio e
+ * sobrevive a galeria apagada. O uuid no nome existe para a troca de logo não
+ * cair em cache do navegador com a imagem antiga — chave nova, link novo.
+ *
+ * ATENÇÃO: este objeto NÃO tem linha em `medias`. Quem varre o bucket
+ * procurando arquivo órfão precisa saber disso, senão apaga a logo de todo
+ * mundo — ver scripts/varrer-orfaos.mjs.
+ */
+export function chaveDaLogo(tenantId: string, extensao: string) {
+  const ext = /^[a-z0-9]{1,10}$/.test(extensao) ? extensao : "bin";
+  return `${tenantId}/marca/${randomUUID()}.${ext}`;
+}
+
+/** true quando a chave é de marca (logo), não de mídia de galeria. */
+export function ehChaveDeMarca(chave: string) {
+  return /^[^/]+\/marca\//.test(chave);
+}
+
+/**
  * URL para o navegador enviar o arquivo DIRETO ao bucket.
  * O arquivo nunca passa pelo nosso servidor — é o que permite receber um filme
  * de 30 GB sem o VPS ser gargalo nem pagar banda.
@@ -170,7 +191,21 @@ export async function apagarObjetos(chaves: string[]) {
  * referencia. Não é usado no caminho normal do app.
  */
 export async function listarChaves(prefixo?: string): Promise<string[]> {
-  const chaves: string[] = [];
+  return (await listarObjetos(prefixo)).map((o) => o.chave);
+}
+
+/**
+ * Como `listarChaves`, mas devolve também QUANDO cada objeto foi gravado.
+ *
+ * A data não é enfeite: a varredura de órfãos precisa poupar o arquivo que
+ * acabou de subir. Entre o PUT no bucket e a confirmação no banco existe uma
+ * janela em que o objeto é, tecnicamente, órfão — e apagar aí significa apagar
+ * a foto de quem está enviando NESTE momento.
+ */
+export async function listarObjetos(
+  prefixo?: string,
+): Promise<Array<{ chave: string; modificadoEm: Date | null }>> {
+  const objetos: Array<{ chave: string; modificadoEm: Date | null }> = [];
   let cursor: string | undefined;
   do {
     const r = await s3().send(
@@ -180,10 +215,12 @@ export async function listarChaves(prefixo?: string): Promise<string[]> {
         ContinuationToken: cursor,
       }),
     );
-    for (const o of r.Contents ?? []) if (o.Key) chaves.push(o.Key);
+    for (const o of r.Contents ?? []) {
+      if (o.Key) objetos.push({ chave: o.Key, modificadoEm: o.LastModified ?? null });
+    }
     cursor = r.IsTruncated ? r.NextContinuationToken : undefined;
   } while (cursor);
-  return chaves;
+  return objetos;
 }
 
 /** true se o objeto existe no bucket. */

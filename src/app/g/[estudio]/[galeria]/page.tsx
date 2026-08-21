@@ -198,6 +198,12 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     medias.find((m) => m.tipo === "foto");
   const urlCapa = capa ? await urlDeLeitura(capa.chave_preview ?? capa.chave, VALIDADE) : null;
 
+  // A logo é guardada como CHAVE, não como URL: este bucket não tem endereço
+  // público, então todo link é assinado na hora de desenhar a página.
+  const urlLogo = galeria.estudio_logo
+    ? await urlDeLeitura(galeria.estudio_logo, VALIDADE)
+    : null;
+
   return (
     /*
      * O tema vive em variáveis CSS neste elemento. Assim a galeria pode ser
@@ -216,7 +222,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           subtitulo: galeria.subtitulo,
           dataFormatada: dataEvento,
           estudio: galeria.estudio_nome,
-          logoUrl: galeria.estudio_logo,
+          logoUrl: urlLogo,
           urlImagem: urlCapa,
         }}
       />

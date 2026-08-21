@@ -13,6 +13,14 @@
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { apagarObjetos, listarChaves, objetoExiste, BUCKET } from "../src/lib/r2.ts";
+/*
+ * A regra de "quem tem dono" vem do módulo compartilhado, NÃO de uma consulta
+ * escrita aqui. Havia três cópias dela neste arquivo, e todas olhavam só
+ * `medias` — então a logo do estúdio, que mora no bucket sem linha em `medias`,
+ * era classificada como órfã. Testar por imitação é pior que não testar: dá o
+ * verde enquanto o código de verdade apagaria a marca de todos os clientes.
+ */
+import { chavesConhecidas } from "./varrer-orfaos-regras.mjs";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
@@ -90,10 +98,7 @@ await etapa("um órfão plantado é encontrado pela comparação com o banco", a
   const orfao = await plantar("orfao.txt");
   try {
     const doBucket = await listarChaves(marca);
-    const { rows } = await db.query("select chave, chave_thumb, chave_preview from medias");
-    const conhecidas = new Set(
-      rows.flatMap((r) => [r.chave, r.chave_thumb, r.chave_preview]).filter(Boolean),
-    );
+    const conhecidas = await chavesConhecidas(db);
     const orfaos = doBucket.filter((c) => !conhecidas.has(c));
     if (!orfaos.includes(orfao)) throw new Error("a varredura não achou o órfão plantado");
     return `achou ${orfaos.length}`;
@@ -107,11 +112,7 @@ await etapa("arquivo REFERENCIADO pelo banco nunca é tratado como órfão", asy
   const { rows } = await db.query("select chave from medias where pronto limit 1");
   if (rows.length === 0) throw new Error("sem mídia no banco para conferir");
   const doBucket = await listarChaves();
-  const conhecidas = new Set(
-    (await db.query("select chave, chave_thumb, chave_preview from medias")).rows
-      .flatMap((r) => [r.chave, r.chave_thumb, r.chave_preview])
-      .filter(Boolean),
-  );
+  const conhecidas = await chavesConhecidas(db);
   const orfaos = doBucket.filter((c) => !conhecidas.has(c));
   if (orfaos.includes(rows[0].chave)) {
     throw new Error("arquivo em uso foi classificado como órfão — a varredura apagaria foto de cliente");
@@ -201,11 +202,7 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
 
 await etapa("o bucket está sem órfãos agora", async () => {
   const doBucket = await listarChaves();
-  const conhecidas = new Set(
-    (await db.query("select chave, chave_thumb, chave_preview from medias")).rows
-      .flatMap((r) => [r.chave, r.chave_thumb, r.chave_preview])
-      .filter(Boolean),
-  );
+  const conhecidas = await chavesConhecidas(db);
   const orfaos = doBucket.filter((c) => !conhecidas.has(c));
   if (orfaos.length) throw new Error(`${orfaos.length} órfão(s): ${orfaos[0]}`);
   return `${doBucket.length} objetos, todos referenciados`;

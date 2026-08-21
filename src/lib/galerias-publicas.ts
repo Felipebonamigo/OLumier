@@ -46,7 +46,7 @@ export async function buscarGaleriaPublica(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
             g.permite_download, g.expira_em, g.aparencia, g.capa_media_id,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug,
-            t.logo_url as estudio_logo, t.cor_destaque as estudio_cor
+            t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor
        from galerias g
        join tenants t on t.id = g.tenant_id
       where t.slug = $1 and g.slug = $2

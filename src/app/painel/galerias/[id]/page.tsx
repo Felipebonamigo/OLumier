@@ -15,6 +15,8 @@ import { EditorSecoes } from "@/components/editor-secoes";
 import { listarSecoes } from "@/lib/secoes";
 import { lerAparencia } from "@/config/aparencia";
 import { PrazoCofre } from "@/components/prazo-cofre";
+import { EditorGaleria } from "@/components/editor-galeria";
+import { paraCampoDeData } from "@/lib/datas";
 import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
 import { apagarGaleriaAction } from "../../actions";
 
@@ -60,6 +62,17 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       })
     : null;
 
+  /*
+   * Mesma data, no formato que o <input type="date"> espera.
+   *
+   * Montada com os campos LOCAIS, não com toISOString(). A coluna é `date` — dia
+   * puro, sem hora — e o driver a entrega como meia-noite no fuso do processo.
+   * Passar por UTC só dá certo em fuso negativo: num servidor a leste de
+   * Greenwich, meia-noite local cai no dia anterior em UTC, e abrir o formulário
+   * sem mexer em nada já mostraria a data errada — que então seria salva.
+   */
+  const dataISO = galeria.data_evento ? paraCampoDeData(new Date(galeria.data_evento)) : null;
+
   const fotos = medias.filter((m) => m.tipo === "foto").length;
   const videos = medias.length - fotos;
 
@@ -86,12 +99,13 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       </Link>
 
       <header className="mt-4 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">{galeria.titulo}</h1>
-          <p className="mt-1 text-sm text-texto-soft">
-            {[dataEvento, galeria.subtitulo].filter(Boolean).join(" · ") || "sem data definida"}
-          </p>
-        </div>
+        <EditorGaleria
+          galeriaId={galeria.id}
+          titulo={galeria.titulo}
+          subtitulo={galeria.subtitulo}
+          dataISO={dataISO}
+          dataFormatada={dataEvento}
+        />
         <span
           className={`rounded-full border px-3 py-1 text-xs ${
             galeria.publicada ? "border-ok/40 bg-ok/10 text-ok" : "border-linha text-texto-faint"

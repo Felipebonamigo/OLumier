@@ -19,6 +19,7 @@ import {
   cancelarAssinatura,
 } from "@/lib/asaas";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
+import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
 import { usoDoEstudio } from "@/lib/medias";
 import {
@@ -39,6 +40,8 @@ async function exigirTenant(): Promise<string> {
 
 export interface EstadoGaleria {
   erro?: string;
+  /** Só a edição usa: a tela fecha o formulário quando a gravação confirma. */
+  ok?: boolean;
 }
 
 export async function criarGaleriaAction(
@@ -406,6 +409,83 @@ export async function reativarAction(form: FormData): Promise<{ erro?: string } 
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
   revalidatePath("/painel");
+}
+
+/**
+ * Corrige os dados da galeria depois de criada.
+ *
+ * Antes isto só existia no momento da criação: um erro no nome do casal exigia
+ * apagar a galeria e reenviar tudo de novo. Custava horas para consertar uma
+ * letra.
+ *
+ * O SLUG NÃO MUDA — de propósito, e essa é a decisão que importa aqui. O
+ * endereço já foi mandado no WhatsApp do casal, e provavelmente repassado para a
+ * família inteira. Renomear a galeria não pode transformar um link que está
+ * circulando em página de erro. Título é o que se lê; slug é o endereço, e
+ * endereço entregue não se mexe.
+ */
+export async function editarGaleriaAction(
+  _estado: EstadoGaleria,
+  form: FormData,
+): Promise<EstadoGaleria> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não encontrada." };
+
+  const titulo = String(form.get("titulo") ?? "").trim();
+  if (!titulo) return { erro: "Dê um nome para a galeria." };
+
+  const subtitulo = String(form.get("subtitulo") ?? "").trim();
+  const dataEvento = String(form.get("data_evento") ?? "").trim();
+
+  await consultar(
+    `update galerias
+        set titulo = $1, subtitulo = $2, data_evento = $3, atualizado_em = now()
+      where id = $4 and tenant_id = $5`,
+    [titulo.slice(0, 120), subtitulo.slice(0, 160) || null, dataEvento || null, galeriaId, tenantId],
+  );
+
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  revalidatePath("/painel");
+  return { ok: true };
+}
+
+// --- marca do estúdio -------------------------------------------------------
+
+export interface EstadoMarca {
+  erro?: string;
+  ok?: string;
+}
+
+/**
+ * Nome do estúdio e cor de destaque. A logo vai por outro caminho
+ * (/api/marca/logo), porque arquivo não cabe no corpo de um server action.
+ *
+ * O SLUG TAMBÉM NÃO MUDA AQUI, pelo mesmo motivo da galeria: ele é o endereço
+ * (siriusfotografia.fotonio.com.br) de todas as galerias já entregues. Trocar o
+ * nome do estúdio muda o que aparece escrito, não onde as coisas moram.
+ */
+export async function salvarMarcaAction(
+  _estado: EstadoMarca,
+  form: FormData,
+): Promise<EstadoMarca> {
+  const tenantId = await exigirTenant();
+
+  const nome = normalizarNomeEstudio(String(form.get("nome_estudio") ?? ""));
+  if (!nome) return { erro: "O nome do estúdio precisa de pelo menos 2 letras." };
+
+  const cor = normalizarCor(String(form.get("cor_destaque") ?? ""));
+  if (!cor) return { erro: "Cor inválida. Use o seletor ou um código como #f0c268." };
+
+  await consultar("update tenants set nome_estudio = $1, cor_destaque = $2 where id = $3", [
+    nome,
+    cor,
+    tenantId,
+  ]);
+
+  revalidatePath("/painel/conta");
+  revalidatePath("/painel");
+  return { ok: "Marca salva." };
 }
 
 export async function apagarGaleriaAction(form: FormData) {

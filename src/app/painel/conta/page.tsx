@@ -9,6 +9,8 @@ import { conferirConfiguracao } from "@/config/socios";
 import { AssinaturaBotao } from "@/components/assinatura-botao";
 import { situacaoDoTenant } from "@/lib/assinatura";
 import { PlanoConta } from "@/components/plano-conta";
+import { EditorMarca } from "@/components/editor-marca";
+import { urlDeLeitura } from "@/lib/r2";
 
 export const metadata: Metadata = { title: "Conta" };
 export const dynamic = "force-dynamic";
@@ -29,6 +31,10 @@ export default async function ContaPage() {
 
   const plano = planoPorId(tenant.plano_id);
   const uso = await usoPorEstado(tenantId);
+
+  // O bucket não tem endereço público: a logo é guardada como chave e ganha um
+  // link assinado a cada render.
+  const urlLogo = tenant.logo_chave ? await urlDeLeitura(tenant.logo_chave, 3600) : null;
 
   const diasTrial =
     tenant.status === "trial" && tenant.trial_ate
@@ -157,11 +163,18 @@ export default async function ContaPage() {
         </div>
       </section>
 
+      {/* Marca — logo, nome e cor. O que o cliente final vê. */}
+      <EditorMarca
+        nomeEstudio={tenant.nome_estudio}
+        corDestaque={tenant.cor_destaque}
+        urlLogo={urlLogo}
+        slug={tenant.slug}
+      />
+
       {/* Dados */}
       <section className="mt-6 rounded-xl border border-linha bg-carbon">
         <dl className="divide-y divide-linha">
           {[
-            { rotulo: "Estúdio", valor: tenant.nome_estudio },
             { rotulo: "E-mail", valor: tenant.email },
             { rotulo: "Endereço das galerias", valor: `/${tenant.slug}` },
           ].map((l) => (

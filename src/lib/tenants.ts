@@ -9,7 +9,8 @@ export interface Tenant {
   slug: string;
   nome_estudio: string;
   email: string;
-  logo_url: string | null;
+  /** Chave do objeto no bucket — não é URL. O link é assinado na hora de exibir. */
+  logo_chave: string | null;
   cor_destaque: string;
   plano_id: string;
   quota_bytes: string; // bigint chega como string do pg — nunca converter cegamente para Number

@@ -19,7 +19,7 @@ create table if not exists tenants (
   senha_hash      text not null,
 
   -- marca do tenant (o que o cliente final vê)
-  logo_url        text,
+  logo_chave      text,                          -- chave no bucket, não URL: o link é assinado na exibição
   cor_destaque    text default '#f0c268',
 
   -- plano e quota (ver src/config/planos.ts)
