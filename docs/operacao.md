@@ -99,6 +99,24 @@ Conta já criada não muda sozinha quando o plano cresce — este script alinha.
 Estúdio com `plano_id` que não existe mais é **pulado**, nunca reduzido: inventar
 quota ali poderia tirar espaço de alguém sem querer.
 
+### O CORS do bucket
+
+O navegador fala direto com o bucket, que é outro domínio. A política de origens
+permitidas mora na Cloudflare (R2 → bucket → Configurações → Política de CORS) e
+inclui **`https://*.fotonio.com.br`** — sem esse curinga, cada estúdio novo
+nasceria com o "salvar no celular" quebrado e ninguém perceberia, porque o
+download no computador continua funcionando.
+
+Para conferir do jeito que o navegador vê, sem precisar de token de admin:
+
+```bash
+node --env-file=.env.local scripts/testar-cors.mjs
+```
+
+Já roda dentro do `npm test`. Para reaplicar a política é preciso um token
+"Admin Read & Write" — a chave do app é de objeto e recebe `AccessDenied`. Veja
+o cabeçalho de `scripts/configurar-cors.mjs`.
+
 ### Arquivo pago que ninguém referencia
 
 ```bash

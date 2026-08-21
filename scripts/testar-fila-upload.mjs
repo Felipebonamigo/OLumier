@@ -255,32 +255,49 @@ console.log("\nEnvio direto para o capítulo:\n");
     });
 
     await etapa("capítulo de OUTRA galeria é recusado", async () => {
+      /*
+       * Slug único por execução, e limpeza garantida no `finally`.
+       *
+       * Antes o slug era fixo ('temp-teste-fila') e a limpeza morava no fim do
+       * caminho feliz. Bastava a etapa falhar no meio — servidor fora do ar, por
+       * exemplo — para a galeria sobrar no banco, e aí a PRÓXIMA execução
+       * quebrava no insert com "duplicate key". O erro apontava para uma chave
+       * duplicada, que não tem nada a ver com o que esta etapa testa: quem fosse
+       * investigar começaria pelo lugar errado.
+       */
       const { rows: outra } = await db.query(
-        `insert into galerias (tenant_id, slug, titulo) values ($1, 'temp-teste-fila', 'Temp')
+        `insert into galerias (tenant_id, slug, titulo) values ($1, $2, 'Temp')
          returning id`,
-        [tid],
+        [tid, `temp-teste-fila-${Date.now()}`],
       );
-      const { rows: sOutra } = await db.query(
-        "insert into secoes (galeria_id, nome) values ($1, 'Intrusa') returning id",
-        [outra[0].id],
-      );
-      const r = await fetch(`${BASE}/api/galerias/${galeriaId}/upload`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", cookie },
-        body: JSON.stringify({
-          nome: "intruso.jpg",
-          mime: "image/jpeg",
-          bytes: 2048,
-          secaoId: sOutra[0].id,
-        }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.erro ?? `HTTP ${r.status}`);
-      const { rows: m } = await db.query("select secao_id from medias where id = $1", [d.mediaId]);
-      if (m[0].secao_id !== null) throw new Error("aceitou capítulo de outra galeria!");
-      await db.query("delete from medias where id = $1", [d.mediaId]);
-      await db.query("delete from galerias where id = $1", [outra[0].id]);
-      return "ignorado, foto fica sem capítulo";
+      let mediaId = null;
+      try {
+        const { rows: sOutra } = await db.query(
+          "insert into secoes (galeria_id, nome) values ($1, 'Intrusa') returning id",
+          [outra[0].id],
+        );
+        const r = await fetch(`${BASE}/api/galerias/${galeriaId}/upload`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", cookie },
+          body: JSON.stringify({
+            nome: "intruso.jpg",
+            mime: "image/jpeg",
+            bytes: 2048,
+            secaoId: sOutra[0].id,
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.erro ?? `HTTP ${r.status}`);
+        mediaId = d.mediaId;
+        const { rows: m } = await db.query("select secao_id from medias where id = $1", [mediaId]);
+        if (m[0].secao_id !== null) throw new Error("aceitou capítulo de outra galeria!");
+        return "ignorado, foto fica sem capítulo";
+      } finally {
+        // A mídia nasce na galeria principal, não na intrusa: apagar a intrusa
+        // não a levaria junto pelo cascade.
+        if (mediaId) await db.query("delete from medias where id = $1", [mediaId]);
+        await db.query("delete from galerias where id = $1", [outra[0].id]);
+      }
     });
   }
   await db.end();

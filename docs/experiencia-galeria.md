@@ -13,7 +13,7 @@ que o Sirius considera o melhor exemplo dele) + requisitos que ele passou ao Fel
 > | Velocidade (derivadas no navegador) | ✅ no ar |
 > | Aparência (4 capas, 3 temas, 3 tipografias, 4 grades) | ✅ no ar |
 > | Capítulos | ✅ no ar |
-> | Salvar na galeria do celular | ✅ no ar — ver ressalva do CORS abaixo |
+> | Salvar na galeria do celular | ✅ no ar |
 > | Envio em massa e envio em partes | ✅ no ar |
 > | Prazo e cofre automático | ✅ no ar |
 > | Subdomínio por estúdio | ✅ no ar — **mas não como está descrito na seção 3** |
@@ -29,9 +29,12 @@ que o Sirius considera o melhor exemplo dele) + requisitos que ele passou ao Fel
 >    módulo de DNS — pior, usar `*.fotonio.com.br` como endereço de site derrubou o TLS do
 >    `www`. O que funciona é **TLS sob demanda** com um porteiro que só libera subdomínio de
 >    estúdio existente. Ver `docs/subdominio-por-estudio.md`.
-> 2. **O CORS do bucket ainda não cobre `*.fotonio.com.br`.** Enquanto não cobrir, "salvar
->    na galeria do celular" cai no download comum quando o casal abre pelo endereço do
->    estúdio (a foto chega, mas vai para Arquivos em vez das Fotos).
+> 2. **O CORS do bucket já cobre `*.fotonio.com.br`** (desde 21/08/2026). Até então a
+>    política listava `app.fotonio.com.br` — um endereço que nunca existiu — e não cobria o
+>    subdomínio dos estúdios, então "salvar na galeria do celular" caía no download comum
+>    justamente no endereço que o fotógrafo manda para o cliente. O curinga é honrado de
+>    verdade, inclusive para estúdio ainda não cadastrado, e `scripts/testar-cors.mjs`
+>    guarda isso dentro do `npm test`.
 
 ## 1. O que a galeria de referência faz (dissecada no navegador)
 
