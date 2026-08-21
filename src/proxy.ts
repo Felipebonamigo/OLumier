@@ -46,7 +46,6 @@ export function proxy(request: NextRequest) {
     const interna =
       pathname.startsWith("/api") ||
       pathname.startsWith("/_next") ||
-      pathname.startsWith("/g/") ||
       pathname === "/favicon.ico";
 
     if (!interna) {
@@ -55,6 +54,23 @@ export function proxy(request: NextRequest) {
       // para a mesma tela e o cookie de sessão não valeria nos dois.
       if (pathname.startsWith("/painel") || pathname === "/entrar" || pathname === "/cadastrar") {
         return NextResponse.redirect(new URL(pathname + search, `https://${DOMINIO_BASE}`));
+      }
+
+      // `/g/` e `/e/` são a forma interna das páginas públicas, e estavam na
+      // lista acima: passavam intactas. Com isso
+      // `siriusfotografia.fotonio.com.br/g/outroestudio/casamento` servia a
+      // entrega de um estúdio dentro do endereço de outro — a marca própria,
+      // que é o que se vende aqui, quebrada numa linha. Agora a casa só
+      // responde pelo que é dela, e pelo endereço curto.
+      if (pathname.startsWith("/g/") || pathname.startsWith("/e/")) {
+        const [, tipo, dono, ...resto] = pathname.split("/");
+        if (dono !== estudio) {
+          // Não é 404: a galeria existe, só não mora nesta casa. O visitante
+          // com o link torto chega no endereço certo em vez de numa parede.
+          return NextResponse.redirect(new URL(pathname + search, `https://${DOMINIO_BASE}`));
+        }
+        const curto = tipo === "g" && resto.length ? `/${resto.join("/")}` : "/";
+        return NextResponse.redirect(new URL(curto + search, `https://${estudio}.${DOMINIO_BASE}`));
       }
 
       const galeria = pathname.replace(/^\/+|\/+$/g, "");

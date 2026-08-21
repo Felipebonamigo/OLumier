@@ -111,6 +111,67 @@ await etapa("o domínio principal continua funcionando como antes", async () => 
   return "/g/estudio/galeria intacto";
 });
 
+/*
+ * A casa de um estúdio só responde pelo que é dele.
+ *
+ * `/g/` é a forma interna das páginas públicas e estava na lista de rotas que o
+ * subdomínio deixava passar intactas — então `sirius.fotonio.com.br/g/carol/x`
+ * servia a entrega da Carol dentro do endereço do Sirius. Não vazava galeria com
+ * senha, mas quebrava exatamente a marca própria que o produto vende.
+ */
+await etapa("galeria de OUTRO estúdio não abre neste endereço", async () => {
+  const marca = `vizinho-${Date.now()}`;
+  const {
+    rows: [v],
+  } = await db.query(
+    `insert into tenants (slug, nome_estudio, email, senha_hash)
+          values ($1, 'Estúdio Vizinho', $2, 'x') returning id, slug`,
+    [marca, `${marca}@teste`],
+  );
+  await db.query(
+    `insert into galerias (tenant_id, slug, titulo, publicada, estado)
+          values ($1, 'entrega-alheia', 'Entrega Alheia', true, 'online')`,
+    [v.id],
+  );
+
+  try {
+    const r = await pedir(`/g/${v.slug}/entrega-alheia`);
+    if (r.status === 200) throw new Error("serviu a entrega do vizinho dentro deste endereço");
+    if (r.status < 300 || r.status >= 400) {
+      throw new Error(`esperava redirecionamento, veio ${r.status}`);
+    }
+    const destino = r.headers.get("location") ?? "";
+    if (destino.includes(`${tslug}.`)) throw new Error(`continuou neste domínio: ${destino}`);
+    if (!destino.includes("fotonio.com.br")) throw new Error(`mandou para ${destino}`);
+    return "vai para o domínio principal";
+  } finally {
+    await db.query("delete from tenants where id = $1", [v.id]);
+  }
+});
+
+await etapa("o caminho interno da própria galeria vira o endereço curto", async () => {
+  const r = await pedir(`/g/${tslug}/${gslug}`);
+  if (r.status < 300 || r.status >= 400) {
+    throw new Error(`esperava redirecionamento, veio ${r.status}`);
+  }
+  const destino = r.headers.get("location") ?? "";
+  if (!destino.includes(`${tslug}.`) || !destino.endsWith(`/${gslug}`)) {
+    throw new Error(`mandou para ${destino}`);
+  }
+  return `um endereço só — ${destino}`;
+});
+
+await etapa("a vitrine de outro estúdio também não abre aqui", async () => {
+  const r = await pedir("/e/estudio-alheio");
+  if (r.status < 300 || r.status >= 400) {
+    throw new Error(`esperava redirecionamento, veio ${r.status}`);
+  }
+  if ((r.headers.get("location") ?? "").includes(`${tslug}.`)) {
+    throw new Error("a vitrine alheia ficou neste domínio");
+  }
+  return "/e/ alheio sai daqui";
+});
+
 await etapa("o painel não abre por subdomínio de estúdio", async () => {
   const r = await pedir("/painel");
   if (r.status < 300 || r.status >= 400) throw new Error(`esperava redirecionamento, veio ${r.status}`);
