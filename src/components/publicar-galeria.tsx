@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { salvarPublicacaoAction } from "@/app/painel/actions";
+import { marca } from "@/config/marca";
 
 /**
  * Controles de publicação. É aqui que o fotógrafo decide se a galeria está no ar,
@@ -11,12 +12,17 @@ import { salvarPublicacaoAction } from "@/app/painel/actions";
 export function PublicarGaleria({
   galeriaId,
   caminho,
+  estudioSlug,
+  galeriaSlug,
   publicada,
   temSenha,
   permiteDownload,
 }: {
   galeriaId: string;
+  /** Caminho longo (/g/estudio/galeria) — usado fora de produção. */
   caminho: string;
+  estudioSlug: string;
+  galeriaSlug: string;
   publicada: boolean;
   temSenha: boolean;
   permiteDownload: boolean;
@@ -34,8 +40,26 @@ export function PublicarGaleria({
    * render (nos dois lados) mostra o caminho, e o domínio entra depois de montar.
    */
   const [origem, setOrigem] = useState("");
-  useEffect(() => setOrigem(window.location.origin), []);
-  const linkCompleto = origem + caminho;
+  const [endereco, setEndereco] = useState("");
+  useEffect(() => {
+    setOrigem(window.location.origin);
+    setEndereco(window.location.hostname);
+  }, []);
+
+  /*
+   * O ENDEREÇO DO ESTÚDIO é o link que o fotógrafo deve mandar.
+   *
+   * O subdomínio existe desde 19/08, mas o painel continuava entregando
+   * `fotonio.com.br/g/siriusfotografia/lu-marino` — então o fotógrafo copiava o
+   * link feio, mandava no WhatsApp, e o recurso inteiro ficava sem uso.
+   *
+   * Só em produção: em `localhost` o subdomínio não resolve, e mostrar um link
+   * que não abre durante o desenvolvimento seria pior que o caminho longo.
+   */
+  const emProducao = endereco.endsWith(marca.dominio);
+  const linkCompleto = emProducao
+    ? `https://${estudioSlug}.${marca.dominio}/${galeriaSlug}`
+    : origem + caminho;
 
   function salvar(mudancas: FormData) {
     iniciar(async () => {
@@ -162,8 +186,11 @@ export function PublicarGaleria({
             >
               {copiado ? "copiado ✓" : "copiar"}
             </button>
+            {/* Abre o MESMO link que ele vai mandar — conferir outro endereço
+                não provaria que o link entregue funciona. O caminho longo cobre
+                a primeira render, antes de o navegador informar o domínio. */}
             <a
-              href={caminho}
+              href={linkCompleto || caminho}
               target="_blank"
               rel="noreferrer"
               className="rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"

@@ -115,14 +115,32 @@ export async function criarTenant(dados: {
   return linha!;
 }
 
+/*
+ * Hash descartável, com o mesmo custo de um real.
+ *
+ * Serve para gastar o MESMO tempo quando o e-mail não existe. Sem isso, a
+ * resposta para um e-mail desconhecido volta na hora e a de um cliente demora o
+ * scrypt inteiro — e essa diferença, medida de fora, revela quem é cliente do
+ * Fotônio. A mensagem na tela já é única de propósito; o relógio contava a
+ * verdade assim mesmo.
+ *
+ * Calculado uma vez, na primeira necessidade, e reaproveitado.
+ */
+let hashFalso: string | null = null;
+async function hashDeReferencia(): Promise<string> {
+  hashFalso ??= await gerarHashSenha("senha-que-nao-e-de-ninguem");
+  return hashFalso;
+}
+
 export async function autenticar(email: string, senha: string): Promise<Tenant | null> {
   const t = await consultarUm<Tenant & { senha_hash: string }>(
     "select * from tenants where lower(email) = lower($1)",
     [email],
   );
-  if (!t) return null;
-  const ok = await conferirSenha(senha, t.senha_hash);
-  return ok ? t : null;
+
+  // Confere sempre — contra o hash real, ou contra um descartável.
+  const ok = await conferirSenha(senha, t?.senha_hash ?? (await hashDeReferencia()));
+  return t && ok ? t : null;
 }
 
 export async function listarGalerias(tenantId: string) {

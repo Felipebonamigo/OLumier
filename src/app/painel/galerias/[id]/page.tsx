@@ -150,6 +150,8 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       <PublicarGaleria
         galeriaId={galeria.id}
         caminho={`/g/${galeria.estudio_slug}/${galeria.slug}`}
+        estudioSlug={galeria.estudio_slug}
+        galeriaSlug={galeria.slug}
         publicada={galeria.publicada}
         temSenha={Boolean(galeria.senha_hash)}
         permiteDownload={galeria.permite_download}
