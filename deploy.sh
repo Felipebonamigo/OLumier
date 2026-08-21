@@ -21,6 +21,7 @@ ATUAL="/opt/fotonio"
 RELEASES="/opt/fotonio-releases"
 COMPARTILHADO="/opt/fotonio-shared"
 SERVICO="fotonio"
+BANCO="fotonio"   # banco de PRODUCAO, consultado pelo portao de migracao
 MANTER=3 # quantas releases antigas guardar, para poder voltar atras
 
 cd "$(dirname "$0")"
@@ -34,26 +35,72 @@ fi
 SHA=$(git rev-parse --short HEAD)
 CARIMBO="$(date +%Y%m%d-%H%M%S)-$SHA"
 
+# ── O portão de migração ─────────────────────────────────────────────────────
+#
 # Publicar código que depende de uma coluna que ninguém criou quebra para o
 # USUÁRIO, não para quem publicou. Conferir antes é barato; descobrir depois, não.
+#
+# A PERGUNTA CERTA é: "o COMMIT que estou publicando traz migração que o banco
+# ainda não viu?".
+#
+# Antes este portão perguntava isso ao release QUE ESTÁ NO AR — rodava o
+# migrar.mjs de lá e lia o código de saída. Só que o release no ar, por
+# definição, NÃO conhece as migrações novas: elas viajam dentro do commit que
+# está sendo publicado. O portão respondia "banco em dia" justamente quando
+# havia migração pendente.
+#
+# Aconteceu em 21/08/2026 com a 008 (renome de logo_url → logo_chave): o portão
+# deu passagem, e só não subiu código procurando uma coluna inexistente porque a
+# migração foi aplicada na mão antes. Com cliente dentro, seria o site fora do ar.
+#
+# Agora a comparação é entre as duas únicas fontes que importam: os arquivos do
+# COMMIT e a tabela `migracoes_aplicadas` do banco de PRODUÇÃO.
 echo "→ conferindo migrações do banco"
-ESTADO=$(ssh "$VPS" "
-  if [ -f $ATUAL/scripts/migrar.mjs ]; then
-    cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs >/dev/null 2>&1
-    echo \$?
-  else
-    echo ausente
-  fi
-")
-if [ "$ESTADO" = "2" ]; then
-  echo "! Há migração pendente em produção. Aplique ANTES de publicar:"
-  echo "    ssh $VPS '/opt/fotonio-backup.sh'"
-  echo "    ssh $VPS 'cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar'"
-  exit 1
-elif [ "$ESTADO" = "ausente" ]; then
+
+# Do commit, não do diretório de trabalho: é isso que vai ser publicado.
+LOCAIS=$(git ls-tree --name-only HEAD -- db/migracoes/ | sed 's|.*/||' | grep '\.sql$' | sort || true)
+
+TEM_TABELA=$(ssh "$VPS" "sudo -u postgres psql -d $BANCO -tAc \"select to_regclass('public.migracoes_aplicadas') is not null\" 2>/dev/null" | tr -d '[:space:]')
+
+if [ "$TEM_TABELA" != "t" ]; then
   echo "  (controle de migrações ainda não instalado — será nesta publicação)"
+  PENDENTES=""
 else
-  echo "  banco em dia"
+  APLICADAS=$(ssh "$VPS" "sudo -u postgres psql -d $BANCO -tAc 'select arquivo from migracoes_aplicadas' 2>/dev/null" | sed 's/[[:space:]]*$//' | sed '/^$/d' | sort)
+  PENDENTES=$(comm -23 <(echo "$LOCAIS") <(echo "$APLICADAS"))
+fi
+
+if [ -n "$PENDENTES" ]; then
+  echo "! Este commit traz migração que o banco de produção ainda não tem:"
+  echo "$PENDENTES" | sed 's/^/    · /'
+  echo
+  echo "  Aplicar agora? Faço dump antes (com cópia fora do servidor), envio os"
+  echo "  arquivos e aplico pelo controle de migrações."
+  read -rp "  Aplicar? [s/N] " r
+  if [[ ! "$r" =~ ^[sS]$ ]]; then
+    echo
+    echo "  Nada foi aplicado. Para fazer na mão:"
+    echo "    ssh $VPS '/opt/fotonio-backup.sh'"
+    echo "$PENDENTES" | sed "s|^|    scp db/migracoes/|; s|$| $VPS:$ATUAL/db/migracoes/|"
+    echo "    ssh $VPS 'cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar'"
+    exit 1
+  fi
+
+  # Dump ANTES de mexer na estrutura. Sem rede, sem publicação.
+  echo "  → dump de segurança"
+  ssh "$VPS" "/opt/fotonio-backup.sh" | sed 's/^/    /'
+
+  # Os arquivos precisam estar no servidor para o migrar.mjs enxergá-los. Vão
+  # para o release ATUAL; o registro fica no banco, que sobrevive à troca.
+  echo "  → enviando migração(ões)"
+  while read -r m; do
+    [ -n "$m" ] && scp -q "db/migracoes/$m" "$VPS:$ATUAL/db/migracoes/$m"
+  done <<< "$PENDENTES"
+
+  echo "  → aplicando"
+  ssh "$VPS" "cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar" | sed 's/^/    /'
+else
+  [ "$TEM_TABELA" = "t" ] && echo "  banco em dia"
 fi
 
 echo "→ empacotando $SHA"
