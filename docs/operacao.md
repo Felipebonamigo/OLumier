@@ -125,8 +125,22 @@ node --env-file=.env.production --experimental-strip-types \
 ```
 
 Compara bucket × banco. **Só relata**; para apagar de verdade, `--apagar`.
-Objeto sem linha em `medias` é invisível — não aparece no painel, não conta na
-quota — e continua sendo cobrado todo mês.
+Objeto sem dono é invisível — não aparece no painel, não conta na quota — e
+continua sendo cobrado todo mês.
+
+Duas salvaguardas que precisam continuar existindo:
+
+- **A logo do estúdio não tem linha em `medias`.** Ela é do estúdio, não de uma
+  galeria. Uma varredura que olhasse só aquela tabela classificaria a logo de
+  **todos os clientes** como órfã e, com `--apagar`, tiraria a marca de todo
+  mundo de uma vez. Por isso a regra de "quem tem dono" mora em
+  `scripts/varrer-orfaos-regras.mjs` e é usada pelo script **e** pelos testes —
+  regra de segurança testada por cópia não está testada.
+- **Objeto com menos de 24h é preservado.** Entre o envio ao bucket e a
+  confirmação no banco existe uma janela em que o arquivo é, tecnicamente, órfão.
+  Sem essa margem, `--apagar` levaria a foto de quem está enviando naquele
+  instante. (A constante existia desde o começo, mas o filtro só passou a usá-la
+  em 21/08/2026 — até então a promessa estava no comentário, não no código.)
 
 ## Testes
 
@@ -134,7 +148,7 @@ quota — e continua sendo cobrado todo mês.
 npm test
 ```
 
-Roda as 15 suítes. As que dependem do servidor de desenvolvimento são **puladas**
+Roda as 20 suítes. As que dependem do servidor de desenvolvimento são **puladas**
 (não reprovadas) quando ele está fora, para não confundir "não rodou" com
 "quebrou".
 
