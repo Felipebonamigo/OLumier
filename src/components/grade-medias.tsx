@@ -11,6 +11,8 @@ export interface MediaExibida {
   url: string;
   bytes: number;
   secaoId: string | null;
+  /** Quantas pessoas marcaram esta foto como favorita. 0 = ninguém. */
+  favoritas?: number;
 }
 
 export interface SecaoOpcao {
@@ -205,6 +207,22 @@ export function GradeMedias({
               {capaId === m.id && (
                 <span className="absolute left-9 top-1.5 rounded-md bg-luz px-2 py-0.5 text-[10px] font-semibold text-void">
                   capa
+                </span>
+              )}
+
+              {/*
+                Marca do cliente, não do fotógrafo: ele não clica aqui, só lê.
+                O número aparece a partir de 2 porque, com uma pessoa só, "♥ 1"
+                em toda foto marcada vira ruído — o que importa ali é o coração.
+                Com duas ou mais, o número é a informação: foto escolhida pelos
+                dois é decisão tomada.
+              */}
+              {(m.favoritas ?? 0) > 0 && (
+                <span
+                  title={`${m.favoritas} ${m.favoritas === 1 ? "pessoa marcou" : "pessoas marcaram"} como favorita`}
+                  className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-luz"
+                >
+                  ♥{(m.favoritas ?? 0) > 1 ? ` ${m.favoritas}` : ""}
                 </span>
               )}
 

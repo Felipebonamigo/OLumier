@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { marca } from "@/config/marca";
 import { urlDeLeitura } from "@/lib/r2";
+import { minhasFavoritas } from "@/lib/favoritas";
 import {
   buscarGaleriaPublica,
   listarMediasPublicas,
@@ -166,6 +167,18 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const aparencia = lerAparencia(galeria.aparencia);
 
   /*
+   * As favoritas DESTE visitante, lidas no servidor.
+   *
+   * Buscar depois de montar faria a galeria inteira aparecer sem corações e
+   * enchê-los meio segundo depois — em 600 fotos isso é um pisca que faz a
+   * pessoa duvidar se a escolha dela foi guardada.
+   *
+   * Quem nunca marcou nada não tem cookie, e isto devolve lista vazia sem tocar
+   * o banco.
+   */
+  const favoritasIniciais = await minhasFavoritas(galeria.id);
+
+  /*
    * Agrupa as fotos em capítulos preservando os índices do array original: o
    * lightbox continua percorrendo a galeria INTEIRA de ponta a ponta, mesmo
    * quem abriu uma foto no meio da "Festa" chega no "Making Of" pela seta.
@@ -234,6 +247,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           </p>
         ) : (
           <GaleriaCliente
+            favoritasIniciais={favoritasIniciais}
             itens={itens}
             permiteDownload={galeria.permite_download}
             galeriaId={galeria.id}

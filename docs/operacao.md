@@ -170,7 +170,7 @@ Duas salvaguardas que precisam continuar existindo:
 npm test
 ```
 
-Roda as 21 suítes. As que dependem do servidor de desenvolvimento são **puladas**
+Roda as 22 suítes. As que dependem do servidor de desenvolvimento são **puladas**
 (não reprovadas) quando ele está fora, para não confundir "não rodou" com
 "quebrou".
 
@@ -183,6 +183,20 @@ Roda as 21 suítes. As que dependem do servidor de desenvolvimento são **pulada
 `--import ./scripts/registrar-ts.mjs` ensina o Node a achar `./db` como `./db.ts`
 e a traduzir o atalho `@/`. Sem isso, nenhum script conseguia importar nada de
 `src/lib` — e o que é difícil de testar acaba não sendo testado.
+
+### As favoritas do cliente
+
+O casal marca as fotos do álbum na própria galeria; o fotógrafo vê os corações
+no painel. Sem login: a identidade é um id anônimo por galeria, num cookie
+assinado que só nasce no PRIMEIRO clique — quem só olha não deixa rastro novo.
+
+O id ser por galeria (e não global) é deliberado: um id único ligaria a mesma
+pessoa entre galerias de estúdios diferentes, informação que não precisamos ter.
+
+O preço da escolha: noiva no celular e noivo no notebook contam como duas
+pessoas. Por isso o painel mostra quantas marcaram cada foto — foto escolhida
+pelos dois é decisão fechada, que costuma ser mais útil que saber o nome de quem
+marcou.
 
 ## Uma decisão que ficou pendente de propósito
 

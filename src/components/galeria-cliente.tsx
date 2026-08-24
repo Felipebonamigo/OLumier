@@ -45,6 +45,7 @@ export function GaleriaCliente({
   aparencia,
   capitulos,
   celularProvavel,
+  favoritasIniciais,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
@@ -53,6 +54,12 @@ export function GaleriaCliente({
   capitulos: CapituloGaleria[];
   /** Palpite do servidor pelo user-agent, só para a primeira pintura não piscar. */
   celularProvavel: boolean;
+  /**
+   * Ids das fotos que ESTE visitante já marcou. Vem do servidor para a primeira
+   * pintura já sair com os corações certos — buscar depois faria a galeria
+   * inteira piscar de vazia para marcada a cada visita.
+   */
+  favoritasIniciais: string[];
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
   const [baixandoTudo, setBaixandoTudo] = useState(false);
@@ -63,6 +70,46 @@ export function GaleriaCliente({
      celular mostraria "Baixar" por um instante antes de virar "Salvar". */
   const [modoSalvar, setModoSalvar] = useState(celularProvavel);
   useEffect(() => setModoSalvar(deveOferecerSalvar()), []);
+
+  const [favoritas, setFavoritas] = useState<Set<string>>(() => new Set(favoritasIniciais));
+  const [soFavoritas, setSoFavoritas] = useState(false);
+
+  /*
+   * Marca na tela ANTES de o servidor responder, e desfaz se falhar.
+   *
+   * Quem escolhe foto de álbum passa por centenas em sequência; esperar a ida e
+   * volta a cada toque tornaria a tarefa insuportável, e numa rede de festa a
+   * espera é longa. O pior caso aqui é um coração voltar sozinho — que a pessoa
+   * vê acontecer, com o aviso explicando.
+   */
+  const alternarFavorita = useCallback(
+    async (mediaId: string, eraFavorita: boolean) => {
+      const mexer = (marcar: boolean) =>
+        setFavoritas((atual) => {
+          const nova = new Set(atual);
+          if (marcar) nova.add(mediaId);
+          else nova.delete(mediaId);
+          return nova;
+        });
+
+      mexer(!eraFavorita);
+      try {
+        const r = await fetch("/api/g/" + galeriaId + "/favoritas", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mediaId }),
+        });
+        if (!r.ok) throw new Error(String(r.status));
+        const d: { favorita: boolean } = await r.json();
+        // O servidor é quem manda: se discordar do palpite, ele vence.
+        mexer(d.favorita);
+      } catch {
+        mexer(eraFavorita);
+        setAviso("Não consegui salvar a escolha. Confira sua conexão.");
+      }
+    },
+    [galeriaId],
+  );
 
   const fechar = useCallback(() => setAberto(null), []);
   const anterior = useCallback(
@@ -255,6 +302,31 @@ export function GaleriaCliente({
         </div>
       )}
 
+      {/*
+        Só aparece depois da primeira foto marcada. Antes disso seria um botão
+        que não faz nada, ocupando o lugar mais nobre da tela — e explicando um
+        recurso que a pessoa ainda não usou.
+      */}
+      {favoritas.size > 0 && (
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSoFavoritas((v) => !v)}
+            aria-pressed={soFavoritas}
+            className="rounded-full px-4 py-2 text-sm transition hover:opacity-85"
+            style={
+              soFavoritas
+                ? { background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }
+                : { border: "1px solid var(--g-linha)", color: "var(--g-suave)" }
+            }
+          >
+            {soFavoritas
+              ? `Mostrando ${favoritas.size} ${favoritas.size === 1 ? "favorita" : "favoritas"} · ver todas`
+              : `♥ Ver só as favoritas (${favoritas.size})`}
+          </button>
+        </div>
+      )}
+
       {/* Menu de capítulos — o cliente pula direto ao momento que quer ver. */}
       {capitulos.length > 1 && (
         <nav
@@ -282,7 +354,18 @@ export function GaleriaCliente({
       )}
 
       <div id="fotos" className="mt-8 scroll-mt-4">
-        {capitulos.map((cap) => (
+        {capitulos.map((capOriginal) => {
+          /*
+           * Com o filtro ligado, o capítulo mostra só o que foi marcado — e some
+           * inteiro se nada ali foi. Manter um capítulo vazio com o título na
+           * tela faria parecer que as fotos sumiram.
+           */
+          const indices = soFavoritas
+            ? capOriginal.indices.filter((i) => favoritas.has(itens[i].id))
+            : capOriginal.indices;
+          if (indices.length === 0) return null;
+          const cap = { ...capOriginal, indices };
+          return (
           <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
             {cap.nome && (
               <h2
@@ -306,9 +389,16 @@ export function GaleriaCliente({
             // da própria foto manda, para o mural não ficar todo igual.
             const alturaPeloLayout =
               aparencia.grade === "linhas" || aparencia.grade === "editorial";
+            const ehFavorita = favoritas.has(it.id);
             return (
+              /*
+               * O envoltório existe por uma razão simples: o coração é um botão,
+               * a foto é um botão, e botão dentro de botão é HTML inválido — o
+               * navegador desmonta a marcação e o clique passa a cair no lugar
+               * errado. O estilo do layout vem para cá; a foto preenche.
+               */
+              <div key={it.id} style={estilo} className={`group relative ${classe}`}>
               <button
-                key={it.id}
                 type="button"
                 onClick={() => {
                   setAberto(i);
@@ -327,8 +417,7 @@ export function GaleriaCliente({
                    */
                   if (it.tipo === "video") registrar("assistiu", it.id);
                 }}
-                style={estilo}
-                className={`group relative overflow-hidden rounded-md ${classe}`}
+                className="block h-full w-full overflow-hidden rounded-md"
                 aria-label={`Abrir ${it.nome}`}
               >
                 {it.tipo === "foto" ? (
@@ -368,11 +457,38 @@ export function GaleriaCliente({
                   </span>
                 )}
               </button>
+
+              {/*
+                O coração fica SEMPRE visível quando marcado, e só no hover
+                quando não. Depender de hover para ver o que já foi escolhido
+                deixaria a pessoa sem saber onde parou — e no celular não existe
+                hover, então lá ele é sempre visível.
+              */}
+              <button
+                type="button"
+                onClick={() => alternarFavorita(it.id, ehFavorita)}
+                aria-pressed={ehFavorita}
+                aria-label={ehFavorita ? `Desmarcar ${it.nome}` : `Marcar ${it.nome} como favorita`}
+                className={`absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full backdrop-blur transition
+                  ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}`}
+                style={{
+                  background: "color-mix(in srgb, var(--g-fundo) 55%, transparent)",
+                  color: ehFavorita ? "var(--g-destaque)" : "var(--g-texto)",
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"
+                  fill={ehFavorita ? "currentColor" : "none"}
+                  stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+                  <path d="M12 20.5 4.6 13a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9A4.6 4.6 0 0 1 19.4 13Z" />
+                </svg>
+              </button>
+              </div>
                 );
               }}
             />
           </section>
-        ))}
+          );
+        })}
       </div>
 
       {item && (
