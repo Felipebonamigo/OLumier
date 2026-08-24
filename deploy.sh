@@ -55,18 +55,22 @@ CARIMBO="$(date +%Y%m%d-%H%M%S)-$SHA"
 #
 # Agora a comparação é entre as duas únicas fontes que importam: os arquivos do
 # COMMIT e a tabela `migracoes_aplicadas` do banco de PRODUÇÃO.
+# -n em todo ssh que nao precisa de stdin: sem ele o ssh CONSOME a entrada
+# do script. Em 24/08/2026 as duas consultas abaixo engoliram a resposta do
+# "Aplicar agora?", o read recebeu EOF e o deploy abortou dizendo que nada foi
+# aplicado. O unico ssh que fica sem -n e o do heredoc, que usa stdin de proposito.
 echo "→ conferindo migrações do banco"
 
 # Do commit, não do diretório de trabalho: é isso que vai ser publicado.
 LOCAIS=$(git ls-tree --name-only HEAD -- db/migracoes/ | sed 's|.*/||' | grep '\.sql$' | sort || true)
 
-TEM_TABELA=$(ssh "$VPS" "sudo -u postgres psql -d $BANCO -tAc \"select to_regclass('public.migracoes_aplicadas') is not null\" 2>/dev/null" | tr -d '[:space:]')
+TEM_TABELA=$(ssh -n "$VPS" "sudo -u postgres psql -d $BANCO -tAc \"select to_regclass('public.migracoes_aplicadas') is not null\" 2>/dev/null" | tr -d '[:space:]')
 
 if [ "$TEM_TABELA" != "t" ]; then
   echo "  (controle de migrações ainda não instalado — será nesta publicação)"
   PENDENTES=""
 else
-  APLICADAS=$(ssh "$VPS" "sudo -u postgres psql -d $BANCO -tAc 'select arquivo from migracoes_aplicadas' 2>/dev/null" | sed 's/[[:space:]]*$//' | sed '/^$/d' | sort)
+  APLICADAS=$(ssh -n "$VPS" "sudo -u postgres psql -d $BANCO -tAc 'select arquivo from migracoes_aplicadas' 2>/dev/null" | sed 's/[[:space:]]*$//' | sed '/^$/d' | sort)
   PENDENTES=$(comm -23 <(echo "$LOCAIS") <(echo "$APLICADAS"))
 fi
 
@@ -88,7 +92,7 @@ if [ -n "$PENDENTES" ]; then
 
   # Dump ANTES de mexer na estrutura. Sem rede, sem publicação.
   echo "  → dump de segurança"
-  ssh "$VPS" "/opt/fotonio-backup.sh" | sed 's/^/    /'
+  ssh -n "$VPS" "/opt/fotonio-backup.sh" | sed 's/^/    /'
 
   # Os arquivos precisam estar no servidor para o migrar.mjs enxergá-los. Vão
   # para o release ATUAL; o registro fica no banco, que sobrevive à troca.
@@ -98,7 +102,7 @@ if [ -n "$PENDENTES" ]; then
   done <<< "$PENDENTES"
 
   echo "  → aplicando"
-  ssh "$VPS" "cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar" | sed 's/^/    /'
+  ssh -n "$VPS" "cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar" | sed 's/^/    /'
 else
   [ "$TEM_TABELA" = "t" ] && echo "  banco em dia"
 fi
@@ -147,7 +151,7 @@ REMOTE
 # Conferir /entrar so provava que o Next respondia: aquela pagina nao toca banco
 # nem R2. O healthz testa as duas dependencias de verdade.
 echo "→ conferindo"
-ssh "$VPS" "
+ssh -n "$VPS" "
   set -e
   for r in / /entrar; do
     c=\$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 http://localhost:3300\$r)
