@@ -7,6 +7,7 @@
  * NÃO testa CORS — testa a lógica: autorização, quota, URL assinada, envio,
  * confirmação com tamanho real e o trigger de uso de espaço.
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHmac } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -45,11 +46,8 @@ const galeria = galerias[0];
 console.log(`estúdio: ${tenant.nome_estudio}`);
 console.log(`galeria: ${galeria.titulo}\n`);
 
-// Monta um cookie de sessão válido, do mesmo jeito que o app monta.
-const expira = Date.now() + 60_000;
-const dados = `${tenant.id}.${expira}`;
-const assinatura = createHmac("sha256", SESSION_SECRET).update(dados).digest("hex");
-const cookie = `fotonio_sessao=${dados}.${assinatura}`;
+// Cookie de sessão pelo módulo compartilhado — o formato mora num lugar só.
+const cookie = cookieDeSessao(tenant.id);
 
 // PNG 1x1 válido — o menor arquivo real possível para o teste.
 const png = Buffer.from(

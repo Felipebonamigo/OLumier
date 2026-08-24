@@ -7,6 +7,7 @@
  * coisas que decidem se isso funciona: paralelismo, retentativa e o descarte do
  * lixo que vem junto quando se arrasta uma pasta.
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHmac } from "node:crypto";
 import pg from "pg";
 
@@ -225,9 +226,7 @@ console.log("\nEnvio direto para o capítulo:\n");
       order by g.criado_em limit 1`,
   );
   const { id: galeriaId, tid } = rows[0];
-  const expira = Date.now() + 120_000;
-  const dados = `${tid}.${expira}`;
-  const cookie = `fotonio_sessao=${dados}.${createHmac("sha256", SESSION_SECRET).update(dados).digest("hex")}`;
+  const cookie = cookieDeSessao(tid);
 
   const { rows: secs } = await db.query(
     "select id, nome from secoes where galeria_id = $1 order by ordem limit 1",

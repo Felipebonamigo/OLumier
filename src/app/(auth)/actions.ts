@@ -2,9 +2,19 @@
 
 import { redirect } from "next/navigation";
 import { criarSessao, encerrarSessao } from "@/lib/auth";
-import { autenticar, criarTenant, emailJaUsado } from "@/lib/tenants";
+import { autenticar, buscarTenantPorEmail, criarTenant, emailJaUsado } from "@/lib/tenants";
 import { planoPorId, planos } from "@/config/planos";
 import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
+import { emailConfigurado } from "@/lib/email";
+import { marca } from "@/config/marca";
+import {
+  MINIMO_SENHA,
+  concluir,
+  conferirToken,
+  criarPedido,
+  enviarEmailDeRecuperacao,
+} from "@/lib/recuperacao";
+import { headers } from "next/headers";
 
 export interface EstadoForm {
   erro?: string;
@@ -64,4 +74,98 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
 export async function sairAction() {
   await encerrarSessao();
   redirect("/entrar");
+}
+
+
+// --- esqueci minha senha ----------------------------------------------------
+
+export interface EstadoRecuperar {
+  erro?: string;
+  /** true quando o pedido foi processado — a tela troca de conteúdo. */
+  enviado?: boolean;
+}
+
+/**
+ * Pede o link de recuperação.
+ *
+ * A RESPOSTA É SEMPRE A MESMA, exista o e-mail ou não. Dizer "não achei essa
+ * conta" transformaria este formulário numa lista de clientes do Fotônio: quem
+ * quisesse saber se um estúdio usa a plataforma bastaria digitar o e-mail dele.
+ * Quem não tem conta simplesmente não recebe nada.
+ */
+export async function pedirRecuperacaoAction(
+  _estado: EstadoRecuperar,
+  form: FormData,
+): Promise<EstadoRecuperar> {
+  const email = String(form.get("email") ?? "").trim();
+  if (!email) return { erro: "Digite seu e-mail." };
+
+  if (!emailConfigurado()) {
+    return {
+      erro: `O envio de e-mail ainda não está ligado. Fale com ${marca.email} para redefinir sua senha.`,
+    };
+  }
+
+  /*
+   * Freio por e-mail. Sem ele, este formulário vira uma forma de encher a caixa
+   * de entrada de alguém — e de gastar nossa cota de envio — só repetindo o
+   * mesmo endereço.
+   */
+  const chave = `recuperar:${email.toLowerCase()}`;
+  const antes = podeTentar(chave);
+  if (!antes.permitido) {
+    return { erro: `Muitos pedidos. Tente de novo em ${emPalavras(antes.esperarSeg!)}.` };
+  }
+  // Conta TODO pedido, não só os que falharam: aqui não existe "errar" — o que
+  // precisa de freio é a repetição em si. O nome da função é do caso de senha.
+  registrarErro(chave);
+
+  const tenant = await buscarTenantPorEmail(email);
+  if (tenant) {
+    const cab = await headers();
+    const origem = cab.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+    const { token } = await criarPedido(tenant.id, origem ?? undefined);
+    const link = `https://${marca.dominio}/recuperar/${token}`;
+    await enviarEmailDeRecuperacao(tenant.email, tenant.nome_estudio, link);
+  }
+
+  // Mesmo retorno nos dois caminhos.
+  return { enviado: true };
+}
+
+export interface EstadoNovaSenha {
+  erro?: string;
+}
+
+/** Grava a senha nova. O token vem do campo escondido, não da URL da action. */
+export async function definirSenhaNovaAction(
+  _estado: EstadoNovaSenha,
+  form: FormData,
+): Promise<EstadoNovaSenha> {
+  const token = String(form.get("token") ?? "");
+  const senha = String(form.get("senha") ?? "");
+  const repetida = String(form.get("senha_repetida") ?? "");
+
+  if (senha.length < MINIMO_SENHA) {
+    return { erro: `A senha precisa de pelo menos ${MINIMO_SENHA} caracteres.` };
+  }
+  if (senha !== repetida) return { erro: "As duas senhas não são iguais." };
+
+  const conferido = await conferirToken(token);
+  if (!conferido.ok) {
+    return { erro: "Este link não vale mais. Peça um novo em “esqueci minha senha”." };
+  }
+
+  const ok = await concluir(token, senha);
+  if (!ok) return { erro: "Este link não vale mais. Peça um novo." };
+
+  /*
+   * NÃO cria sessão automaticamente.
+   *
+   * Seria mais cômodo entrar direto, e é o que muitos sistemas fazem. Só que
+   * quem chegou aqui pode ser alguém que interceptou o e-mail; obrigar a digitar
+   * a senha nova na tela de entrada não atrapalha o dono (ele acabou de
+   * escolhê-la) e fecha a porta de entrar sem nunca provar que sabe a senha.
+   */
+  redirect("/entrar?senha_redefinida=1");
 }

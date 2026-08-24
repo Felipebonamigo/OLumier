@@ -12,6 +12,7 @@
  * desenvolvimento rodando, porque a reconferência mora na rota — e é justamente
  * a rota que estava furada.
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHmac } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -145,9 +146,7 @@ if (!t.length || !g.length) {
 } else {
   const tenantId = t[0].id;
   const quotaOriginal = t[0].quota_bytes;
-  const expira = Date.now() + 60_000;
-  const dados = `${tenantId}.${expira}`;
-  const cookie = `fotonio_sessao=${dados}.${createHmac("sha256", SESSION_SECRET).update(dados).digest("hex")}`;
+  const cookie = cookieDeSessao(tenantId);
 
   await etapa("declarar 1 byte e subir um arquivo maior é RECUSADO", async () => {
     // Aperta a quota deixando uma folga de 3 KB SOBRE o que já está em uso —

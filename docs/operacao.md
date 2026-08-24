@@ -83,8 +83,30 @@ node --env-file=.env.production --experimental-strip-types \
      --import ./scripts/registrar-ts.mjs scripts/redefinir-senha.mjs email@do.estudio
 ```
 
-Sorteia uma senha nova e mostra **uma vez**. Não existe "esqueci minha senha" no
-app ainda — ver "O que falta" abaixo.
+Sorteia uma senha nova e mostra **uma vez**.
+
+Continua útil como saída de emergência, mas o caminho normal agora é o
+autoatendimento em `/recuperar` — **desde que o envio de e-mail esteja ligado**.
+Sem `RESEND_API_KEY` e `EMAIL_REMETENTE`, o link "esqueci minha senha" nem
+aparece na tela de entrada, e `/recuperar` diz a verdade em vez de aceitar o
+e-mail e não mandar nada.
+
+### Como o "esqueci minha senha" funciona
+
+| | |
+|---|---|
+| Validade do link | 1 hora, uso único |
+| No banco | só o **hash** do token — o dump diário iria junto com o token em texto |
+| Pedido novo | invalida o anterior |
+| Resposta da tela | idêntica exista ou não a conta (senão o formulário vira lista de clientes) |
+| Depois de trocar | **todas as sessões caem** (`tenants.senha_alterada_em`) e a pessoa entra de novo |
+
+O último item é o que faz a troca significar alguma coisa: a sessão é um cookie
+assinado, sem registro no servidor. Sem essa data, quem tivesse roubado o cookie
+seguiria dentro por até 30 dias **depois** da troca — justamente o caso em que a
+pessoa troca a senha porque desconfia de invasão.
+
+Para ligar o envio, ver "O que falta" abaixo.
 
 ### Depois de mudar um plano em `planos.ts`
 
@@ -148,7 +170,7 @@ Duas salvaguardas que precisam continuar existindo:
 npm test
 ```
 
-Roda as 20 suítes. As que dependem do servidor de desenvolvimento são **puladas**
+Roda as 21 suítes. As que dependem do servidor de desenvolvimento são **puladas**
 (não reprovadas) quando ele está fora, para não confundir "não rodou" com
 "quebrou".
 
@@ -180,10 +202,18 @@ galeria e só então poder descartar o detalhe — não o contrário.
 
 ## O que falta
 
-- **"Esqueci minha senha" self-service** — depende de um remetente verificado no
-  Resend para `fotonio.com.br`. A chave atual é restrita a envio e só tem
-  remetente do Atomatiza; mandar "redefina sua senha do Fotônio" de um endereço
-  `@atomatiza.com.br` pareceria golpe.
+- **Ligar o envio de e-mail.** O fluxo de recuperação está pronto e testado, mas
+  fica escondido até existirem as duas variáveis. Falta verificar `fotonio.com.br`
+  como domínio no Resend (o remetente precisa ser do nosso domínio: mandar
+  "redefina sua senha do Fotônio" de um `@atomatiza.com.br` pareceria golpe) e
+  então acrescentar ao `/opt/fotonio-shared/.env.production`:
+
+  ```
+  RESEND_API_KEY=...
+  EMAIL_REMETENTE=nao-responda@fotonio.com.br
+  ```
+
+  Nenhuma mudança de código é necessária — só reiniciar o serviço.
 - **Bucket próprio no B2 para o backup** — hoje mora numa pasta dentro do bucket
   do Padelizou, porque a chave existente é dali. Se aquela chave for trocada, o
   backup do Fotônio para junto e só descobriríamos na próxima falha.

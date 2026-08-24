@@ -7,6 +7,7 @@
  * que importa: a GRADE passa a servir a miniatura, não o original. É esse
  * desvio que faz a galeria abrir rápido.
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHmac } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -31,9 +32,7 @@ const { rows } = await db.query(
 );
 const { id: galeriaId, gslug, tid, tslug } = rows[0];
 
-const expira = Date.now() + 120_000;
-const dados = `${tid}.${expira}`;
-const cookie = `fotonio_sessao=${dados}.${createHmac("sha256", SESSION_SECRET).update(dados).digest("hex")}`;
+const cookie = cookieDeSessao(tid);
 
 // "Original" de 300 KB e derivadas pequenas — as proporções reais do problema.
 const original = Buffer.alloc(300 * 1024, 7);

@@ -6,6 +6,7 @@
  * Cobre o que mais importa nesta parte: galeria despublicada não abre, senha
  * errada não passa, senha certa libera, e o acesso fica registrado.
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHash, createHmac } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -206,11 +207,7 @@ await etapa("com download liberado, a URL do original volta a aparecer", async (
  * A permissão vem da SESSÃO, nunca do parâmetro. Estes testes existem para o
  * `?previa=1` não virar, por descuido, um jeito de abrir rascunho alheio.
  */
-const sessaoDe = (tenantId) => {
-  const exp = Date.now() + 300000;
-  const d = `${tenantId}.${exp}`;
-  return `fotonio_sessao=${d}.${createHmac("sha256", SESSION_SECRET).update(d).digest("hex")}`;
-};
+const sessaoDe = (tenantId) => cookieDeSessao(tenantId);
 
 await etapa("prévia: rascunho com senha abre para o DONO e para mais ninguém", async () => {
   const { rows: t } = await db.query("select tenant_id from galerias where id = $1", [galeriaId]);

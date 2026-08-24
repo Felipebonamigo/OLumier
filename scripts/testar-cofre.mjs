@@ -6,6 +6,7 @@
  * O que está em jogo é a promessa central do produto: "o link sai do ar, mas
  * nada é apagado". Se arquivar perdesse foto, o argumento inteiro cai.
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { execFileSync } from "node:child_process";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -105,9 +106,7 @@ await etapa("enviar arquivo para galeria no cofre é recusado", async () => {
     "select tenant_id from galerias where id = $1",
     [galeriaId],
   );
-  const expira = Date.now() + 60_000;
-  const d = `${t[0].tenant_id}.${expira}`;
-  const cookie = `fotonio_sessao=${d}.${createHmac("sha256", process.env.SESSION_SECRET).update(d).digest("hex")}`;
+  const cookie = cookieDeSessao(t[0].tenant_id);
   const r = await fetch(`${BASE}/api/galerias/${galeriaId}/upload`, {
     method: "POST",
     headers: { "Content-Type": "application/json", cookie },

@@ -8,6 +8,7 @@
  * caminho multipart com um arquivo pequeno declarando tamanho grande, e depois
  * valida a remontagem com partes reais.
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHmac, createHash } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -29,9 +30,7 @@ const { rows } = await db.query(
     order by g.criado_em limit 1`,
 );
 const { id: galeriaId, tid } = rows[0];
-const expira = Date.now() + 300_000;
-const dados = `${tid}.${expira}`;
-const cookie = `fotonio_sessao=${dados}.${createHmac("sha256", SESSION_SECRET).update(dados).digest("hex")}`;
+const cookie = cookieDeSessao(tid);
 
 let falhou = false;
 const etapa = async (nome, fn) => {

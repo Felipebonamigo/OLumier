@@ -10,6 +10,7 @@
  * e a logo antiga ser apagada do bucket na troca (senão vira arquivo pago que
  * ninguém enxerga).
  */
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHmac } from "node:crypto";
 import pg from "pg";
 import {
@@ -159,9 +160,7 @@ if (!servidor) {
   const tid = rows[0].id;
   const logoAntes = rows[0].logo_chave;
 
-  const expira = Date.now() + 120_000;
-  const dados = `${tid}.${expira}`;
-  const cookie = `fotonio_sessao=${dados}.${createHmac("sha256", SESSION_SECRET).update(dados).digest("hex")}`;
+  const cookie = cookieDeSessao(tid);
 
   // PNG 1x1 de verdade — o servidor confere o que CHEGOU no bucket, então não
   // adianta mandar texto dizendo que é imagem.
