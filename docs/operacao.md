@@ -214,6 +214,12 @@ galeria e só então poder descartar o detalhe — não o contrário.
   ```
 
   Nenhuma mudança de código é necessária — só reiniciar o serviço.
+
+  > ⚠️ **Cole a chave de verdade, não o texto de exemplo.** Em 24/08/2026 a linha
+  > `RESEND_API_KEY=cole_aqui` foi parar no `.env.production` exatamente assim.
+  > O app agora recusa qualquer valor que não comece com `re_` e mantém o
+  > recurso escondido, dizendo o motivo no log — mas o melhor é editar o arquivo
+  > com um editor em vez de acrescentar por linha de comando.
 - **Bucket próprio no B2 para o backup** — hoje mora numa pasta dentro do bucket
   do Padelizou, porque a chave existente é dali. Se aquela chave for trocada, o
   backup do Fotônio para junto e só descobriríamos na próxima falha.

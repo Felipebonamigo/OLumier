@@ -218,6 +218,41 @@ try {
     });
   }
 
+  console.log("\nconfiguração do e-mail");
+
+  /*
+   * Em 24/08/2026 a linha `RESEND_API_KEY=cole_aqui` foi parar no
+   * .env.production: o texto de exemplo de uma instrução foi colado literalmente.
+   *
+   * Uma chave de mentira é pior que chave nenhuma. O recurso foi desenhado para
+   * ficar escondido enquanto não puder funcionar; com um valor qualquer no lugar
+   * da chave, ele se acharia pronto — o link apareceria, a pessoa pediria a
+   * recuperação, a tela diria "o link já saiu" e nada chegaria nunca.
+   */
+  await etapa("chave que não é do Resend conta como NÃO configurado", async () => {
+    const { emailConfigurado, motivoEmailIndisponivel } = await import("../src/lib/email.ts");
+    const antes = process.env.RESEND_API_KEY;
+    const antesRem = process.env.EMAIL_REMETENTE;
+    try {
+      process.env.EMAIL_REMETENTE = "nao-responda@fotonio.com.br";
+      for (const falsa of ["cole_aqui", "sua_chave_aqui", "xxx", "RESEND_API_KEY"]) {
+        process.env.RESEND_API_KEY = falsa;
+        if (emailConfigurado()) throw new Error(`aceitou "${falsa}" como chave`);
+        if (!motivoEmailIndisponivel()?.includes("re_")) {
+          throw new Error(`o motivo não explica o formato para "${falsa}"`);
+        }
+      }
+      process.env.RESEND_API_KEY = "re_parece_de_verdade_123";
+      if (!emailConfigurado()) throw new Error("recusou uma chave com o prefixo certo");
+      return "só chave com re_ liga o recurso";
+    } finally {
+      if (antes === undefined) delete process.env.RESEND_API_KEY;
+      else process.env.RESEND_API_KEY = antes;
+      if (antesRem === undefined) delete process.env.EMAIL_REMETENTE;
+      else process.env.EMAIL_REMETENTE = antesRem;
+    }
+  });
+
   console.log("\nvalidade");
 
   await etapa("o pedido vence em 1 hora", async () => {

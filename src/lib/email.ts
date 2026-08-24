@@ -35,13 +35,40 @@ function remetente(): string | null {
   return r.includes("<") ? r : `${marca.nome} <${r}>`;
 }
 
-export function emailConfigurado(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && remetente());
+/**
+ * Chave do Resend, só se for plausível.
+ *
+ * Toda chave do Resend começa com `re_`. Conferir o prefixo parece
+ * preciosismo e não é: em 24/08/2026 a linha `RESEND_API_KEY=cole_aqui` foi
+ * parar no .env.production — o texto de exemplo de uma instrução foi colado
+ * literalmente.
+ *
+ * Sem esta conferência, o sistema se acharia configurado: o link "esqueci minha
+ * senha" apareceria, a pessoa pediria a recuperação, a tela responderia "o link
+ * já saiu" e nada chegaria nunca. O recurso foi desenhado para ficar ESCONDIDO
+ * enquanto não puder funcionar — uma chave de mentira desfazia esse desenho.
+ *
+ * Falha para o lado seguro: prefixo estranho = tratado como não configurado, com
+ * o motivo no log. Se o Resend um dia mudar o formato, o pior que acontece é o
+ * recurso ficar escondido e o log dizer exatamente por quê.
+ */
+function chave(): string | null {
+  const k = process.env.RESEND_API_KEY?.trim();
+  if (!k) return null;
+  return k.startsWith("re_") ? k : null;
 }
 
-/** Por que o envio não está disponível — para a tela poder ser honesta. */
+export function emailConfigurado(): boolean {
+  return Boolean(chave() && remetente());
+}
+
+/** Por que o envio não está disponível — para a tela e o log poderem ser honestos. */
 export function motivoEmailIndisponivel(): string | null {
-  if (!process.env.RESEND_API_KEY) return "RESEND_API_KEY não configurada";
+  const bruta = process.env.RESEND_API_KEY?.trim();
+  if (!bruta) return "RESEND_API_KEY não configurada";
+  if (!bruta.startsWith("re_")) {
+    return "RESEND_API_KEY não parece uma chave do Resend (deveria começar com re_)";
+  }
   if (!remetente()) return "EMAIL_REMETENTE não configurado";
   return null;
 }
@@ -63,7 +90,8 @@ export interface Email {
  */
 export async function enviarEmail(email: Email): Promise<boolean> {
   const de = remetente();
-  if (!process.env.RESEND_API_KEY || !de) {
+  const k = chave();
+  if (!k || !de) {
     console.warn(`[email] não enviado (${motivoEmailIndisponivel()}): ${email.assunto}`);
     return false;
   }
@@ -72,7 +100,7 @@ export async function enviarEmail(email: Email): Promise<boolean> {
     const r = await fetch(API, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        Authorization: `Bearer ${k}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
