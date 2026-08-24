@@ -32,7 +32,7 @@ export default function Home() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-7">
         <span className="flex items-center gap-3">
           <MarcaTile tamanho={38} />
-          <span className="text-lg font-bold tracking-tight">{marca.nome}</span>
+          <span className="font-serif text-xl font-bold tracking-tight">{marca.nome}</span>
         </span>
         <nav className="flex items-center gap-6 text-sm">
           <Link href="/entrar" className="text-texto-soft transition hover:text-texto">
