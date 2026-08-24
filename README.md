@@ -1,7 +1,7 @@
-# Fotônio
+# Olumier
 
 Galerias de entrega para fotógrafos e filmakers. Multi-tenant: cada estúdio tem
-seu endereço (`siriusfotografia.fotonio.com.br`), sua marca e seu espaço.
+seu endereço (`siriusfotografia.olumier.com.br`), sua marca e seu espaço.
 
 ## Rodar
 
@@ -30,7 +30,7 @@ contra qualquer banco que não termine em `_dev`/`_teste`.
 | `ops/` | Backup e vigia — versionados aqui, instalados no servidor |
 | `scripts/` | Testes e ferramentas de manutenção |
 
-**A marca fica só em `src/config/marca.ts`.** Nada mais escreve "Fotônio"
+**A marca fica só em `src/config/marca.ts`.** Nada mais escreve "Olumier"
 direto; bucket, tabelas e pastas usam termos neutros, para o nome poder mudar
 sem migração.
 

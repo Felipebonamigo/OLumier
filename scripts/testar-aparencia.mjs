@@ -27,7 +27,7 @@ const url = `${BASE}/g/${tslug}/${gslug}`;
 await db.query("update galerias set publicada = true, senha_hash = null where id = $1", [galeriaId]);
 
 const PRESETS = {
-  fotonio: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal" },
+  olumier: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal" },
   revista: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal" },
   atelie: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada" },
   essencial: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta" },

@@ -37,7 +37,7 @@ if (!R2_ACCOUNT_ID || !chave || !segredo || !R2_BUCKET) {
 /*
  * O CURINGA É O PONTO DA HISTÓRIA.
  *
- * Cada estúdio tem seu subdomínio (siriusfotografia.fotonio.com.br), e é nesse
+ * Cada estúdio tem seu subdomínio (siriusfotografia.olumier.com.br), e é nesse
  * endereço que o casal abre a galeria. Sem autorizar essa origem, "salvar na
  * galeria do celular" quebra — essa função busca o arquivo com `fetch` antes de
  * abrir o menu nativo. O download no computador continua funcionando (é uma
@@ -50,15 +50,15 @@ if (!R2_ACCOUNT_ID || !chave || !segredo || !R2_BUCKET) {
  * curinga, cada estúdio novo exigiria uma passada aqui, e quem esquecesse
  * entregaria um cliente com o "salvar no celular" quebrado de nascença.
  *
- * `fotonio.com.br.golpe.net` é barrado — a comparação é por host, não por
+ * `olumier.com.br.golpe.net` é barrado — a comparação é por host, não por
  * "contém". Isso é testado em scripts/testar-cors.mjs.
  */
 const ORIGENS = [
   "http://localhost:3040",
   "http://localhost:3000",
-  "https://fotonio.com.br",
-  "https://www.fotonio.com.br",
-  "https://*.fotonio.com.br",
+  "https://olumier.com.br",
+  "https://www.olumier.com.br",
+  "https://*.olumier.com.br",
 ];
 
 const ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
@@ -124,7 +124,7 @@ await mostrarAtual();
  * bucket como o navegador perguntaria, e de um subdomínio que não existe — que
  * é justamente o caso que o curinga precisa cobrir.
  */
-const prova = "https://estudio-que-nao-existe-ainda.fotonio.com.br";
+const prova = "https://estudio-que-nao-existe-ainda.olumier.com.br";
 const r = await fetch(`${ENDPOINT}/${R2_BUCKET}/qualquer`, {
   method: "OPTIONS",
   headers: { Origin: prova, "Access-Control-Request-Method": "GET" },

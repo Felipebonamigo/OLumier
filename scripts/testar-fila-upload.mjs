@@ -8,7 +8,6 @@
  * lixo que vem junto quando se arrasta uma pasta.
  */
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
-import { createHmac } from "node:crypto";
 import pg from "pg";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";

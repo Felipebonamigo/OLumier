@@ -92,7 +92,7 @@ console.log("\nCiclo de cobrança:\n");
 
 await etapa("pagamento confirmado ativa o estúdio", async () => {
   const r = await enviarEvento(
-    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `fotonio:${tenantId}`, value: 129 } },
+    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `olumier:${tenantId}`, value: 129 } },
     token,
   );
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -103,7 +103,7 @@ await etapa("pagamento confirmado ativa o estúdio", async () => {
 
 await etapa("atraso marca inadimplente SEM derrubar as galerias", async () => {
   const r = await enviarEvento(
-    { event: "PAYMENT_OVERDUE", payment: { externalReference: `fotonio:${tenantId}` } },
+    { event: "PAYMENT_OVERDUE", payment: { externalReference: `olumier:${tenantId}` } },
     token,
   );
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -120,7 +120,7 @@ await etapa("atraso marca inadimplente SEM derrubar as galerias", async () => {
 
 await etapa("cancelamento marca cancelado", async () => {
   const r = await enviarEvento(
-    { event: "SUBSCRIPTION_DELETED", subscription: { externalReference: `fotonio:${tenantId}` } },
+    { event: "SUBSCRIPTION_DELETED", subscription: { externalReference: `olumier:${tenantId}` } },
     token,
   );
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -132,7 +132,7 @@ await etapa("referência nossa com estúdio inexistente não quebra", async () =
   const r = await enviarEvento(
     {
       event: "PAYMENT_CONFIRMED",
-      payment: { externalReference: "fotonio:00000000-0000-0000-0000-000000000000" },
+      payment: { externalReference: "olumier:00000000-0000-0000-0000-000000000000" },
     },
     token,
   );
@@ -145,7 +145,7 @@ await etapa("referência nossa com estúdio inexistente não quebra", async () =
 // aceitava qualquer POST anônimo. O teste passava verde por cima do furo.
 await etapa("token errado é recusado", async () => {
   const r = await enviarEvento(
-    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `fotonio:${tenantId}` } },
+    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `olumier:${tenantId}` } },
     "token-inventado",
   );
   if (r.status !== 401) throw new Error(`esperava 401, veio ${r.status}`);
@@ -154,7 +154,7 @@ await etapa("token errado é recusado", async () => {
 
 await etapa("requisição SEM token nenhum é recusada", async () => {
   const r = await enviarEvento(
-    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `fotonio:${tenantId}` } },
+    { event: "PAYMENT_CONFIRMED", payment: { externalReference: `olumier:${tenantId}` } },
     undefined,
   );
   if (r.status !== 401) throw new Error(`esperava 401, veio ${r.status}`);

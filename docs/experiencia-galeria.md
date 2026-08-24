@@ -25,12 +25,12 @@ que o Sirius considera o melhor exemplo dele) + requisitos que ele passou ao Fel
 > ⚠️ **Duas correções de fato**, porque seguir o que está escrito daria trabalho à toa:
 >
 > 1. **Não foi preciso certificado curinga.** A seção 3 diz que o subdomínio exige DNS-01 e
->    um certificado `*.fotonio.com.br`. Tentamos, e o binário do Caddy no servidor não tem o
->    módulo de DNS — pior, usar `*.fotonio.com.br` como endereço de site derrubou o TLS do
+>    um certificado `*.olumier.com.br`. Tentamos, e o binário do Caddy no servidor não tem o
+>    módulo de DNS — pior, usar `*.olumier.com.br` como endereço de site derrubou o TLS do
 >    `www`. O que funciona é **TLS sob demanda** com um porteiro que só libera subdomínio de
 >    estúdio existente. Ver `docs/subdominio-por-estudio.md`.
-> 2. **O CORS do bucket já cobre `*.fotonio.com.br`** (desde 21/08/2026). Até então a
->    política listava `app.fotonio.com.br` — um endereço que nunca existiu — e não cobria o
+> 2. **O CORS do bucket já cobre `*.olumier.com.br`** (desde 21/08/2026). Até então a
+>    política listava `app.fotonio.com.br` (domínio antigo) — um endereço que nunca existiu — e não cobria o
 >    subdomínio dos estúdios, então "salvar na galeria do celular" caía no download comum
 >    justamente no endereço que o fotógrafo manda para o cliente. O curinga é honrado de
 >    verdade, inclusive para estúdio ainda não cadastrado, e `scripts/testar-cors.mjs`
@@ -50,7 +50,7 @@ que o Sirius considera o melhor exemplo dele) + requisitos que ele passou ao Fel
   `-large.jpg` de **640px** (~40–80 KB cada). Original só no download.
 - **Ação por foto** (download/favorito aparecem no hover — 210 elementos de ação na página).
 - **Modal de onboarding** ensinando o convidado a baixar ("Como baixar fotos facilmente").
-- Rodapé "Desenvolvido pela PIXIESET" (nosso selo "entregue com Fotônio" é o equivalente).
+- Rodapé "Desenvolvido pela PIXIESET" (nosso selo "entregue com Olumier" é o equivalente).
 
 ## 2. Sistema de aparência: eixos + presets
 
@@ -70,21 +70,21 @@ sem migração.
 
 **Presets de partida** (1 clique, depois ajusta fino):
 - **Sirius** — jornal + claro + serifada + colunas (réplica da referência dele)
-- **Fotônio** — imersa + noite + serifada + editorial (nossa cara)
+- **Olumier** — imersa + noite + serifada + editorial (nossa cara)
 - **Clássico** — dividida + creme + serifada + linhas
 - **Mínima** — minima + claro + moderna + quadrada
 
 UI no painel: aba "Aparência" na galeria → presets em cards com miniatura → ajustes finos
 embaixo → preview ao vivo (iframe da própria galeria pública).
 
-## 3. Subdomínio por estúdio (`siriusfotografia.fotonio.com.br/lu-marino`)
+## 3. Subdomínio por estúdio (`siriusfotografia.olumier.com.br/lu-marino`)
 
 **Sim, planejado — em duas etapas:**
-1. **Hoje** já funciona como `fotonio.com.br/g/siriusfotografia/lu-marino` (path-based).
-2. **Subdomínio** exige DNS wildcard `*.fotonio.com.br` + certificado wildcard (desafio
+1. **Hoje** já funciona como `olumier.com.br/g/siriusfotografia/lu-marino` (path-based).
+2. **Subdomínio** exige DNS wildcard `*.olumier.com.br` + certificado wildcard (desafio
    DNS-01). O Registro.br não tem API para isso; a Cloudflare tem. Caminho: mover os
    nameservers para a Cloudflare (a zona já foi criada lá) → Caddy com desafio DNS
-   emite `*.fotonio.com.br` → o app resolve o tenant pelo header Host. O código de
+   emite `*.olumier.com.br` → o app resolve o tenant pelo header Host. O código de
    resolução por Host pode entrar antes; o TLS destrava quando o DNS migrar.
 
 ## 4. Velocidade ("extremamente rápido")

@@ -101,7 +101,6 @@ await etapa("o link avisa que está no cofre, sem dar erro", async () => {
 });
 
 await etapa("enviar arquivo para galeria no cofre é recusado", async () => {
-  const { createHmac } = await import("node:crypto");
   const { rows: t } = await db.query(
     "select tenant_id from galerias where id = $1",
     [galeriaId],

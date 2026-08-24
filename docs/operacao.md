@@ -133,7 +133,7 @@ quota ali poderia tirar espaço de alguém sem querer.
 
 O navegador fala direto com o bucket, que é outro domínio. A política de origens
 permitidas mora na Cloudflare (R2 → bucket → Configurações → Política de CORS) e
-inclui **`https://*.fotonio.com.br`** — sem esse curinga, cada estúdio novo
+inclui **`https://*.olumier.com.br`** — sem esse curinga, cada estúdio novo
 nasceria com o "salvar no celular" quebrado e ninguém perceberia, porque o
 download no computador continua funcionando.
 
@@ -212,7 +212,7 @@ o mesmo poder que a visão concede.
 
 Para quem não é admin a resposta é **404**, não "acesso negado": mensagem de
 negado confirma que a página existe. O título da aba também passa pelo portão,
-senão o 404 vinha com "Administração · Fotônio" escrito nele.
+senão o 404 vinha com "Administração · Olumier" escrito nele.
 
 ### As favoritas do cliente
 
@@ -247,14 +247,14 @@ galeria e só então poder descartar o detalhe — não o contrário.
 ## O que falta
 
 - **Ligar o envio de e-mail.** O fluxo de recuperação está pronto e testado, mas
-  fica escondido até existirem as duas variáveis. Falta verificar `fotonio.com.br`
+  fica escondido até existirem as duas variáveis. Falta verificar `olumier.com.br`
   como domínio no Resend (o remetente precisa ser do nosso domínio: mandar
-  "redefina sua senha do Fotônio" de um `@atomatiza.com.br` pareceria golpe) e
+  "redefina sua senha do Olumier" de um `@atomatiza.com.br` pareceria golpe) e
   então acrescentar ao `/opt/fotonio-shared/.env.production`:
 
   ```
   RESEND_API_KEY=...
-  EMAIL_REMETENTE=nao-responda@fotonio.com.br
+  EMAIL_REMETENTE=nao-responda@olumier.com.br
   ```
 
   Nenhuma mudança de código é necessária — só reiniciar o serviço.
@@ -266,4 +266,4 @@ galeria e só então poder descartar o detalhe — não o contrário.
   > com um editor em vez de acrescentar por linha de comando.
 - **Bucket próprio no B2 para o backup** — hoje mora numa pasta dentro do bucket
   do Padelizou, porque a chave existente é dali. Se aquela chave for trocada, o
-  backup do Fotônio para junto e só descobriríamos na próxima falha.
+  backup do Olumier para junto e só descobriríamos na próxima falha.

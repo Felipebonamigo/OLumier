@@ -10,7 +10,7 @@ import { eventoEhNosso, tenantDaReferencia } from "@/lib/asaas";
  *
  * 1. A conta do Asaas é COMPARTILHADA com o Atomatiza. Todo evento chega nos dois
  *    webhooks, então filtramos por `externalReference` — evento sem o prefixo
- *    "fotonio:" é respondido com 200 e ignorado. Sem esse filtro, um pagamento
+ *    "olumier:" é respondido com 200 e ignorado. Sem esse filtro, um pagamento
  *    do Atomatiza tentaria ativar uma assinatura que não existe aqui.
  *
  * 2. Responder 200 mesmo ao ignorar é proposital: erro faz o Asaas reenviar o

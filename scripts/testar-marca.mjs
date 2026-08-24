@@ -11,7 +11,6 @@
  * ninguém enxerga).
  */
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
-import { createHmac } from "node:crypto";
 import pg from "pg";
 import {
   COR_PADRAO,
@@ -27,7 +26,7 @@ import { paraCampoDeData } from "../src/lib/datas.ts";
 import { objetoExiste, apagarObjeto } from "../src/lib/r2.ts";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
-const { DATABASE_URL, SESSION_SECRET } = process.env;
+const { DATABASE_URL } = process.env;
 
 let falhou = false;
 async function etapa(nome, fn) {

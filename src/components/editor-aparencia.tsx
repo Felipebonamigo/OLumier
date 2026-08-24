@@ -170,7 +170,7 @@ export function EditorAparencia({
 /** Rabisco do layout de cada preset — ajuda a escolher sem precisar abrir. */
 function MiniaturaPreset({ id }: { id: string }) {
   const comum = "h-6 w-8 shrink-0 rounded-[3px] border border-linha p-[3px]";
-  if (id === "fotonio") {
+  if (id === "olumier") {
     return (
       <span className={`${comum} bg-void`}>
         <span className="grid h-full grid-cols-3 gap-[1px]">

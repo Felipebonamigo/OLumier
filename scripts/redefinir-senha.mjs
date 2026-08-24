@@ -10,8 +10,8 @@
  * e isso vai acontecer com o primeiro fotógrafo que trocar de celular.
  *
  * O fluxo self-service (link por e-mail) depende de um remetente verificado no
- * Resend para fotonio.com.br, que ainda não existe: mandar "redefina sua senha
- * do Fotônio" de um endereço @atomatiza.com.br pareceria golpe, e ensinar
+ * Resend para olumier.com.br, que ainda não existe: mandar "redefina sua senha
+ * do Olumier" de um endereço @atomatiza.com.br pareceria golpe, e ensinar
  * cliente a confiar em e-mail assim é pior que não ter o recurso. Enquanto
  * isso, isto resolve de verdade — só exige que você rode.
  *

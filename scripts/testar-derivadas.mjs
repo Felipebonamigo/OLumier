@@ -8,7 +8,6 @@
  * desvio que faz a galeria abrir rápido.
  */
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
-import { createHmac } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 

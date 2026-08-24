@@ -9,12 +9,12 @@ import { montarFatias } from "@/config/socios";
  *
  * ⚠️ A conta é a MESMA do Atomatiza (decisão do Felipe). Isso significa que
  * clientes dos dois produtos convivem no mesmo painel do Asaas — por isso toda
- * cobrança daqui leva `externalReference` começando com "fotonio:", e o webhook
+ * cobrança daqui leva `externalReference` começando com "olumier:", e o webhook
  * ignora o que não for nosso. Sem isso, um evento do Atomatiza mexeria numa
  * assinatura daqui.
  */
 
-const PREFIXO = "fotonio:";
+const PREFIXO = "olumier:";
 
 function base(): string {
   // Sandbox por padrão: começar apontando para produção é como testar cobrança
@@ -186,7 +186,7 @@ export async function proximaCobranca(assinaturaId: string) {
   return r.data?.[0] ?? null;
 }
 
-/** true se o evento do webhook pertence ao Fotônio (a conta é dividida com o Atomatiza). */
+/** true se o evento do webhook pertence ao Olumier (a conta é dividida com o Atomatiza). */
 export function eventoEhNosso(referenciaExterna: string | null | undefined): boolean {
   return Boolean(referenciaExterna?.startsWith(PREFIXO));
 }

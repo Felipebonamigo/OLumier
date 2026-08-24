@@ -5,7 +5,7 @@ import { marca } from "@/config/marca";
 /**
  * Porteiro do certificado sob demanda.
  *
- * Cada estúdio ganha seu subdomínio (siriusfotografia.fotonio.com.br), e o Caddy
+ * Cada estúdio ganha seu subdomínio (siriusfotografia.olumier.com.br), e o Caddy
  * emite um certificado para cada um na primeira visita — em vez de um curinga,
  * que exigiria trocar o binário do Caddy num servidor com quatro sites em
  * produção.
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
   }
 
   const slug = dominio.slice(0, -sufixo.length);
-  // Um ponto no meio significa sub-subdomínio (a.b.fotonio.com.br) — não é nosso formato.
+  // Um ponto no meio significa sub-subdomínio (a.b.olumier.com.br) — não é nosso formato.
   if (!slug || slug.includes(".")) {
     return new NextResponse("formato inválido", { status: 403 });
   }

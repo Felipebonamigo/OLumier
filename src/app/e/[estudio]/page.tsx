@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 type Props = { params: Promise<{ estudio: string }> };
 
 /**
- * A raiz do subdomínio do estúdio (siriusfotografia.fotonio.com.br).
+ * A raiz do subdomínio do estúdio (siriusfotografia.olumier.com.br).
  *
  * Mostra só as galerias PÚBLICAS e sem senha. Galeria protegida não aparece
  * aqui: listá-la entregaria a existência da entrega de um casal para qualquer

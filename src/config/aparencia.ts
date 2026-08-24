@@ -88,8 +88,8 @@ export interface Preset {
 
 export const PRESETS: Preset[] = [
   {
-    id: "fotonio",
-    nome: "Fotônio",
+    id: "olumier",
+    nome: "Olumier",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
     aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal" },
   },

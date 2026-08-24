@@ -7,7 +7,7 @@
  * originais — que é o que faz a galeria abrir rápido no celular do convidado.
  */
 
-const url = process.argv[2] ?? "http://localhost:3040/g/estudio-teste-fotonio/ana-pedro";
+const url = process.argv[2] ?? "http://localhost:3040/g/estudio-teste-olumier/ana-pedro";
 
 const resposta = await fetch(url);
 if (!resposta.ok) {

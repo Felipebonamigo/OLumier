@@ -24,14 +24,14 @@ não disputarem disco e rede).
 
 ### Por que a cópia de fora é obrigatória aqui
 
-Diferente do Atomatiza (banco no Supabase), o Postgres do Fotônio roda **neste
+Diferente do Atomatiza (banco no Supabase), o Postgres do Olumier roda **neste
 mesmo VPS**. Dump guardado só aqui é o para-quedas dentro do avião: disco morreu,
 morreram os dois juntos. Por isso a falha do B2 é **fatal** no script — sem a
 cópia de fora não existe backup, existe a sensação de ter um.
 
 ### Por que `pg_dump` 14 e não 17
 
-O servidor tem os dois binários, mas o cluster do Fotônio é **14.23**. O `pg_dump`
+O servidor tem os dois binários, mas o cluster do Olumier é **14.23**. O `pg_dump`
 17 dumparia bem, mas poderia gerar sintaxe que o 14 não restaura — e o dia da
 restauração é o pior dia possível para descobrir isso.
 
@@ -71,7 +71,7 @@ problemas de uma vez (custo e segunda cópia), e continua na fila.
 
 ## Detalhe a arrumar quando der
 
-O backup do Fotônio mora numa pasta (`fotonio/`) **dentro do bucket do Padelizou**,
+O backup do Olumier mora numa pasta (`fotonio/`) **dentro do bucket do Padelizou**,
 porque a chave do B2 existente é dali. Funciona e está separado, mas o certo é um
 bucket próprio com chave própria — se a chave do Padelizou for trocada, o backup
-do Fotônio para junto, e sem avisar até a próxima falha.
+do Olumier para junto, e sem avisar até a próxima falha.

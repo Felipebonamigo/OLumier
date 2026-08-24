@@ -12,7 +12,7 @@ import { marca } from "@/config/marca";
  * O TÍTULO TAMBÉM PRECISA DO PORTÃO.
  *
  * Com `export const metadata`, o Next resolve o título ANTES de a página rodar —
- * então o `notFound()` lá embaixo devolvia 404 com "Administração · Fotônio" na
+ * então o `notFound()` lá embaixo devolvia 404 com "Administração · Olumier" na
  * aba. Nenhum dado de cliente vazava, mas confirmava que a rota existe, que é o
  * que a resposta 404 deveria justamente esconder. Um teste pegou isso.
  *

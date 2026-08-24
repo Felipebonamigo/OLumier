@@ -297,7 +297,7 @@ try {
     const antes = process.env.RESEND_API_KEY;
     const antesRem = process.env.EMAIL_REMETENTE;
     try {
-      process.env.EMAIL_REMETENTE = "nao-responda@fotonio.com.br";
+      process.env.EMAIL_REMETENTE = "nao-responda@olumier.com.br";
       for (const falsa of ["cole_aqui", "sua_chave_aqui", "xxx", "RESEND_API_KEY"]) {
         process.env.RESEND_API_KEY = falsa;
         if (emailConfigurado()) throw new Error(`aceitou "${falsa}" como chave`);

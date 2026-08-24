@@ -50,7 +50,7 @@ export function PublicarGaleria({
    * O ENDEREÇO DO ESTÚDIO é o link que o fotógrafo deve mandar.
    *
    * O subdomínio existe desde 19/08, mas o painel continuava entregando
-   * `fotonio.com.br/g/siriusfotografia/lu-marino` — então o fotógrafo copiava o
+   * `olumier.com.br/g/siriusfotografia/lu-marino` — então o fotógrafo copiava o
    * link feio, mandava no WhatsApp, e o recurso inteiro ficava sem uso.
    *
    * Só em produção: em `localhost` o subdomínio não resolve, e mostrar um link

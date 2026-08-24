@@ -3,7 +3,7 @@
  *
  * Fonte ÚNICA de propósito. Antes esta lista só existia dentro do `proxy.ts`, e
  * o cadastro não a consultava: um estúdio chamado "WWW Fotografia" viraria o
- * slug `www`, e aí `www.fotonio.com.br` deixaria de ser o site para tentar ser a
+ * slug `www`, e aí `www.olumier.com.br` deixaria de ser o site para tentar ser a
  * página desse estúdio — que o proxy recusaria, deixando o cadastro com um
  * endereço quebrado e o site principal em risco.
  *

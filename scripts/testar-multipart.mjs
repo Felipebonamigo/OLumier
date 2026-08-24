@@ -9,7 +9,7 @@
  * valida a remontagem com partes reais.
  */
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
-import { createHmac, createHash } from "node:crypto";
+import { createHash } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 

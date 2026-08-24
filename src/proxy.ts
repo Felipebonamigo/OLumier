@@ -11,13 +11,13 @@ import { SUBDOMINIOS_RESERVADOS } from "@/config/subdominios";
  *    + estúdio existe) fica no layout do painel, que roda em Node e tem banco.
  *    Cookie falsificado passa por aqui e morre lá, antes de tocar em dado.
  *
- * 2. Subdomínio por estúdio — `siriusfotografia.fotonio.com.br/lu-marino` é
+ * 2. Subdomínio por estúdio — `siriusfotografia.olumier.com.br/lu-marino` é
  *    reescrito para a rota interna `/g/siriusfotografia/lu-marino`. É reescrita,
  *    não redirecionamento: o visitante continua vendo o endereço bonito.
  */
 
-const NOME_COOKIE = "fotonio_sessao";
-const DOMINIO_BASE = "fotonio.com.br";
+const NOME_COOKIE = "olumier_sessao";
+const DOMINIO_BASE = "olumier.com.br";
 
 // A lista mora em config/subdominios.ts para o CADASTRO usar a mesma: antes ela
 // só existia aqui, e nada impedia um estúdio nascer com o slug "www".
@@ -31,7 +31,7 @@ function estudioDoEndereco(host: string | null): string | null {
   if (!nome.endsWith(sufixo)) return null;
 
   const slug = nome.slice(0, -sufixo.length);
-  // Sub-subdomínio (a.b.fotonio.com.br) não é o nosso formato.
+  // Sub-subdomínio (a.b.olumier.com.br) não é o nosso formato.
   if (!slug || slug.includes(".") || SUBDOMINIOS_RESERVADOS.has(slug)) return null;
   return slug;
 }
@@ -58,7 +58,7 @@ export function proxy(request: NextRequest) {
 
       // `/g/` e `/e/` são a forma interna das páginas públicas, e estavam na
       // lista acima: passavam intactas. Com isso
-      // `siriusfotografia.fotonio.com.br/g/outroestudio/casamento` servia a
+      // `siriusfotografia.olumier.com.br/g/outroestudio/casamento` servia a
       // entrega de um estúdio dentro do endereço de outro — a marca própria,
       // que é o que se vende aqui, quebrada numa linha. Agora a casa só
       // responde pelo que é dela, e pelo endereço curto.

@@ -1,6 +1,13 @@
 import { marca } from "@/config/marca";
 
-/** O azulejo de tabela periódica — o símbolo do elemento. Lê tudo de config/marca. */
+/**
+ * O monograma da marca. Lê tudo de config/marca.
+ *
+ * Nasceu como azulejo de tabela periódica, quando o nome era Fotônio e a tagline
+ * falava em "elemento". Com Olumier a metáfora morreu, mas o desenho —
+ * quadrado arredondado com duas letras — continua servindo: é o mesmo formato de
+ * ícone que aparece na aba do navegador e no atalho do celular.
+ */
 export function MarcaTile({ tamanho = 56 }: { tamanho?: number }) {
   return (
     <div

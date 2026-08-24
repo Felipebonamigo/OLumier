@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 const RECURSOS = [
   {
     titulo: "Seu próprio endereço",
-    texto: "Cada estúdio ganha um subdomínio — seuestudio.fotonio.com.br. Nada de link genérico.",
+    texto: "Cada estúdio ganha um subdomínio — seuestudio.olumier.com.br. Nada de link genérico.",
   },
   {
     titulo: "Vai para a galeria do celular",

@@ -464,7 +464,7 @@ export interface EstadoMarca {
  * (/api/marca/logo), porque arquivo não cabe no corpo de um server action.
  *
  * O SLUG TAMBÉM NÃO MUDA AQUI, pelo mesmo motivo da galeria: ele é o endereço
- * (siriusfotografia.fotonio.com.br) de todas as galerias já entregues. Trocar o
+ * (siriusfotografia.olumier.com.br) de todas as galerias já entregues. Trocar o
  * nome do estúdio muda o que aparece escrito, não onde as coisas moram.
  */
 export async function salvarMarcaAction(

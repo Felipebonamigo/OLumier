@@ -105,7 +105,7 @@ try {
 /*
  * Arquivo inacessível — na prática, CORS.
  *
- * O endereço do estúdio (siriusfotografia.fotonio.com.br) é uma origem
+ * O endereço do estúdio (siriusfotografia.olumier.com.br) é uma origem
  * diferente do domínio principal; se o bucket não autorizar, o fetch morre.
  * O download comum continua funcionando porque é navegação, não fetch.
  */

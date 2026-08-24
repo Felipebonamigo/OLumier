@@ -11,7 +11,7 @@
  * do estúdio: a combinação mais difícil de perceber testando na mão.
  *
  * Foi exatamente o que aconteceu até 21/08/2026: a política do bucket listava
- * `app.fotonio.com.br` (endereço que nunca existiu) e não cobria o subdomínio
+ * `app.fotonio.com.br` (endereço que nunca existiu, no domínio antigo) e não cobria o subdomínio
  * dos estúdios.
  *
  * O teste faz as DUAS metades, porque passar numa não garante a outra:
@@ -43,18 +43,59 @@ const s3 = new S3Client({
 });
 
 /*
+ * O domínio vem de config/marca.ts, não escrito à mão: na troca de nome de
+ * 24/08/2026 este arquivo tinha o domínio antigo em cinco lugares, e um teste
+ * que carrega a própria cópia do endereço passa a testar o passado.
+ */
+const { marca } = await import("../src/config/marca.ts");
+const DOMINIO = marca.dominio;
+
+/*
  * `estudio-que-nao-existe` não é enfeite: é o teste que prova que o curinga
  * está valendo. Se um dia alguém trocar a política por uma lista explícita, os
  * estúdios já cadastrados continuariam passando e só o cliente NOVO quebraria —
  * meses depois, sem ninguém ligar uma coisa à outra.
  */
 const PERMITIDAS = [
-  "https://fotonio.com.br",
-  "https://www.fotonio.com.br",
-  "https://siriusfotografia.fotonio.com.br",
-  "https://estudio-que-nao-existe-ainda.fotonio.com.br",
+  `https://${DOMINIO}`,
+  `https://www.${DOMINIO}`,
+  `https://siriusfotografia.${DOMINIO}`,
+  `https://estudio-que-nao-existe-ainda.${DOMINIO}`,
 ];
-const BARRADAS = ["https://site-invasor.com", "https://fotonio.com.br.golpe.net"];
+const BARRADAS = ["https://site-invasor.com", `https://${DOMINIO}.golpe.net`];
+
+/*
+ * TROCA DE DOMÍNIO EM ANDAMENTO.
+ *
+ * A política do bucket mora na Cloudflare e só pode ser trocada de lá. Enquanto
+ * o DNS do domínio novo não subir, o bucket segue autorizando o antigo e ESTE
+ * teste falharia em toda execução — teste vermelho permanente é teste que todo
+ * mundo aprende a ignorar, o que é pior que não ter teste.
+ *
+ * Então: se o bucket ainda autoriza o domínio ANTIGO, isto vira pulo com motivo
+ * explícito. Se não autoriza nem o antigo nem o novo, é falha de verdade — pulo
+ * silencioso aqui esconderia justamente a quebra que a suíte existe para pegar.
+ */
+const DOMINIO_ANTERIOR = "fotonio.com.br";
+async function bucketAindaNoDominioAntigo() {
+  if (DOMINIO === DOMINIO_ANTERIOR) return false;
+  const r = await fetch(`${ENDPOINT}/${R2_BUCKET}/qualquer`, {
+    method: "OPTIONS",
+    headers: {
+      Origin: `https://${DOMINIO_ANTERIOR}`,
+      "Access-Control-Request-Method": "GET",
+    },
+  });
+  return r.headers.get("access-control-allow-origin") === `https://${DOMINIO_ANTERIOR}`;
+}
+
+if (await bucketAindaNoDominioAntigo()) {
+  console.log(`⚠ CORS pulado: o bucket ainda autoriza ${DOMINIO_ANTERIOR}, não ${DOMINIO}.`);
+  console.log("  Troca de domínio em andamento. Depois de migrar o DNS, atualize a política");
+  console.log("  em Cloudflare → R2 → bucket → Política de CORS (ou rode configurar-cors.mjs)");
+  console.log(`  e este teste volta a valer sozinho — a lista sai de config/marca.ts.\n`);
+  process.exit(0);
+}
 
 let falhas = 0;
 const ok = (m) => console.log(`  ✓ ${m}`);
@@ -82,7 +123,7 @@ try {
       method: "OPTIONS",
       headers: { Origin: origem, "Access-Control-Request-Method": "GET" },
     });
-    // `fotonio.com.br.golpe.net` termina com nosso domínio no meio do nome: se a
+    // `olumier.com.br.golpe.net` termina com nosso domínio no meio do nome: se a
     // regra estivesse escrita como "contém", ele passaria. Precisa ser barrado.
     if (r.headers.get("access-control-allow-origin")) erro(`${origem} NÃO deveria ser liberado`);
     else ok(`${origem} barrado`);
@@ -102,7 +143,7 @@ try {
     expiresIn: 120,
   });
 
-  const origem = "https://siriusfotografia.fotonio.com.br";
+  const origem = "https://siriusfotografia.olumier.com.br";
   const r = await fetch(url, { headers: { Origin: origem } });
   const liberou = r.headers.get("access-control-allow-origin");
   const corpo = await r.text();

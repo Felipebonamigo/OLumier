@@ -41,7 +41,7 @@ const s3 = new S3Client({
 });
 
 const chave = `_teste/conexao-${Date.now()}.txt`;
-const conteudo = "fotonio: teste de conexao";
+const conteudo = "olumier: teste de conexao";
 let falhou = false;
 
 async function etapa(nome, fn) {

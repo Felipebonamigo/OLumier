@@ -18,7 +18,7 @@ const scryptAsync = promisify(scrypt) as (
   tamanho: number,
 ) => Promise<Buffer>;
 
-const COOKIE = "fotonio_sessao";
+const COOKIE = "olumier_sessao";
 const DURACAO_DIAS = 30;
 
 function segredo(): string {

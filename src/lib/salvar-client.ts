@@ -127,7 +127,7 @@ export async function salvarNoCelular(
     /*
      * Buscar o arquivo falhou. A causa mais provável não é rede: é CORS.
      * O bucket precisa autorizar a origem que está pedindo, e o endereço do
-     * estúdio (siriusfotografia.fotonio.com.br) é uma origem diferente do
+     * estúdio (siriusfotografia.olumier.com.br) é uma origem diferente do
      * domínio principal. Quem chama cai no download comum — que funciona,
      * porque é navegação e não passa por CORS.
      */

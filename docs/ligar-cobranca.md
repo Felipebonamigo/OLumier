@@ -83,7 +83,7 @@ apontar para produção.
 
 Adicionar uma URL **nova** (sem mexer na que o Atomatiza já usa):
 
-- URL: `https://fotonio.com.br/api/asaas/webhook`
+- URL: `https://olumier.com.br/api/asaas/webhook`
 - Token: o mesmo do `ASAAS_WEBHOOK_TOKEN`
 - Eventos: pagamento confirmado/recebido, vencido, estornado, assinatura removida
 
@@ -98,7 +98,7 @@ clientes reais pagando. Duas proteções já estão no código:
    looping e, após muitas falhas, **suspender a fila da conta inteira** — o que
    derrubaria a cobrança do Atomatiza junto.
 
-Ao configurar o webhook do Fotônio, **não altere nem remova** o do Atomatiza.
+Ao configurar o webhook do Olumier, **não altere nem remova** o do Atomatiza.
 
 ## Como conferir depois de ligar
 

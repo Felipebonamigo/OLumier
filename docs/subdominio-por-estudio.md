@@ -1,6 +1,6 @@
 # Subdomínio por estúdio
 
-`siriusfotografia.fotonio.com.br/lu-marino` — cada estúdio com seu endereço.
+`siriusfotografia.olumier.com.br/lu-marino` — cada estúdio com seu endereço.
 
 ## Estado
 
@@ -27,8 +27,8 @@ O Registro.br leva alguns minutos para publicar na zona do `.br` (aqui foram
 ~4min30). Conferir com:
 
 ```bash
-dig +short DS fotonio.com.br @a.dns.br      # o DS chegou na zona do .br
-dig fotonio.com.br +dnssec @1.1.1.1         # precisa aparecer a flag "ad"
+dig +short DS olumier.com.br @a.dns.br      # o DS chegou na zona do .br
+dig olumier.com.br +dnssec @1.1.1.1         # precisa aparecer a flag "ad"
 ```
 
 A flag **`ad`** (*authenticated data*) é a prova real: sem ela o DS está lá mas
@@ -39,8 +39,8 @@ para de resolver (SERVFAIL, não "site fora do ar" — sintoma bem confuso).
 Recalcular e republicar:
 
 ```bash
-dig DNSKEY fotonio.com.br @dayana.ns.cloudflare.com +noall +answer > /tmp/k.txt
-dnssec-dsfromkey -f /tmp/k.txt fotonio.com.br
+dig DNSKEY olumier.com.br @dayana.ns.cloudflare.com +noall +answer > /tmp/k.txt
+dnssec-dsfromkey -f /tmp/k.txt olumier.com.br
 ```
 
 Ao preencher o formulário, cuidado com **espaço invisível grudado no digest** —
@@ -52,17 +52,17 @@ antes de salvar.
 
 Cada estúdio ganha seu próprio certificado na primeira visita (*on-demand TLS*).
 
-**Por que não curinga:** um certificado `*.fotonio.com.br` exige desafio DNS-01,
+**Por que não curinga:** um certificado `*.olumier.com.br` exige desafio DNS-01,
 que exige o módulo de DNS da Cloudflare compilado no Caddy. O binário do servidor
 não tem esse módulo, e trocá-lo num servidor com sete sites em produção seria
 risco desnecessário.
 
 ### ⚠️ A armadilha que já nos mordeu
 
-A primeira tentativa usou `*.fotonio.com.br` como **endereço do site** no
+A primeira tentativa usou `*.olumier.com.br` como **endereço do site** no
 Caddyfile. Isso faz o Caddy tentar obter um certificado curinga de verdade por
 ACME — que falha sem o módulo de DNS — e **essa falha derrubou o TLS do
-`www.fotonio.com.br`**, que estava funcionando.
+`www.olumier.com.br`**, que estava funcionando.
 
 A configuração correta usa `https://` genérico com **matcher de host**:
 
@@ -122,7 +122,7 @@ servidor. Se o serviço for recriado do zero, lembrar deste detalhe.
 `on_demand_tls` no Caddyfile, que estava fixo em `http://127.0.0.1:3300` —
 o porteiro do certificado ficava com "connection refused" e negava tudo.
 Precisou trocar esse `ask` para `http://localhost:3300` também (mesma regra:
-todo endereço que aponta para o app do Fotônio usa `localhost`, nunca
+todo endereço que aponta para o app do Olumier usa `localhost`, nunca
 `127.0.0.1`, em qualquer lugar do servidor).
 
 ### O porteiro (`/api/tls/permitir`)
@@ -139,7 +139,7 @@ Só respondemos "pode" para subdomínio de estúdio que existe no banco.
 node --env-file=.env.local scripts/testar-subdominio.mjs
 ```
 
-E na prática: criar uma conta em produção e abrir `<slug>.fotonio.com.br`.
+E na prática: criar uma conta em produção e abrir `<slug>.olumier.com.br`.
 O certificado é emitido na primeira visita (leva alguns segundos).
 
 ## Detalhes do comportamento

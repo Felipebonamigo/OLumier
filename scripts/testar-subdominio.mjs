@@ -4,7 +4,7 @@
  *   node --env-file=.env.local scripts/testar-subdominio.mjs
  *
  * Não precisa do DNS pronto: o roteamento é decidido pelo cabeçalho Host, então
- * dá para simular `siriusfotografia.fotonio.com.br` batendo no servidor local.
+ * dá para simular `siriusfotografia.olumier.com.br` batendo no servidor local.
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -28,7 +28,7 @@ await db.query(
   [gslug],
 );
 
-const HOST = `${tslug}.fotonio.com.br`;
+const HOST = `${tslug}.olumier.com.br`;
 console.log(`estúdio: ${nome_estudio}\nsubdomínio simulado: ${HOST}\n`);
 
 let falhou = false;
@@ -104,7 +104,7 @@ await etapa("o endereço bonito é mantido (reescrita, não redirecionamento)", 
 });
 
 await etapa("o domínio principal continua funcionando como antes", async () => {
-  const r = await pedir(`/g/${tslug}/${gslug}`, "fotonio.com.br");
+  const r = await pedir(`/g/${tslug}/${gslug}`, "olumier.com.br");
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const t = await texto(r);
   if (!t.includes(titulo)) throw new Error("a rota antiga quebrou");
@@ -115,7 +115,7 @@ await etapa("o domínio principal continua funcionando como antes", async () => 
  * A casa de um estúdio só responde pelo que é dele.
  *
  * `/g/` é a forma interna das páginas públicas e estava na lista de rotas que o
- * subdomínio deixava passar intactas — então `sirius.fotonio.com.br/g/carol/x`
+ * subdomínio deixava passar intactas — então `sirius.olumier.com.br/g/carol/x`
  * servia a entrega da Carol dentro do endereço do Sirius. Não vazava galeria com
  * senha, mas quebrava exatamente a marca própria que o produto vende.
  */
@@ -142,7 +142,7 @@ await etapa("galeria de OUTRO estúdio não abre neste endereço", async () => {
     }
     const destino = r.headers.get("location") ?? "";
     if (destino.includes(`${tslug}.`)) throw new Error(`continuou neste domínio: ${destino}`);
-    if (!destino.includes("fotonio.com.br")) throw new Error(`mandou para ${destino}`);
+    if (!destino.includes("olumier.com.br")) throw new Error(`mandou para ${destino}`);
     return "vai para o domínio principal";
   } finally {
     await db.query("delete from tenants where id = $1", [v.id]);
@@ -176,21 +176,21 @@ await etapa("o painel não abre por subdomínio de estúdio", async () => {
   const r = await pedir("/painel");
   if (r.status < 300 || r.status >= 400) throw new Error(`esperava redirecionamento, veio ${r.status}`);
   const destino = r.headers.get("location") ?? "";
-  if (!destino.includes("fotonio.com.br") || destino.includes(`${tslug}.`)) {
+  if (!destino.includes("olumier.com.br") || destino.includes(`${tslug}.`)) {
     throw new Error(`mandou para ${destino}`);
   }
   return "manda para o domínio principal";
 });
 
 await etapa("subdomínio reservado não vira estúdio", async () => {
-  const r = await pedir("/", "www.fotonio.com.br");
+  const r = await pedir("/", "www.olumier.com.br");
   const t = await texto(r);
   if (t.includes("Nenhuma galeria pública")) throw new Error("www foi tratado como estúdio");
   return "www segue sendo o site";
 });
 
 await etapa("estúdio inexistente devolve 404", async () => {
-  const r = await pedir("/", "estudio-que-nao-existe.fotonio.com.br");
+  const r = await pedir("/", "estudio-que-nao-existe.olumier.com.br");
   if (r.status !== 404) throw new Error(`esperava 404, veio ${r.status}`);
   return "HTTP 404";
 });
@@ -204,7 +204,7 @@ await etapa("libera certificado para estúdio que existe", async () => {
 });
 
 await etapa("recusa estúdio inexistente", async () => {
-  const r = await fetch(`${BASE}/api/tls/permitir?domain=inventado.fotonio.com.br`);
+  const r = await fetch(`${BASE}/api/tls/permitir?domain=inventado.olumier.com.br`);
   if (r.status !== 403) throw new Error(`esperava 403, veio ${r.status}`);
   return "HTTP 403";
 });
@@ -216,7 +216,7 @@ await etapa("recusa domínio de fora (evita virar emissor de certificado alheio)
 });
 
 await etapa("libera o domínio principal e o www", async () => {
-  for (const d of ["fotonio.com.br", "www.fotonio.com.br"]) {
+  for (const d of ["olumier.com.br", "www.olumier.com.br"]) {
     const r = await fetch(`${BASE}/api/tls/permitir?domain=${d}`);
     if (r.status !== 200) throw new Error(`${d} veio ${r.status}`);
   }
@@ -229,4 +229,4 @@ if (falhou) {
   console.error("\n✗ o subdomínio tem problema");
   process.exit(1);
 }
-console.log(`\n✓ subdomínio pronto — falta só o DNS apontar *.fotonio.com.br`);
+console.log(`\n✓ subdomínio pronto — falta só o DNS apontar *.olumier.com.br`);

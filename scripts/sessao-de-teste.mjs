@@ -12,7 +12,7 @@
  */
 import { createHmac } from "node:crypto";
 
-const NOME = "fotonio_sessao";
+const NOME = "olumier_sessao";
 /** Precisa acompanhar DURACAO_DIAS de src/lib/auth.ts. */
 const DURACAO_MS = 30 * 24 * 60 * 60 * 1000;
 

@@ -13,7 +13,6 @@
  * a rota que estava furada.
  */
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
-import { createHmac } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { conferirDocumento, cpfValido, cnpjValido, soDigitos } from "../src/lib/documento.ts";
@@ -124,7 +123,7 @@ await etapa("status desconhecido NÃO trava quem está pagando", () => {
 console.log("\nQuota — o furo do tamanho declarado pelo navegador:\n");
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
-const { DATABASE_URL, SESSION_SECRET } = process.env;
+const { DATABASE_URL } = process.env;
 const db = new pg.Client({ connectionString: DATABASE_URL });
 await db.connect();
 
