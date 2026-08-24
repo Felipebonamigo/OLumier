@@ -178,7 +178,7 @@ Duas salvaguardas que precisam continuar existindo:
 npm test
 ```
 
-Roda as 22 suítes. As que dependem do servidor de desenvolvimento são **puladas**
+Roda as 23 suítes. As que dependem do servidor de desenvolvimento são **puladas**
 (não reprovadas) quando ele está fora, para não confundir "não rodou" com
 "quebrou".
 
@@ -191,6 +191,28 @@ Roda as 22 suítes. As que dependem do servidor de desenvolvimento são **pulada
 `--import ./scripts/registrar-ts.mjs` ensina o Node a achar `./db` como `./db.ts`
 e a traduzir o atalho `@/`. Sem isso, nenhum script conseguia importar nada de
 `src/lib` — e o que é difícil de testar acaba não sendo testado.
+
+### A visão de administrador
+
+`/painel/admin` mostra todos os estúdios: situação, plano, uso, galerias e
+quando o cliente abriu pela última vez. **Só leitura** — nada ali altera nada, de
+propósito: o administrador é a única pessoa sem ninguém acima para desfazer um
+engano.
+
+Quem entra vem da variável `ADMINS`, no `.env.production`:
+
+```
+ADMINS=felipe@exemplo.com,carol@exemplo.com
+```
+
+**Vazia (o padrão) = ninguém é admin**, e a rota devolve 404 para todo mundo. Não
+é uma coluna no banco porque coluna pode ser ligada por um `update` errado ou
+por um bug numa tela de perfil; a variável só muda com acesso ao servidor — que é
+o mesmo poder que a visão concede.
+
+Para quem não é admin a resposta é **404**, não "acesso negado": mensagem de
+negado confirma que a página existe. O título da aba também passa pelo portão,
+senão o 404 vinha com "Administração · Fotônio" escrito nele.
 
 ### As favoritas do cliente
 

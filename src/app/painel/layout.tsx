@@ -4,6 +4,7 @@ import { sessaoAtual } from "@/lib/auth";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoDoEstudio } from "@/lib/medias";
 import { MarcaLockup } from "@/components/marca-tile";
+import { ehAdmin } from "@/config/admin";
 import { sairAction } from "../(auth)/actions";
 
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
@@ -49,6 +50,16 @@ export default async function PainelLayout({ children }: { children: React.React
             >
               Conta
             </Link>
+            {/* Só para quem está na lista ADMINS. Para todo o resto o link não
+                existe — e a rota devolve 404, não "acesso negado". */}
+            {ehAdmin(tenant.email) && (
+              <Link
+                href="/painel/admin"
+                className="rounded-lg px-3 py-2 text-luz transition hover:bg-carbon"
+              >
+                Admin
+              </Link>
+            )}
             <form action={sairAction}>
               <button
                 type="submit"
