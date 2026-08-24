@@ -20,7 +20,7 @@ export default function InstitucionalLayout({ children }: { children: React.Reac
         </div>
       </header>
 
-      <main className="mx-auto max-w-[70ch] px-6 py-14 text-[15px] leading-relaxed text-texto-soft [&_a]:text-luz [&_a]:underline [&_a]:underline-offset-4 [&_h2]:mt-12 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-texto [&_h3]:mt-8 [&_h3]:font-semibold [&_h3]:text-texto [&_li]:mt-1.5 [&_p]:mt-4 [&_strong]:text-texto [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-5">
+      <main className="mx-auto max-w-[70ch] px-6 py-14 text-[15px] leading-relaxed text-texto-soft [&_a]:text-acento [&_a]:underline [&_a]:underline-offset-4 [&_h2]:mt-12 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-texto [&_h3]:mt-8 [&_h3]:font-semibold [&_h3]:text-texto [&_li]:mt-1.5 [&_p]:mt-4 [&_strong]:text-texto [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-5">
         {children}
       </main>
 

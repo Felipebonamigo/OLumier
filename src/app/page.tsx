@@ -40,7 +40,7 @@ export default function Home() {
           </Link>
           <Link
             href="/cadastrar"
-            className="cta-luz rounded-full bg-luz px-4 py-2 font-medium text-void"
+            className="cta-luz rounded-full bg-acento px-4 py-2 font-medium text-void"
           >
             Criar conta
           </Link>
@@ -60,7 +60,7 @@ export default function Home() {
             <h1 className="mt-6 font-serif text-5xl font-bold leading-[1.04] tracking-tight sm:text-7xl">
               Sua luz,
               <br />
-              <em className="text-luz-alta">entregue.</em>
+              <em className="text-acento-alto">entregue.</em>
             </h1>
             <p className="mt-7 max-w-[44ch] text-lg leading-relaxed text-texto-soft">
               O casamento acaba, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal:
@@ -69,7 +69,7 @@ export default function Home() {
             <div className="mt-10 flex flex-wrap items-center gap-5">
               <Link
                 href="/cadastrar"
-                className="cta-luz rounded-full bg-luz px-7 py-3.5 font-semibold text-void"
+                className="cta-luz rounded-full bg-acento px-7 py-3.5 font-semibold text-void"
               >
                 Começar grátis
               </Link>
@@ -95,14 +95,14 @@ export default function Home() {
             </div>
             <div className="absolute right-20 top-24 w-72 rotate-3 rounded-xl border border-linha-forte bg-carbon p-3 shadow-2xl">
               <div className="grid h-40 place-items-center rounded-lg bg-gradient-to-br from-luz/25 via-carbon-2 to-void">
-                <span className="font-script text-3xl text-luz-alta">Ana &amp; Pedro</span>
+                <span className="font-script text-3xl text-acento-alto">Ana &amp; Pedro</span>
               </div>
               <div className="mt-3 flex items-center justify-between">
                 <div>
                   <div className="h-2.5 w-28 rounded bg-texto-soft/50" />
                   <div className="mt-2 h-2 w-20 rounded bg-texto-faint/30" />
                 </div>
-                <div className="grid h-8 w-8 place-items-center rounded-full bg-luz text-sm text-void">
+                <div className="grid h-8 w-8 place-items-center rounded-full bg-acento text-sm text-void">
                   ↓
                 </div>
               </div>
@@ -152,7 +152,7 @@ export default function Home() {
             ].map((g, i) => (
               <Revelar key={g.n} atraso={i * 90}>
                 <li className="grid grid-cols-[auto_1fr] gap-6">
-                  <span className="select-none font-serif text-6xl font-bold leading-none text-luz/25">
+                  <span className="select-none font-serif text-6xl font-bold leading-none text-acento/25">
                     {g.n}
                   </span>
                   <div className="pt-2">
@@ -273,7 +273,7 @@ export default function Home() {
               </p>
               <div className="mt-6" aria-hidden>
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-luz" />
+                  <span className="h-2 w-2 rounded-full bg-acento" />
                   <span className="h-px flex-1 bg-gradient-to-r from-luz/60 to-linha" />
                   <span className="h-2 w-2 rounded-full border border-linha-forte" />
                 </div>
@@ -292,7 +292,7 @@ export default function Home() {
               <p className="mt-2 text-sm leading-relaxed text-texto-soft">
                 Cada estúdio ganha um subdomínio próprio e cada galeria carrega a sua logo.
               </p>
-              <code className="mt-5 block w-fit rounded-lg border border-linha bg-void px-3 py-2 font-mono text-xs text-luz-alta">
+              <code className="mt-5 block w-fit rounded-lg border border-linha bg-void px-3 py-2 font-mono text-xs text-acento-alto">
                 seuestudio.{marca.dominio}
               </code>
             </div>
@@ -369,11 +369,11 @@ export default function Home() {
         <div className="trama absolute inset-0 -z-10" aria-hidden />
         <Revelar>
           <h2 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl">
-            A próxima entrega já podia ser <em className="text-luz-alta">assim</em>.
+            A próxima entrega já podia ser <em className="text-acento-alto">assim</em>.
           </h2>
           <Link
             href="/cadastrar"
-            className="cta-luz mt-9 inline-block rounded-full bg-luz px-8 py-4 font-semibold text-void"
+            className="cta-luz mt-9 inline-block rounded-full bg-acento px-8 py-4 font-semibold text-void"
           >
             Criar conta grátis
           </Link>
@@ -419,7 +419,7 @@ function PlanoGrupo({ titulo, planos }: { titulo: string; planos: Plano[] }) {
         {planos.map((p) => (
           <li key={p.id} className="relative flex items-center justify-between gap-4 p-5">
             {p.destaque && (
-              <span className="absolute -top-3 left-5 rounded-full bg-luz px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-void">
+              <span className="absolute -top-3 left-5 rounded-full bg-acento px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-void">
                 Mais pedido
               </span>
             )}
@@ -429,7 +429,7 @@ function PlanoGrupo({ titulo, planos }: { titulo: string; planos: Plano[] }) {
                 galeria + {p.cofreGb >= 1000 ? `${p.cofreGb / 1000} TB` : `${p.cofreGb} GB`} de cofre
               </p>
             </div>
-            <p className="whitespace-nowrap text-lg font-bold text-luz-alta">
+            <p className="whitespace-nowrap text-lg font-bold text-acento-alto">
               {formatarReais(p.precoCentavos)}
               <span className="text-xs font-normal text-texto-faint">/mês</span>
             </p>

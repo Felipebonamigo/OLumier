@@ -18,7 +18,7 @@ export const metadata: Metadata = { title: "Conta" };
 export const dynamic = "force-dynamic";
 
 const SITUACOES: Record<string, { texto: string; cor: string }> = {
-  trial: { texto: "Teste grátis", cor: "text-luz" },
+  trial: { texto: "Teste grátis", cor: "text-acento" },
   ativo: { texto: "Assinatura ativa", cor: "text-ok" },
   inadimplente: { texto: "Pagamento em atraso", cor: "text-alerta" },
   cancelado: { texto: "Assinatura cancelada", cor: "text-erro" },
@@ -100,7 +100,7 @@ export default async function ContaPage() {
               href={cobranca.invoiceUrl}
               target="_blank"
               rel="noreferrer"
-              className="mt-2 inline-block text-sm text-luz underline underline-offset-4"
+              className="mt-2 inline-block text-sm text-acento underline underline-offset-4"
             >
               Ver e pagar ↗
             </a>
@@ -232,7 +232,7 @@ function Balde({
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-void">
         <div
           className={`h-full rounded-full ${
-            estourou ? "bg-erro" : apertado ? "bg-alerta" : "bg-luz"
+            estourou ? "bg-erro" : apertado ? "bg-alerta" : "bg-acento"
           }`}
           style={{ width: `${Math.min(100, pct)}%` }}
         />

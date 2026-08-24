@@ -206,9 +206,9 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         para explicar um recurso que talvez nem seja usado naquele trabalho.
       */}
       {favoritas.fotos > 0 && (
-        <section className="mt-8 rounded-xl border border-luz/30 bg-luz/[0.06] p-5">
+        <section className="mt-8 rounded-xl border border-acento/30 bg-acento/[0.06] p-5">
           <h2 className="text-sm font-semibold">
-            <span className="text-luz">♥</span> Escolhas do cliente
+            <span className="text-acento">♥</span> Escolhas do cliente
           </h2>
           <p className="mt-1 text-sm text-texto-soft">
             <strong className="text-texto">{favoritas.fotos}</strong>{" "}

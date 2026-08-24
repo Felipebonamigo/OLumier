@@ -127,15 +127,22 @@ export function presetEquivalente(a: Aparencia): string | null {
 
 /** Cada tema é um conjunto de variáveis; os componentes leem sempre as mesmas. */
 export const TEMAS: Record<Tema, Record<string, string>> = {
+  /*
+   * NOITE — a sala de projeção, mesma paleta do painel.
+   *
+   * Preto azulado de propósito: num fundo quente, pele de retrato fica lavada,
+   * porque fundo e pele disputam a mesma faixa de cor. Frio, a foto salta.
+   * O destaque é âmbar e aparece só em ação (botão, coração marcado).
+   */
   noite: {
-    "--g-fundo": "#0c0a07",
-    "--g-superficie": "#171310",
-    "--g-texto": "#f0e9db",
-    "--g-suave": "#b8ab90",
-    "--g-tenue": "#847860",
-    "--g-linha": "rgba(240,228,200,.16)",
-    "--g-destaque": "#e6c17a",
-    "--g-sobre-destaque": "#1c1509",
+    "--g-fundo": "#07080b",
+    "--g-superficie": "#101319",
+    "--g-texto": "#eef1f6",
+    "--g-suave": "#a4adbd",
+    "--g-tenue": "#6b7484",
+    "--g-linha": "rgba(190,205,230,.16)",
+    "--g-destaque": "#d9a441",
+    "--g-sobre-destaque": "#0a0906",
   },
   claro: {
     "--g-fundo": "#ffffff",

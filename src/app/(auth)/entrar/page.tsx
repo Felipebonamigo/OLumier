@@ -50,7 +50,7 @@ export default async function EntrarPage({
 
       <p className="mt-8 text-sm text-texto-soft">
         Ainda não tem conta?{" "}
-        <Link href="/cadastrar" className="text-luz underline underline-offset-4">
+        <Link href="/cadastrar" className="text-acento underline underline-offset-4">
           Criar agora
         </Link>
       </p>

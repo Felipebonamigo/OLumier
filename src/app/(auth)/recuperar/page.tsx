@@ -41,7 +41,7 @@ export default function RecuperarPage() {
           <p className="font-medium text-texto">O envio automático ainda não está ligado.</p>
           <p className="mt-2">
             Escreva para{" "}
-            <a href={`mailto:${marca.email}`} className="text-luz underline underline-offset-4">
+            <a href={`mailto:${marca.email}`} className="text-acento underline underline-offset-4">
               {marca.email}
             </a>{" "}
             do endereço cadastrado e a senha é redefinida na hora.
@@ -51,7 +51,7 @@ export default function RecuperarPage() {
 
       <p className="mt-8 text-sm text-texto-soft">
         Lembrou?{" "}
-        <Link href="/entrar" className="text-luz underline underline-offset-4">
+        <Link href="/entrar" className="text-acento underline underline-offset-4">
           Voltar para entrar
         </Link>
       </p>

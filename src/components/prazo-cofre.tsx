@@ -72,7 +72,7 @@ export function PrazoCofre({
           type="button"
           disabled={ocupado}
           onClick={() => executar(reativarAction)}
-          className="mt-4 rounded-lg bg-luz px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta disabled:opacity-50"
+          className="mt-4 rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:opacity-50"
         >
           {ocupado ? "Reativando…" : "Tirar do cofre"}
         </button>
@@ -106,7 +106,7 @@ export function PrazoCofre({
               onClick={() => executar(definirPrazoAction, { meses: p.meses?.toString() ?? "" })}
               className={`rounded-lg border px-3 py-1.5 text-xs transition disabled:opacity-50 ${
                 ativo
-                  ? "border-luz bg-luz/10 text-luz-alta"
+                  ? "border-acento bg-acento/10 text-acento-alto"
                   : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
               }`}
             >

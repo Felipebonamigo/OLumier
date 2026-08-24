@@ -60,7 +60,7 @@ export default async function PainelPage() {
         </div>
         <Link
           href="/painel/galerias/nova"
-          className="rounded-lg bg-luz px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta"
+          className="rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto"
         >
           Nova galeria
         </Link>
@@ -75,7 +75,7 @@ export default async function PainelPage() {
           </p>
           <Link
             href="/painel/galerias/nova"
-            className="mt-6 inline-block rounded-lg bg-luz px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta"
+            className="mt-6 inline-block rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto"
           >
             Nova galeria
           </Link>

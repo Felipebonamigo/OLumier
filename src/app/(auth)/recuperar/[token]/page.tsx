@@ -52,7 +52,7 @@ export default async function NovaSenhaPage({
         <h1 className="text-2xl font-bold tracking-tight">{recado.titulo}</h1>
         <p className="mt-3 text-sm text-texto-soft">{recado.texto}</p>
         <p className="mt-8 text-sm text-texto-soft">
-          <Link href="/recuperar" className="text-luz underline underline-offset-4">
+          <Link href="/recuperar" className="text-acento underline underline-offset-4">
             Pedir um link novo
           </Link>
         </p>

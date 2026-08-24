@@ -55,7 +55,7 @@ export default async function PainelLayout({ children }: { children: React.React
             {ehAdmin(tenant.email) && (
               <Link
                 href="/painel/admin"
-                className="rounded-lg px-3 py-2 text-luz transition hover:bg-carbon"
+                className="rounded-lg px-3 py-2 text-acento transition hover:bg-carbon"
               >
                 Admin
               </Link>
@@ -90,7 +90,7 @@ export default async function PainelLayout({ children }: { children: React.React
             aria-label="Espaço usado"
           >
             <div
-              className={`h-full rounded-full ${perto ? "bg-alerta" : "bg-luz"}`}
+              className={`h-full rounded-full ${perto ? "bg-alerta" : "bg-acento"}`}
               style={{ width: `${Math.max(proporcao * 100, 0.5)}%` }}
             />
           </div>

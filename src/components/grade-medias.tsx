@@ -118,7 +118,7 @@ export function GradeMedias({
 
       {/* Barra de ações em lote — só aparece com algo selecionado. */}
       {selecao.size > 0 && (
-        <div className="sticky top-2 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-luz/40 bg-carbon-2 px-3 py-2.5 shadow-lg">
+        <div className="sticky top-2 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-acento/40 bg-carbon-2 px-3 py-2.5 shadow-lg">
           <span className="text-sm font-medium">
             {selecao.size} {selecao.size === 1 ? "selecionada" : "selecionadas"}
           </span>
@@ -149,7 +149,7 @@ export function GradeMedias({
                 if (e.target.value !== "") moverPara(e.target.value);
                 e.target.value = "";
               }}
-              className="rounded-md border border-linha bg-void px-2 py-1.5 text-xs focus:border-luz focus:outline-none"
+              className="rounded-md border border-linha bg-void px-2 py-1.5 text-xs focus:border-acento focus:outline-none"
             >
               <option value="" disabled>
                 escolha o capítulo…
@@ -173,7 +173,7 @@ export function GradeMedias({
             <li key={m.id} className="group relative">
               <div
                 className={`aspect-[4/5] overflow-hidden rounded-lg border bg-carbon-2 transition ${
-                  selecionada ? "border-luz ring-2 ring-luz/40" : "border-linha"
+                  selecionada ? "border-acento ring-2 ring-acento/40" : "border-linha"
                 }`}
               >
                 {m.tipo === "foto" ? (
@@ -197,7 +197,7 @@ export function GradeMedias({
                 aria-pressed={selecionada}
                 className={`absolute left-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full border text-[11px] transition ${
                   selecionada
-                    ? "border-luz bg-luz text-void"
+                    ? "border-acento bg-acento text-void"
                     : "border-linha-forte bg-void/70 text-transparent hover:text-texto-faint"
                 }`}
               >
@@ -205,7 +205,7 @@ export function GradeMedias({
               </button>
 
               {capaId === m.id && (
-                <span className="absolute left-9 top-1.5 rounded-md bg-luz px-2 py-0.5 text-[10px] font-semibold text-void">
+                <span className="absolute left-9 top-1.5 rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
                   capa
                 </span>
               )}
@@ -220,7 +220,7 @@ export function GradeMedias({
               {(m.favoritas ?? 0) > 0 && (
                 <span
                   title={`${m.favoritas} ${m.favoritas === 1 ? "pessoa marcou" : "pessoas marcaram"} como favorita`}
-                  className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-luz"
+                  className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-acento"
                 >
                   ♥{(m.favoritas ?? 0) > 1 ? ` ${m.favoritas}` : ""}
                 </span>

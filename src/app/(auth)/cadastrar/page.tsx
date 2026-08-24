@@ -21,7 +21,7 @@ export default function CadastrarPage() {
 
       <p className="mt-8 text-sm text-texto-soft">
         Já tem conta?{" "}
-        <Link href="/entrar" className="text-luz underline underline-offset-4">
+        <Link href="/entrar" className="text-acento underline underline-offset-4">
           Entrar
         </Link>
       </p>

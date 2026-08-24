@@ -4,7 +4,7 @@ import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react
 
 const baseCampo =
   "w-full rounded-lg border border-linha bg-carbon px-3 py-2.5 text-sm text-texto " +
-  "placeholder:text-texto-faint focus:border-luz focus:outline-none";
+  "placeholder:text-texto-faint focus:border-acento focus:outline-none";
 
 export function Campo({
   label,
@@ -58,7 +58,7 @@ export function BotaoEnviar({
     <button
       type="submit"
       disabled={carregando}
-      className="mt-2 rounded-lg bg-luz px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta disabled:cursor-not-allowed disabled:opacity-60"
+      className="mt-2 rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:cursor-not-allowed disabled:opacity-60"
     >
       {carregando ? "Aguarde…" : children}
     </button>

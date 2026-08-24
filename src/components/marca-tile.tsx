@@ -1,17 +1,22 @@
 import { marca } from "@/config/marca";
 
 /**
- * A marca desenhada: o diafragma aberto.
+ * A marca: O FEIXE ATRAVESSANDO A LENTE.
  *
- * Um "O" que é um anel de lente — com um arco aceso onde a luz bate na borda e
- * um ponto de luz dentro. Diz três coisas ao mesmo tempo: fotografia (o
- * diafragma), cinema (a íris do projetor — o eco de Lumière que deu o nome) e a
- * inicial de Olumier. Substituiu o "azulejo de tabela periódica" da era
- * Fotônio, cuja metáfora morreu com o rename de 24/08/2026.
+ * Um anel — o "O" de Olumier, e a lente — cortado por um feixe de luz que entra
+ * pela esquerda, atravessa e sai mais largo do outro lado. É a própria operação
+ * do produto: a luz entra, passa pelo vidro, e chega maior do lado de fora.
  *
- * SVG inline de propósito: escala sem servir arquivo, herda cor por
- * currentColor onde precisar, e o favicon (src/app/icon.svg) é este mesmo
- * desenho com fundo — mudou aqui, mudou lá.
+ * Nasceu junto com a paleta, não depois dela: o anel é PRATA (o vidro, a luz
+ * fria da sala de projeção) e só o ponto focal é ÂMBAR. Mesma regra da
+ * interface inteira — o âmbar é reservado ao que importa, então quando ele
+ * aparece, quer dizer alguma coisa.
+ *
+ * A versão anterior (um anel com arco aceso, da era Fotônio recolorida) foi
+ * descartada por isto: era desenho bonito herdando cor de outra ideia.
+ *
+ * SVG inline: escala sem pedido de rede, e o favicon (src/app/icon.svg) é este
+ * mesmo desenho com fundo — mudou aqui, mude lá.
  */
 export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
   return (
@@ -23,35 +28,49 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
       aria-hidden
       className="shrink-0"
     >
-      {/* o anel — o "O", a lente */}
-      <circle cx="24" cy="24" r="17" stroke="var(--luz)" strokeWidth="2.4" opacity="0.5" />
-      {/* a luz batendo na borda: um arco aceso no alto-direito */}
+      {/* o feixe que entra: fino, frio, vindo de fora do quadro */}
       <path
-        d="M 33.5 9.55 A 17 17 0 0 1 41.45 24"
-        stroke="var(--luz-alta)"
-        strokeWidth="2.4"
+        d="M 2 24 H 15"
+        stroke="var(--luz)"
+        strokeWidth="1.6"
         strokeLinecap="round"
+        opacity="0.55"
       />
-      {/* o ponto de luz que entrou */}
-      <circle cx="30" cy="18" r="2.6" fill="var(--luz-alta)" />
+      {/* o anel: a lente, e o O */}
+      <circle cx="24" cy="24" r="11.5" stroke="var(--luz)" strokeWidth="2.2" />
+      {/* o feixe que sai — aberto, porque a luz foi trabalhada */}
+      <path
+        d="M 34 24 H 46 M 34.5 18.5 L 45 14 M 34.5 29.5 L 45 34"
+        stroke="var(--luz)"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
+      {/* o ponto focal — o único âmbar, onde a luz se concentra */}
+      <circle cx="24" cy="24" r="3.4" fill="var(--acento)" />
     </svg>
   );
 }
 
-/** Compatível com os usos antigos do azulejo — hoje desenha o símbolo livre. */
+/** Compatível com os usos antigos. Hoje desenha o símbolo livre, sem moldura. */
 export function MarcaTile({ tamanho = 56 }: { tamanho?: number }) {
   return <MarcaSimbolo tamanho={tamanho} />;
 }
 
-export function MarcaLockup({ tamanho = 44 }: { tamanho?: number }) {
+export function MarcaLockup({ tamanho = 40 }: { tamanho?: number }) {
   return (
     <span className="flex items-center gap-3">
       <MarcaSimbolo tamanho={tamanho} />
       <span>
-        <span className="block font-serif text-xl font-bold leading-tight tracking-tight">
+        {/*
+          Espaçamento largo entre as letras: o nome é francês na origem e ganha
+          ar de letreiro de cinema quando respira. Peso leve porque a marca não
+          precisa gritar — quem grita na tela é a foto do cliente.
+        */}
+        <span className="block text-lg font-medium leading-tight tracking-[0.14em]">
           {marca.nome}
         </span>
-        <span className="block font-mono text-[10px] uppercase tracking-[0.24em] text-texto-soft">
+        <span className="block font-mono text-[9px] uppercase tracking-[0.3em] text-texto-faint">
           galerias de entrega
         </span>
       </span>

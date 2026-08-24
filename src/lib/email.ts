@@ -134,15 +134,15 @@ export async function enviarEmail(email: Email): Promise<boolean> {
  */
 export function moldura(titulo: string, corpo: string): string {
   return `<!doctype html>
-<html lang="pt-BR"><body style="margin:0;background:#0c0a07;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0c0a07;padding:32px 16px">
+<html lang="pt-BR"><body style="margin:0;background:#07080b;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#07080b;padding:32px 16px">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#171310;border:1px solid rgba(240,228,200,0.14);border-radius:12px;padding:32px">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#101319;border:1px solid rgba(190,205,230,0.14);border-radius:12px;padding:32px">
         <tr><td>
-          <p style="margin:0 0 24px;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#e6c17a">${marca.nome}</p>
-          <h1 style="margin:0 0 16px;font-size:20px;color:#f0e9db">${titulo}</h1>
+          <p style="margin:0 0 24px;font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#d9a441">${marca.nome}</p>
+          <h1 style="margin:0 0 16px;font-size:20px;color:#eef1f6">${titulo}</h1>
           ${corpo}
-          <p style="margin:28px 0 0;font-size:12px;color:#847860">
+          <p style="margin:28px 0 0;font-size:12px;color:#6b7484">
             ${marca.nome} · ${marca.dominio}
           </p>
         </td></tr>

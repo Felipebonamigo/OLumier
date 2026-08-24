@@ -268,7 +268,7 @@ export function EnviarArquivos({
             value={destino}
             onChange={(e) => setDestino(e.target.value)}
             disabled={rodando}
-            className="rounded-lg border border-linha bg-void px-3 py-1.5 text-sm focus:border-luz focus:outline-none disabled:opacity-50"
+            className="rounded-lg border border-linha bg-void px-3 py-1.5 text-sm focus:border-acento focus:outline-none disabled:opacity-50"
           >
             <option value="">— sem capítulo —</option>
             {secoes.map((s) => (
@@ -293,7 +293,7 @@ export function EnviarArquivos({
           processar(await arquivosDeArrasto(e.dataTransfer));
         }}
         className={`rounded-xl border border-dashed px-6 py-12 text-center transition ${
-          arrastando ? "border-luz bg-luz/5" : "border-linha-forte bg-carbon"
+          arrastando ? "border-acento bg-acento/5" : "border-linha-forte bg-carbon"
         }`}
       >
         <p className="text-base font-medium">Arraste a pasta do casamento aqui</p>
@@ -306,7 +306,7 @@ export function EnviarArquivos({
           <button
             type="button"
             onClick={() => pastaRef.current?.click()}
-            className="rounded-lg bg-luz px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta"
+            className="rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto"
           >
             Escolher pasta
           </button>
@@ -367,7 +367,7 @@ export function EnviarArquivos({
           {/* Progresso do conjunto: numa fila de 600, o total importa mais que cada linha. */}
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-carbon-2">
             <div
-              className="h-full rounded-full bg-luz transition-[width]"
+              className="h-full rounded-full bg-acento transition-[width]"
               style={{ width: `${fila.length ? (enviados / fila.length) * 100 : 0}%` }}
             />
           </div>
@@ -403,7 +403,7 @@ export function EnviarArquivos({
                         ? "bg-erro"
                         : item.situacao === "pronto"
                           ? "bg-ok"
-                          : "bg-luz"
+                          : "bg-acento"
                     }`}
                     style={{ width: `${item.situacao === "erro" ? 100 : item.progresso}%` }}
                   />

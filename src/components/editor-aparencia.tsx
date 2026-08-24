@@ -71,7 +71,7 @@ export function EditorAparencia({
               onClick={() => mudar({ ...ap, [eixo]: op.id } as Aparencia)}
               className={`rounded-lg border px-3 py-1.5 text-xs transition ${
                 ativo
-                  ? "border-luz bg-luz/10 text-luz-alta"
+                  ? "border-acento bg-acento/10 text-acento-alto"
                   : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
               }`}
             >
@@ -96,7 +96,7 @@ export function EditorAparencia({
           type="button"
           onClick={salvar}
           disabled={salvo || salvando}
-          className="rounded-lg bg-luz px-4 py-2 text-sm font-semibold text-void transition hover:bg-luz-alta disabled:opacity-40"
+          className="rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:opacity-40"
         >
           {salvando ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar aparência"}
         </button>
@@ -113,7 +113,7 @@ export function EditorAparencia({
               onClick={() => mudar(p.aparencia)}
               className={`rounded-lg border p-3 text-left transition ${
                 ativo
-                  ? "border-luz bg-luz/5"
+                  ? "border-acento bg-acento/5"
                   : "border-linha hover:border-linha-forte hover:bg-carbon-2"
               }`}
             >
@@ -174,7 +174,7 @@ function MiniaturaPreset({ id }: { id: string }) {
     return (
       <span className={`${comum} bg-void`}>
         <span className="grid h-full grid-cols-3 gap-[1px]">
-          <span className="col-span-2 row-span-2 bg-luz/70" />
+          <span className="col-span-2 row-span-2 bg-acento/70" />
           <span className="bg-texto-faint/50" />
           <span className="bg-texto-faint/50" />
         </span>

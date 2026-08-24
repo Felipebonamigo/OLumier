@@ -81,7 +81,7 @@ export function EditorSecoes({
                     value={nomeEditado}
                     onChange={(e) => setNomeEditado(e.target.value)}
                     autoFocus
-                    className="min-w-0 flex-1 rounded-md border border-linha bg-void px-2 py-1 text-sm focus:border-luz focus:outline-none"
+                    className="min-w-0 flex-1 rounded-md border border-linha bg-void px-2 py-1 text-sm focus:border-acento focus:outline-none"
                   />
                   <button
                     type="button"
@@ -90,7 +90,7 @@ export function EditorSecoes({
                       executar(renomearSecaoAction, { secao_id: s.id, nome: nomeEditado });
                       setEditando(null);
                     }}
-                    className="rounded-md bg-luz px-3 py-1 text-xs font-semibold text-void"
+                    className="rounded-md bg-acento px-3 py-1 text-xs font-semibold text-void"
                   >
                     ok
                   </button>
@@ -187,7 +187,7 @@ export function EditorSecoes({
           }}
           placeholder="Novo capítulo…"
           maxLength={60}
-          className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-texto-faint focus:border-luz focus:outline-none"
+          className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-texto-faint focus:border-acento focus:outline-none"
         />
         <button
           type="button"

@@ -97,7 +97,7 @@ export function PublicarGaleria({
           checked={publicada}
           disabled={salvando}
           onChange={(e) => alternar("publicada", e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-[color:var(--luz)]"
+          className="mt-0.5 h-4 w-4 accent-[color:var(--acento)]"
         />
         <span>
           <span className="block text-sm font-medium">Galeria no ar</span>
@@ -113,7 +113,7 @@ export function PublicarGaleria({
           checked={permiteDownload}
           disabled={salvando}
           onChange={(e) => alternar("permite_download", e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-[color:var(--luz)]"
+          className="mt-0.5 h-4 w-4 accent-[color:var(--acento)]"
         />
         <span>
           <span className="block text-sm font-medium">Permitir download</span>
@@ -153,7 +153,7 @@ export function PublicarGaleria({
               setMexeuNaSenha(true);
             }}
             placeholder={temSenha ? "nova senha" : "ex.: anaepedro"}
-            className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-texto-faint focus:border-luz focus:outline-none"
+            className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-texto-faint focus:border-acento focus:outline-none"
           />
           <button
             type="button"
@@ -182,7 +182,7 @@ export function PublicarGaleria({
             <button
               type="button"
               onClick={copiar}
-              className="rounded-lg bg-luz px-4 py-2 text-sm font-semibold text-void transition hover:bg-luz-alta"
+              className="rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
             >
               {copiado ? "copiado ✓" : "copiar"}
             </button>

@@ -29,7 +29,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = "force-dynamic";
 
 const CORES: Record<string, string> = {
-  trial: "text-luz",
+  trial: "text-acento",
   ativo: "text-ok",
   inadimplente: "text-alerta",
   cancelado: "text-erro",

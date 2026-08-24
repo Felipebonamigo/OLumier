@@ -37,7 +37,7 @@ export default function Erro({
         <button
           type="button"
           onClick={reset}
-          className="rounded-full bg-luz px-5 py-2.5 text-sm font-semibold text-void transition hover:bg-luz-alta"
+          className="rounded-full bg-acento px-5 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto"
         >
           Tentar de novo
         </button>
