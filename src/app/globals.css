@@ -2,25 +2,42 @@
 
 /*
   Olumier — tokens visuais.
-  A paleta nasce do conceito: fóton = partícula da luz. Fundo escuro para a foto
-  brilhar (é a matéria-prima do produto), âmbar como único acento.
-  Os valores espelham src/config/marca.ts — mudar lá e aqui juntos.
+
+  A paleta é a sala de projeção: preto quente de sala escura, um único acento
+  dourado-champanhe (a luz do projetor), marfim para as superfícies claras.
+  Um acento só é decisão, não falta de ideia — marca premium sussurra.
+
+  Espelhos que precisam andar juntos quando isto mudar:
+  src/config/marca.ts (cores), src/config/aparencia.ts (TEMAS) e os hex em
+  linha dos e-mails (src/lib/email.ts, recuperacao.ts) — cliente de e-mail
+  não lê variável CSS, lá é hex escrito mesmo.
 */
 
 :root {
-  --void: #0d0b09;
-  --carbon: #16120e;
-  --carbon-2: #1d1813;
-  --luz: #f0c268;
-  --luz-alta: #ffe9bf;
-  --texto: #ece4d6;
-  --texto-soft: #b3a58f;
-  --texto-faint: #7d715f;
-  --linha: rgba(240, 221, 190, 0.14);
-  --linha-forte: rgba(240, 221, 190, 0.28);
-  --ok: #6fbf73;
-  --alerta: #e0a33e;
-  --erro: #e06c6c;
+  /* o palco escuro */
+  --void: #0c0a07;
+  --carbon: #171310;
+  --carbon-2: #201a13;
+  --luz: #e6c17a;
+  --luz-alta: #f8ecd0;
+  --texto: #f0e9db;
+  --texto-soft: #b8ab90;
+  --texto-faint: #847860;
+  --linha: rgba(240, 228, 200, 0.14);
+  --linha-forte: rgba(240, 228, 200, 0.28);
+
+  /* a folha clara — seções de contraste, papel, marfim */
+  --marfim: #f7f1e6;
+  --marfim-2: #ede2cd;
+  --tinta: #2a2318;
+  --tinta-suave: #574b38;
+  --tinta-faint: #8d7f66;
+  --ouro-tinta: #8c6f3f;
+
+  /* semânticos, aquecidos para a família */
+  --ok: #7dbd7f;
+  --alerta: #d9a643;
+  --erro: #d97664;
 }
 
 @theme inline {
@@ -34,6 +51,12 @@
   --color-texto-faint: var(--texto-faint);
   --color-linha: var(--linha);
   --color-linha-forte: var(--linha-forte);
+  --color-marfim: var(--marfim);
+  --color-marfim-2: var(--marfim-2);
+  --color-tinta: var(--tinta);
+  --color-tinta-suave: var(--tinta-suave);
+  --color-tinta-faint: var(--tinta-faint);
+  --color-ouro-tinta: var(--ouro-tinta);
   --color-ok: var(--ok);
   --color-alerta: var(--alerta);
   --color-erro: var(--erro);
@@ -75,4 +98,75 @@ body {
 :focus-visible {
   outline: 2px solid var(--luz);
   outline-offset: 2px;
+}
+
+/* ── Página institucional: movimento e textura ──────────────────────────────
+   O estado escondido só existe quando o JavaScript está de pé (html[data-js],
+   ligado por um script de uma linha no layout). Sem isso, um navegador com JS
+   bloqueado veria a página inteira em opacity 0 — em branco pra sempre. */
+html[data-js] .revelar {
+  opacity: 0;
+  transform: translateY(22px);
+}
+html[data-js] .revelar[data-visivel] {
+  opacity: 1;
+  transform: none;
+}
+.revelar {
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+/* O feixe do hero: um facho de luz âmbar atravessando o preto. É a marca
+   contada em CSS — nenhuma imagem, nenhum peso. */
+.feixe {
+  position: absolute;
+  inset: -20% -10% auto auto;
+  width: 70%;
+  height: 120%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    color-mix(in srgb, var(--luz) 13%, transparent) 50%,
+    color-mix(in srgb, var(--luz-alta) 7%, transparent) 56%,
+    transparent 66%
+  );
+  filter: blur(28px);
+  animation: feixe-respira 9s ease-in-out infinite alternate;
+}
+@keyframes feixe-respira {
+  from {
+    opacity: 0.55;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-3%);
+  }
+}
+
+/* Trama de pontos quase invisível — dá textura ao vazio sem competir com foto. */
+.trama {
+  background-image: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--texto-faint) 26%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 35%, black 30%, transparent 75%);
+}
+
+/* CTA principal: brilho suave que responde ao hover sem gritar. */
+.cta-luz {
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--luz) 34%, transparent);
+  transition:
+    box-shadow 0.45s ease,
+    transform 0.45s ease,
+    background-color 0.3s ease;
+}
+.cta-luz:hover {
+  box-shadow: 0 0 42px 4px color-mix(in srgb, var(--luz) 26%, transparent);
+  transform: translateY(-1px);
 }

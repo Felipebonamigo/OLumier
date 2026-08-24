@@ -12,6 +12,7 @@ import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
+import { TEMAS } from "../src/config/aparencia.ts";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -34,7 +35,11 @@ const PRESETS = {
 };
 
 // Assinaturas: o que precisa aparecer no HTML de cada combinação.
-const FUNDO = { noite: "#0d0b09", claro: "#ffffff", creme: "#fbf8f2" };
+// Lidos da fonte da verdade: com hex copiado aqui, a troca de paleta de
+// 24/08/2026 teria deixado o teste validando as cores antigas para sempre.
+const FUNDO = Object.fromEntries(
+  Object.entries(TEMAS).map(([nome, vars]) => [nome, vars["--g-fundo"]]),
+);
 const MARCA_GRADE = {
   colunas: "column-width",
   linhas: "flex-basis",

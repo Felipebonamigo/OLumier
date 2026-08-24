@@ -37,6 +37,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
+      {/* Liga o estado "com JavaScript" ANTES da primeira pintura. As entradas
+          de scroll (.revelar) só escondem conteúdo sob html[data-js]: sem este
+          interruptor, um navegador com JS bloqueado veria a página em branco. */}
+      <script
+        dangerouslySetInnerHTML={{ __html: `document.documentElement.dataset.js=""` }}
+      />
       <body
         className={`${montserrat.variable} ${cormorant.variable} ${greatVibes.variable} antialiased`}
       >

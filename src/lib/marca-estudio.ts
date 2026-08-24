@@ -28,7 +28,7 @@ export const TIPOS_LOGO: Record<string, string> = {
 /** 2 MB. Logo é marca, não fotografia — acima disso é original mal exportado. */
 export const LIMITE_LOGO = 2 * 1024 * 1024;
 
-export const COR_PADRAO = "#f0c268";
+export const COR_PADRAO = "#e6c17a";
 
 /**
  * Aceita #rgb e #rrggbb e devolve sempre #rrggbb minúsculo.

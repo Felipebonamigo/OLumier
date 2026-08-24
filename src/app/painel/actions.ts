@@ -477,7 +477,7 @@ export async function salvarMarcaAction(
   if (!nome) return { erro: "O nome do estúdio precisa de pelo menos 2 letras." };
 
   const cor = normalizarCor(String(form.get("cor_destaque") ?? ""));
-  if (!cor) return { erro: "Cor inválida. Use o seletor ou um código como #f0c268." };
+  if (!cor) return { erro: "Cor inválida. Use o seletor ou um código como #e6c17a." };
 
   await consultar("update tenants set nome_estudio = $1, cor_destaque = $2 where id = $3", [
     nome,

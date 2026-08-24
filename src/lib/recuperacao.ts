@@ -159,20 +159,20 @@ export async function enviarEmailDeRecuperacao(
   link: string,
 ): Promise<boolean> {
   const corpo = `
-    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#b3a58f">
-      Alguém pediu para redefinir a senha de <strong style="color:#ece4d6">${nomeEstudio}</strong>
+    <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#b8ab90">
+      Alguém pediu para redefinir a senha de <strong style="color:#f0e9db">${nomeEstudio}</strong>
       no ${marca.nome}. Se foi você, use o botão abaixo.
     </p>
     <p style="margin:0 0 24px">
-      <a href="${link}" style="display:inline-block;background:#f0c268;color:#0d0b09;text-decoration:none;font-weight:600;font-size:15px;padding:12px 24px;border-radius:8px">
+      <a href="${link}" style="display:inline-block;background:#e6c17a;color:#0c0a07;text-decoration:none;font-weight:600;font-size:15px;padding:12px 24px;border-radius:8px">
         Criar senha nova
       </a>
     </p>
-    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#7d715f">
+    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:#847860">
       O link vale por 1 hora e só funciona uma vez.
     </p>
-    <p style="margin:0;font-size:13px;line-height:1.6;color:#7d715f">
-      <strong style="color:#b3a58f">Não foi você?</strong> Pode ignorar este e-mail —
+    <p style="margin:0;font-size:13px;line-height:1.6;color:#847860">
+      <strong style="color:#b8ab90">Não foi você?</strong> Pode ignorar este e-mail —
       sua senha continua a mesma. Ninguém consegue entrar só por ter pedido isto.
     </p>`;
 

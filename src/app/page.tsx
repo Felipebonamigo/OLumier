@@ -3,140 +3,409 @@ import Link from "next/link";
 import { marca } from "@/config/marca";
 import { planos, formatarReais, type Plano } from "@/config/planos";
 import { MarcaTile } from "@/components/marca-tile";
+import { Revelar } from "@/components/revelar";
 
 export const metadata: Metadata = {
   title: `${marca.nome} — ${marca.tagline}`,
 };
 
-const RECURSOS = [
-  {
-    titulo: "Seu próprio endereço",
-    texto: "Cada estúdio ganha um subdomínio — seuestudio.olumier.com.br. Nada de link genérico.",
-  },
-  {
-    titulo: "Vai para a galeria do celular",
-    texto: 'Um toque e a foto cai no rolo do iPhone ou Android — não em "Arquivos", onde ninguém acha depois.',
-  },
-  {
-    titulo: "Envio em massa",
-    texto: "Suba centenas de fotos de uma vez. Se a conexão cair no meio, o envio retoma sozinho de onde parou.",
-  },
-  {
-    titulo: "Cofre automático",
-    texto: "No prazo que você definir, a galeria sai do ar sozinha e vai para o cofre. Nada é apagado — você reativa quando o cliente pedir.",
-  },
-  {
-    titulo: "A aparência que você quiser",
-    texto: "Quatro estilos prontos, ou combine capa, tema, tipografia e grade do seu jeito.",
-  },
-  {
-    titulo: "Sem limite de download",
-    texto: "A galeria é do seu cliente. Ele baixa quantas fotos quiser, quantas vezes quiser.",
-  },
-];
+/*
+ * A página conta uma história em cinco atos: a promessa (hero, escuro), o
+ * caminho (três gestos, escuro), o resultado na mão do casal (creme — a única
+ * seção clara, de propósito: é o momento em que a luz chega), a ferramenta do
+ * estúdio (bento escuro) e o preço. Cada seção tem composição própria; nada de
+ * repetir a mesma grade de cards seis vezes.
+ *
+ * O que NÃO existe aqui, por honestidade: barra de logos de clientes e
+ * depoimentos. O produto tem zero estúdios pagantes hoje — logo inventado e
+ * depoimento inventado são mentira com tipografia bonita. Quando o Sirius e a
+ * Carol estiverem usando de verdade, esta página ganha as palavras deles.
+ */
 
 export default function Home() {
   const foto = planos.filter((p) => p.segmento === "foto");
   const filme = planos.filter((p) => p.segmento === "filme");
 
   return (
-    <main>
-      <header className="mx-auto flex max-w-5xl items-center justify-between px-6 py-8">
+    <main className="overflow-x-clip">
+      {/* ── cabeçalho ─────────────────────────────────────────────────── */}
+      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-7">
         <span className="flex items-center gap-3">
-          <MarcaTile tamanho={40} />
+          <MarcaTile tamanho={38} />
           <span className="text-lg font-bold tracking-tight">{marca.nome}</span>
         </span>
         <nav className="flex items-center gap-6 text-sm">
-          <Link href="/entrar" className="text-texto-soft hover:text-texto">
+          <Link href="/entrar" className="text-texto-soft transition hover:text-texto">
             Entrar
           </Link>
           <Link
             href="/cadastrar"
-            className="rounded-full bg-luz px-4 py-2 font-medium text-void hover:bg-luz-alta"
+            className="cta-luz rounded-full bg-luz px-4 py-2 font-medium text-void"
           >
             Criar conta
           </Link>
         </nav>
       </header>
 
-      <section className="mx-auto max-w-3xl px-6 pb-20 pt-12 text-center sm:pt-20">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-texto-faint">
-          Galerias de entrega
-        </p>
-        <h1 className="mt-4 font-serif text-4xl font-bold tracking-tight sm:text-6xl">
-          {marca.tagline}
-        </h1>
-        <p className="mx-auto mt-6 max-w-[46ch] text-lg text-texto-soft">{marca.descricao}</p>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
+      {/* ── ato 1: a promessa ─────────────────────────────────────────── */}
+      <section className="relative mx-auto max-w-6xl px-6 pb-28 pt-16 sm:pt-24">
+        <div className="feixe" aria-hidden />
+        <div className="trama absolute inset-0 -z-10" aria-hidden />
+
+        <div className="relative grid items-center gap-16 lg:grid-cols-[7fr_5fr]">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+              Galerias de entrega para fotógrafos e filmakers
+            </p>
+            <h1 className="mt-6 font-serif text-5xl font-bold leading-[1.04] tracking-tight sm:text-7xl">
+              Sua luz,
+              <br />
+              <em className="text-luz-alta">entregue.</em>
+            </h1>
+            <p className="mt-7 max-w-[44ch] text-lg leading-relaxed text-texto-soft">
+              O casamento acaba, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal:
+              com a sua marca, no seu endereço, direto na galeria do celular deles.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center gap-5">
+              <Link
+                href="/cadastrar"
+                className="cta-luz rounded-full bg-luz px-7 py-3.5 font-semibold text-void"
+              >
+                Começar grátis
+              </Link>
+              <Link
+                href="#planos"
+                className="text-sm text-texto-soft underline underline-offset-4 transition hover:text-texto"
+              >
+                Ver planos
+              </Link>
+            </div>
+            <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-texto-faint">
+              14 dias grátis · sem cartão
+            </p>
+          </div>
+
+          {/* Duas "galerias" sobrepostas, desenhadas em CSS — o produto antes
+              de existir foto de divulgação. A de trás espia por baixo. */}
+          <div className="relative hidden h-[420px] lg:block" aria-hidden>
+            <div className="absolute right-6 top-10 w-64 -rotate-6 rounded-xl border border-linha bg-carbon-2 p-3 opacity-60 shadow-2xl">
+              <div className="h-32 rounded-lg bg-gradient-to-br from-texto-faint/30 to-void" />
+              <div className="mt-3 h-2.5 w-24 rounded bg-texto-faint/40" />
+              <div className="mt-2 h-2 w-16 rounded bg-texto-faint/25" />
+            </div>
+            <div className="absolute right-20 top-24 w-72 rotate-3 rounded-xl border border-linha-forte bg-carbon p-3 shadow-2xl">
+              <div className="grid h-40 place-items-center rounded-lg bg-gradient-to-br from-luz/25 via-carbon-2 to-void">
+                <span className="font-script text-3xl text-luz-alta">Ana &amp; Pedro</span>
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <div>
+                  <div className="h-2.5 w-28 rounded bg-texto-soft/50" />
+                  <div className="mt-2 h-2 w-20 rounded bg-texto-faint/30" />
+                </div>
+                <div className="grid h-8 w-8 place-items-center rounded-full bg-luz text-sm text-void">
+                  ↓
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ato 2: o caminho — coluna fixa à esquerda, gestos à direita ── */}
+      <section className="border-y border-linha bg-carbon/40">
+        <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[2fr_3fr]">
+          <div className="lg:sticky lg:top-24 lg:self-start">
+            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+              Da pasta ao link
+            </p>
+            <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+              Três gestos.
+              <br />
+              Nenhum deles é &ldquo;exportar de novo&rdquo;.
+            </h2>
+            <p className="mt-5 max-w-[36ch] text-texto-soft">
+              Entregar não deveria ser a parte difícil do trabalho. Aqui ela cabe entre um café e
+              o próximo ensaio.
+            </p>
+          </div>
+
+          <ol className="space-y-14">
+            {[
+              {
+                n: "01",
+                titulo: "Arraste a pasta do casamento",
+                texto:
+                  "Centenas de fotos sobem em paralelo, direto do navegador. A conexão caiu? O envio retoma sozinho de onde parou — inclusive o filme de 30 GB.",
+              },
+              {
+                n: "02",
+                titulo: "Escolha a cara da entrega",
+                texto:
+                  "Capa, tema, tipografia e grade — quatro estilos prontos ou a sua combinação. Sua logo no topo, seus capítulos contando a ordem do dia.",
+              },
+              {
+                n: "03",
+                titulo: "Mande um link",
+                texto:
+                  "seuestudio.olumier.com.br/ana-pedro. Um endereço seu, não um link genérico de nuvem. Com senha, se você quiser; com prazo, se você definir.",
+              },
+            ].map((g, i) => (
+              <Revelar key={g.n} atraso={i * 90}>
+                <li className="grid grid-cols-[auto_1fr] gap-6">
+                  <span className="select-none font-serif text-6xl font-bold leading-none text-luz/25">
+                    {g.n}
+                  </span>
+                  <div className="pt-2">
+                    <h3 className="text-lg font-semibold">{g.titulo}</h3>
+                    <p className="mt-2 max-w-[52ch] leading-relaxed text-texto-soft">{g.texto}</p>
+                  </div>
+                </li>
+              </Revelar>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ── ato 3: a luz chega — a ÚNICA seção clara da página ─────────── */}
+      <section className="bg-marfim text-tinta">
+        <div className="mx-auto max-w-6xl px-6 py-24">
+          <div className="grid items-center gap-14 lg:grid-cols-[5fr_6fr]">
+            <Revelar>
+              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-tinta-faint">
+                Do outro lado do link
+              </p>
+              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+                O casal abre no celular.
+                <br />
+                <em>E fica tudo bem.</em>
+              </h2>
+              <ul className="mt-8 space-y-5 text-tinta-suave">
+                {[
+                  [
+                    "Salvar de verdade",
+                    "um toque e a foto cai no rolo do iPhone ou do Android — não no app “Arquivos”, onde ninguém acha depois.",
+                  ],
+                  [
+                    "Favoritas",
+                    "o casal marca as fotos do álbum com um coração. Você recebe a lista pronta, sem planilha nem prints no WhatsApp.",
+                  ],
+                  [
+                    "Sem limite",
+                    "a galeria é deles. Baixam tudo, quantas vezes quiserem, na melhor resolução — sem custo extra pra você.",
+                  ],
+                ].map(([t, d]) => (
+                  <li key={t} className="grid grid-cols-[auto_1fr] items-baseline gap-3">
+                    <span className="text-ouro-tinta">✦</span>
+                    <p>
+                      <strong className="font-semibold text-tinta">{t}</strong> — {d}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Revelar>
+
+            {/* Telefone desenhado em CSS: a grade da galeria com uma favorita marcada. */}
+            <Revelar atraso={120} className="justify-self-center">
+              <div
+                className="w-64 rounded-[2rem] border border-marfim-2 bg-white p-3 shadow-[0_30px_60px_-20px_rgba(42,35,24,0.25)]"
+                aria-hidden
+              >
+                <div className="rounded-[1.4rem] bg-marfim p-3">
+                  <p className="text-center font-script text-2xl text-tinta">Ana &amp; Pedro</p>
+                  <p className="mt-1 text-center font-mono text-[8px] uppercase tracking-[0.22em] text-tinta-faint">
+                    21 de março · Serra Gaúcha
+                  </p>
+                  <div className="mt-3 grid grid-cols-3 gap-1.5">
+                    {Array.from({ length: 9 }, (_, i) => (
+                      <div
+                        key={i}
+                        className={`relative aspect-square rounded ${
+                          [
+                            "bg-marfim-2",
+                            "bg-[#d9c8a8]",
+                            "bg-[#efe7d6]",
+                            "bg-ouro-tinta/40",
+                            "bg-marfim-2",
+                            "bg-[#efe7d6]",
+                            "bg-[#d9c8a8]",
+                            "bg-[#efe7d6]",
+                            "bg-marfim-2",
+                          ][i]
+                        }`}
+                      >
+                        {i === 3 && (
+                          <span className="absolute right-1 top-1 text-[10px] text-erro">
+                            ♥
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mx-auto mt-3 w-fit rounded-full bg-tinta px-4 py-1.5 text-[10px] font-semibold text-marfim">
+                    Salvar as 347 fotos
+                  </div>
+                </div>
+              </div>
+            </Revelar>
+          </div>
+        </div>
+      </section>
+
+      {/* ── ato 4: a ferramenta — bento assimétrico, célula a célula ───── */}
+      <section className="mx-auto max-w-6xl px-6 py-24">
+        <Revelar>
+          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+            Do seu lado do balcão
+          </p>
+          <h2 className="mt-4 max-w-[24ch] font-serif text-4xl font-bold tracking-tight">
+            O estúdio continua seu. Só o trabalho pesado muda de dono.
+          </h2>
+        </Revelar>
+
+        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Cofre — a célula larga, com a linha do tempo desenhada */}
+          <Revelar className="sm:col-span-2 lg:col-span-2">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">Cofre automático</h3>
+              <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-texto-soft">
+                No prazo que você definir, a galeria sai do ar sozinha e desce para o cofre — um
+                espaço separado, mais barato, seu. Nada é apagado; reativar é um clique.
+              </p>
+              <div className="mt-6" aria-hidden>
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-luz" />
+                  <span className="h-px flex-1 bg-gradient-to-r from-luz/60 to-linha" />
+                  <span className="h-2 w-2 rounded-full border border-linha-forte" />
+                </div>
+                <div className="mt-2 flex justify-between font-mono text-[10px] uppercase tracking-widest text-texto-faint">
+                  <span>no ar · 12 meses</span>
+                  <span>cofre · pra sempre</span>
+                </div>
+              </div>
+            </div>
+          </Revelar>
+
+          {/* Endereço próprio */}
+          <Revelar atraso={80} className="lg:col-span-2">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">Seu endereço, sua marca</h3>
+              <p className="mt-2 text-sm leading-relaxed text-texto-soft">
+                Cada estúdio ganha um subdomínio próprio e cada galeria carrega a sua logo.
+              </p>
+              <code className="mt-5 block w-fit rounded-lg border border-linha bg-void px-3 py-2 font-mono text-xs text-luz-alta">
+                seuestudio.{marca.dominio}
+              </code>
+            </div>
+          </Revelar>
+
+          {/* Aparência — os 4 presets como amostras */}
+          <Revelar className="lg:col-span-1">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">Quatro caras</h3>
+              <p className="mt-2 text-sm text-texto-soft">Ou a sua: capa, tema, letra e grade.</p>
+              <div className="mt-4 flex gap-2" aria-hidden>
+                <span className="h-8 w-8 rounded-md bg-void ring-1 ring-linha-forte" />
+                <span className="h-8 w-8 rounded-md bg-marfim" />
+                <span className="h-8 w-8 rounded-md bg-marfim-2" />
+                <span className="h-8 w-8 rounded-md bg-gradient-to-br from-luz/60 to-void" />
+              </div>
+            </div>
+          </Revelar>
+
+          {/* Prova de entrega */}
+          <Revelar atraso={60} className="lg:col-span-1">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">Prova de entrega</h3>
+              <p className="mt-2 text-sm text-texto-soft">
+                Aberturas e downloads contados. &ldquo;Não recebi&rdquo; deixa de ser conversa.
+              </p>
+            </div>
+          </Revelar>
+
+          {/* Segurança */}
+          <Revelar atraso={120} className="sm:col-span-2 lg:col-span-2">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">Guardado como coisa séria</h3>
+              <p className="mt-2 max-w-[52ch] text-sm leading-relaxed text-texto-soft">
+                Senha por galeria, links assinados que expiram, backup diário com cópia fora do
+                servidor — e restauração ensaiada, não prometida.
+              </p>
+            </div>
+          </Revelar>
+        </div>
+      </section>
+
+      {/* ── ato 5: preço ───────────────────────────────────────────────── */}
+      <section id="planos" className="scroll-mt-8 border-t border-linha bg-carbon/40">
+        <div className="mx-auto max-w-6xl px-6 py-24">
+          <Revelar>
+            <div className="max-w-2xl">
+              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+                Planos
+              </p>
+              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+                Um plano pra cada tamanho de entrega
+              </h2>
+              <p className="mt-4 text-texto-soft">
+                Todos incluem galeria com a sua marca, downloads ilimitados e cofre automático
+                depois do prazo.
+              </p>
+            </div>
+          </Revelar>
+
+          <div className="mt-12 grid gap-10 lg:grid-cols-2">
+            <Revelar>
+              <PlanoGrupo titulo="Foto" planos={foto} />
+            </Revelar>
+            <Revelar atraso={100}>
+              <PlanoGrupo titulo="Filme" planos={filme} />
+            </Revelar>
+          </div>
+        </div>
+      </section>
+
+      {/* ── fecho ──────────────────────────────────────────────────────── */}
+      <section className="relative mx-auto max-w-4xl px-6 py-28 text-center">
+        <div className="trama absolute inset-0 -z-10" aria-hidden />
+        <Revelar>
+          <h2 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+            A próxima entrega já podia ser <em className="text-luz-alta">assim</em>.
+          </h2>
           <Link
             href="/cadastrar"
-            className="rounded-full bg-luz px-6 py-3 font-medium text-void hover:bg-luz-alta"
+            className="cta-luz mt-9 inline-block rounded-full bg-luz px-8 py-4 font-semibold text-void"
           >
             Criar conta grátis
           </Link>
-          <Link
-            href="#planos"
-            className="text-sm text-texto-soft underline underline-offset-4 hover:text-texto"
-          >
-            Ver planos
-          </Link>
-        </div>
-        <p className="mt-4 text-xs text-texto-faint">14 dias grátis, sem cartão.</p>
-      </section>
-
-      <section className="mx-auto max-w-5xl px-6 pb-24">
-        <ul className="grid gap-px overflow-hidden rounded-2xl border border-linha bg-linha sm:grid-cols-2 lg:grid-cols-3">
-          {RECURSOS.map((r) => (
-            <li key={r.titulo} className="bg-carbon p-6">
-              <h3 className="font-semibold">{r.titulo}</h3>
-              <p className="mt-2 text-sm text-texto-soft">{r.texto}</p>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section id="planos" className="mx-auto max-w-5xl scroll-mt-8 px-6 pb-24">
-        <div className="text-center">
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-texto-faint">Planos</p>
-          <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight">
-            Um plano pra cada tamanho de entrega
-          </h2>
-          <p className="mx-auto mt-3 max-w-[50ch] text-texto-soft">
-            Todos incluem galeria com a sua marca, downloads ilimitados e cofre automático depois do
-            prazo.
+          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-texto-faint">
+            14 dias grátis · sem cartão
           </p>
-        </div>
-
-        <div className="mt-12 grid gap-10 sm:grid-cols-2">
-          <PlanoGrupo titulo="Foto" planos={foto} />
-          <PlanoGrupo titulo="Filme" planos={filme} />
-        </div>
+        </Revelar>
       </section>
 
-      <section className="mx-auto max-w-3xl px-6 pb-24 text-center">
-        <h2 className="font-serif text-2xl font-bold tracking-tight">Pronto pra entregar do seu jeito?</h2>
-        <Link
-          href="/cadastrar"
-          className="mt-6 inline-block rounded-full bg-luz px-6 py-3 font-medium text-void hover:bg-luz-alta"
-        >
-          Criar conta grátis
-        </Link>
-      </section>
-
-      <footer className="border-t border-linha px-6 py-10 text-center text-xs text-texto-faint">
-        <p>
-          <Link href="/privacidade" className="hover:text-texto-soft">
-            Privacidade
-          </Link>
-          {" · "}
-          <Link href="/termos" className="hover:text-texto-soft">
-            Termos de uso
-          </Link>
-        </p>
-        <p className="mt-2">
-          {marca.nome} · {marca.email}
-        </p>
-        <p className="mt-1">© {new Date().getFullYear()}</p>
+      <footer className="border-t border-linha">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-6 px-6 py-10 text-xs text-texto-faint">
+          <span className="flex items-center gap-2.5">
+            <MarcaTile tamanho={26} />
+            <span>
+              {marca.nome} · {marca.tagline}
+            </span>
+          </span>
+          <p>
+            <Link href="/privacidade" className="hover:text-texto-soft">
+              Privacidade
+            </Link>
+            {" · "}
+            <Link href="/termos" className="hover:text-texto-soft">
+              Termos de uso
+            </Link>
+            {" · "}
+            <a href={`mailto:${marca.email}`} className="hover:text-texto-soft">
+              {marca.email}
+            </a>
+          </p>
+          <p>© {new Date().getFullYear()}</p>
+        </div>
       </footer>
     </main>
   );
@@ -146,7 +415,7 @@ function PlanoGrupo({ titulo, planos }: { titulo: string; planos: Plano[] }) {
   return (
     <div>
       <h3 className="font-mono text-[11px] uppercase tracking-[0.28em] text-texto-faint">{titulo}</h3>
-      <ul className="mt-4 divide-y divide-linha rounded-xl border border-linha">
+      <ul className="mt-4 divide-y divide-linha rounded-xl border border-linha bg-carbon">
         {planos.map((p) => (
           <li key={p.id} className="relative flex items-center justify-between gap-4 p-5">
             {p.destaque && (

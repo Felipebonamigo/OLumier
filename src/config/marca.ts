@@ -18,16 +18,18 @@ export const marca = {
   email: "contato@olumier.com.br",
 } as const;
 
-/** Paleta — o âmbar sai do conceito de luz; o fundo escuro faz as fotos brilharem. */
+/** Paleta — a sala de projeção: preto quente, dourado-champanhe, marfim. Espelha globals.css. */
 export const cores = {
-  void: "#0d0b09",
-  carbon: "#16120e",
-  carbon2: "#1d1813",
-  luz: "#f0c268",
-  luzAlta: "#ffe9bf",
-  texto: "#ece4d6",
-  textoSoft: "#b3a58f",
-  textoFaint: "#7d715f",
-  linha: "rgba(240, 221, 190, 0.14)",
-  linhaForte: "rgba(240, 221, 190, 0.28)",
+  void: "#0c0a07",
+  carbon: "#171310",
+  carbon2: "#201a13",
+  luz: "#e6c17a",
+  luzAlta: "#f8ecd0",
+  texto: "#f0e9db",
+  textoSoft: "#b8ab90",
+  textoFaint: "#847860",
+  linha: "rgba(240, 228, 200, 0.14)",
+  linhaForte: "rgba(240, 228, 200, 0.28)",
+  marfim: "#f7f1e6",
+  tinta: "#2a2318",
 } as const;
