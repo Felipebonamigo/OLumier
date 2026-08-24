@@ -39,12 +39,27 @@ Sucesso é duplo e precisa acontecer nos dois lados:
 
 Três coisas que um concorrente vizinho não copia de graça:
 
-1. **Vídeo pelo preço de foto.** R$ 249–349 nas faixas de 1 a 5 TB, onde a
-   Pic-Time cobra R$ 275–468. É escolha deliberada, não acidente de tabela: acima
-   de 2 TB de foto o projeto decidiu **não** competir por preço (concorrente
-   oferece "ilimitado" por ~R$ 220), e apontou o esforço para vídeo. Fonte:
-   `planejamento/custos-validado-v7.xlsx` (17/08/2026), espelhada em
-   `src/config/planos.ts`.
+1. **Vídeo pelo preço de foto.** O tipo de trabalho não altera a mensalidade:
+   ligar o player 4K com download em alta custa zero, porque um GB de filme
+   ocupa o mesmo que um GB de foto. Quem entrega vídeo paga só o espaço —
+   R$ 139–449 nas faixas de 1 a 5 TB.
+
+   É a diferença estrutural contra todo o resto do mercado, que trata vídeo
+   como produto separado e caro: o Pixieset cobra US$ 5/mês por **hora** de
+   filme (~R$ 27,50) e entrega só HD — 4K não existe em plano nenhum deles;
+   a Pic-Time cobra R$ 275–468 nas mesmas faixas; o SmugMug limita a 1080p e
+   20 minutos por arquivo. Um filmaker com 10 h de acervo paga R$ 335/mês no
+   Pixieset, em HD, contra R$ 139 aqui, em 4K.
+
+   Decisão de contrapartida, e deliberada: acima de 2 TB de **foto** o projeto
+   **não** compete por preço (concorrente oferece "ilimitado" por ~R$ 220) e
+   aponta o esforço para vídeo, onde ninguém está.
+
+   `scripts/testar-planos.mjs` prende essa promessa — qualquer adicional por
+   segmento deixa a suíte vermelha antes de a página mentir. Fonte de custo:
+   `planejamento/custos-validado-v7.xlsx` (17/08/2026); preços revisados em
+   24/08/2026 contra a página do Pixieset e espelhados em
+   `src/config/planos.ts`, que é a fonte da verdade.
 2. **O endereço e a marca são do estúdio.** Cada conta ganha um subdomínio
    próprio — `siriusfotografia.olumier.com.br` — e cada galeria carrega a logo e
    a cor do estúdio. O oposto de mandar um link genérico de nuvem.
