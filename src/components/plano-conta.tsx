@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { planos, formatarReais, type Plano } from "@/config/planos";
+import { planoPorId, type Plano } from "@/config/planos";
+import { MontadorPlano } from "@/components/montador-plano";
 import { trocarPlanoAction, cancelarAssinaturaAction } from "@/app/painel/actions";
 
 /**
@@ -25,6 +26,7 @@ export function PlanoConta({
   const [ok, setOk] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
+  const atual = planoPorId(planoAtual);
 
   const trocar = (p: Plano) =>
     iniciar(async () => {
@@ -74,31 +76,34 @@ export function PlanoConta({
             </button>
           </div>
 
-          <ul className="mt-3 space-y-1">
-            {planos.map((p) => {
-              const atual = p.id === planoAtual;
-              return (
-                <li key={p.id}>
+          {/*
+           * O montador começa no plano que a pessoa já tem: abrir no padrão
+           * faria a tela sugerir uma troca que ninguém pediu, e ainda esconderia
+           * o que está contratado hoje.
+           */}
+          <div className="mt-3">
+            <MontadorPlano
+              inicial={
+                atual
+                  ? { segmento: atual.segmento, galeriaGb: atual.quotaGb, cofreGb: atual.cofreGb }
+                  : undefined
+              }
+              acao={(p) =>
+                p.id === planoAtual ? (
+                  <span className="text-xs text-texto-faint">É o seu plano de hoje</span>
+                ) : (
                   <button
                     type="button"
-                    disabled={ocupado || atual}
+                    disabled={ocupado}
                     onClick={() => trocar(p)}
-                    className={`flex w-full items-baseline justify-between rounded-md px-3 py-2 text-left text-sm transition ${
-                      atual
-                        ? "cursor-default bg-carbon-2 text-texto-faint"
-                        : "text-texto-soft hover:bg-carbon-2 hover:text-texto disabled:opacity-50"
-                    }`}
+                    className="rounded-full bg-acento px-5 py-2 text-sm font-semibold text-void disabled:opacity-50"
                   >
-                    <span>
-                      {p.nome}
-                      {atual && <span className="ml-2 text-[11px]">· atual</span>}
-                    </span>
-                    <span className="tabular-nums">{formatarReais(p.precoCentavos)}</span>
+                    {ocupado ? "Mudando…" : "Mudar para este"}
                   </button>
-                </li>
-              );
-            })}
-          </ul>
+                )
+              }
+            />
+          </div>
 
           <p className="mt-3 text-[11px] text-texto-faint">
             Descer de plano só é possível se o que você já guardou couber no tamanho novo.

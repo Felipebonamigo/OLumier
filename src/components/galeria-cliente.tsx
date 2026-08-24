@@ -491,16 +491,24 @@ export function GaleriaCliente({
         })}
       </div>
 
+      {/*
+        Tela cheia. Tudo aqui é pintado com o tema DA GALERIA (--g-*), nunca com
+        os tokens do painel: quem abre é o casal, e a cara é a que o fotógrafo
+        escolheu. Com --void, a tela cheia passaria a seguir o claro/escuro do
+        aparelho de quem está olhando — uma galeria "noite" abriria a foto
+        sobre branco no celular de quem usa o tema claro.
+      */}
       {item && (
         <div
           role="dialog"
           aria-modal="true"
           aria-label={item.nome}
-          className="fixed inset-0 z-50 flex flex-col bg-void/97 backdrop-blur"
+          className="fixed inset-0 z-50 flex flex-col backdrop-blur"
+          style={{ background: "color-mix(in srgb, var(--g-fundo) 97%, transparent)" }}
           onClick={fechar}
         >
           <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
-            <span className="truncate text-texto-soft">
+            <span className="truncate" style={{ color: "var(--g-suave)" }}>
               {aberto! + 1} de {itens.length}
             </span>
             <span className="flex items-center gap-2">
@@ -511,7 +519,8 @@ export function GaleriaCliente({
                     e.stopPropagation();
                     salvarUm(item);
                   }}
-                  className="rounded-lg border border-linha-forte px-3 py-1.5 text-xs transition hover:bg-carbon"
+                  className="rounded-lg border px-3 py-1.5 text-xs transition hover:opacity-70"
+                  style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
                 >
                   {modoSalvar ? "Salvar no celular" : "↓ Baixar"}
                 </button>
@@ -520,7 +529,8 @@ export function GaleriaCliente({
                 type="button"
                 onClick={fechar}
                 aria-label="Fechar"
-                className="rounded-lg border border-linha-forte px-3 py-1.5 text-xs transition hover:bg-carbon"
+                className="rounded-lg border px-3 py-1.5 text-xs transition hover:opacity-70"
+                  style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
               >
                 Fechar ✕
               </button>
@@ -560,7 +570,12 @@ export function GaleriaCliente({
                   anterior();
                 }}
                 aria-label="Anterior"
-                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-linha-forte bg-void/70 text-texto transition hover:bg-carbon"
+                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                style={{
+                  background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
+                  borderColor: "var(--g-linha)",
+                  color: "var(--g-texto)",
+                }}
               >
                 ‹
               </button>
@@ -571,7 +586,12 @@ export function GaleriaCliente({
                   proximo();
                 }}
                 aria-label="Próxima"
-                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-linha-forte bg-void/70 text-texto transition hover:bg-carbon"
+                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                style={{
+                  background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
+                  borderColor: "var(--g-linha)",
+                  color: "var(--g-texto)",
+                }}
               >
                 ›
               </button>

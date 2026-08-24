@@ -31,17 +31,17 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
       {/* o feixe que entra: fino, frio, vindo de fora do quadro */}
       <path
         d="M 2 24 H 15"
-        stroke="var(--luz)"
+        stroke="var(--marca-traco)"
         strokeWidth="1.6"
         strokeLinecap="round"
         opacity="0.55"
       />
       {/* o anel: a lente, e o O */}
-      <circle cx="24" cy="24" r="11.5" stroke="var(--luz)" strokeWidth="2.2" />
+      <circle cx="24" cy="24" r="11.5" stroke="var(--marca-traco)" strokeWidth="2.2" />
       {/* o feixe que sai — aberto, porque a luz foi trabalhada */}
       <path
         d="M 34 24 H 46 M 34.5 18.5 L 45 14 M 34.5 29.5 L 45 34"
-        stroke="var(--luz)"
+        stroke="var(--marca-traco)"
         strokeWidth="1.6"
         strokeLinecap="round"
         opacity="0.75"

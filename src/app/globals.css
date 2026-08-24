@@ -8,30 +8,33 @@
   marcada. Interface fria de propósito: assim a única cor saturada da tela é a
   fotografia do cliente.
 
+  DOIS TEMAS, UMA DEFINIÇÃO
+  Cada cor é escrita uma vez só, com os dois lados juntos:
+  `light-dark(claro, escuro)`. Quem decide qual vale é o `color-scheme`: sem
+  escolha da pessoa vale `light dark`, ou seja, o tema do sistema dela. O
+  seletor no cabeçalho grava `data-tema` no <html> e trava um dos dois.
+
+  O primeiro bloco :root repete a metade ESCURA em CSS comum. Não é decoração:
+  navegador que não conhece light-dark() descarta a declaração inteira, e um
+  token vazio vira `transparent` — texto branco sobre fundo branco. Com o bloco
+  de compatibilidade, esse navegador simplesmente fica no escuro, que é o
+  padrão da marca. `scripts/testar-tema.mjs` prende as duas cópias juntas e
+  confere o contraste nos dois temas; sem ele, as metades envelheceriam
+  separadas em silêncio.
+
   Espelhos que precisam andar juntos quando isto mudar:
   src/config/marca.ts (cores), src/config/aparencia.ts (TEMAS) e os hex em
   linha dos e-mails (src/lib/email.ts, recuperacao.ts) — cliente de e-mail
   não lê variável CSS, lá é hex escrito mesmo.
 */
 
+/*
+ * COMPATIBILIDADE — a metade escura, em CSS que todo navegador entende.
+ * Mantida idêntica ao segundo argumento de cada light-dark() lá embaixo.
+ */
 :root {
-  /*
-   * A SALA DE PROJEÇÃO.
-   *
-   * Preto AZULADO, não marrom: sala escura é fria, e o azul afasta o fundo da
-   * pele das pessoas nas fotos — num fundo quente, retrato de casamento fica
-   * lavado, porque fundo e pele disputam a mesma faixa de cor.
-   *
-   * A luz é PRATA, cor de feixe de projetor, e é ela que domina a interface. O
-   * âmbar sobrevive num papel só: ação. Botão, link, foto marcada. Assim o
-   * dourado quer dizer alguma coisa — antes ele estava em tudo, e o que está em
-   * tudo não destaca nada.
-   *
-   * O ganho real: com a interface em cinza-frio, a única cor saturada da tela é
-   * a fotografia. Era o oposto do que acontecia com o tema dourado.
-   */
+  color-scheme: dark;
 
-  /* o palco escuro — azulado, como sala de cinema */
   --void: #07080b;
   --carbon: #101319;
   --carbon-2: #171b23;
@@ -40,27 +43,95 @@
   --texto-faint: #6b7484;
   --linha: rgba(190, 205, 230, 0.13);
   --linha-forte: rgba(190, 205, 230, 0.26);
-
-  /* o feixe — prata levemente azulada, a luz que atravessa a sala */
   --luz: #cfd9ea;
   --luz-alta: #ffffff;
-
-  /* o âmbar do projetor: SÓ ação. Um acento que aparece pouco, aparece muito. */
+  --marca-traco: #cfd9ea;
   --acento: #d9a441;
   --acento-alto: #f2c877;
-
-  /* a folha clara — seções de contraste, papel, projeção sobre branco */
   --marfim: #f4f6fa;
   --marfim-2: #e3e8f0;
   --tinta: #14171d;
   --tinta-suave: #464e5c;
   --tinta-faint: #79828f;
   --ouro-tinta: #8a6a2f;
-
-  /* semânticos, na temperatura da família */
   --ok: #6bc39b;
   --alerta: #d9a441;
   --erro: #e0705f;
+}
+
+@supports (color: light-dark(#000, #fff)) {
+  :root {
+    /* Ninguém escolheu ainda: manda o sistema de quem abriu. */
+    color-scheme: light dark;
+
+    /*
+     * O PALCO.
+     *
+     * Escuro: preto AZULADO, não marrom — sala escura é fria, e o azul afasta
+     * o fundo da pele das pessoas nas fotos. Em fundo quente o retrato fica
+     * lavado, porque fundo e pele disputam a mesma faixa de cor.
+     *
+     * Claro: a mesma sala com a luz acesa. Branco levemente azulado, pela
+     * mesma razão — papel de laboratório, não papel pardo.
+     */
+    --void: light-dark(#f4f6fa, #07080b);
+    --carbon: light-dark(#ffffff, #101319);
+    --carbon-2: light-dark(#eaeef5, #171b23);
+
+    --texto: light-dark(#101319, #eef1f6);
+    --texto-soft: light-dark(#4a5462, #a4adbd);
+    --texto-faint: light-dark(#6d7684, #6b7484);
+    --linha: light-dark(rgba(16, 19, 25, 0.12), rgba(190, 205, 230, 0.13));
+    --linha-forte: light-dark(rgba(16, 19, 25, 0.24), rgba(190, 205, 230, 0.26));
+
+    /*
+     * O FEIXE — só o brilho do projetor (.feixe, gradientes decorativos).
+     * No escuro é prata sobre preto; no claro precisa ser mais fundo que o
+     * papel, senão o facho some. Branco sobre branco não é discrição, é nada.
+     */
+    --luz: light-dark(#a8bcd8, #cfd9ea);
+    --luz-alta: light-dark(#8fa9cd, #ffffff);
+
+    /*
+     * O TRAÇO DA MARCA, separado do feixe de propósito: o anel do símbolo
+     * precisa ser LEGÍVEL, e legível troca de lado junto com o fundo. O feixe
+     * pode ser sutil; a marca, não.
+     */
+    --marca-traco: light-dark(#2b3542, #cfd9ea);
+
+    /*
+     * O ÂMBAR DO PROJETOR: só AÇÃO. Botão, link, foto marcada.
+     * No claro ele escurece — #d9a441 sobre branco dá 2:1 e reprova como
+     * texto. Mesmo papel, mesma família, tom que sobrevive ao fundo.
+     */
+    --acento: light-dark(#96661a, #d9a441);
+    --acento-alto: light-dark(#6f4b11, #f2c877);
+
+    /*
+     * A FOLHA CLARA — a seção "o casal abre no celular". É papel nos dois
+     * temas: no claro ela apenas ganha um cinza a mais que a página, para
+     * continuar sendo uma folha apoiada e não se dissolver no fundo.
+     */
+    --marfim: light-dark(#e7ebf2, #f4f6fa);
+    --marfim-2: light-dark(#d5dce7, #e3e8f0);
+    --tinta: light-dark(#14171d, #14171d);
+    --tinta-suave: light-dark(#464e5c, #464e5c);
+    --tinta-faint: light-dark(#6d7684, #79828f);
+    --ouro-tinta: light-dark(#8a6a2f, #8a6a2f);
+
+    /* Semânticos: mesma temperatura da família, escurecidos no claro. */
+    --ok: light-dark(#1f7a55, #6bc39b);
+    --alerta: light-dark(#8a5e12, #d9a441);
+    --erro: light-dark(#b23b2a, #e0705f);
+  }
+
+  /* Escolheu na mão: trava um dos dois e o sistema deixa de opinar. */
+  :root[data-tema="claro"] {
+    color-scheme: only light;
+  }
+  :root[data-tema="escuro"] {
+    color-scheme: only dark;
+  }
 }
 
 @theme inline {
@@ -91,9 +162,9 @@
   --font-mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", Consolas, monospace;
 }
 
-/* A marca é escura por definição — não seguimos o tema do sistema. */
+/* O color-scheme mora no :root lá em cima, junto dos tokens — repetir aqui
+   sobrescreveria a escolha da pessoa, porque esta regra vem depois. */
 html {
-  color-scheme: dark;
   scroll-behavior: smooth;
 }
 

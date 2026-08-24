@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Montserrat, Cormorant_Garamond, Great_Vibes } from "next/font/google";
 import { marca } from "@/config/marca";
+import { SCRIPT_TEMA } from "@/config/tema";
 import "./globals.css";
 
 const montserrat = Montserrat({
@@ -37,11 +38,19 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      {/* Liga o estado "com JavaScript" ANTES da primeira pintura. As entradas
-          de scroll (.revelar) só escondem conteúdo sob html[data-js]: sem este
-          interruptor, um navegador com JS bloqueado veria a página em branco. */}
+      {/* Duas coisas ANTES da primeira pintura.
+
+          A primeira liga o estado "com JavaScript": as entradas de scroll
+          (.revelar) só escondem conteúdo sob html[data-js], então sem este
+          interruptor um navegador com JS bloqueado veria a página em branco.
+
+          A segunda aplica o tema que a pessoa escolheu. Precisa ser aqui, e
+          não num efeito do React: qualquer coisa que espere a hidratação
+          pintaria a página no tema errado antes de corrigir. */}
       <script
-        dangerouslySetInnerHTML={{ __html: `document.documentElement.dataset.js=""` }}
+        dangerouslySetInnerHTML={{
+          __html: `document.documentElement.dataset.js="";${SCRIPT_TEMA}`,
+        }}
       />
       <body
         className={`${montserrat.variable} ${cormorant.variable} ${greatVibes.variable} antialiased`}

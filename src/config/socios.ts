@@ -17,6 +17,8 @@
  * nada no resto do código depende desses números.
  */
 
+import { planoPorId, custoTetoCentavos } from "./planos";
+
 export interface Socio {
   id: string;
   nome: string;
@@ -55,9 +57,34 @@ export const RESERVA_POR_PLANO: Record<string, number> = {
   "filme-5000": 55000, // custo teto R$ 498
 };
 
+/** Folga sobre o custo teto: cobre alta do dólar sem comer o lucro dos sócios. */
+const FOLGA = 1.3;
+/** Taxa do Asaas por cobrança, em centavos. */
+const TAXA_COBRANCA = 300;
+
+/**
+ * Reserva de uma montagem do quebra-cabeça.
+ *
+ * A tabela acima não serve para as montagens novas: as peças combinam em mais
+ * de cem planos possíveis, e uma tabela escrita à mão ou ficaria incompleta ou
+ * envelheceria calada. Aqui a reserva sai do custo real da montagem — mesma
+ * regra de bolso de antes (custo teto + folga + taxa), só que calculada.
+ */
+function reservaDaMontagem(planoId: string): number | null {
+  const plano = planoPorId(planoId);
+  if (!plano || !planoId.startsWith("g:")) return null;
+  const custo = custoTetoCentavos({
+    segmento: plano.segmento,
+    galeriaGb: plano.quotaGb,
+    cofreGb: plano.cofreGb,
+  });
+  return Math.round(custo * FOLGA) + TAXA_COBRANCA;
+}
+
 /** Quanto sobra de lucro depois de separar a reserva de custo. */
 export function lucroCentavos(planoId: string, precoCentavos: number): number {
-  const reserva = RESERVA_POR_PLANO[planoId] ?? Math.round(precoCentavos * 0.35);
+  const reserva =
+    RESERVA_POR_PLANO[planoId] ?? reservaDaMontagem(planoId) ?? Math.round(precoCentavos * 0.35);
   return Math.max(0, precoCentavos - reserva);
 }
 

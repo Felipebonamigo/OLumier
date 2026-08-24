@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
 import { planos, formatarReais, type Plano } from "@/config/planos";
+import { MontadorPlano } from "@/components/montador-plano";
 import { MarcaTile } from "@/components/marca-tile";
+import { SeletorTema } from "@/components/seletor-tema";
+import { TEMAS } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
 
 export const metadata: Metadata = {
@@ -34,7 +37,10 @@ export default function Home() {
           <MarcaTile tamanho={38} />
           <span className="font-serif text-xl font-bold tracking-tight">{marca.nome}</span>
         </span>
-        <nav className="flex items-center gap-6 text-sm">
+        <nav className="flex items-center gap-4 text-sm sm:gap-5">
+          {/* Antes do login, e antes de qualquer conta: quem chegou decide como
+              quer ler. Sem escolha, a página já abre no tema do sistema. */}
+          <SeletorTema />
           <Link href="/entrar" className="text-texto-soft transition hover:text-texto">
             Entrar
           </Link>
@@ -303,11 +309,24 @@ export default function Home() {
             <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
               <h3 className="font-semibold">Quatro caras</h3>
               <p className="mt-2 text-sm text-texto-soft">Ou a sua: capa, tema, letra e grade.</p>
+              {/* As cores saem de TEMAS, os temas de galeria de verdade — não de
+                  tokens da interface. Estas amostras mostram o que o CASAL vai
+                  ver; se usassem os tokens do painel, virariam de lado junto com
+                  o tema do fotógrafo e passariam a mostrar outra coisa. */}
               <div className="mt-4 flex gap-2" aria-hidden>
-                <span className="h-8 w-8 rounded-md bg-void ring-1 ring-linha-forte" />
-                <span className="h-8 w-8 rounded-md bg-marfim" />
-                <span className="h-8 w-8 rounded-md bg-marfim-2" />
-                <span className="h-8 w-8 rounded-md bg-gradient-to-br from-luz/60 to-void" />
+                {(["noite", "claro", "creme"] as const).map((t) => (
+                  <span
+                    key={t}
+                    className="h-8 w-8 rounded-md ring-1 ring-linha-forte"
+                    style={{ background: TEMAS[t]["--g-fundo"] }}
+                  />
+                ))}
+                <span
+                  className="h-8 w-8 rounded-md ring-1 ring-linha-forte"
+                  style={{
+                    background: `linear-gradient(135deg, ${TEMAS.noite["--g-destaque"]}, ${TEMAS.creme["--g-fundo"]})`,
+                  }}
+                />
               </div>
             </div>
           </Revelar>
@@ -344,23 +363,32 @@ export default function Home() {
                 Planos
               </p>
               <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
-                Um plano pra cada tamanho de entrega
+                Monte o seu em três peças
               </h2>
               <p className="mt-4 text-texto-soft">
-                Todos incluem galeria com a sua marca, downloads ilimitados e cofre automático
-                depois do prazo.
+                Sem pacote pronto pra caber à força. Escolha o que você entrega, quanto de espaço
+                fica no ar e se quer cofre — o preço é a soma das peças, e nada mais.
               </p>
             </div>
           </Revelar>
 
-          <div className="mt-12 grid gap-10 lg:grid-cols-2">
-            <Revelar>
-              <PlanoGrupo titulo="Foto" planos={foto} />
-            </Revelar>
-            <Revelar atraso={100}>
-              <PlanoGrupo titulo="Filme" planos={filme} />
-            </Revelar>
-          </div>
+          <Revelar>
+            <div className="mt-12">
+              <MontadorPlano />
+            </div>
+          </Revelar>
+
+          <Revelar atraso={100}>
+            <div className="mt-14">
+              <p className="text-center text-sm text-texto-soft">
+                Ou comece por uma combinação pronta:
+              </p>
+              <div className="mt-6 grid gap-10 lg:grid-cols-2">
+                <PlanoGrupo titulo="Foto" planos={foto} />
+                <PlanoGrupo titulo="Filme" planos={filme} />
+              </div>
+            </div>
+          </Revelar>
         </div>
       </section>
 

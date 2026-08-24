@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { criarSessao, encerrarSessao } from "@/lib/auth";
 import { autenticar, buscarTenantPorEmail, criarTenant, emailJaUsado } from "@/lib/tenants";
-import { planoPorId, planos } from "@/config/planos";
+import { planoPorId, PLANO_INICIAL } from "@/config/planos";
 import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 import { emailConfigurado } from "@/lib/email";
 import { marca } from "@/config/marca";
@@ -58,7 +58,13 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
   const nomeEstudio = String(form.get("nome_estudio") ?? "").trim();
   const email = String(form.get("email") ?? "").trim();
   const senha = String(form.get("senha") ?? "");
-  const planoId = String(form.get("plano_id") ?? planos[0].id);
+  /*
+   * O formulário não manda mais plano — a conta nasce no plano inicial e a
+   * pessoa escolhe na Conta. O campo continua sendo aceito e validado porque
+   * o teste de ponta a ponta o usa para criar contas em planos diferentes, e
+   * porque aceitar sem validar seria deixar a quota vir de fora.
+   */
+  const planoId = String(form.get("plano_id") ?? PLANO_INICIAL);
 
   if (!nomeEstudio) return { erro: "Diga o nome do seu estúdio." };
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { erro: "E-mail inválido." };

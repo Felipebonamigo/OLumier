@@ -171,16 +171,31 @@ await etapa("percentuais somam 100%", async () => {
   return socios.SOCIOS.map((s) => `${s.nome} ${s.percentual}%`).join(" · ");
 });
 
+/*
+ * Antes isto exigia uma linha em RESERVA_POR_PLANO para cada plano. Não serve
+ * mais: desde que o plano virou montagem, a tabela cobre só os seis ids antigos
+ * e a reserva das montagens é calculada do custo. A checagem passou a ser a que
+ * realmente importa — e é mais dura que a anterior, porque compara a reserva
+ * com o custo de verdade em vez de só conferir se alguém preencheu a tabela.
+ */
 await etapa("a reserva de custo cobre o custo real de cada plano", async () => {
   const planos = await import("../src/config/planos.ts");
-  const linhas = [];
   for (const p of planos.planos) {
-    const reserva = socios.RESERVA_POR_PLANO[p.id];
-    if (reserva === undefined) throw new Error(`plano ${p.id} sem reserva definida`);
+    const custo = planos.custoTetoCentavos({
+      segmento: p.segmento,
+      galeriaGb: p.quotaGb,
+      cofreGb: p.cofreGb,
+    });
     const lucro = socios.lucroCentavos(p.id, p.precoCentavos);
+    const reserva = p.precoCentavos - lucro;
+
     if (lucro <= 0) throw new Error(`plano ${p.id} não sobra lucro`);
     if (reserva >= p.precoCentavos) throw new Error(`reserva do ${p.id} maior que o preço`);
-    linhas.push(`${p.id}: reserva R$${(reserva / 100).toFixed(0)} lucro R$${(lucro / 100).toFixed(0)}`);
+    if (reserva < custo) {
+      throw new Error(
+        `reserva do ${p.id} (R$${(reserva / 100).toFixed(0)}) não cobre o custo (R$${(custo / 100).toFixed(0)})`,
+      );
+    }
   }
   return `${planos.planos.length} planos conferidos`;
 });

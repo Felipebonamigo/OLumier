@@ -3,8 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { cadastrarAction, type EstadoForm } from "../actions";
-import { Campo, Selecao, Erro, BotaoEnviar } from "@/components/form-ui";
-import { planos, formatarReais } from "@/config/planos";
+import { Campo, Erro, BotaoEnviar } from "@/components/form-ui";
 
 function Botao() {
   const { pending } = useFormStatus();
@@ -42,16 +41,11 @@ export function FormCadastrar() {
         placeholder="mínimo 8 caracteres"
       />
 
-      <Selecao label="Plano" name="plano_id" defaultValue={planos.find((p) => p.destaque)?.id}>
-        {planos.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.nome} — {formatarReais(p.precoCentavos)}/mês
-          </option>
-        ))}
-      </Selecao>
-
+      {/* Sem escolha de plano aqui, de propósito: ver a tabela de preços antes
+          de ter subido a primeira foto só produz chute. O plano é escolhido na
+          Conta, quando a assinatura começa. */}
       <p className="text-xs text-texto-faint">
-        14 dias grátis para testar. Sem cartão agora.
+        14 dias grátis para testar. Sem cartão agora — o plano você escolhe depois, no painel.
       </p>
 
       <Erro mensagem={estado.erro} />
