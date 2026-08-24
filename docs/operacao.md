@@ -83,7 +83,15 @@ node --env-file=.env.production --experimental-strip-types \
      --import ./scripts/registrar-ts.mjs scripts/redefinir-senha.mjs email@do.estudio
 ```
 
-Sorteia uma senha nova e mostra **uma vez**.
+Sorteia uma senha nova e mostra **uma vez**. É a saída de emergência: hoje o
+fotógrafo troca a própria senha em **Conta → Senha**, e quem esqueceu usa o
+`/recuperar` (quando o e-mail estiver ligado).
+
+A troca pelo painel pede a senha ATUAL mesmo com a pessoa já logada — sessão
+aberta num computador emprestado, ou cookie roubado, viraria conta tomada para
+sempre se bastasse estar dentro. E ela derruba os OUTROS aparelhos mantendo
+este: sem emitir um cookie novo na hora, quem trocasse a senha seria deslogado
+no mesmo instante, sem entender por quê.
 
 Continua útil como saída de emergência, mas o caminho normal agora é o
 autoatendimento em `/recuperar` — **desde que o envio de e-mail esteja ligado**.

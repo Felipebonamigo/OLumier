@@ -10,6 +10,8 @@ import { AssinaturaBotao } from "@/components/assinatura-botao";
 import { situacaoDoTenant } from "@/lib/assinatura";
 import { PlanoConta } from "@/components/plano-conta";
 import { EditorMarca } from "@/components/editor-marca";
+import { TrocarSenha } from "@/components/trocar-senha";
+import { MINIMO_SENHA } from "@/lib/recuperacao";
 import { urlDeLeitura } from "@/lib/r2";
 
 export const metadata: Metadata = { title: "Conta" };
@@ -170,6 +172,8 @@ export default async function ContaPage() {
         urlLogo={urlLogo}
         slug={tenant.slug}
       />
+
+      <TrocarSenha minimo={MINIMO_SENHA} />
 
       {/* Dados */}
       <section className="mt-6 rounded-xl border border-linha bg-carbon">

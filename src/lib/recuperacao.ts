@@ -16,8 +16,8 @@ import { marca } from "@/config/marca";
 /** Uma hora. Tempo de sair do computador, abrir o e-mail no celular e voltar. */
 export const VALIDADE_MS = 60 * 60 * 1000;
 
-/** Mínimo da senha nova. O mesmo do cadastro — trocar por aqui não pode enfraquecer. */
-export const MINIMO_SENHA = 8;
+/** Reexportado de senha.ts: o mínimo é um número só para o sistema inteiro. */
+export { MINIMO_SENHA } from "./senha";
 
 /**
  * 32 bytes de aleatório real, em base64url.

@@ -19,7 +19,8 @@ import {
   gerarToken,
   hashDoToken,
 } from "../src/lib/recuperacao.ts";
-import { conferirSenha } from "../src/lib/auth.ts";
+import { conferirSenha, gerarHashSenha } from "../src/lib/auth.ts";
+import { trocarSenha } from "../src/lib/senha.ts";
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
 
 await exigirBancoDeTeste();
@@ -217,6 +218,68 @@ try {
       igual((await pedirLogo(inventado)).status, 401, "conta inexistente");
     });
   }
+
+  console.log("\ntrocar a senha pelo painel");
+
+  await etapa("exige a senha atual correta", async () => {
+    await db.query("update tenants set senha_hash = $1 where id = $2", [senhaOriginal, tenant.id]);
+    const r = await trocarSenha(tenant.id, "senha-que-nao-e-a-atual", "nova-valida-123", "nova-valida-123");
+    igual(r.ok, false, "resultado");
+    igual(r.motivo, "atual-errada", "motivo");
+
+    const { rows } = await db.query("select senha_hash from tenants where id = $1", [tenant.id]);
+    igual(rows[0].senha_hash, senhaOriginal, "a senha NÃO pode ter mudado");
+  });
+
+  await etapa("recusa senha curta, repetida diferente e igual à atual", async () => {
+    const atual = "senha-atual-boa-123";
+    await db.query("update tenants set senha_hash = $1 where id = $2", [
+      await gerarHashSenha(atual),
+      tenant.id,
+    ]);
+    igual((await trocarSenha(tenant.id, atual, "curta", "curta")).motivo, "curta", "curta");
+    igual((await trocarSenha(tenant.id, atual, "uma-senha-boa", "outra-senha")).motivo, "diferentes", "diferentes");
+    igual((await trocarSenha(tenant.id, atual, atual, atual)).motivo, "igual-a-atual", "igual");
+  });
+
+  await etapa("troca a senha e move senha_alterada_em", async () => {
+    const atual = "senha-atual-boa-123";
+    const antesDaTroca = new Date(
+      (await db.query("select senha_alterada_em from tenants where id = $1", [tenant.id])).rows[0]
+        .senha_alterada_em,
+    ).getTime();
+
+    const r = await trocarSenha(tenant.id, atual, "senha-nova-do-painel-9", "senha-nova-do-painel-9");
+    igual(r.ok, true, "resultado");
+
+    const { rows } = await db.query("select senha_hash, senha_alterada_em from tenants where id = $1", [
+      tenant.id,
+    ]);
+    if (!(await conferirSenha("senha-nova-do-painel-9", rows[0].senha_hash))) {
+      throw new Error("a senha nova não confere");
+    }
+    if (new Date(rows[0].senha_alterada_em).getTime() <= antesDaTroca) {
+      throw new Error("senha_alterada_em não avançou — as outras sessões não cairiam");
+    }
+  });
+
+  /*
+   * O cenário que motiva isto: a pessoa desconfia de invasão, pede o link por
+   * e-mail, se lembra da senha e troca pelo painel. Sem esta regra o link
+   * continuaria valendo por uma hora — na caixa de entrada de quem ela estava
+   * tentando expulsar.
+   */
+  await etapa("trocar a senha mata pedido de recuperação em aberto", async () => {
+    const atual = "senha-nova-do-painel-9";
+    const { token } = await criarPedido(tenant.id);
+    igual((await conferirToken(token)).ok, true, "o pedido nasce válido");
+
+    await trocarSenha(tenant.id, atual, "outra-senha-ainda-77", "outra-senha-ainda-77");
+
+    const depois = await conferirToken(token);
+    igual(depois.ok, false, "o link deveria ter morrido");
+    igual(depois.motivo, "usado", "motivo");
+  });
 
   console.log("\nconfiguração do e-mail");
 

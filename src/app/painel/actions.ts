@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { sessaoAtual } from "@/lib/auth";
+import { criarSessao, sessaoAtual } from "@/lib/auth";
 import { criarGaleria, apagarGaleria } from "@/lib/tenants";
 import { consultar } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
@@ -20,6 +20,8 @@ import {
 } from "@/lib/asaas";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
 import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
+import { MINIMO_SENHA, trocarSenha } from "@/lib/senha";
+import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
 import { usoDoEstudio } from "@/lib/medias";
 import {
@@ -486,6 +488,74 @@ export async function salvarMarcaAction(
   revalidatePath("/painel/conta");
   revalidatePath("/painel");
   return { ok: "Marca salva." };
+}
+
+// --- trocar a própria senha ------------------------------------------------
+
+export interface EstadoSenha {
+  erro?: string;
+  ok?: string;
+}
+
+/**
+ * Troca a senha de quem está logado.
+ *
+ * Pede a senha ATUAL mesmo quem já está dentro. Não é burocracia: sessão aberta
+ * num computador emprestado, ou cookie roubado, viraria conta tomada para sempre
+ * se bastasse estar logado para trocar a senha. Saber a senha atual é o que
+ * separa "é o dono" de "está no navegador do dono".
+ */
+export async function trocarSenhaAction(
+  _estado: EstadoSenha,
+  form: FormData,
+): Promise<EstadoSenha> {
+  const tenantId = await exigirTenant();
+
+  const atual = String(form.get("senha_atual") ?? "");
+  const nova = String(form.get("senha_nova") ?? "");
+  const repetida = String(form.get("senha_repetida") ?? "");
+
+  // Freio: sem ele, quem pegasse uma sessão aberta poderia testar a senha atual
+  // à vontade por aqui, sem passar pela tela de entrada, que já é freada.
+  const chave = `trocar-senha:${tenantId}`;
+  const antes = podeTentar(chave);
+  if (!antes.permitido) {
+    return { erro: `Muitas tentativas. Tente de novo em ${emPalavras(antes.esperarSeg!)}.` };
+  }
+
+  const r = await trocarSenha(tenantId, atual, nova, repetida);
+  if (!r.ok) {
+    const recados: Record<string, string> = {
+      curta: `A senha nova precisa de pelo menos ${MINIMO_SENHA} caracteres.`,
+      diferentes: "As duas senhas novas não são iguais.",
+      "igual-a-atual": "A senha nova é igual à atual.",
+      "sem-conta": "Conta não encontrada.",
+      "atual-errada": "A senha atual está incorreta.",
+    };
+    // Só errar a senha ATUAL conta como tentativa: digitar duas senhas novas
+    // diferentes é engano de digitação, não alguém adivinhando.
+    if (r.motivo === "atual-errada") {
+      const depois = registrarErro(chave);
+      if (!depois.permitido) {
+        return { erro: `Muitas tentativas. Tente de novo em ${emPalavras(depois.esperarSeg!)}.` };
+      }
+    }
+    return { erro: recados[r.motivo] };
+  }
+  limparTentativas(chave);
+
+  /*
+   * Cookie novo para ESTE aparelho.
+   *
+   * A troca derruba toda sessão emitida antes — inclusive a de quem está
+   * trocando agora. Sem emitir um cookie novo, a pessoa seria deslogada no
+   * instante em que trocasse a senha, sem entender o motivo. Os outros aparelhos
+   * caem, que é justamente o ponto.
+   */
+  await criarSessao(tenantId);
+
+  revalidatePath("/painel/conta");
+  return { ok: "Senha alterada. Os outros aparelhos foram desconectados." };
 }
 
 export async function apagarGaleriaAction(form: FormData) {
