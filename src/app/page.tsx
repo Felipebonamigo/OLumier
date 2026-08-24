@@ -63,7 +63,7 @@ export default function Home() {
               <em className="text-acento-alto">entregue.</em>
             </h1>
             <p className="mt-7 max-w-[44ch] text-lg leading-relaxed text-texto-soft">
-              O casamento acaba, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal:
+              O dia passa, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal:
               com a sua marca, no seu endereço, direto na galeria do celular deles.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-5">
