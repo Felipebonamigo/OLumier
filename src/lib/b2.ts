@@ -1,0 +1,162 @@
+import "server-only";
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { dispositionSegura } from "./r2";
+
+/**
+ * ARMAZÉM DOS ARQUIVOS PESADOS — o primário no Backblaze B2.
+ *
+ * Guarda o original de galeria grande (acima de 500 GB contratados) e de tudo
+ * que foi para o cofre. Custa R$ 0,046/GB/mês contra R$ 0,1155 do R2, e a grade
+ * de preços foi calculada com esse número: enquanto o arquivo pesado não morar
+ * aqui, boa parte da tabela vende abaixo do custo (ver docs/obra-rota-b2.md).
+ *
+ * ── O QUE ESTE MÓDULO NÃO É ───────────────────────────────────────────────
+ * Não é o espelho (`lib/espelho.ts`), que também fala com o B2. São papéis
+ * opostos e por isso módulos separados:
+ *
+ *   espelho.ts  — cópia de segurança. NUNCA lança: se o B2 cair, o upload do
+ *                 fotógrafo continua e o arquivo espera a próxima passada.
+ *   b2.ts       — caminho de SERVIR galeria. Lança alto: falha aqui é o cliente
+ *                 do fotógrafo olhando para uma foto que não abre, e engolir
+ *                 isso em silêncio transformaria um defeito em mistério.
+ *
+ * Buckets e credenciais também são separados — e `scripts/testar-b2.mjs` prende
+ * isso. Primário e espelho no mesmo bucket seriam UMA cópia com dois nomes, e a
+ * promessa de "duas empresas diferentes" da página /seguranca morreria sem
+ * ninguém notar, porque no dia a dia tudo continuaria funcionando.
+ *
+ * ── POR QUE ARQUIVOS_* E NÃO B2_* ─────────────────────────────────────────
+ * O ambiente já tinha `B2_KEY_ID`, `B2_APPLICATION_KEY` e `B2_BUCKET` sobrando
+ * de um experimento antigo, sem ninguém lendo. Batizar as variáveis novas de
+ * `B2_*` faria este módulo herdar aquele bucket em silêncio — e o sintoma seria
+ * arquivo gravado no lugar errado, que só aparece muito depois.
+ */
+
+const endpoint = process.env.ARQUIVOS_ENDPOINT;
+const accessKeyId = process.env.ARQUIVOS_ACCESS_KEY_ID;
+const secretAccessKey = process.env.ARQUIVOS_SECRET_ACCESS_KEY;
+/* A região vem embutida no endpoint do B2 (s3.<regiao>.backblazeb2.com). */
+const regiao = process.env.ARQUIVOS_REGIAO ?? "us-east-005";
+
+export const ARQUIVOS_BUCKET = process.env.ARQUIVOS_BUCKET ?? "";
+
+/**
+ * true quando dá para servir do B2.
+ *
+ * Enquanto for false o sistema roda igual: nada foi movido para cá ainda, e
+ * `medias.armazem` continua dizendo 'r2' para todo mundo. É o que permite esta
+ * fase entrar em produção sem mudar nada.
+ */
+export const arquivosConfigurado = Boolean(
+  endpoint && accessKeyId && secretAccessKey && ARQUIVOS_BUCKET,
+);
+
+let cliente: S3Client | null = null;
+
+function s3(): S3Client {
+  if (!arquivosConfigurado) {
+    throw new Error(
+      "Armazém dos arquivos não configurado: preencha ARQUIVOS_ENDPOINT, " +
+        "ARQUIVOS_ACCESS_KEY_ID, ARQUIVOS_SECRET_ACCESS_KEY e ARQUIVOS_BUCKET " +
+        "(ver docs/obra-rota-b2.md → fase 1)",
+    );
+  }
+  cliente ??= new S3Client({
+    region: regiao,
+    endpoint,
+    credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
+  });
+  return cliente;
+}
+
+/**
+ * URL temporária de leitura — a mesma ideia do R2, no outro fornecedor.
+ *
+ * A chave é IDÊNTICA à do R2 de propósito: quem decide de onde ler é a coluna
+ * `medias.armazem`, e não um segundo caminho guardado em algum lugar. Chave
+ * derivada não se perde no dia do desastre; correspondência guardada à parte,
+ * sim.
+ *
+ * Não é `async` porque `s3()` precisa estourar na hora, e não virar promessa
+ * rejeitada que alguém esquece de esperar.
+ */
+export function urlDeLeituraArquivo(chave: string, expiraSeg = 3600, baixarComoNome?: string) {
+  return getSignedUrl(
+    s3(),
+    new GetObjectCommand({
+      Bucket: ARQUIVOS_BUCKET,
+      Key: chave,
+      /* Reusa a montagem do r2.ts: duas formas de `filename`, sem quebra de
+       * linha. Refazer aqui à mão faria a correção de cabeçalho injetado
+       * regredir justamente no download que o casal abre. */
+      ...(baixarComoNome ? { ResponseContentDisposition: dispositionSegura(baixarComoNome) } : {}),
+    }),
+    { expiresIn: expiraSeg },
+  );
+}
+
+/**
+ * URL para gravar direto no bucket.
+ *
+ * Hoje só o movedor noturno usa — o upload do fotógrafo continua nascendo no R2
+ * e é movido depois. Bifurcar o caminho de upload por tamanho de plano seria
+ * mexer na parte mais crítica do sistema para economizar uma cópia noturna.
+ */
+export function urlDeUploadArquivo(chave: string, mime: string, expiraSeg = 3600) {
+  return getSignedUrl(
+    s3(),
+    new PutObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave, ContentType: mime }),
+    { expiresIn: expiraSeg },
+  );
+}
+
+/** Confirma que o objeto chegou e devolve o tamanho real gravado. */
+export async function conferirArquivo(chave: string) {
+  const r = await s3().send(new HeadObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave }));
+  return { bytes: Number(r.ContentLength ?? 0), mime: r.ContentType ?? "application/octet-stream" };
+}
+
+export async function apagarArquivo(chave: string) {
+  await s3().send(new DeleteObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave }));
+}
+
+/** true se o objeto já está aqui — usado pelo movedor para não copiar duas vezes. */
+export async function arquivoExiste(chave: string): Promise<boolean> {
+  try {
+    await s3().send(new HeadObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * O bucket responde e aceita nossa credencial?
+ *
+ * Mesmo raciocínio do `conferirAcesso` do R2: `arquivoExiste` engole qualquer
+ * erro, então credencial revogada ficaria indistinguível de "arquivo não
+ * existe". Aqui o 404 é o resultado ESPERADO — prova que a requisição chegou,
+ * foi autenticada e o bucket respondeu.
+ */
+export async function conferirArmazemArquivos(): Promise<{ ok: boolean; erro?: string }> {
+  if (!arquivosConfigurado) return { ok: false, erro: "ARQUIVOS_* não configurado" };
+  try {
+    await s3().send(new HeadObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: "_healthz/nao-existe" }));
+    return { ok: true };
+  } catch (e) {
+    const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
+    const status = err.$metadata?.httpStatusCode;
+    if (status === 404 || err.name === "NotFound" || err.name === "NoSuchKey") return { ok: true };
+    return {
+      ok: false,
+      erro: err.name ? `${err.name} (${status ?? "sem status"})` : "falha no bucket",
+    };
+  }
+}

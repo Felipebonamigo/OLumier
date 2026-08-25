@@ -119,7 +119,7 @@ export function urlDeUpload(chave: string, mime: string, expiraSeg = 3600) {
  * para navegador antigo, e `filename*` em UTF-8, que os atuais preferem — e que
  * preserva o acento e o nome real que o casal espera ver.
  */
-function dispositionSegura(nome: string): string {
+export function dispositionSegura(nome: string): string {
   const limpo = nome.replace(/[\r\n"\\]/g, "").slice(0, 200) || "arquivo";
   const soAscii = limpo.replace(/[^\x20-\x7E]/g, "_");
   return `attachment; filename="${soAscii}"; filename*=UTF-8''${encodeURIComponent(limpo)}`;
