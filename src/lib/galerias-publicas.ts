@@ -70,6 +70,10 @@ export async function listarMediasPublicas(galeriaId: string) {
     largura: number | null;
     altura: number | null;
     secao_id: string | null;
+    /* De onde servir o ORIGINAL. As derivadas ficam sempre no r2 — quem decide
+     * é `lib/armazem.ts`, e o caso perigoso é a derivada AUSENTE, cujo fallback
+     * é o próprio original e precisa seguir esta coluna. */
+    armazem: string;
   }>(
     /*
      * A ordem já sai agrupada por capítulo (seções pela ordem definida pelo
@@ -77,7 +81,7 @@ export async function listarMediasPublicas(galeriaId: string) {
      * capítulo e o lightbox anda na mesma ordem que a página mostra.
      */
     `select m.id, m.chave, m.chave_thumb, m.chave_preview, m.nome_original,
-            m.tipo, m.bytes, m.largura, m.altura, m.secao_id
+            m.tipo, m.bytes, m.largura, m.altura, m.secao_id, m.armazem
        from medias m
        left join secoes s on s.id = m.secao_id
       where m.galeria_id = $1 and m.pronto

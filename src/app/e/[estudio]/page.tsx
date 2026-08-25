@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { marca } from "@/config/marca";
 import { consultar, consultarUm } from "@/lib/db";
-import { urlDeLeitura } from "@/lib/r2";
+import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { TEMAS } from "@/config/aparencia";
 
 export const dynamic = "force-dynamic";
@@ -45,14 +45,34 @@ export default async function EstudioPage({ params }: Props) {
     titulo: string;
     subtitulo: string | null;
     data_evento: Date | null;
-    capa: string | null;
+    capa_thumb: string | null;
+    capa_original: string | null;
+    capa_armazem: string | null;
   }>(
+    /*
+     * A capa vem em TRÊS colunas, não num `coalesce` só.
+     *
+     * Antes era `coalesce(cm.chave_thumb, cm.chave, pm.chave_thumb, pm.chave)`,
+     * que devolve a chave e esconde QUAL das quatro venceu. Desde que o original
+     * pode morar no B2 (obra da rota B2), essa informação passou a importar: se
+     * o vencedor foi uma miniatura, lê-se do R2; se foi o original, lê-se de
+     * onde ele estiver. Com a chave já achatada não dá para saber, e a capa
+     * abriria quebrada exatamente nas galerias sem miniatura.
+     *
+     * A escolha é da MÍDIA inteira, não coluna a coluna: `cm` (a capa que o
+     * fotógrafo marcou) se ela existir, senão `pm` (a primeira foto). Um
+     * `coalesce` por coluna pegaria a miniatura de uma foto com o original de
+     * outra no caso em que a capa marcada não tem miniatura — as três colunas
+     * têm de vir sempre da mesma linha.
+     */
     `select g.slug, g.titulo, g.subtitulo, g.data_evento,
-            coalesce(cm.chave_thumb, cm.chave, pm.chave_thumb, pm.chave) as capa
+            case when cm.chave is not null then cm.chave_thumb else pm.chave_thumb end as capa_thumb,
+            case when cm.chave is not null then cm.chave       else pm.chave       end as capa_original,
+            case when cm.chave is not null then cm.armazem     else pm.armazem     end as capa_armazem
        from galerias g
        left join medias cm on cm.id = g.capa_media_id and cm.pronto
        left join lateral (
-         select chave, chave_thumb from medias
+         select chave, chave_thumb, armazem from medias
           where galeria_id = g.id and pronto and tipo = 'foto'
           order by ordem limit 1
        ) pm on true
@@ -69,7 +89,9 @@ export default async function EstudioPage({ params }: Props) {
   const comCapa = await Promise.all(
     galerias.map(async (g) => ({
       ...g,
-      urlCapa: g.capa ? await urlDeLeitura(g.capa, 6 * 3600) : null,
+      urlCapa: g.capa_original
+        ? await urlDaDerivada(g.capa_thumb, g.capa_original, armazemDe(g.capa_armazem), 6 * 3600)
+        : null,
     })),
   );
 

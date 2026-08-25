@@ -5,7 +5,7 @@ import { sessaoAtual } from "@/lib/auth";
 import { consultarUm } from "@/lib/db";
 import { formatarBytes, type Galeria } from "@/lib/tenants";
 import { listarMedias } from "@/lib/medias";
-import { urlDeLeitura } from "@/lib/r2";
+import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { resumoAcessos } from "@/lib/galerias-publicas";
 import { EnviarArquivos } from "@/components/enviar-arquivos";
 import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
@@ -55,7 +55,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       bytes: Number(m.bytes),
       secaoId: m.secao_id,
       favoritas: favoritas.porMedia.get(m.id) ?? 0,
-      url: await urlDeLeitura(m.chave_thumb ?? m.chave, 3600),
+      url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), 3600),
     })),
   );
 

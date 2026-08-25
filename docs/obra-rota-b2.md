@@ -196,9 +196,27 @@ Obrigatório junto da fase 4, meio dia de trabalho:
    recém-gravado tem de ser recusado. *Rollback:* nada a desfazer.
    **Código entregue em 25/08/2026**; as etapas de rede ficam PULADAS até o bucket
    existir — ver "Ligar o armazém dos arquivos" no fim deste documento.
-2. **Leitura por armazém.** `urlDeLeitura` com o parâmetro; chamadores de original
-   passam `m.armazem`. Comportamento idêntico (tudo ainda 'r2'). *Pronto:* suíte
-   inteira verde. *Rollback:* revert do commit.
+2. **Leitura por armazém.** Um módulo despachante (`lib/armazem.ts`) decide de qual
+   fornecedor cada arquivo sai; os chamadores passam `m.armazem`. Comportamento
+   idêntico (tudo ainda 'r2'). *Pronto:* suíte inteira verde.
+   *Rollback:* revert do commit.
+   **Entregue em 25/08/2026.** Duas coisas mudaram em relação ao previsto aqui:
+   - Não virou parâmetro do `urlDeLeitura`. Isso faria `r2.ts` importar `b2.ts`, que
+     já importa `dispositionSegura` do `r2.ts` — ciclo entre os dois módulos de
+     armazenamento. O despachante é um terceiro módulo e nenhum lado conhece o outro.
+   - A regra perigosa não era o original, era a **derivada ausente**. Miniatura é
+     opcional (vídeo sem capa, HEIC antes da conversão, foto recém-enviada), e onde
+     ela falta o código cai no original. Se o fallback continuasse pedindo ao R2 um
+     arquivo já movido para o B2, o grid abriria com buracos só nos itens sem
+     derivada — passa em teste com galeria de exemplo e quebra na do cliente. Por
+     isso `urlDaDerivada` recebe as duas chaves e o armazém juntos: quem escolhe a
+     chave escolhe o armazém na mesma expressão.
+   - Efeito colateral na vitrine do estúdio: a query usava
+     `coalesce(cm.chave_thumb, cm.chave, pm.chave_thumb, pm.chave)`, que achata as
+     quatro possibilidades numa chave só e esconde qual venceu. Passou a trazer
+     miniatura, original e armazém em colunas separadas, escolhendo a MÍDIA inteira
+     (`case when cm.chave is not null`) — um `coalesce` por coluna pegaria a
+     miniatura de uma foto com o original de outra.
 3. **Mover noturno.** Galerias arquivadas + tenants grandes migram original a
    original, verificado. R2 intocado. *Pronto:* amostra real movida, galeria de teste
    servindo do B2 (thumb do R2, original do B2), player com seek ok. *Rollback:*

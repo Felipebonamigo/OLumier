@@ -18,6 +18,11 @@ export interface Media {
   ordem: number;
   pronto: boolean;
   criado_em: Date;
+  /**
+   * Em qual fornecedor o ORIGINAL mora: 'r2' (padrão) ou 'b2'. As derivadas
+   * ficam sempre no r2 — ver `lib/armazem.ts`, que é quem decide de onde ler.
+   */
+  armazem: string;
 }
 
 /** O que aceitamos subir. Fora desta lista, recusamos antes de gerar a URL. */

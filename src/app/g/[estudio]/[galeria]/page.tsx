@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { marca } from "@/config/marca";
 import { urlDeLeitura } from "@/lib/r2";
+import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
 import { minhasFavoritas } from "@/lib/favoritas";
 import {
   buscarGaleriaPublica,
@@ -119,11 +120,15 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    */
   const itens: ItemGaleria[] = await Promise.all(
     medias.map(async (m) => {
+      /* Miniatura e preview saem do R2 (borda perto do Brasil, grid rápido); o
+       * original sai de onde ele estiver. Quando a derivada não existe, o
+       * fallback É o original e segue o armazém dele — ver lib/armazem.ts. */
+      const armazem = armazemDe(m.armazem);
       const [thumb, preview, download] = await Promise.all([
-        urlDeLeitura(m.chave_thumb ?? m.chave, VALIDADE),
-        urlDeLeitura(m.chave_preview ?? m.chave, VALIDADE),
+        urlDaDerivada(m.chave_thumb, m.chave, armazem, VALIDADE),
+        urlDaDerivada(m.chave_preview, m.chave, armazem, VALIDADE),
         galeria.permite_download
-          ? urlDeLeitura(m.chave, VALIDADE, m.nome_original)
+          ? urlDoOriginal(m.chave, armazem, VALIDADE, m.nome_original)
           : Promise.resolve(null),
       ]);
       return {
@@ -209,7 +214,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const capa =
     medias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
     medias.find((m) => m.tipo === "foto");
-  const urlCapa = capa ? await urlDeLeitura(capa.chave_preview ?? capa.chave, VALIDADE) : null;
+  const urlCapa = capa
+    ? await urlDaDerivada(capa.chave_preview, capa.chave, armazemDe(capa.armazem), VALIDADE)
+    : null;
 
   // A logo é guardada como CHAVE, não como URL: este bucket não tem endereço
   // público, então todo link é assinado na hora de desenhar a página.
