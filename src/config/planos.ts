@@ -82,25 +82,54 @@ export const GALERIAS: Faixa[] = [
  */
 export const COFRES: Faixa[] = [
   /*
-   * Revisão de 25/08/2026: o espelho passou a copiar TUDO (galeria e cofre)
-   * para uma segunda empresa, e o custo do cofre dobrou — a grade anterior
-   * (39/59/99/149/239/449) ficava abaixo do custo em todas as faixas ≥ 1 TB.
-   * A grade nova cobre o custo alvo com folga de 1,5 (ver socios.ts) e margem
-   * de propósito pequena: cofre não existe para dar lucro, existe para o
-   * fotógrafo nunca perder uma entrega — e para ninguém cancelar.
+   * Revisão de 25/08/2026, em dois passos no mesmo dia:
+   *
+   * 1. O espelho passou a copiar TUDO (galeria e cofre) para uma segunda
+   *    empresa, dobrando o custo do cofre — a grade original
+   *    (39/59/99/149/239/449) ficava abaixo do custo já em 1 TB.
+   * 2. Descoberto que o B2 subiu de US$ 6,00 para US$ 6,95/TB em 01/05/2026.
+   *    A primeira correção (39/79/149/219/359/719) foi calculada no preço
+   *    velho e também não fechava: a montagem 100 GB + cofre 10 TB saía com
+   *    reserva de R$ 786,69 contra preço de R$ 768.
+   *
+   * Esta grade cobre o custo ALVO com folga de 1,5 (ver socios.ts). Margem de
+   * propósito pequena: cofre não existe para dar lucro, existe para o fotógrafo
+   * nunca perder uma entrega — e para ninguém cancelar.
+   *
+   * ⚠️  O piso está no custo alvo, e o cofre só chega lá com a obra da rota B2
+   * (`docs/obra-rota-b2.md`). Na rota atual o cofre custa 12,07/GB e a peça é
+   * subsidiada — por isso ASSINATURA DE COFRE > 500 GB é gatilho da obra. O
+   * split não vaza dinheiro nesse meio-tempo (retém 100%), mas o caixa paga.
    */
-  { gb: 500, precoCentavos: 3900 },
-  { gb: 1000, precoCentavos: 7900 },
-  { gb: 2000, precoCentavos: 14900 },
-  { gb: 3000, precoCentavos: 21900 },
-  { gb: 5000, precoCentavos: 35900 },
-  { gb: 10000, precoCentavos: 71900 },
+  { gb: 500, precoCentavos: 5900 },
+  { gb: 1000, precoCentavos: 8900 },
+  { gb: 2000, precoCentavos: 16900 },
+  { gb: 3000, precoCentavos: 24900 },
+  { gb: 5000, precoCentavos: 41900 },
+  { gb: 10000, precoCentavos: 83900 },
 ];
 
-/** Custo real por GB/mês, em centavos — a fonte de verdade da margem. */
+/*
+ * Custo real por GB/mês, em centavos — a fonte de verdade da margem.
+ * Todos convertidos a R$ 5,50/US$ e R$ 6,30/€; a folga em socios.ts cobre o câmbio.
+ * Conferidos na página de preços de cada fornecedor em 25/08/2026.
+ */
+/** Cloudflare R2: US$ 0,015/GB. Egress ilimitado grátis. */
 const CUSTO_R2_CENTAVOS_GB = 8.25;
-const CUSTO_B2_CENTAVOS_GB = 3.3;
-/** Espelho frio (Hetzner Storage Box via rclone) — alvo da obra, ainda não existe. */
+/**
+ * Backblaze B2: US$ 6,95/TB. Era US$ 6,00 até 01/05/2026 — o aumento de 16% é o
+ * que obrigou a revisão da grade do cofre. Na mesma data as transações (Class
+ * A/B/C) ficaram grátis, então não há custo por requisição a somar aqui.
+ */
+const CUSTO_B2_CENTAVOS_GB = 3.82;
+/**
+ * Espelho frio (Hetzner Storage Box via rclone) — alvo da obra, ainda não existe.
+ *
+ * É o preço da caixa CHEIA: BX31, 10 TB por € 20,80. A caixa é cobrada inteira
+ * mesmo vazia, então na BX11 (1 TB, € 3,20) o GB efetivo é 2,02 — 55% mais caro.
+ * Usar o número da caixa cheia é seguro porque a obra só compra caixa depois que
+ * existe cliente para enchê-la, e o excesso cai em cima da folga.
+ */
 const CUSTO_ESPELHO_FRIO_CENTAVOS_GB = 1.3;
 /** Acima disto a galeria será servida pelo B2 com Cloudflare na frente. */
 const LIMITE_ROTA_R2_GB = 500;
