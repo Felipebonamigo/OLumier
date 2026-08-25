@@ -76,19 +76,66 @@ ao que o R2 faz hoje. Suporta Range.
 **O navegador nunca toca o B2.** Miniatura, preview, capa, logo e a renderização de
 streaming do vídeo ficam no R2 para sempre — é o R2 que tem borda perto do Brasil, e
 é dele que sai tudo que é interativo. O B2 serve **só o download do original**, que é
-o único caminho onde 180 ms de ida e volta não aparecem para o usuário. É isso que
+o único caminho onde 153 ms de ida e volta não aparecem para o usuário. É isso que
 mantém o player 4K rápido (o argumento de venda contra o Pixieset) mesmo com o
 arquivo pesado morando longe.
 
-**Download em massa sai em partes, não em fluxo único.** Isto é requisito, não
-detalhe: numa rede longa (Brasil → EUA, ~180 ms) a latência é o teto da velocidade
-por conexão — a janela TCP dividida pelo tempo de ida e volta. Um fluxo só rende
-30-100 Mbps, e um casamento de 300 GB levaria 7 a 22 horas. Pior: uma queda de
-conexão aos 80% recomeçaria do zero. Blocos de 2-4 GB com Range e retomada, 4 a 8 em
-paralelo, recuperam 200-400 Mbps agregados e transformam uma queda na perda de um
-bloco. (Uma versão anterior deste documento dizia "latência irrelevante para download
-em massa" — é falso para fluxo único, e construir em cima disso daria uma entrega
-visivelmente pior que a de hoje.)
+#### Por que a derivada não vai junto — a conta que fecha a discussão
+
+A pergunta volta toda vez ("se é tudo B2, por que não as miniaturas também?"), então
+os dois números que a respondem ficam registrados aqui.
+
+**O que se ganha movendo:** quase nada. Derivada (miniatura 640 px + preview 2048 px,
+WebP q82 ≈ 280 KB) é **2,7% dos bytes** de uma foto de casamento de 10 MB — e ~0% de
+um vídeo. Num acervo de 10 TB são 273 GB de derivada: R$ 22,56/mês no R2 contra
+R$ 10,45 no B2. **Economia de R$ 12,11/mês — 1,7% dos R$ 695 que a obra economiza
+nesse mesmo cliente.** No pior perfil (fotos leves de 3 MB, derivada vira 9% dos
+bytes) ainda são só 5,8%.
+
+**O que se perde movendo:** a galeria. Medido em 25/08/2026, grid de 16 miniaturas
+com 6 conexões, três rodadas cada:
+
+| Origem | Cache frio | Quente |
+|---|---|---|
+| R2, nosso peso (45 KB) | 1,71 s | **1,14 s** |
+| B2, nosso peso (45 KB) | 2,54 s | **2,32 s** |
+| R2, peso do concorrente (208 KB) | 1,96 s | 1,21 s |
+| B2, peso do concorrente (208 KB) | 3,28 s | 3,22 s |
+| **Pixellu/SmartGalleries** (208 KB, CloudFront GRU1) | 4,93 s | **0,98 s** |
+
+Repare na linha "R2, peso do concorrente": servindo 4,6× mais bytes o R2 ainda faz em
+1,21 s. **Não é o peso que atrasa no B2, é a distância.**
+
+A conclusão é aritmética: manter derivada no R2 custa **1,7% da economia** e é a
+diferença entre empatar com o concorrente (1,14 s contra 0,98 s deles) e perder por
+2,4× (2,32 s). Os R$ 695 vêm todos dos originais, que são 97% dos bytes. Derivada é
+troco — e é 100% da experiência.
+
+> Referência de mercado, medida na galeria real da Carol no SmartGalleries: eles
+> servem por CloudFront com PoP em São Paulo, miniatura JPEG de 208 KB (a nossa é
+> WebP de ~45 KB, 4× mais leve) e a galeria entrega no máximo 2048 px — o caminho
+> `/gal/aws/2k/`. O download do original em resolução cheia, que é nosso
+> diferencial, não existe lá.
+
+**Download em massa sai em partes, não em fluxo único.** Numa rede longa
+(Brasil → EUA, 153 ms medidos) a latência é o teto da velocidade por conexão — a
+janela TCP dividida pelo tempo de ida e volta. Medido de verdade, baixando 100 MB
+da máquina do Felipe: **16,4 MB/s (131 Mbps) num fluxo único**, subindo para
+**25,9 MB/s (207 Mbps) com blocos paralelos**. O R2, no mesmo teste, faz 42,7 MB/s.
+Um casamento de 300 GB leva ~2,0 h pelo R2, ~5,2 h pelo B2 em fluxo único e ~3,3 h
+pelo B2 em blocos.
+
+O motivo de exigir blocos, porém, **não é a velocidade** — 58% de ganho é bom, não
+dramático. É a **retomada**: 300 GB num fluxo único que cai aos 80% recomeça do zero;
+em blocos de 8-12 MB, perde-se um bloco. O paralelismo tem retorno decrescente
+(medido: 12 conexões 24,6 MB/s, 24 conexões 25,9 MB/s), então o ponto bom é 8-12
+blocos, não mais.
+
+> Duas versões anteriores deste documento erraram aqui, nas duas direções: primeiro
+> dizendo "latência irrelevante para download em massa" (falso para fluxo único), e
+> depois "30-100 Mbps, 7 a 22 horas" (pessimismo por estimativa). Os números acima
+> são medidos, não calculados — se alguém for revisar, meça de novo em vez de
+> estimar.
 
 Egress do B2: **grátis até 3× o armazenado médio do mês** (nível da conta, todos os
 clientes somados); acima disso US$ 0,01/GB. Com ~3 TB guardados a franquia é ~9 TB/mês,
