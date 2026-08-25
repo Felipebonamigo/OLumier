@@ -42,7 +42,7 @@ Três coisas que um concorrente vizinho não copia de graça:
 1. **Vídeo pelo preço de foto.** O tipo de trabalho não altera a mensalidade:
    ligar o player 4K com download em alta custa zero, porque um GB de filme
    ocupa o mesmo que um GB de foto. Quem entrega vídeo paga só o espaço —
-   R$ 139–449 nas faixas de 1 a 5 TB.
+   R$ 139–799 nas faixas de 1 a 10 TB.
 
    É a diferença estrutural contra todo o resto do mercado, que trata vídeo
    como produto separado e caro: o Pixieset cobra US$ 5/mês por **hora** de
@@ -121,8 +121,10 @@ Três coisas que um concorrente vizinho não copia de graça:
 - a divisão da receita entre os três sócios (50/25/25 é proposta, não acordo
   fechado);
 - revisão jurídica dos Termos de Uso e da Política de Privacidade;
-- plano de 10 TB não é produto de prateleira — é sob consulta, e o formato dessa
-  consulta não existe.
+- nenhum estúdio pagante ainda usa a faixa de 10 TB: o preço de R$ 799 sai do
+  modelo de custo (R$ 330 de custo teto, R$ 432 de reserva) e da curva de
+  desconto por volume, não de venda observada. Primeira venda no topo da grade
+  vale conferir se o número para de pé.
 
 ## Brand Commitments
 

@@ -114,7 +114,10 @@ export function MontadorPlano({
         O espaço que fica <strong className="text-texto">no ar</strong>, com o link aberto para o
         cliente baixar quantas vezes quiser.
       </p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      {/* Sete colunas para sete faixas, iguais às do cofre logo abaixo: as duas
+          linhas de peça precisam alinhar, senão o quebra-cabeça deixa de parecer
+          um. Mudou GALERIAS? confira se a contagem ainda bate. */}
+      <div className="mt-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {GALERIAS.map((g) => (
           <Peca
             key={g.gb}

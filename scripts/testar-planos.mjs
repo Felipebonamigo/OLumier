@@ -60,6 +60,29 @@ await etapa("tamanhos de galeria em ordem crescente", () => {
   return `${GALERIAS.length} faixas, ${GALERIAS[0].gb} GB a ${GALERIAS.at(-1).gb} GB`;
 });
 
+/*
+ * O topo da grade existe para quem filma: 10 TB é o volume de quem entrega
+ * casamento em 4K o ano inteiro. Sem esta faixa, esse fotógrafo bate no teto de
+ * 5 TB e vai embora — e a peça de cofre já ia a 10 TB, então parava justamente
+ * o lado que ocupa espaço de verdade.
+ *
+ * O piso do preço não é opinião: sai da regra da reserva no PIOR combo (galeria
+ * de 10 TB com o maior cofre). Abaixo dele a reserva não cobre a fatura da
+ * Cloudflare e da Backblaze, e o sócio recebe zero.
+ */
+await etapa("a galeria vai até 10 TB, com lucro no pior combo", () => {
+  const maior = GALERIAS.at(-1);
+  igual(maior.gb, 10000, "maior faixa de galeria");
+
+  const pior = montar({ segmento: "ambos", galeriaGb: 10000, cofreGb: COFRES.at(-1).gb });
+  const custo = custoTetoCentavos({ segmento: "ambos", galeriaGb: 10000, cofreGb: COFRES.at(-1).gb });
+  const lucro = lucroCentavos(pior.id, pior.precoCentavos);
+  if (lucro <= 0) {
+    throw new Error(`${pior.nome} custa ${custo / 100} e não deixa lucro nenhum`);
+  }
+  return `R$ ${maior.precoCentavos / 100} · pior combo deixa R$ ${(lucro / 100).toFixed(2)}`;
+});
+
 await etapa("cofre é opcional e mais barato por GB que a galeria", () => {
   const galeria1tb = GALERIAS.find((g) => g.gb === 1000);
   const cofre1tb = COFRES.find((c) => c.gb === 1000);

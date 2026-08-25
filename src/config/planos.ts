@@ -55,6 +55,16 @@ export const GALERIAS: Faixa[] = [
   { gb: 1000, precoCentavos: 13900 },
   { gb: 2000, precoCentavos: 21900 },
   { gb: 5000, precoCentavos: 44900 },
+  /*
+   * O topo, para quem filma casamento em 4K o ano inteiro. R$ 0,080/GB, contra
+   * R$ 0,0898 do 5 TB: o degrau continua barateando o GB, como todos os
+   * anteriores. Custo teto de R$ 330 e reserva de R$ 432 — o piso real desta
+   * faixa, e o motivo de ela não poder descer muito.
+   *
+   * Existia como cofre desde o começo e faltava na galeria, o que travava
+   * justamente o lado que ocupa espaço de verdade.
+   */
+  { gb: 10000, precoCentavos: 79900 },
 ];
 
 /**
