@@ -79,6 +79,41 @@ export function DEVE_ESPELHAR(chave: string): boolean {
 }
 
 /**
+ * A fila do espelho: todo ORIGINAL que ainda está com uma cópia só.
+ *
+ * Mora aqui, e não solta dentro do `espelhar.mjs`, porque a pergunta que esta
+ * consulta responde é a promessa da página /seguranca em forma de SQL — "o que
+ * ainda não está em duas empresas?". Deixá-la no script fez com que ela ficasse
+ * incompleta por dois meses sem ninguém notar.
+ *
+ * ── POR QUE A LOGO ENTRA AQUI ─────────────────────────────────────────────
+ * Até 25/08/2026 a varredura lia só a tabela `medias`. A logo do estúdio é
+ * arquivo que o fotógrafo ENVIOU — não é derivada, não se regenera de nada — e
+ * mora em `tenants.logo_chave`. Ficava com cópia única, e era a única perda
+ * DEFINITIVA de arquivo de cliente no desenho inteiro: sumindo o R2, só pedindo
+ * o arquivo de novo, para cada estúdio.
+ *
+ * Passou despercebido porque "cada arquivo em duas empresas" é fácil de escrever
+ * e ninguém tinha conferido o "cada". `scripts/testar-espelho.mjs` agora prende
+ * esta consulta — voltar a olhar só para `medias` deixa a suíte vermelha.
+ *
+ * A logo não tem coluna de controle própria (não existe `logo_espelhada_em`): a
+ * cópia é idempotente e o script pula o que já está lá conferindo o destino, que
+ * é barato para UM objeto por estúdio. Uma coluna a mais seria mais migração e
+ * mais estado para manter sincronizado, sem ganho nenhum nessa escala.
+ */
+export const ORIGINAIS_SEM_COPIA = `
+  select id, chave, bytes::text as bytes, 'media' as origem
+    from medias
+   where pronto and espelhado_em is null
+  union all
+  select null as id, logo_chave as chave, null as bytes, 'logo' as origem
+    from tenants
+   where logo_chave is not null
+  order by origem, chave
+`;
+
+/**
  * Onde o objeto mora no espelho.
  *
  * Derivada da chave de origem, nunca sorteada: no dia de restaurar, o banco tem
@@ -232,6 +267,39 @@ export interface ResultadoPurga {
  * linha e não tem objeto ainda, e tratá-lo como órfão seria apagar o que está
  * chegando.
  */
+/**
+ * Fração do espelho que uma varredura automática pode apagar numa passada.
+ *
+ * Acima disto ela recusa e pede olho humano. Não é palpite de tamanho: é a
+ * diferença entre "faxina" e "acidente". Órfã aparece quando alguém apaga uma
+ * foto e o objeto fica para trás — é um punhado por noite, nunca um terço do
+ * acervo.
+ */
+export const LIMITE_PURGA = 0.25;
+
+/** Abaixo disto não há amostra que sustente a proporção; a trava não se aplica. */
+const MINIMO_PARA_PROPORCAO = 20;
+
+/**
+ * A trava de volume — o `--max-delete` desta casa.
+ *
+ * A purga decide o que é órfão comparando o bucket contra a tabela `medias`.
+ * Toda a segurança dela depende dessa comparação estar certa, e ela pode estar
+ * errada de um jeito silencioso: banco restaurado pela metade, migração no meio
+ * do caminho, consulta que devolveu vazio. Nesses casos TODO o espelho vira
+ * órfão, e a varredura automática das 05:20 apaga a segunda cópia de todos os
+ * clientes numa noite — sem erro nenhum aparecer, porque do ponto de vista do
+ * código está tudo funcionando.
+ *
+ * A trava não tenta descobrir se a comparação está certa. Ela só se recusa a
+ * executar um apagamento grande demais para ser plausível, e devolve a decisão
+ * para uma pessoa. Custa uma noite de faxina adiada; evita perder o espelho.
+ */
+export function purgaExcedeLimite(alvos: number, totalNoEspelho: number): boolean {
+  if (totalNoEspelho < MINIMO_PARA_PROPORCAO) return false;
+  return alvos / totalNoEspelho > LIMITE_PURGA;
+}
+
 export async function purgarEspelho(opcoes: OpcoesPurga = {}): Promise<ResultadoPurga> {
   const { consultar } = await import("./db");
   const vazio: ResultadoPurga = { orfas: [], apagadas: 0, erros: [] };
@@ -277,6 +345,23 @@ export async function purgarEspelho(opcoes: OpcoesPurga = {}): Promise<Resultado
 
   const resultado: ResultadoPurga = { orfas, apagadas: 0, erros: [] };
   if (!opcoes.aplicar || alvos.length === 0) return resultado;
+
+  /*
+   * Exclusão a pedido do titular passa por fora da trava: ali apagar tudo do
+   * estúdio é literalmente o pedido, e o alvo é um tenant só. A trava existe
+   * para a varredura AUTOMÁTICA, que roda sozinha de madrugada e não tem
+   * ninguém olhando.
+   */
+  if (!opcoes.exclusaoSolicitada && purgaExcedeLimite(alvos.length, origens.length)) {
+    const pct = ((alvos.length / origens.length) * 100).toFixed(0);
+    resultado.erros.push(
+      `RECUSADO: ${alvos.length} de ${origens.length} objetos (${pct}%) seriam apagados, ` +
+        `acima do limite de ${(LIMITE_PURGA * 100).toFixed(0)}%. Uma purga desse tamanho quase ` +
+        `sempre é a comparação com o banco que está errada, não o espelho. Confira o banco ` +
+        `antes; para apagar assim mesmo, é caso a caso com exclusaoSolicitada.`,
+    );
+    return resultado;
+  }
 
   for (const chave of alvos) {
     try {

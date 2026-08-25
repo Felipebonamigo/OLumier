@@ -24,6 +24,7 @@ import {
   objetoEspelhadoExiste,
   conferirEspelho,
   DEVE_ESPELHAR,
+  ORIGINAIS_SEM_COPIA,
 } from "../src/lib/espelho.ts";
 
 const APLICAR = process.argv.includes("--aplicar");
@@ -52,19 +53,16 @@ const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
 try {
-  const { rows } = await db.query(
-    `select id, chave, bytes
-       from medias
-      where pronto and espelhado_em is null
-      order by criado_em
-      limit $1`,
-    [LIMITE],
-  );
+  /* A fila vem de `lib/espelho.ts` e cobre mídias E logos — a logo é arquivo
+   * enviado pelo fotógrafo, não se regenera, e ficou fora do espelho até
+   * 25/08/2026. Ver ORIGINAIS_SEM_COPIA. */
+  const { rows } = await db.query(ORIGINAIS_SEM_COPIA);
 
   /* Miniatura e preview não entram (ver DEVE_ESPELHAR): são geradas no
    * navegador e a galeria cai para o original se sumirem. */
-  const fila = rows.filter((r) => DEVE_ESPELHAR(r.chave));
-  const pulados = rows.length - fila.length;
+  const candidatos = rows.filter((r) => DEVE_ESPELHAR(r.chave));
+  const pulados = rows.length - candidatos.length;
+  const fila = candidatos.slice(0, LIMITE);
 
   const { rows: totais } = await db.query(
     `select count(*) filter (where espelhado_em is not null) as espelhados,
@@ -72,8 +70,9 @@ try {
        from medias`,
   );
   const t = totais[0];
+  const logos = candidatos.filter((r) => r.origem === "logo").length;
 
-  console.log(`espelhados: ${t.espelhados} · na fila: ${t.pendentes}`);
+  console.log(`espelhados: ${t.espelhados} · mídias na fila: ${t.pendentes} · logos: ${logos}`);
   if (pulados > 0) console.log(`(${pulados} derivada(s) fora do espelho, por desenho)`);
 
   if (fila.length === 0) {
@@ -100,7 +99,10 @@ try {
      * o banco não chegou a ser marcado. Conferir antes é uma chamada barata que
      * evita repetir a cópia de um vídeo inteiro. */
     if (await objetoEspelhadoExiste(m.chave)) {
-      await db.query("update medias set espelhado_em = now() where id = $1", [m.id]);
+      /* A logo não tem coluna de controle — ela volta na fila toda noite e sai
+       * dela por esta conferência, que custa um HEAD por estúdio. Só a mídia
+       * tem `espelhado_em` para marcar. */
+      if (m.id) await db.query("update medias set espelhado_em = now() where id = $1", [m.id]);
       jaEstavam++;
       continue;
     }
@@ -109,8 +111,8 @@ try {
     if (r.ok) {
       /* Marcar SÓ depois do envio terminar. Marcar antes deixaria um arquivo
        * sem cópia parecendo protegido — a mentira mais cara que este script
-       * poderia contar. */
-      await db.query("update medias set espelhado_em = now() where id = $1", [m.id]);
+       * poderia contar. (A logo não tem o que marcar: ver acima.) */
+      if (m.id) await db.query("update medias set espelhado_em = now() where id = $1", [m.id]);
       copiados++;
     } else {
       falhas.push({ chave: m.chave, erro: r.erro });

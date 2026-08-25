@@ -29,6 +29,7 @@ import {
   apagarDoEspelho,
   conferirEspelho,
   DEVE_ESPELHAR,
+  ORIGINAIS_SEM_COPIA,
 } from "../src/lib/espelho.ts";
 import { urlDeUpload } from "../src/lib/r2.ts";
 
@@ -81,6 +82,27 @@ await etapa("chave do espelho é derivada da origem", () => {
   igual(chaveDoEspelho(origem), chaveDoEspelho(origem), "estável entre chamadas");
   if (!chaveDoEspelho(origem).includes("abc.jpg")) {
     throw new Error("a chave do espelho perdeu o nome do objeto de origem");
+  }
+});
+
+/*
+ * A LOGO É ORIGINAL, NÃO DERIVADA.
+ *
+ * Ela entrou no sistema pelo upload do fotógrafo, não é gerada de nada e não se
+ * regenera — se sumir, só pedindo o arquivo de novo. Mesmo assim ficou fora do
+ * espelho até 25/08/2026, porque a varredura lia só a tabela `medias` e a logo
+ * mora em `tenants.logo_chave`. Era a única perda DEFINITIVA de arquivo de
+ * cliente no desenho inteiro, e passou despercebida porque a página /seguranca
+ * diz "cada arquivo em duas empresas" e ninguém foi conferir o "cada".
+ *
+ * Este teste prende a consulta que alimenta o espelho: se alguém voltar a olhar
+ * só para `medias`, ele fica vermelho antes de a promessa virar mentira.
+ */
+await etapa("a varredura do espelho cobre a logo, não só as mídias", () => {
+  const sql = ORIGINAIS_SEM_COPIA.toLowerCase();
+  if (!sql.includes("medias")) throw new Error("a varredura deixou de cobrir as mídias");
+  if (!sql.includes("logo_chave")) {
+    throw new Error("a logo do estúdio ficou de fora — é original e não se regenera");
   }
 });
 
