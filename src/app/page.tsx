@@ -420,6 +420,10 @@ export default function Home() {
             </span>
           </span>
           <p>
+            <Link href="/seguranca" className="hover:text-texto-soft">
+              Segurança
+            </Link>
+            {" · "}
             <Link href="/privacidade" className="hover:text-texto-soft">
               Privacidade
             </Link>

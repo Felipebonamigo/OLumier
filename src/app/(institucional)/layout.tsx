@@ -26,6 +26,10 @@ export default function InstitucionalLayout({ children }: { children: React.Reac
 
       <footer className="border-t border-linha px-6 py-10 text-center text-xs text-texto-faint">
         <p>
+          <Link href="/seguranca" className="hover:text-texto-soft">
+            Segurança
+          </Link>
+          {" · "}
           <Link href="/privacidade" className="hover:text-texto-soft">
             Privacidade
           </Link>
