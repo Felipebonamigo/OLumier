@@ -210,7 +210,21 @@ export const PRAZO_LIXEIRA_DIAS = 30;
  * ocupa lugar de verdade, e fingir que não ocuparia deixaria o estúdio passar do
  * plano sem perceber. Quem apagou para abrir espaço esvazia a lixeira à mão.
  */
-export async function apagarGaleria(tenantId: string, galeriaId: string) {
+export async function apagarGaleria(tenantId: string, galeriaId: string, ip?: string | null) {
+  /*
+   * O título e a contagem são lidos ANTES: o evento precisa ficar legível
+   * mesmo depois de a galeria ser destruída de vez, e aí não haverá mais o que
+   * consultar. É o que transforma "galeria abc-123 apagada" em "a galeria Ana
+   * e Pedro, com 340 arquivos, foi apagada".
+   */
+  const antes = await consultarUm<{ titulo: string; medias: number; estudio: string }>(
+    `select g.titulo, t.nome_estudio as estudio,
+            (select count(*)::int from medias m where m.galeria_id = g.id) as medias
+       from galerias g join tenants t on t.id = g.tenant_id
+      where g.id = $1 and g.tenant_id = $2 and g.estado <> 'lixeira'`,
+    [galeriaId, tenantId],
+  );
+
   // O tenant_id no where não é redundante: impede que um id adivinhado alcance galeria de outro.
   await consultar(
     `update galerias
@@ -218,16 +232,50 @@ export async function apagarGaleria(tenantId: string, galeriaId: string) {
       where id = $1 and tenant_id = $2 and estado <> 'lixeira'`,
     [galeriaId, tenantId],
   );
+
+  // Sem `antes` não houve mudança (id alheio, ou já estava na lixeira): nada a registrar.
+  if (!antes) return;
+  const { registrarEvento, ACOES } = await import("./eventos");
+  await registrarEvento({
+    tenantId,
+    estudio: antes.estudio,
+    ator: "estudio",
+    acao: ACOES.GALERIA_APAGADA,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    detalhe: { titulo: antes.titulo, medias: antes.medias, prazoDias: PRAZO_LIXEIRA_DIAS },
+    ip,
+  });
 }
 
 /** Tira a galeria da lixeira. Volta como rascunho: republicar é decisão de quem restaurou. */
-export async function restaurarGaleria(tenantId: string, galeriaId: string) {
+export async function restaurarGaleria(tenantId: string, galeriaId: string, ip?: string | null) {
+  const antes = await consultarUm<{ titulo: string; estudio: string }>(
+    `select g.titulo, t.nome_estudio as estudio
+       from galerias g join tenants t on t.id = g.tenant_id
+      where g.id = $1 and g.tenant_id = $2 and g.estado = 'lixeira'`,
+    [galeriaId, tenantId],
+  );
+
   await consultar(
     `update galerias
         set estado = 'online', apagada_em = null, atualizado_em = now()
       where id = $1 and tenant_id = $2 and estado = 'lixeira'`,
     [galeriaId, tenantId],
   );
+
+  if (!antes) return;
+  const { registrarEvento, ACOES } = await import("./eventos");
+  await registrarEvento({
+    tenantId,
+    estudio: antes.estudio,
+    ator: "estudio",
+    acao: ACOES.GALERIA_RESTAURADA,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    detalhe: { titulo: antes.titulo },
+    ip,
+  });
 }
 
 export interface GaleriaNaLixeira extends Galeria {
@@ -292,10 +340,38 @@ export async function galeriasVencidasNaLixeira() {
  * cobrir.
  */
 export async function destruirGaleria(galeriaId: string, chaves: string[]) {
+  /*
+   * Lido antes do delete, pelo mesmo motivo de sempre: depois não existe mais
+   * de onde tirar. Este é o evento que alguém vai procurar anos depois — é o
+   * único registro de que aquela galeria existiu.
+   */
+  const antes = await consultarUm<{ titulo: string; tenant_id: string; estudio: string }>(
+    `select g.titulo, g.tenant_id, t.nome_estudio as estudio
+       from galerias g join tenants t on t.id = g.tenant_id
+      where g.id = $1`,
+    [galeriaId],
+  );
+
   const apagou = await consultar<{ id: string }>(
     "delete from galerias where id = $1 returning id",
     [galeriaId],
   );
+
+  if (apagou.length > 0 && antes) {
+    const { registrarEvento, ACOES } = await import("./eventos");
+    await registrarEvento({
+      tenantId: antes.tenant_id,
+      estudio: antes.estudio,
+      // Quem destruiu foi o temporizador, não a pessoa — e a distinção importa
+      // numa disputa: prova que o prazo correu, não que alguém mandou apagar.
+      ator: "sistema",
+      acao: ACOES.GALERIA_DESTRUIDA,
+      alvoTipo: "galeria",
+      alvoId: galeriaId,
+      detalhe: { titulo: antes.titulo, arquivos: chaves.length, apos_dias: PRAZO_LIXEIRA_DIAS },
+    });
+  }
+
   if (apagou.length === 0 || chaves.length === 0) return;
 
   // O banco já é a fonte da verdade e a galeria já sumiu. Se o bucket falhar
