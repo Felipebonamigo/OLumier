@@ -1,0 +1,13 @@
+[Unit]
+Description=Olumier - espelho dos arquivos (segunda copia no B2)
+
+[Timer]
+# 04:10 — depois do backup do banco (03:40) e antes do cofre (04:33), para os
+# tres nao disputarem a banda de saida do VPS ao mesmo tempo.
+OnCalendar=*-*-* 04:10:00
+# Servidor desligado na hora: roda assim que voltar. Arquivo sem espelho e
+# justamente o que nao pode esperar mais um dia.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

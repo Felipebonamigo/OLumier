@@ -1,0 +1,132 @@
+#!/usr/bin/env node
+/**
+ * Espelha os arquivos que ainda estão com uma cópia só.
+ *
+ *   ... scripts/espelhar.mjs              → mostra o que falta (não copia nada)
+ *   ... scripts/espelhar.mjs --aplicar    → copia
+ *   ... scripts/espelhar.mjs --aplicar --limite=200
+ *
+ * Roda pelo temporizador do servidor, de madrugada. Por que temporizador e não
+ * no momento do upload: espelhar durante o envio faria o fotógrafo esperar a
+ * cópia de um vídeo de 30 GB para ver "pronto" na tela, e uma queda do B2
+ * viraria falha de upload. Assim o caminho do usuário não depende do backup —
+ * arquivo novo nasce na fila e sai dela sozinho.
+ *
+ * A janela de exposição é o preço: um arquivo enviado às 10h da manhã fica com
+ * cópia única até a passada da madrugada. É aceitável porque o risco coberto
+ * (perder a CONTA inteira) não é um evento que escolhe a hora — e cortar a
+ * janela para zero custaria o upload travado, que é pior todo dia.
+ */
+import pg from "pg";
+import {
+  espelhoConfigurado,
+  espelharObjeto,
+  objetoEspelhadoExiste,
+  conferirEspelho,
+  DEVE_ESPELHAR,
+} from "../src/lib/espelho.ts";
+
+const APLICAR = process.argv.includes("--aplicar");
+const limiteArg = process.argv.find((a) => a.startsWith("--limite="));
+const LIMITE = limiteArg ? Number(limiteArg.split("=")[1]) : 500;
+
+if (!process.env.DATABASE_URL) {
+  console.error("DATABASE_URL não definida");
+  process.exit(1);
+}
+
+if (!espelhoConfigurado) {
+  console.error("✗ espelho não configurado — faltam ESPELHO_ENDPOINT, ESPELHO_ACCESS_KEY_ID,");
+  console.error("  ESPELHO_SECRET_ACCESS_KEY e ESPELHO_BUCKET no arquivo de ambiente.");
+  console.error("  Ver docs/backup.md → 'Ligar o espelho'.");
+  process.exit(1);
+}
+
+const saude = await conferirEspelho();
+if (!saude.ok) {
+  console.error(`✗ o espelho não respondeu: ${saude.erro}`);
+  process.exit(1);
+}
+
+const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await db.connect();
+
+try {
+  const { rows } = await db.query(
+    `select id, chave, bytes
+       from medias
+      where pronto and espelhado_em is null
+      order by criado_em
+      limit $1`,
+    [LIMITE],
+  );
+
+  /* Miniatura e preview não entram (ver DEVE_ESPELHAR): são geradas no
+   * navegador e a galeria cai para o original se sumirem. */
+  const fila = rows.filter((r) => DEVE_ESPELHAR(r.chave));
+  const pulados = rows.length - fila.length;
+
+  const { rows: totais } = await db.query(
+    `select count(*) filter (where espelhado_em is not null) as espelhados,
+            count(*) filter (where pronto and espelhado_em is null) as pendentes
+       from medias`,
+  );
+  const t = totais[0];
+
+  console.log(`espelhados: ${t.espelhados} · na fila: ${t.pendentes}`);
+  if (pulados > 0) console.log(`(${pulados} derivada(s) fora do espelho, por desenho)`);
+
+  if (fila.length === 0) {
+    console.log("✓ nada a espelhar");
+    process.exit(0);
+  }
+
+  const totalBytes = fila.reduce((s, r) => s + Number(r.bytes ?? 0), 0);
+  console.log(
+    `${fila.length} arquivo(s) nesta passada, ${(totalBytes / 1024 ** 3).toFixed(2)} GB`,
+  );
+
+  if (!APLICAR) {
+    console.log("\nNada foi copiado. Para copiar: --aplicar");
+    process.exit(0);
+  }
+
+  let copiados = 0;
+  let jaEstavam = 0;
+  const falhas = [];
+
+  for (const m of fila) {
+    /* Já estar lá acontece quando uma passada morreu no meio: o objeto subiu e
+     * o banco não chegou a ser marcado. Conferir antes é uma chamada barata que
+     * evita repetir a cópia de um vídeo inteiro. */
+    if (await objetoEspelhadoExiste(m.chave)) {
+      await db.query("update medias set espelhado_em = now() where id = $1", [m.id]);
+      jaEstavam++;
+      continue;
+    }
+
+    const r = await espelharObjeto(m.chave);
+    if (r.ok) {
+      /* Marcar SÓ depois do envio terminar. Marcar antes deixaria um arquivo
+       * sem cópia parecendo protegido — a mentira mais cara que este script
+       * poderia contar. */
+      await db.query("update medias set espelhado_em = now() where id = $1", [m.id]);
+      copiados++;
+    } else {
+      falhas.push({ chave: m.chave, erro: r.erro });
+    }
+  }
+
+  console.log(`\n✓ ${copiados} copiado(s)${jaEstavam ? `, ${jaEstavam} já estava(m) lá` : ""}`);
+
+  if (falhas.length > 0) {
+    console.error(`✗ ${falhas.length} falharam (continuam na fila para a próxima passada):`);
+    for (const f of falhas.slice(0, 10)) console.error(`    ${f.chave}: ${f.erro}`);
+    if (falhas.length > 10) console.error(`    … e mais ${falhas.length - 10}`);
+    /* Código 1 para o temporizador registrar como falha e o e-mail sair. A fila
+     * não some — arquivo que falhou continua com espelhado_em nulo. */
+    process.exit(1);
+  }
+} finally {
+  await db.end();
+}

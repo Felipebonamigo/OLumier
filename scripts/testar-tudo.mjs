@@ -12,29 +12,36 @@
  * com "quebrou".
  */
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const AQUI = import.meta.dirname;
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 
-/** Estas batem em rotas HTTP; sem servidor no ar não têm como passar. */
-const PRECISAM_DO_SERVIDOR = new Set([
-  "testar-upload",
-  "testar-derivadas",
-  "testar-galeria-publica",
-  "testar-secoes",
-  "testar-multipart",
-  "testar-cobranca",
-  "testar-subdominio",
-  "testar-portao-cobranca",
-  "testar-limpeza",
-]);
-
 const suites = readdirSync(AQUI)
   .filter((f) => f.startsWith("testar-") && f.endsWith(".mjs") && f !== "testar-tudo.mjs")
   .map((f) => f.replace(/\.mjs$/, ""))
   .sort();
+
+/**
+ * Quais suítes batem em rotas HTTP — DEDUZIDO do próprio arquivo.
+ *
+ * Isto era uma lista escrita à mão, e a lista envelheceu: em 25/08/2026 nove
+ * suítes usavam BASE_URL e só três estavam nela. O efeito é o pior possível num
+ * arranjo de testes — com o servidor no ar, tudo verde; sem ele, três suítes
+ * VERMELHAS por "fetch failed" e as outras seis puladas. A mesma ausência do
+ * servidor produzia duas cores diferentes, e a vermelha acusava um problema que
+ * não existia.
+ *
+ * Deduzir do conteúdo elimina a lista: suíte nova que fale HTTP entra sozinha, e
+ * ninguém precisa lembrar de nada.
+ */
+const PRECISAM_DO_SERVIDOR = new Set(
+  suites.filter((nome) => {
+    const fonte = readFileSync(path.join(AQUI, `${nome}.mjs`), "utf8");
+    return fonte.includes("BASE_URL") || fonte.includes("localhost:3040");
+  }),
+);
 
 let servidorNoAr = false;
 try {

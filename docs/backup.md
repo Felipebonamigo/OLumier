@@ -59,19 +59,89 @@ Só depois de conferir é que se decide promover o banco restaurado.
 gerenciador de senhas do Felipe. **Sem ela o backup é inútil** — é a troca que a
 criptografia impõe.
 
-## O risco que continua aberto
+## O espelho dos arquivos
 
-**As fotos são cópia única.** Vivem no R2 e não há segunda cópia em lugar nenhum.
-Se o bucket for perdido ou a conta Cloudflare suspensa, as entregas dos clientes
-somem — e o banco restaurado vai apontar para arquivos que não existem mais.
+O banco tem backup desde sempre; os arquivos passaram a ter em 25/08/2026.
 
-Hoje isso é teórico (nenhuma foto real subiu ainda). Deixa de ser no minuto em
-que o primeiro casamento entrar. A migração R2 → B2 do "cofre" resolveria os dois
-problemas de uma vez (custo e segunda cópia), e continua na fila.
+Antes, foto e vídeo viviam **só no R2**: uma cópia, um fornecedor, uma conta.
+Disco não é o risco — a Cloudflare declara durabilidade de onze noves. O risco é
+a **conta**: suspensão, cartão recusado, chave vazada com permissão de apagar,
+engano humano. Qualquer um leva as entregas de todos os clientes de uma vez, e o
+banco restaurado passa a apontar para arquivos que não existem mais.
+
+O espelho copia cada **original** para o Backblaze B2, num bucket com credencial
+própria. Miniatura e preview ficam de fora de propósito: são geradas no navegador
+e a galeria cai para o original sozinha se sumirem.
+
+| | Onde | Quando |
+|---|---|---|
+| Banco | dump cifrado no B2 | 03:40 |
+| **Arquivos** | **espelho no B2** | **04:10** |
+| Cofre (galerias vencidas) | move dentro do R2 | 04:33 |
+
+```bash
+# o que ainda está com uma cópia só (não copia nada)
+node --env-file=.env.production --experimental-strip-types \
+     --import ./scripts/registrar-ts.mjs scripts/espelhar.mjs
+
+# copiar
+node ... scripts/espelhar.mjs --aplicar --limite=2000
+```
+
+A passada é noturna, não no momento do upload: espelhar durante o envio faria o
+fotógrafo esperar a cópia de um vídeo de 30 GB para ver "pronto", e uma queda do
+B2 viraria falha de upload. O preço é a janela — arquivo enviado às 10h fica com
+cópia única até a madrugada. É aceitável porque o risco coberto não escolhe hora,
+e fechar a janela custaria upload travado todo dia.
+
+### Ligar o espelho
+
+Precisa de bucket e chave **próprios** — não reaproveitar a chave do Padelizou,
+que é justamente o acoplamento que este trabalho remove.
+
+1. Backblaze → **Buckets** → *Create a Bucket*: nome `olumier-espelho`, privado.
+2. Anotar o **Endpoint** que aparece no bucket (`s3.us-east-005.backblazeb2.com`
+   ou a região que sair) e a região embutida nele.
+3. **Application Keys** → *Add a New Application Key*, restrita a esse bucket,
+   com permissão de leitura e escrita.
+4. Pôr no `/opt/fotonio-shared/.env.production` (e no `.env.local` para testar):
+
+   ```
+   ESPELHO_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+   ESPELHO_ACCESS_KEY_ID=...
+   ESPELHO_SECRET_ACCESS_KEY=...
+   ESPELHO_BUCKET=olumier-espelho
+   ESPELHO_REGIAO=us-east-005
+   ```
+
+5. Instalar o temporizador:
+
+   ```bash
+   scp ops/fotonio-espelho.{service,timer} root@SERVIDOR:/etc/systemd/system/
+   ssh root@SERVIDOR 'systemctl daemon-reload && systemctl enable --now fotonio-espelho.timer'
+   ```
+
+Sem essas variáveis o sistema roda igual, só sem segunda cópia — e o
+`scripts/espelhar.mjs` recusa dizendo exatamente o que falta.
+
+### Onde o objeto fica
+
+A chave do espelho é **derivada** da chave de origem: `espelho/<chave original>`.
+Nunca sorteada, e sem índice à parte — no dia de restaurar, o banco tem em mãos
+só a chave original, e uma correspondência que dependa de outra tabela é uma
+correspondência que pode se perder justamente no desastre.
+
+### Apagar não apaga do espelho
+
+Quando o fotógrafo apaga uma foto, o objeto sai do R2 e **fica** no espelho. É de
+propósito: apagar dos dois lugares ao mesmo tempo transformaria um clique errado
+em perda definitiva. A limpeza do que sobra é do `scripts/varrer-orfaos.mjs`,
+rodado à mão e com conferência.
 
 ## Detalhe a arrumar quando der
 
-O backup do Olumier mora numa pasta (`fotonio/`) **dentro do bucket do Padelizou**,
-porque a chave do B2 existente é dali. Funciona e está separado, mas o certo é um
-bucket próprio com chave própria — se a chave do Padelizou for trocada, o backup
-do Olumier para junto, e sem avisar até a próxima falha.
+O backup **do banco** ainda mora numa pasta (`fotonio/`) dentro do bucket do
+Padelizou, porque a chave do B2 existente é dali. Funciona e está separado, mas o
+certo é um bucket próprio — se a chave do Padelizou for trocada, o backup do
+Olumier para junto, e sem avisar até a próxima falha. O `olumier-espelho` criado
+acima serve: basta apontar o remote `cofre-b2:` do rclone para ele.
