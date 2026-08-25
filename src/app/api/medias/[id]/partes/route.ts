@@ -10,14 +10,14 @@ import {
   MAX_PARTES,
 } from "@/lib/medias";
 import { buscarTenantPorId } from "@/lib/tenants";
+import { objetoExiste, apagarObjeto } from "@/lib/r2";
 import {
-  urlDaParte,
-  fecharEnvioEmPartes,
-  abortarEnvioEmPartes,
-  conferirObjeto,
-  objetoExiste,
-  apagarObjeto,
-} from "@/lib/r2";
+  armazemDe,
+  urlDaParteDoOriginal,
+  fecharEnvioDoOriginal,
+  abortarEnvioDoOriginal,
+  conferirOriginal,
+} from "@/lib/armazem";
 
 /**
  * Envio em partes de um arquivo grande (filme 4K).
@@ -34,11 +34,22 @@ import {
 async function mediaComEnvioAberto(mediaId: string, tenantId: string) {
   const media = await buscarMedia(mediaId, tenantId);
   if (!media) return null;
-  const linha = await consultarUm<{ upload_id: string | null }>(
-    "select upload_id from medias where id = $1",
+  /*
+   * O `armazem` vem da linha junto com o `upload_id` porque as duas coisas
+   * pertencem ao MESMO envio: um vídeo grande leva horas subindo, e se a
+   * credencial do B2 entrar no ambiente no meio disso, perguntar de novo
+   * mandaria as partes seguintes para outro fornecedor — partes órfãs de um
+   * lado e envio que nunca fecha do outro.
+   */
+  const linha = await consultarUm<{ upload_id: string | null; armazem: string | null }>(
+    "select upload_id, armazem from medias where id = $1",
     [mediaId],
   );
-  return { media, uploadId: linha?.upload_id ?? null };
+  return {
+    media,
+    uploadId: linha?.upload_id ?? null,
+    armazem: armazemDe(linha?.armazem),
+  };
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -68,7 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const urls = await Promise.all(
     numeros.map(async (numero) => ({
       numero,
-      url: await urlDaParte(dados.media.chave, dados.uploadId!, numero),
+      url: await urlDaParteDoOriginal(dados.media.chave, dados.uploadId!, numero, dados.armazem),
     })),
   );
   return NextResponse.json({ urls });
@@ -99,10 +110,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   try {
-    await fecharEnvioEmPartes(dados.media.chave, dados.uploadId, partes);
+    await fecharEnvioDoOriginal(dados.media.chave, dados.uploadId, partes, dados.armazem);
 
     // Mesmo cuidado do envio simples: o tamanho vem do bucket, não do navegador.
-    const { bytes } = await conferirObjeto(dados.media.chave);
+    const { bytes } = await conferirOriginal(dados.media.chave, dados.armazem);
 
     // E a mesma reconferência de quota: o filme montado pode ter saído bem maior
     // do que o navegador declarou lá no preparo.
@@ -139,7 +150,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ ok: true, bytes: Number(atualizada!.bytes) });
   } catch (e) {
     // Falhou ao remontar: aborta para as partes não ficarem ocupando espaço pago.
-    await abortarEnvioEmPartes(dados.media.chave, dados.uploadId).catch(() => {});
+    await abortarEnvioDoOriginal(dados.media.chave, dados.uploadId, dados.armazem).catch(() => {});
     await apagarMedia(id, tenantId);
     return NextResponse.json(
       { erro: e instanceof Error ? e.message : "não foi possível finalizar o envio" },
@@ -157,7 +168,7 @@ export async function DELETE(_r: NextRequest, { params }: { params: Promise<{ id
   if (!dados) return NextResponse.json({ erro: "Não encontrado." }, { status: 404 });
 
   if (dados.uploadId) {
-    await abortarEnvioEmPartes(dados.media.chave, dados.uploadId).catch(() => {});
+    await abortarEnvioDoOriginal(dados.media.chave, dados.uploadId, dados.armazem).catch(() => {});
   }
   await apagarMedia(id, tenantId);
   return NextResponse.json({ ok: true });

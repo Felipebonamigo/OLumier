@@ -5,6 +5,10 @@ import {
   PutObjectCommand,
   HeadObjectCommand,
   DeleteObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { dispositionSegura } from "./r2";
@@ -135,6 +139,73 @@ export async function arquivoExiste(chave: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * ── ENVIO EM PARTES ───────────────────────────────────────────────────────
+ *
+ * O caminho do vídeo 4K: acima de 5 GB o PUT único não serve, e o arquivo sobe
+ * em pedaços com uma URL assinada por parte. É o arquivo que o fotógrafo menos
+ * quer subir duas vezes, então este é o trecho onde uma falha custa mais caro.
+ *
+ * Espelho fiel do que o `r2.ts` faz — mesma sequência (abrir, assinar cada
+ * parte, fechar na ordem), mesmos nomes, mesma validade de 6 horas. A cópia é
+ * deliberada: um envio precisa acontecer inteiro no MESMO fornecedor, e uma
+ * abstração comum sobre os dois convidaria a abrir num e fechar no outro, o
+ * que deixa partes órfãs ocupando espaço e cobrando sem nunca virar arquivo.
+ * `scripts/testar-armazem.mjs` prende as quatro operações no mesmo armazém.
+ */
+export async function abrirEnvioEmPartesArquivo(chave: string, mime: string): Promise<string> {
+  const r = await s3().send(
+    new CreateMultipartUploadCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave, ContentType: mime }),
+  );
+  if (!r.UploadId) throw new Error("o armazenamento não devolveu o identificador do envio");
+  return r.UploadId;
+}
+
+export function urlDaParteArquivo(
+  chave: string,
+  uploadId: string,
+  numero: number,
+  expiraSeg = 6 * 3600,
+) {
+  return getSignedUrl(
+    s3(),
+    new UploadPartCommand({
+      Bucket: ARQUIVOS_BUCKET,
+      Key: chave,
+      UploadId: uploadId,
+      PartNumber: numero,
+    }),
+    { expiresIn: expiraSeg },
+  );
+}
+
+export async function fecharEnvioEmPartesArquivo(
+  chave: string,
+  uploadId: string,
+  partes: { numero: number; etag: string }[],
+) {
+  await s3().send(
+    new CompleteMultipartUploadCommand({
+      Bucket: ARQUIVOS_BUCKET,
+      Key: chave,
+      UploadId: uploadId,
+      MultipartUpload: {
+        // A ordem importa: o S3 remonta o arquivo pela sequência dos números.
+        Parts: partes
+          .slice()
+          .sort((a, b) => a.numero - b.numero)
+          .map((p) => ({ PartNumber: p.numero, ETag: p.etag })),
+      },
+    }),
+  );
+}
+
+export async function abortarEnvioEmPartesArquivo(chave: string, uploadId: string) {
+  await s3().send(
+    new AbortMultipartUploadCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave, UploadId: uploadId }),
+  );
 }
 
 /**

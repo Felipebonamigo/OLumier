@@ -12,12 +12,12 @@ import {
   bytesUsados,
   criarMediaPendente,
 } from "@/lib/medias";
+import { montarChaves, urlDeUpload, armazenamentoConfigurado } from "@/lib/r2";
 import {
-  montarChaves,
-  urlDeUpload,
-  abrirEnvioEmPartes,
-  armazenamentoConfigurado,
-} from "@/lib/r2";
+  armazemDeNovosUploads,
+  urlDeEnvioDoOriginal,
+  abrirEnvioDoOriginal,
+} from "@/lib/armazem";
 
 /**
  * Prepara o envio de UM arquivo.
@@ -130,7 +130,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // (vídeo, HEIC que ele não decodifica), gravamos null e a grade usa o original.
   const comDerivadas = tipo === "foto" && corpo.comDerivadas === true;
 
+  /*
+   * O ORIGINAL nasce onde a credencial disser (B2 quando as ARQUIVOS_*
+   * existirem, R2 enquanto não). As DERIVADAS nascem sempre no R2 — é de lá que
+   * o navegador serve o grid e o player, e medimos que o B2 dobra o tempo da
+   * primeira tela. Ver docs/obra-rota-b2.md.
+   *
+   * O armazém é decidido UMA vez, aqui, e gravado na linha: as etapas seguintes
+   * do envio (partes, conclusão) leem da mídia, nunca perguntam de novo.
+   */
+  const armazem = armazemDeNovosUploads();
+
   const media = await criarMediaPendente({
+    armazem,
     galeriaId,
     tenantId,
     chave: chaves.original,
@@ -155,7 +167,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // Acima de 5 GB o PUT único não serve: abre o envio em partes e o navegador
   // pede as URLs de cada pedaço conforme avança.
   if (bytes > LIMITE_PUT_UNICO) {
-    const uploadId = await abrirEnvioEmPartes(chaves.original, mime);
+    const uploadId = await abrirEnvioDoOriginal(chaves.original, mime, armazem);
     await consultarUm("update medias set upload_id = $1 where id = $2", [uploadId, media!.id]);
     return NextResponse.json({
       mediaId: media!.id,
@@ -166,6 +178,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
   }
 
-  const url = await urlDeUpload(chaves.original, mime);
+  const url = await urlDeEnvioDoOriginal(chaves.original, mime, armazem);
   return NextResponse.json({ mediaId: media!.id, emPartes: false, url, urlThumb, urlPreview });
 }

@@ -8,7 +8,8 @@ import {
   bytesUsados,
 } from "@/lib/medias";
 import { buscarTenantPorId } from "@/lib/tenants";
-import { conferirObjeto, apagarObjeto, objetoExiste } from "@/lib/r2";
+import { apagarObjeto, objetoExiste } from "@/lib/r2";
+import { armazemDe, conferirOriginal } from "@/lib/armazem";
 
 /**
  * Confirma que o arquivo chegou ao bucket.
@@ -30,7 +31,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (media.pronto) return NextResponse.json({ ok: true, bytes: Number(media.bytes) });
 
   try {
-    const { bytes } = await conferirObjeto(media.chave);
+    /* O original pode estar no B2; as derivadas, conferidas abaixo, nunca —
+     * elas ficam no R2 sempre (ver lib/armazem.ts). */
+    const { bytes } = await conferirOriginal(media.chave, armazemDe(media.armazem));
 
     // O tamanho declarado no preparo era um palpite do navegador; ESTE é o real.
     // Reconferir a quota agora é o que fecha o furo: sem isso bastava declarar

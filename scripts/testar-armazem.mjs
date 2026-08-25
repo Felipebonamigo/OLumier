@@ -25,7 +25,18 @@
  * ARQUIVOS_* ausentes, pedir ao B2 estoura nomeando as variáveis — e é esse
  * estouro que serve de prova de que a escolha caiu no B2.
  */
-import { urlDoOriginal, urlDaDerivada, armazemDe } from "../src/lib/armazem.ts";
+import {
+  urlDoOriginal,
+  urlDaDerivada,
+  armazemDe,
+  armazemDeNovosUploads,
+  urlDeEnvioDoOriginal,
+  abrirEnvioDoOriginal,
+  urlDaParteDoOriginal,
+  fecharEnvioDoOriginal,
+  abortarEnvioDoOriginal,
+  conferirOriginal,
+} from "../src/lib/armazem.ts";
 import { arquivosConfigurado } from "../src/lib/b2.ts";
 import { armazenamentoConfigurado } from "../src/lib/r2.ts";
 
@@ -156,6 +167,92 @@ await etapa("com tudo em r2 o comportamento é o de hoje", async () => {
   ];
   for (const c of casos) if (!(await foiParaOR2(c))) throw new Error("algum caso saiu do R2");
   return `${casos.length} caminhos, todos no R2`;
+});
+
+/*
+ * ── FASE 3: ONDE O ARQUIVO NASCE ──────────────────────────────────────────
+ *
+ * Até aqui o armazém só decidia de onde LER. Agora decide onde ESCREVER: o
+ * original passa a nascer direto no B2, em vez de nascer no R2 e ser movido de
+ * madrugada. Só foi possível porque produção tinha ZERO mídias — não havia o
+ * que migrar. Isso apagou duas fases inteiras da obra (mover noturno e limpar
+ * o R2 com carência), que eram justamente as duas rotinas capazes de apagar
+ * arquivo vivo de cliente.
+ *
+ * A chave da escolha é `armazemDeNovosUploads()`: ela olha se as ARQUIVOS_*
+ * existem. Sem credencial do B2 o sistema continua gravando no R2 e nada
+ * quebra — a virada acontece no dia em que a variável entra no ambiente, sem
+ * deploy e sem migração. É o que permite entregar este código antes de o
+ * bucket estar ligado.
+ *
+ * As DERIVADAS não seguem o original: continuam no R2 sempre. Medido em
+ * 25/08/2026, um grid de 16 miniaturas leva 1,14 s no R2 contra 2,32 s no B2, e
+ * mover as derivadas economizaria 1,7% da conta. Ver docs/obra-rota-b2.md.
+ */
+console.log("\nonde o arquivo nasce (fase 3)");
+
+await etapa("sem credencial do B2, o upload continua caindo no R2", () => {
+  if (arquivosConfigurado) return "pulado: ARQUIVOS_* configurado nesta máquina";
+  igual(armazemDeNovosUploads(), "r2", "armazém de novos uploads");
+  return "degrada para o R2 em vez de quebrar";
+});
+
+await etapa("com credencial do B2, o original nasce no B2", () => {
+  if (!arquivosConfigurado) return "pulado: ARQUIVOS_* ausente nesta máquina";
+  igual(armazemDeNovosUploads(), "b2", "armazém de novos uploads");
+});
+
+await etapa("a escrita do original respeita o armazém escolhido", async () => {
+  if (!(await foiParaOB2(() => urlDeEnvioDoOriginal("g/1/f.jpg", "image/jpeg", "b2")))) {
+    throw new Error("upload do original não foi para o B2");
+  }
+  if (!(await foiParaOR2(() => urlDeEnvioDoOriginal("g/1/f.jpg", "image/jpeg", "r2")))) {
+    throw new Error("upload do original não respeitou r2");
+  }
+});
+
+/*
+ * Envio em partes é o caminho do vídeo 4K — o que mais importa não quebrar,
+ * porque é o arquivo grande que o fotógrafo não quer subir duas vezes. As
+ * QUATRO operações precisam ir para o mesmo lugar: abrir num fornecedor e
+ * fechar no outro deixa partes órfãs ocupando espaço e cobrando.
+ */
+await etapa("o envio em partes inteiro respeita o armazém", async () => {
+  const noB2 = [
+    () => abrirEnvioDoOriginal("g/1/v.mp4", "video/mp4", "b2"),
+    () => urlDaParteDoOriginal("g/1/v.mp4", "upload-id", 1, "b2"),
+    () => fecharEnvioDoOriginal("g/1/v.mp4", "upload-id", [{ numero: 1, etag: "x" }], "b2"),
+    () => abortarEnvioDoOriginal("g/1/v.mp4", "upload-id", "b2"),
+  ];
+  for (const c of noB2) if (!(await foiParaOB2(c))) throw new Error("alguma etapa do multipart saiu do B2");
+  return `${noB2.length} etapas do multipart`;
+});
+
+/*
+ * `conferirOriginal` não gera URL: ela vai à rede e devolve tamanho. Então os
+ * detectores acima (que leem o endereço assinado) não servem, e a prova aqui é
+ * pela mensagem de erro — que é o que distingue "foi ao B2 sem credencial" de
+ * "foi ao R2 e o objeto não existe".
+ */
+await etapa("conferir o objeto olha no armazém certo", async () => {
+  if (arquivosConfigurado) return "pulado: com B2 ligado os dois lados vão à rede de verdade";
+
+  const erroB2 = await conferirOriginal("g/1/inexistente.jpg", "b2").then(
+    () => null,
+    (e) => e.message,
+  );
+  if (!erroB2?.includes("ARQUIVOS_")) {
+    throw new Error(`conferência com armazem=b2 não foi ao B2 (erro: ${erroB2})`);
+  }
+
+  const erroR2 = await conferirOriginal("g/1/inexistente.jpg", "r2").then(
+    () => null,
+    (e) => e.message,
+  );
+  if (erroR2?.includes("ARQUIVOS_")) {
+    throw new Error("conferência com armazem=r2 foi parar no B2");
+  }
+  return "b2 e r2 despachados para lados diferentes";
 });
 
 console.log(falhou ? "\n✗ escolha de armazém com problema\n" : "\n✓ escolha de armazém ok\n");

@@ -138,6 +138,13 @@ export async function criarMediaPendente(dados: {
   secaoId?: string | null;
   /** Posição do arquivo na lista que o fotógrafo ordenou. */
   indice?: number;
+  /**
+   * Onde o ORIGINAL vai nascer. Gravado na linha na hora da criação, e não
+   * consultado depois: um vídeo de 30 GB pode levar horas subindo, e se a
+   * credencial do B2 entrar no ambiente no meio do envio, as partes seguintes
+   * iriam para outro fornecedor. A linha é a memória de onde este arquivo mora.
+   */
+  armazem?: "r2" | "b2";
 }) {
   /*
    * A ORDEM vem do navegador (a posição do arquivo na lista já ordenada por
@@ -160,8 +167,9 @@ export async function criarMediaPendente(dados: {
 
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
-                         nome_original, tipo, mime, bytes, largura, altura, secao_id, ordem, pronto)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false)
+                         nome_original, tipo, mime, bytes, largura, altura, secao_id, ordem, pronto,
+                         armazem)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14)
      returning *`,
     [
       dados.galeriaId,
@@ -177,6 +185,7 @@ export async function criarMediaPendente(dados: {
       dados.altura ?? null,
       dados.secaoId ?? null,
       posicao,
+      dados.armazem ?? "r2",
     ],
   );
 }

@@ -1,5 +1,22 @@
-import { urlDeLeitura } from "./r2";
-import { urlDeLeituraArquivo } from "./b2";
+import {
+  urlDeLeitura,
+  urlDeUpload,
+  conferirObjeto,
+  abrirEnvioEmPartes,
+  urlDaParte,
+  fecharEnvioEmPartes,
+  abortarEnvioEmPartes,
+} from "./r2";
+import {
+  urlDeLeituraArquivo,
+  urlDeUploadArquivo,
+  conferirArquivo,
+  arquivosConfigurado,
+  abrirEnvioEmPartesArquivo,
+  urlDaParteArquivo,
+  fecharEnvioEmPartesArquivo,
+  abortarEnvioEmPartesArquivo,
+} from "./b2";
 
 /**
  * DE ONDE LER — o único lugar que sabe em qual fornecedor cada arquivo mora.
@@ -84,4 +101,105 @@ export function urlDaDerivada(
   return derivada
     ? urlDeLeitura(derivada, expiraSeg)
     : urlDoOriginal(original, armazemDoOriginal, expiraSeg);
+}
+
+/**
+ * ── ONDE O ARQUIVO NASCE (fase 3 da obra) ─────────────────────────────────
+ *
+ * Até a fase 2 este módulo só decidia de onde LER. Agora decide onde ESCREVER.
+ *
+ * O desenho original mandava o arquivo nascer no R2 e um job noturno movê-lo
+ * para o B2, com verificação, carência e reconciliação. Isso existia para
+ * migrar acervo — e não havia acervo: produção tinha ZERO mídias. Fazer o
+ * original nascer direto no B2 apagou as duas fases mais perigosas da obra,
+ * que eram justamente as únicas rotinas capazes de apagar arquivo vivo.
+ *
+ * A janela para essa simplificação fecha no primeiro upload real. Depois dele
+ * volta a ser migração.
+ */
+
+/**
+ * Onde os uploads novos vão parar.
+ *
+ * A decisão é a PRESENÇA DA CREDENCIAL, não uma variável de liga-desliga. Sem
+ * as `ARQUIVOS_*` o sistema grava no R2 e nada quebra; no dia em que elas
+ * entrarem no ambiente, os uploads seguintes nascem no B2 — sem deploy, sem
+ * migração e sem tocar no que já foi gravado, porque cada mídia carrega seu
+ * próprio `armazem` na linha do banco.
+ *
+ * Uma variável separada ("USAR_B2=true") permitiria o estado impossível de
+ * estar ligada sem credencial, e o sintoma seria upload falhando para o
+ * fotógrafo. Aqui esse estado não existe.
+ */
+export function armazemDeNovosUploads(): Armazem {
+  return arquivosConfigurado ? "b2" : "r2";
+}
+
+/** URL de escrita do ORIGINAL, no armazém onde ele vai nascer. */
+export function urlDeEnvioDoOriginal(
+  chave: string,
+  mime: string,
+  armazem: Armazem,
+  expiraSeg = 3600,
+): Promise<string> {
+  return armazem === "b2"
+    ? urlDeUploadArquivo(chave, mime, expiraSeg)
+    : urlDeUpload(chave, mime, expiraSeg);
+}
+
+/** Tamanho e tipo do que chegou — usado para conferir o upload antes de aceitar. */
+export function conferirOriginal(
+  chave: string,
+  armazem: Armazem,
+): Promise<{ bytes: number; mime?: string }> {
+  return armazem === "b2" ? conferirArquivo(chave) : conferirObjeto(chave);
+}
+
+/*
+ * As quatro operações do envio em partes andam juntas, sempre no mesmo
+ * armazém: abrir num fornecedor e fechar no outro deixa partes órfãs ocupando
+ * espaço e cobrando sem nunca virar arquivo. O armazém vem de fora (da linha
+ * da mídia, gravada quando o envio abriu) e não de `armazemDeNovosUploads()`,
+ * porque um vídeo de 30 GB pode levar horas subindo — e se a credencial do B2
+ * entrar no ambiente no meio disso, as partes seguintes iriam para outro lugar.
+ */
+export function abrirEnvioDoOriginal(
+  chave: string,
+  mime: string,
+  armazem: Armazem,
+): Promise<string> {
+  return armazem === "b2" ? abrirEnvioEmPartesArquivo(chave, mime) : abrirEnvioEmPartes(chave, mime);
+}
+
+export function urlDaParteDoOriginal(
+  chave: string,
+  uploadId: string,
+  numero: number,
+  armazem: Armazem,
+  expiraSeg = 6 * 3600,
+): Promise<string> {
+  return armazem === "b2"
+    ? urlDaParteArquivo(chave, uploadId, numero, expiraSeg)
+    : urlDaParte(chave, uploadId, numero, expiraSeg);
+}
+
+export function fecharEnvioDoOriginal(
+  chave: string,
+  uploadId: string,
+  partes: { numero: number; etag: string }[],
+  armazem: Armazem,
+): Promise<void> {
+  return armazem === "b2"
+    ? fecharEnvioEmPartesArquivo(chave, uploadId, partes)
+    : fecharEnvioEmPartes(chave, uploadId, partes);
+}
+
+export function abortarEnvioDoOriginal(
+  chave: string,
+  uploadId: string,
+  armazem: Armazem,
+): Promise<void> {
+  return armazem === "b2"
+    ? abortarEnvioEmPartesArquivo(chave, uploadId)
+    : abortarEnvioEmPartes(chave, uploadId);
 }
