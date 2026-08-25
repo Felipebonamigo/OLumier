@@ -25,7 +25,7 @@ PG_DUMP=/usr/lib/postgresql/14/bin/pg_dump
 BANCO=fotonio
 DESTINO=/opt/fotonio-backups
 RCLONE=/usr/local/bin/rclone
-COFRE=cofre-b2:fotonio/banco   # remote "crypt" — sobe criptografado
+COFRE=cofre-olumier:banco   # bucket PROPRIO no B2 (olumier-espelho), com chave propria
 DIARIOS=7
 SEMANAIS=4
 # Chave do Resend para avisar quando falha. Reaproveita a do Atomatiza (mesmo

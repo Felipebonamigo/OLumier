@@ -138,10 +138,36 @@ propósito: apagar dos dois lugares ao mesmo tempo transformaria um clique errad
 em perda definitiva. A limpeza do que sobra é do `scripts/varrer-orfaos.mjs`,
 rodado à mão e com conferência.
 
-## Detalhe a arrumar quando der
+## O bucket é próprio desde 25/08/2026
 
-O backup **do banco** ainda mora numa pasta (`fotonio/`) dentro do bucket do
-Padelizou, porque a chave do B2 existente é dali. Funciona e está separado, mas o
-certo é um bucket próprio — se a chave do Padelizou for trocada, o backup do
-Olumier para junto, e sem avisar até a próxima falha. O `olumier-espelho` criado
-acima serve: basta apontar o remote `cofre-b2:` do rclone para ele.
+Até então o backup do banco morava numa pasta (`fotonio/`) **dentro do bucket do
+Padelizou**, usando a chave de lá — se aquela chave fosse trocada, o backup do
+Olumier parava junto, e sem avisar até a próxima falha.
+
+Agora banco e espelho vivem no `olumier-espelho`, com chave própria restrita a
+esse bucket:
+
+| Remote | O quê | Caminho |
+|---|---|---|
+| `olumier-b2` | conta B2, chave do Olumier | — |
+| `cofre-olumier` | crypt sobre o bucket | `cofre-olumier:banco` |
+
+A senha do crypt é **a mesma** de antes, copiada verbatim da configuração: senha
+diferente deixaria os backups antigos ilegíveis. Os seis que existiam foram
+copiados para o bucket novo e conferidos com `rclone check` (0 diferenças).
+
+O remote antigo `cofre-b2:` continua existindo e apontando para o bucket do
+Padelizou — é o backup **daquele** projeto, e não deve ser mexido.
+
+### Object Lock
+
+O bucket nasceu com `isFileLockEnabled: true`, mas **sem retenção padrão** — a
+trava existia e não estava sendo aplicada. Corrigido no mesmo dia via API:
+`governance`, 30 dias. Arquivo que sobe agora não pode ser apagado antes disso.
+
+⚠️ **A chave do app tem a capacidade `bypassGovernance`**, que a Backblaze
+concede por padrão às chaves criadas pela interface. Na prática, uma chave
+roubada ainda conseguiria apagar arquivo travado. Fechar isso exige criar a
+chave pela API (`b2_create_key`) com a lista de capacidades explícita, sem essa.
+Fica anotado: a trava cobre engano e software, mas não cobre chave vazada
+enquanto a capacidade estiver lá.
