@@ -84,9 +84,7 @@ export function PlanoConta({
           <div className="mt-3">
             <MontadorPlano
               inicial={
-                atual
-                  ? { segmento: atual.segmento, galeriaGb: atual.quotaGb, cofreGb: atual.cofreGb }
-                  : undefined
+                atual ? { segmento: atual.segmento, espacoGb: atual.quotaGb } : undefined
               }
               acao={(p) =>
                 p.id === planoAtual ? (

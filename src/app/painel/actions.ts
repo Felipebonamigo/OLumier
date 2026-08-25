@@ -294,20 +294,20 @@ export async function trocarPlanoAction(
   if (!tenant) return { erro: "Conta não encontrada." };
   if (tenant.plano_id === plano.id) return { erro: "Você já está neste plano." };
 
-  const novaQuotaAr = BigInt(plano.quotaGb) * BigInt(GB);
-  const novaQuotaCofre = BigInt(plano.cofreGb) * BigInt(GB);
+  /*
+   * Uma quota só: o que está no ar e o que está arquivado somam. Antes eram
+   * duas checagens, e a do cofre recusava a descida com "apague algo do cofre"
+   * — pedir para o fotógrafo apagar entrega é exatamente o que este produto
+   * promete que nunca é preciso fazer.
+   */
+  const novaQuota = BigInt(plano.quotaGb) * BigInt(GB);
   const uso = await usoDoEstudio(tenantId);
+  const usoTotal = uso.noAr + uso.noCofre;
 
-  if (uso.noAr > novaQuotaAr) {
-    const excesso = Number(uso.noAr - novaQuotaAr) / 1024 ** 3;
+  if (usoTotal > novaQuota) {
+    const excesso = Number(usoTotal - novaQuota) / 1024 ** 3;
     return {
-      erro: `Suas galerias no ar ocupam ${excesso.toFixed(1)} GB a mais do que o ${plano.nome} permite. Arquive ou apague algo antes de descer de plano.`,
-    };
-  }
-  if (uso.noCofre > novaQuotaCofre) {
-    const excesso = Number(uso.noCofre - novaQuotaCofre) / 1024 ** 3;
-    return {
-      erro: `Seu cofre ocupa ${excesso.toFixed(1)} GB a mais do que o ${plano.nome} permite. Apague algo do cofre antes de descer de plano.`,
+      erro: `Seu estúdio ocupa ${excesso.toFixed(1)} GB a mais do que o ${plano.nome} permite. Apague algo antes de descer de plano.`,
     };
   }
 
@@ -328,9 +328,9 @@ export async function trocarPlanoAction(
 
   await consultar(
     `update tenants
-        set plano_id = $1, quota_bytes = $2, quota_cofre_bytes = $3, atualizado_em = now()
-      where id = $4`,
-    [plano.id, novaQuotaAr.toString(), novaQuotaCofre.toString(), tenantId],
+        set plano_id = $1, quota_bytes = $2, atualizado_em = now()
+      where id = $3`,
+    [plano.id, novaQuota.toString(), tenantId],
   );
 
   /*

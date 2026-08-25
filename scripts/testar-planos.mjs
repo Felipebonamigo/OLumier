@@ -1,48 +1,44 @@
 #!/usr/bin/env node
 /**
- * Testa o montador de planos — o "quebra-cabeça".
+ * Testa o montador de planos — agora de DUAS peças, não três.
  * Uso: node --env-file=.env.local --experimental-strip-types \
  *        --import ./scripts/registrar-ts.mjs scripts/testar-planos.mjs
  *
- * Por que existe: o plano deixou de ser uma lista fixa de seis e virou peças
- * que o fotógrafo combina (tipo de trabalho + tamanho da galeria + cofre).
- * Combinação é multiplicação: são dezenas de montagens possíveis, e nenhuma
- * pode sair com preço abaixo do custo nem com reserva maior que o preço —
- * os dois jeitos de a cobrança sangrar em silêncio.
+ * Por que existe: o plano é montado (tipo de trabalho + tamanho do espaço), e
+ * nenhuma montagem pode sair com preço abaixo do custo nem com reserva maior
+ * que o preço — os dois jeitos de a cobrança sangrar em silêncio.
  *
- * Prende também o que NÃO pode mudar: id antigo gravado no banco tem de
- * continuar valendo a MESMA quota de antes. Um id que muda de significado
+ * Prende também o que NÃO pode mudar: id gravado no banco tem de continuar
+ * valendo pelo menos o MESMO espaço de antes. Um id que muda de significado
  * encolhe o espaço de quem já pagou, sem aviso e sem erro.
+ *
+ * ── A UNIFICAÇÃO DE 25/08/2026 ────────────────────────────────────────────
+ * O cofre deixou de ser peça de preço. Com tudo no B2, o GB no ar e o GB
+ * arquivado custam exatamente o mesmo (a franquia de egress de 3× cobre o
+ * download nos casos reais), então cobrar 36% menos pelo byte parado virou
+ * desconto sem lastro. Agora é um espaço só, e arquivar é comportamento
+ * incluso. Este arquivo prende as duas metades disso: que a peça sumiu, e que
+ * ninguém que já assinou perdeu espaço nem pagou mais caro.
  */
 import {
   SEGMENTOS,
-  GALERIAS,
-  COFRES,
+  ESPACOS,
   montar,
   idDaMontagem,
   planoPorId,
   custoTetoCentavos,
-  custoPecasCentavos,
+  custoEspacoCentavos,
   planos,
   todasAsMontagens,
 } from "../src/config/planos.ts";
-import {
-  lucroCentavos,
-  RESERVA_POR_PLANO,
-  FOLGA_GALERIA,
-  FOLGA_COFRE,
-  TAXA_COBRANCA,
-} from "../src/config/socios.ts";
+import { lucroCentavos, FOLGA_ESPACO, TAXA_COBRANCA } from "../src/config/socios.ts";
 
 /*
  * Reserva que a montagem terá QUANDO a obra da rota B2 estiver entregue.
  * Mesma regra do socios.ts, calculada aqui de novo de propósito: se a regra
  * de lá mudar sem ninguém pensar no alvo, este teste conta a diferença.
  */
-const reservaAlvo = (m) => {
-  const pecas = custoPecasCentavos(m, "alvo");
-  return Math.round(pecas.galeria * FOLGA_GALERIA + pecas.cofre * FOLGA_COFRE) + TAXA_COBRANCA;
-};
+const reservaAlvo = (m) => Math.round(custoEspacoCentavos(m, "alvo") * FOLGA_ESPACO) + TAXA_COBRANCA;
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -66,66 +62,53 @@ await etapa("três tipos de trabalho", () => {
   igual(ids, "ambos,filme,foto", "ids dos segmentos");
 });
 
-await etapa("tamanhos de galeria em ordem crescente", () => {
-  if (GALERIAS.length < 4) throw new Error("poucas faixas de galeria");
-  for (let i = 1; i < GALERIAS.length; i++) {
-    if (GALERIAS[i].gb <= GALERIAS[i - 1].gb) throw new Error("gb fora de ordem");
-    if (GALERIAS[i].precoCentavos <= GALERIAS[i - 1].precoCentavos) {
+await etapa("tamanhos de espaço em ordem crescente", () => {
+  if (ESPACOS.length < 4) throw new Error("poucas faixas de espaço");
+  for (let i = 1; i < ESPACOS.length; i++) {
+    if (ESPACOS[i].gb <= ESPACOS[i - 1].gb) throw new Error("gb fora de ordem");
+    if (ESPACOS[i].precoCentavos <= ESPACOS[i - 1].precoCentavos) {
       throw new Error("preço não cresce junto com o espaço");
     }
   }
-  return `${GALERIAS.length} faixas, ${GALERIAS[0].gb} GB a ${GALERIAS.at(-1).gb} GB`;
+  return `${ESPACOS.length} faixas, ${ESPACOS[0].gb} GB a ${ESPACOS.at(-1).gb} GB`;
 });
 
 /*
- * O topo da grade existe para quem filma: 10 TB é o volume de quem entrega
- * casamento em 4K o ano inteiro. Sem esta faixa, esse fotógrafo bate no teto de
- * 5 TB e vai embora — e a peça de cofre já ia a 10 TB, então parava justamente
- * o lado que ocupa espaço de verdade.
- *
- * O piso do preço não é opinião: sai da regra da reserva no PIOR combo (galeria
- * de 10 TB com o maior cofre). Abaixo dele a reserva não cobre a fatura da
- * Cloudflare e da Backblaze, e o sócio recebe zero.
+ * A escada tem de ficar mais barata por GB a cada degrau — é o que empurra o
+ * cliente para a faixa maior, que custa proporcionalmente menos para nós. Uma
+ * inversão aqui (degrau maior com R$/GB pior) é erro de digitação em dinheiro.
  */
-await etapa("a galeria vai até 10 TB, com lucro no pior combo (no alvo)", () => {
-  const maior = GALERIAS.at(-1);
-  igual(maior.gb, 10000, "maior faixa de galeria");
-
-  // No ALVO, porque na rota atual (tudo R2 + espelho) o pior combo segura 100%
-  // do dinheiro de propósito — ver a etapa "sob obra" na seção dinheiro.
-  const m = { segmento: "ambos", galeriaGb: 10000, cofreGb: COFRES.at(-1).gb };
-  const pior = montar(m);
-  const lucro = pior.precoCentavos - reservaAlvo(m);
-  if (lucro <= 0) {
-    throw new Error(`${pior.nome} não deixa lucro nem com a obra pronta`);
+await etapa("o GB fica mais barato a cada degrau", () => {
+  let anterior = Infinity;
+  for (const e of ESPACOS) {
+    const porGb = e.precoCentavos / e.gb;
+    if (porGb >= anterior) throw new Error(`${e.gb} GB não barateia o GB (${porGb.toFixed(3)})`);
+    anterior = porGb;
   }
-  return `R$ ${maior.precoCentavos / 100} · pior combo no alvo deixa R$ ${(lucro / 100).toFixed(2)}`;
+  const primeiro = ESPACOS[0], ultimo = ESPACOS.at(-1);
+  return `R$ ${(primeiro.precoCentavos / primeiro.gb / 100).toFixed(3)}/GB → R$ ${(ultimo.precoCentavos / ultimo.gb / 100).toFixed(3)}/GB`;
 });
 
-await etapa("cofre é opcional e mais barato por GB que a galeria", () => {
-  const galeria1tb = GALERIAS.find((g) => g.gb === 1000);
-  const cofre1tb = COFRES.find((c) => c.gb === 1000);
-  if (!galeria1tb || !cofre1tb) throw new Error("falta a faixa de 1 TB para comparar");
-  if (cofre1tb.precoCentavos >= galeria1tb.precoCentavos) {
-    throw new Error("cofre não pode custar o mesmo que espaço no ar");
-  }
-  return `1 TB: galeria ${galeria1tb.precoCentavos / 100} vs cofre ${cofre1tb.precoCentavos / 100}`;
+/*
+ * A peça de cofre não pode voltar por descuido. Se alguém reintroduzir uma
+ * grade separada para o arquivo, o desconto sem lastro volta junto — e com ele
+ * a recusa de arquivamento que este trabalho removeu.
+ */
+await etapa("não existe mais peça de cofre", async () => {
+  const mod = await import("../src/config/planos.ts");
+  if ("COFRES" in mod) throw new Error("COFRES voltou a existir");
+  if ("GALERIAS" in mod) throw new Error("GALERIAS deveria ter virado ESPACOS");
+  const p = montar({ segmento: "foto", espacoGb: 1000 });
+  if ("cofreGb" in p) throw new Error("Plano ainda carrega cofreGb");
 });
 
 console.log("\nmontagem");
 
-await etapa("preço é a soma das peças", () => {
-  const g = GALERIAS.find((x) => x.gb === 1000);
-  const c = COFRES.find((x) => x.gb === 3000);
-  const p = montar({ segmento: "filme", galeriaGb: 1000, cofreGb: 3000 });
-  igual(p.precoCentavos, g.precoCentavos + c.precoCentavos, "soma galeria+cofre");
-});
-
-await etapa("sem cofre paga só a galeria", () => {
-  const g = GALERIAS.find((x) => x.gb === 500);
-  const p = montar({ segmento: "foto", galeriaGb: 500, cofreGb: 0 });
-  igual(p.precoCentavos, g.precoCentavos, "preço sem cofre");
-  igual(p.cofreGb, 0, "cofre zerado");
+await etapa("preço é o da faixa escolhida", () => {
+  const e = ESPACOS.find((x) => x.gb === 1000);
+  const p = montar({ segmento: "filme", espacoGb: 1000 });
+  igual(p.precoCentavos, e.precoCentavos, "preço da faixa");
+  igual(p.quotaGb, 1000, "quota");
 });
 
 /*
@@ -135,29 +118,28 @@ await etapa("sem cofre paga só a galeria", () => {
  * mentira antes de ir pro ar.
  */
 await etapa("vídeo não custa mais caro que foto", () => {
-  for (const g of GALERIAS) {
-    const foto = montar({ segmento: "foto", galeriaGb: g.gb, cofreGb: 0 });
-    const filme = montar({ segmento: "filme", galeriaGb: g.gb, cofreGb: 0 });
-    const ambos = montar({ segmento: "ambos", galeriaGb: g.gb, cofreGb: 0 });
-    igual(filme.precoCentavos, foto.precoCentavos, `preço de filme em ${g.gb} GB`);
-    igual(ambos.precoCentavos, foto.precoCentavos, `preço de ambos em ${g.gb} GB`);
+  for (const e of ESPACOS) {
+    const foto = montar({ segmento: "foto", espacoGb: e.gb });
+    const filme = montar({ segmento: "filme", espacoGb: e.gb });
+    const ambos = montar({ segmento: "ambos", espacoGb: e.gb });
+    igual(filme.precoCentavos, foto.precoCentavos, `preço de filme em ${e.gb} GB`);
+    igual(ambos.precoCentavos, foto.precoCentavos, `preço de ambos em ${e.gb} GB`);
   }
 });
 
 await etapa("id da montagem faz ida e volta", () => {
-  const m = { segmento: "ambos", galeriaGb: 2000, cofreGb: 5000 };
+  const m = { segmento: "ambos", espacoGb: 2000 };
   const id = idDaMontagem(m);
   const p = planoPorId(id);
   if (!p) throw new Error(`planoPorId não reconheceu "${id}"`);
   igual(p.segmento, m.segmento, "segmento");
-  igual(p.quotaGb, m.galeriaGb, "galeria");
-  igual(p.cofreGb, m.cofreGb, "cofre");
+  igual(p.quotaGb, m.espacoGb, "espaço");
   igual(p.id, id, "id estável");
   return id;
 });
 
 await etapa("id inventado é recusado", () => {
-  for (const ruim of ["g:foto:999:0", "g:banana:100:0", "g:foto:100", "", "g::100:0"]) {
+  for (const ruim of ["g:foto:999", "g:banana:100", "g:foto", "", "g::100"]) {
     if (planoPorId(ruim)) throw new Error(`deveria recusar "${ruim}"`);
   }
 });
@@ -165,27 +147,54 @@ await etapa("id inventado é recusado", () => {
 console.log("\nnão quebrar quem já pagou");
 
 /*
- * Estes seis ids estão gravados em `tenants.plano_id` e no default da coluna.
- * O tamanho que cada um vale é contrato: mudar aqui encolhe a conta de alguém
- * na próxima sincronização de quota, calado.
+ * Ids gravados em `tenants.plano_id`. Duas gerações:
+ *   - os seis nomeados, de antes do quebra-cabeça
+ *   - os montados de TRÊS peças (`g:seg:galeria:cofre`), que existiram entre
+ *     24/08 e a unificação — inclusive o do único estúdio em produção
+ *
+ * Nos dois casos a regra é a mesma: a quota nova é a SOMA do que ele tinha
+ * (galeria + cofre), e o preço fica congelado. Somar nunca encolhe o espaço de
+ * ninguém, e congelar o preço garante que a unificação não vire aumento pelas
+ * costas. Ninguém novo recebe estes ids — eles só resolvem para trás.
  */
 const LEGADOS = {
-  "foto-100": { quotaGb: 100, cofreGb: 500 },
-  "foto-200": { quotaGb: 200, cofreGb: 1000 },
-  "foto-500": { quotaGb: 500, cofreGb: 2000 },
-  "filme-1000": { quotaGb: 1000, cofreGb: 3000 },
-  "filme-2000": { quotaGb: 2000, cofreGb: 5000 },
-  "filme-5000": { quotaGb: 5000, cofreGb: 10000 },
+  "foto-100": { quotaGb: 600, precoCentavos: 9900 },
+  "foto-200": { quotaGb: 1200, precoCentavos: 12900 },
+  "foto-500": { quotaGb: 2500, precoCentavos: 17900 },
+  "filme-1000": { quotaGb: 4000, precoCentavos: 24900 },
+  "filme-2000": { quotaGb: 7000, precoCentavos: 34900 },
+  "filme-5000": { quotaGb: 15000, precoCentavos: 69900 },
 };
 
-await etapa("id antigo continua valendo o mesmo espaço", () => {
+await etapa("id antigo nomeado vale galeria + cofre somados", () => {
   for (const [id, esperado] of Object.entries(LEGADOS)) {
     const p = planoPorId(id);
     if (!p) throw new Error(`id antigo "${id}" deixou de existir`);
-    igual(p.quotaGb, esperado.quotaGb, `${id}: galeria`);
-    igual(p.cofreGb, esperado.cofreGb, `${id}: cofre`);
+    igual(p.quotaGb, esperado.quotaGb, `${id}: quota`);
+    igual(p.precoCentavos, esperado.precoCentavos, `${id}: preço`);
   }
   return `${Object.keys(LEGADOS).length} ids preservados`;
+});
+
+/*
+ * O estúdio que está em produção hoje usa `g:foto:250:1000`. Se este id parar
+ * de resolver, a conta dele quebra na próxima leitura de plano; se resolver
+ * para menos de 1250 GB, ele perde espaço calado na próxima sincronização.
+ */
+await etapa("id montado de três peças vira espaço somado, sem mudar de preço", () => {
+  const p = planoPorId("g:foto:250:1000");
+  if (!p) throw new Error("g:foto:250:1000 deixou de resolver — é o plano do estúdio em produção");
+  igual(p.quotaGb, 1250, "quota somada");
+  igual(p.precoCentavos, 16800, "preço congelado (79 + 89)");
+  igual(p.segmento, "foto", "segmento");
+});
+
+await etapa("qualquer id de três peças resolve pela soma", () => {
+  for (const [id, gb] of [["g:filme:1000:3000", 4000], ["g:ambos:2000:5000", 7000], ["g:foto:100:0", 100]]) {
+    const p = planoPorId(id);
+    if (!p) throw new Error(`${id} não resolve`);
+    igual(p.quotaGb, gb, `${id}: quota`);
+  }
 });
 
 console.log("\ndinheiro");
@@ -193,12 +202,11 @@ console.log("\ndinheiro");
 /*
  * Duas rotas, duas verdades:
  *
- *   ALVO  — obra da rota B2 entregue (galeria grande e cofre no B2, espelho
- *           frio). É o piso de PREÇO: nenhuma montagem pode sair abaixo do
- *           custo alvo com as folgas, senão a grade nasce errada.
- *   ATUAL — tudo mora no R2 + espelho no B2. Algumas montagens grandes custam
- *           mais que o preço; enquanto a obra não sai, elas têm de segurar
- *           100% do dinheiro (lucro zero, split não manda nada).
+ *   ALVO  — obra entregue: TUDO no B2 com espelho frio em outra empresa.
+ *           É o piso de PREÇO: nenhuma faixa pode sair abaixo do custo com a
+ *           folga, senão a grade nasce errada.
+ *   ATUAL — tudo no R2 + espelho no B2. Algumas faixas custam mais que o preço;
+ *           enquanto a obra não sai, elas têm de segurar 100% do dinheiro.
  */
 await etapa("no alvo, nenhuma montagem sai abaixo do custo + folga", () => {
   let pior = null;
@@ -214,10 +222,9 @@ await etapa("no alvo, nenhuma montagem sai abaixo do custo + folga", () => {
 });
 
 /*
- * A reserva é o que FICA na conta para pagar Cloudflare e Backblaze; o split
- * manda embora o resto. Reserva < custo significaria fatura do cartão sem
- * dinheiro para cobrir. Onde nem o preço inteiro cobre o custo atual, o único
- * comportamento aceitável é reter tudo — e é isso que se confere aqui.
+ * A reserva é o que FICA na conta para pagar os fornecedores; o split manda
+ * embora o resto. Onde nem o preço inteiro cobre o custo atual, o único
+ * comportamento aceitável é reter tudo.
  */
 await etapa("na rota atual, reserva cobre o custo — ou segura o preço inteiro", () => {
   let sobObra = 0;
@@ -229,49 +236,36 @@ await etapa("na rota atual, reserva cobre o custo — ou segura o preço inteiro
     if (custo < p.precoCentavos) {
       if (reserva < custo) throw new Error(`${p.id}: reserva ${reserva / 100} < custo ${custo / 100}`);
     } else {
-      // Preço não cobre o custo atual: nada pode sair no split.
-      if (lucro !== 0) throw new Error(`${p.id}: distribui R$ ${(lucro / 100).toFixed(2)} vendendo abaixo do custo atual`);
+      if (lucro !== 0) {
+        throw new Error(`${p.id}: distribui R$ ${(lucro / 100).toFixed(2)} vendendo abaixo do custo atual`);
+      }
       sobObra++;
     }
   }
   return sobObra > 0 ? `${sobObra} montagem(ns) sob obra, retendo 100%` : "todas cobrem o custo atual";
 });
 
-await etapa("id antigo mantém a reserva que já estava na tabela", () => {
-  for (const id of Object.keys(LEGADOS)) {
-    const p = planoPorId(id);
-    const lucro = lucroCentavos(id, p.precoCentavos);
-    const reserva = p.precoCentavos - lucro;
-    if (RESERVA_POR_PLANO[id] && reserva !== RESERVA_POR_PLANO[id]) {
-      throw new Error(`${id}: reserva ${reserva} ≠ tabela ${RESERVA_POR_PLANO[id]}`);
-    }
-  }
-});
-
 console.log("\nposição contra o mercado");
 
 /*
- * Número verificado em 24/08/2026 na página do Pixieset: plano Pro, 1 TB, US$ 24
- * no anual — R$ 132 a 5,50, e ~R$ 140 no cartão do brasileiro com IOF de 3,38%.
- * Nossa faixa de 1 TB precisa caber embaixo disso, senão o fotógrafo que compara
- * lado a lado escolhe eles. Foi exatamente esse buraco que motivou a grade nova.
+ * Número verificado em 25/08/2026 na página do Pixieset: plano Pro, 1 TB, US$ 24
+ * no anual — R$ 132 a 5,50, e ~R$ 135 no cartão do brasileiro com IOF de 2,38%.
+ * Nossa faixa de 1 TB precisa caber perto disso, senão o fotógrafo que compara
+ * lado a lado escolhe eles — e lá o vídeo é 1 h em HD, aqui é ilimitado em 4K.
  */
-await etapa("1 TB de galeria fica abaixo do Pixieset Pro com IOF", () => {
-  const g = GALERIAS.find((x) => x.gb === 1000);
-  if (!g) throw new Error("sumiu a faixa de 1 TB");
-  if (g.precoCentavos > 14000) {
-    throw new Error(`1 TB a R$ ${g.precoCentavos / 100} perde para o Pro (~R$ 140)`);
+await etapa("1 TB fica no páreo com o Pixieset Pro", () => {
+  const e = ESPACOS.find((x) => x.gb === 1000);
+  if (!e) throw new Error("sumiu a faixa de 1 TB");
+  if (e.precoCentavos > 14000) {
+    throw new Error(`1 TB a R$ ${e.precoCentavos / 100} perde para o Pro (~R$ 135)`);
   }
-  return `R$ ${g.precoCentavos / 100} contra ~R$ 140`;
+  return `R$ ${e.precoCentavos / 100} contra ~R$ 135`;
 });
 
-await etapa("combos prontos continuam com cofre maior que a galeria", () => {
-  for (const p of planos) {
-    if (p.cofreGb <= p.quotaGb) {
-      throw new Error(`${p.nome}: cofre ${p.cofreGb} ≤ galeria ${p.quotaGb}`);
-    }
-  }
-  return `${planos.length} combos`;
+await etapa("existe um combo em destaque para a home", () => {
+  const destaque = planos.filter((p) => p.destaque);
+  igual(destaque.length, 1, "quantidade de destaques");
+  return `${destaque[0].nome} — R$ ${destaque[0].precoCentavos / 100}`;
 });
 
 console.log(falhou ? "\n✗ suíte vermelha\n" : "\n✓ planos ok\n");

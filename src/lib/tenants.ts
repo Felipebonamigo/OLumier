@@ -95,23 +95,19 @@ export async function criarTenant(dados: {
   }
 
   const senhaHash = await gerarHashSenha(dados.senha);
+  /*
+   * Uma quota só desde a unificação de 25/08/2026: galeria no ar e arquivo
+   * somam no mesmo espaço. `quota_cofre_bytes` continua na tabela (a migração
+   * 016 a zerou e comentou) para não quebrar release antigo em rollback, mas
+   * ninguém mais escreve nela.
+   */
   const quota = BigInt(plano.quotaGb) * BigInt(GB);
-  const quotaCofre = BigInt(plano.cofreGb) * BigInt(GB);
 
   const linha = await consultarUm<Tenant>(
-    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id,
-                          quota_bytes, quota_cofre_bytes)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes)
+     values ($1, $2, $3, $4, $5, $6)
      returning *`,
-    [
-      slug,
-      dados.nomeEstudio,
-      dados.email.toLowerCase(),
-      senhaHash,
-      plano.id,
-      quota.toString(),
-      quotaCofre.toString(),
-    ],
+    [slug, dados.nomeEstudio, dados.email.toLowerCase(), senhaHash, plano.id, quota.toString()],
   );
   return linha!;
 }

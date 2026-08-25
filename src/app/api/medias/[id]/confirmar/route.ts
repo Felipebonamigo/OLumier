@@ -5,7 +5,7 @@ import {
   confirmarMedia,
   apagarMedia,
   anularDerivadas,
-  bytesNoAr,
+  bytesUsados,
 } from "@/lib/medias";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { conferirObjeto, apagarObjeto, objetoExiste } from "@/lib/r2";
@@ -40,7 +40,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     const tenant = await buscarTenantPorId(tenantId);
     if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
 
-    const outros = await bytesNoAr(tenantId, mediaId);
+    const outros = await bytesUsados(tenantId, mediaId);
     if (outros + BigInt(bytes) > BigInt(tenant.quota_bytes)) {
       // Recusar e limpar: deixar o objeto no bucket seria pagar por um arquivo
       // que o dono não pode usar.

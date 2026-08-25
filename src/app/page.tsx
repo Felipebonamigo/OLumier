@@ -274,8 +274,9 @@ export default function Home() {
             <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
               <h3 className="font-semibold">Cofre automático</h3>
               <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-texto-soft">
-                No prazo que você definir, a galeria sai do ar sozinha e desce para o cofre — um
-                espaço separado, mais barato, seu. Nada é apagado; reativar é um clique.
+                No prazo que você definir, a galeria sai do ar sozinha: o link fecha para o cliente
+                e <strong className="text-texto">nada é apagado</strong>. Fica guardada no seu
+                espaço, sem custar a mais, e reativar é um clique.
               </p>
               <div className="mt-6" aria-hidden>
                 <div className="flex items-center gap-2">
@@ -285,7 +286,7 @@ export default function Home() {
                 </div>
                 <div className="mt-2 flex justify-between font-mono text-[10px] uppercase tracking-widest text-texto-faint">
                   <span>no ar · 12 meses</span>
-                  <span>cofre · pra sempre</span>
+                  <span>guardado · pra sempre</span>
                 </div>
               </div>
             </div>
@@ -363,11 +364,11 @@ export default function Home() {
                 Planos
               </p>
               <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
-                Monte o seu em três peças
+                Um número só: quanto espaço você quer
               </h2>
               <p className="mt-4 text-texto-soft">
-                Sem pacote pronto pra caber à força. Escolha o que você entrega, quanto de espaço
-                fica no ar e se quer cofre — o preço é a soma das peças, e nada mais.
+                Sem pacote pronto pra caber à força, e sem segunda conta pra fazer. Galeria no ar e
+                entrega guardada usam o mesmo espaço — arquivar não custa a mais.
               </p>
             </div>
           </Revelar>
@@ -458,7 +459,7 @@ function PlanoGrupo({ titulo, planos }: { titulo: string; planos: Plano[] }) {
             <div>
               <p className="font-semibold">{p.nome}</p>
               <p className="text-xs text-texto-soft">
-                galeria + {p.cofreGb >= 1000 ? `${p.cofreGb / 1000} TB` : `${p.cofreGb} GB`} de cofre
+                no ar e arquivado juntos
               </p>
             </div>
             <p className="whitespace-nowrap text-lg font-bold text-acento-alto">

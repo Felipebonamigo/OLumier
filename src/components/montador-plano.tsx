@@ -3,8 +3,7 @@
 import { useState, type ReactNode } from "react";
 import {
   SEGMENTOS,
-  GALERIAS,
-  COFRES,
+  ESPACOS,
   montar,
   formatarGb,
   formatarReais,
@@ -14,12 +13,18 @@ import {
 } from "@/config/planos";
 
 /**
- * O quebra-cabeça: o fotógrafo monta o plano dele em três peças.
+ * O montador: o fotógrafo escolhe o que entrega e quanto espaço o estúdio tem.
  *
  * Substituiu a lista de seis pacotes fixos. Pacote fixo obriga a pagar por
  * espaço que não se usa (quem só faz ensaio não precisa de 1 TB) ou a estourar
  * o único tamanho que servia — e, pior, esconde o que está sendo comprado
- * atrás de um nome. Aqui cada peça tem preço visível e o total é a soma.
+ * atrás de um nome.
+ *
+ * Foram TRÊS peças por um dia (25/08/2026), com o cofre cobrado à parte. A
+ * terceira saiu quando a conta mostrou que, com tudo no B2, o GB no ar e o GB
+ * arquivado custam o mesmo — o desconto do cofre virou desconto sem lastro. E a
+ * pergunta que sumiu era a impossível de responder na hora da compra: ninguém
+ * sabe quanto vai arquivar em 2027. Ver `docs/arquitetura-armazenamento.md`.
  *
  * Serve à home (vitrine, com "criar conta" no pé) e à tela de Conta (troca de
  * plano de verdade). Por isso o botão final vem de fora, em `acao`: o
@@ -76,12 +81,9 @@ export function MontadorPlano({
   acao?: (plano: Plano) => ReactNode;
 }) {
   const [segmento, setSegmento] = useState<Segmento>(inicial?.segmento ?? "foto");
-  const [galeriaGb, setGaleriaGb] = useState(inicial?.galeriaGb ?? 250);
-  const [cofreGb, setCofreGb] = useState(inicial?.cofreGb ?? 0);
+  const [espacoGb, setEspacoGb] = useState(inicial?.espacoGb ?? 1000);
 
-  const plano = montar({ segmento, galeriaGb, cofreGb });
-  const precoGaleria = GALERIAS.find((g) => g.gb === galeriaGb)?.precoCentavos ?? 0;
-  const precoCofre = cofreGb > 0 ? (COFRES.find((c) => c.gb === cofreGb)?.precoCentavos ?? 0) : 0;
+  const plano = montar({ segmento, espacoGb });
 
   return (
     <div className="rounded-2xl border border-linha bg-carbon/60 p-6 sm:p-8">
@@ -108,63 +110,40 @@ export function MontadorPlano({
       {/* ── peça 2 ─────────────────────────────────────────────────────── */}
       <div className="mt-9 flex items-center gap-3">
         <Numero n={2} />
-        <span className={PASSO}>Tamanho da galeria</span>
+        <span className={PASSO}>Espaço do estúdio</span>
       </div>
       <p className="mt-2 text-sm text-texto-soft">
-        O espaço que fica <strong className="text-texto">no ar</strong>, com o link aberto para o
-        cliente baixar quantas vezes quiser.
+        Um número só: galeria no ar e arquivo guardado usam o{" "}
+        <strong className="text-texto">mesmo espaço</strong>.
       </p>
-      {/* Sete colunas para sete faixas, iguais às do cofre logo abaixo: as duas
-          linhas de peça precisam alinhar, senão o quebra-cabeça deixa de parecer
-          um. Mudou GALERIAS? confira se a contagem ainda bate. */}
-      <div className="mt-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        {GALERIAS.map((g) => (
-          <Peca
-            key={g.gb}
-            ativo={galeriaGb === g.gb}
-            onClick={() => setGaleriaGb(g.gb)}
-            titulo={formatarGb(g.gb)}
-            preco={formatarReais(g.precoCentavos)}
-          />
-        ))}
-      </div>
-
-      {/* ── peça 3 ─────────────────────────────────────────────────────── */}
-      <div className="mt-9 flex items-center gap-3">
-        <Numero n={3} />
-        <span className={PASSO}>Cofre — opcional</span>
-      </div>
 
       {/*
-       * O cofre é a peça que ninguém conhece, então a explicação vive aqui e não
-       * numa página de ajuda: quem não entende o que é simplesmente não compra.
+       * O arquivamento é a promessa que nenhum concorrente faz, e o cliente não
+       * descobre sozinho que ela existe — por isso a explicação vive aqui, ao
+       * lado do preço, e não numa página de ajuda que ninguém abre.
        */}
       <div className="mt-3 rounded-lg border border-linha bg-void p-4 text-sm text-texto-soft">
         <p>
           Toda galeria tem um prazo no ar (você escolhe: 6 meses, 1 ano, 2 anos ou sem prazo).
-          Quando o prazo acaba, ela <strong className="text-texto">desce para o cofre</strong>:
-          o link sai do ar, mas <strong className="text-texto">nada é apagado</strong>.
+          Quando o prazo acaba, o link sai do ar e{" "}
+          <strong className="text-texto">nada é apagado</strong> — a entrega continua guardada no
+          seu espaço.
         </p>
         <p className="mt-2">
-          Cliente antigo pediu as fotos de novo? Você reativa em um clique e a galeria volta ao ar
-          por mais um ano. Sem cofre, você precisa apagar as entregas antigas para abrir espaço.
+          Cliente antigo pediu as fotos de novo? Você reativa em um clique e a galeria volta ao ar.
+          Guardar entrega antiga <strong className="text-texto">não custa a mais</strong>.
         </p>
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-7">
-        <Peca
-          ativo={cofreGb === 0}
-          onClick={() => setCofreGb(0)}
-          titulo="Sem cofre"
-          preco={formatarReais(0)}
-        />
-        {COFRES.map((c) => (
+      {/* Oito colunas para oito faixas. Mudou ESPACOS? confira a contagem. */}
+      <div className="mt-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-8">
+        {ESPACOS.map((e) => (
           <Peca
-            key={c.gb}
-            ativo={cofreGb === c.gb}
-            onClick={() => setCofreGb(c.gb)}
-            titulo={formatarGb(c.gb)}
-            preco={formatarReais(c.precoCentavos)}
+            key={e.gb}
+            ativo={espacoGb === e.gb}
+            onClick={() => setEspacoGb(e.gb)}
+            titulo={formatarGb(e.gb)}
+            preco={formatarReais(e.precoCentavos)}
           />
         ))}
       </div>
@@ -175,8 +154,7 @@ export function MontadorPlano({
           <p className={PASSO}>Seu plano</p>
           <p className="mt-2 text-lg font-semibold">{plano.nome}</p>
           <p className="mt-1 text-xs text-texto-faint tabular-nums">
-            galeria {formatarReais(precoGaleria)}
-            {cofreGb > 0 && ` + cofre ${formatarReais(precoCofre)}`}
+            {formatarGb(espacoGb)} · no ar e arquivado juntos
           </p>
         </div>
         <div className="text-left sm:text-right">

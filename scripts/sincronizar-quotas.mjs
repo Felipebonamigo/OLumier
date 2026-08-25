@@ -30,7 +30,7 @@ await db.connect();
 
 try {
   const { rows } = await db.query(
-    "select id, nome_estudio, plano_id, quota_bytes, quota_cofre_bytes from tenants order by criado_em",
+    "select id, nome_estudio, plano_id, quota_bytes from tenants order by criado_em",
   );
 
   if (rows.length === 0) {
@@ -50,25 +50,34 @@ try {
       continue;
     }
 
-    const alvoAr = BigInt(plano.quotaGb) * BigInt(GB);
-    const alvoCofre = BigInt(plano.cofreGb) * BigInt(GB);
-    const atualAr = BigInt(t.quota_bytes);
-    const atualCofre = BigInt(t.quota_cofre_bytes);
+    const alvo = BigInt(plano.quotaGb) * BigInt(GB);
+    const atual = BigInt(t.quota_bytes);
 
-    if (alvoAr === atualAr && alvoCofre === atualCofre) continue;
+    if (alvo === atual) continue;
 
-    mudariam++;
-    console.log(`  ${t.nome_estudio} (${plano.nome})`);
-    if (alvoAr !== atualAr) console.log(`      no ar: ${emGB(atualAr)} → ${emGB(alvoAr)}`);
-    if (alvoCofre !== atualCofre) {
-      console.log(`      cofre: ${emGB(atualCofre)} → ${emGB(alvoCofre)}`);
+    /*
+     * ENCOLHER é o caso perigoso, e ele existe: os ids antigos resolvem para
+     * galeria + cofre somados, e um estúdio que já passou pela migração 016 tem
+     * a soma gravada. Se alguém mexer na tabela de legados sem pensar nisso, o
+     * alvo cai abaixo do atual e este script tiraria espaço de quem já pagou —
+     * calado. Avisa e pula; reduzir quota é decisão de gente.
+     */
+    if (alvo < atual) {
+      console.log(
+        `  ! ${t.nome_estudio} (${plano.nome}): o plano dá ${emGB(alvo)} e a conta tem ${emGB(atual)} — ` +
+          `ENCOLHERIA, então foi pulado. Confira o mapa de ids antigos em planos.ts.`,
+      );
+      continue;
     }
 
+    mudariam++;
+    console.log(`  ${t.nome_estudio} (${plano.nome}): ${emGB(atual)} → ${emGB(alvo)}`);
+
     if (APLICAR) {
-      await db.query(
-        "update tenants set quota_bytes = $1, quota_cofre_bytes = $2, atualizado_em = now() where id = $3",
-        [alvoAr.toString(), alvoCofre.toString(), t.id],
-      );
+      await db.query("update tenants set quota_bytes = $1, atualizado_em = now() where id = $2", [
+        alvo.toString(),
+        t.id,
+      ]);
     }
   }
 

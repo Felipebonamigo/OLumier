@@ -53,12 +53,19 @@ async function tamanhoDaGaleria(galeriaId: string, tenantId: string): Promise<bi
 /**
  * Manda a galeria para o cofre agora, sem esperar o prazo.
  *
- * RECUSA quando não cabe no cofre. Aqui o fotógrafo está clicando um botão e
- * esperando uma resposta — dizer "não coube" na hora é melhor que aceitar e
- * deixá-lo descobrir depois que estourou o plano.
+ * NÃO PODE FALHAR, e isso é o desenho, não descuido: desde a unificação de
+ * 25/08/2026 existe um espaço só, então arquivar não muda o total ocupado —
+ * muda apenas se o link abre para o cliente final. Não há motivo físico para
+ * recusar.
  *
- * (O arquivamento AUTOMÁTICO por prazo se comporta diferente de propósito — ver
- * `arquivarVencidas`.)
+ * A versão anterior recusava quando não cabia no `quota_cofre_bytes`, que
+ * nascia zero (migração 007). Na prática o cliente padrão levava "não cabe no
+ * seu cofre" na primeira vez que tentava usar o recurso que mais vendemos, e a
+ * saída oferecida era apagar entrega — exatamente o que a página /seguranca
+ * promete que nunca é preciso fazer.
+ *
+ * `scripts/testar-quota.mjs` prende isto: se alguém reintroduzir uma recusa
+ * aqui, a suíte fica vermelha antes de o cliente descobrir.
  */
 export async function arquivarAgora(
   galeriaId: string,
@@ -66,21 +73,6 @@ export async function arquivarAgora(
 ): Promise<ResultadoCofre> {
   const tamanho = await tamanhoDaGaleria(galeriaId, tenantId);
   if (tamanho === null) return { ok: false, erro: "Galeria não encontrada." };
-
-  const tenant = await consultarUm<{ quota_cofre_bytes: string }>(
-    "select quota_cofre_bytes from tenants where id = $1",
-    [tenantId],
-  );
-  const { noCofre } = await usoDoEstudio(tenantId);
-  const limite = BigInt(tenant?.quota_cofre_bytes ?? "0");
-
-  if (noCofre + tamanho > limite) {
-    const faltam = Number(noCofre + tamanho - limite) / 1024 ** 3;
-    return {
-      ok: false,
-      erro: `Esta galeria não cabe no seu cofre — faltam ${faltam.toFixed(1)} GB. Reative uma galeria antiga para liberar espaço, ou aumente o plano.`,
-    };
-  }
 
   await consultar(
     `update galerias
@@ -111,27 +103,13 @@ export async function arquivarAgora(
  * Tira a galeria do cofre. Estende o prazo por mais 12 meses a partir de hoje —
  * reativar e a galeria vencer de novo na semana seguinte seria uma armadilha.
  *
- * Recusa quando não há espaço no ar: colocar de volta o que não cabe deixaria o
- * estúdio acima da quota sem ele ter enviado nada.
+ * Também NÃO PODE FALHAR, pelo mesmo motivo de `arquivarAgora`: com um espaço
+ * só, voltar ao ar não ocupa um byte a mais do que já estava ocupado. A recusa
+ * antiga ("não há espaço no ar") existia porque os baldes eram dois.
  */
 export async function reativar(galeriaId: string, tenantId: string): Promise<ResultadoCofre> {
   const tamanho = await tamanhoDaGaleria(galeriaId, tenantId);
   if (tamanho === null) return { ok: false, erro: "Galeria não encontrada." };
-
-  const tenant = await consultarUm<{ quota_bytes: string }>(
-    "select quota_bytes from tenants where id = $1",
-    [tenantId],
-  );
-  const { noAr } = await usoDoEstudio(tenantId);
-  const limite = BigInt(tenant?.quota_bytes ?? "0");
-
-  if (noAr + tamanho > limite) {
-    const faltam = Number(noAr + tamanho - limite) / 1024 ** 3;
-    return {
-      ok: false,
-      erro: `Não há espaço no ar para esta galeria — faltam ${faltam.toFixed(1)} GB. Arquive outra galeria ou aumente o plano.`,
-    };
-  }
 
   await consultar(
     `update galerias
@@ -211,8 +189,18 @@ export async function arquivarVencidas() {
   return arquivadas;
 }
 
-/** Quem passou do cofre contratado — para o log da tarefa diária avisar. */
-export async function estudiosAcimaDoCofre() {
+/**
+ * Quem passou do espaço contratado — para o log da tarefa diária avisar.
+ *
+ * Conta TUDO (no ar e arquivado) contra a quota única. Chamava-se
+ * `estudiosAcimaDoCofre` e olhava só o arquivado contra `quota_cofre_bytes`,
+ * que a migração 016 zerou — deixar como estava faria a tarefa diária acusar
+ * todo estúdio com uma única galeria arquivada.
+ *
+ * Estourar não bloqueia nada: só o upload seguinte é recusado. Aqui é aviso
+ * para o operador, não punição para o cliente.
+ */
+export async function estudiosAcimaDoEspaco() {
   return consultar<{
     nome_estudio: string;
     email: string;
@@ -221,12 +209,12 @@ export async function estudiosAcimaDoCofre() {
   }>(
     `select t.nome_estudio, t.email,
             coalesce(sum(m.bytes),0)::text as usado,
-            t.quota_cofre_bytes::text      as limite
+            t.quota_bytes::text            as limite
        from tenants t
-       join galerias g on g.tenant_id = t.id and g.estado = 'arquivada'
+       join galerias g on g.tenant_id = t.id
        join medias   m on m.galeria_id = g.id
-      group by t.id, t.nome_estudio, t.email, t.quota_cofre_bytes
-     having coalesce(sum(m.bytes),0) > t.quota_cofre_bytes`,
+      group by t.id, t.nome_estudio, t.email, t.quota_bytes
+     having coalesce(sum(m.bytes),0) > t.quota_bytes`,
   );
 }
 

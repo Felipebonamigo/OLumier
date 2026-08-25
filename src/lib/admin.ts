@@ -25,7 +25,6 @@ export interface LinhaAdmin {
   cpf_cnpj: string | null;
   tem_assinatura: boolean;
   quota_bytes: string;
-  quota_cofre_bytes: string;
   bytes_no_ar: string;
   bytes_no_cofre: string;
   galerias: number;
@@ -47,7 +46,7 @@ export async function panoramaDosEstudios(): Promise<LinhaAdmin[]> {
       t.id, t.nome_estudio, t.email, t.slug, t.plano_id, t.status,
       t.trial_ate, t.criado_em, t.cpf_cnpj,
       (t.asaas_assinatura_id is not null) as tem_assinatura,
-      t.quota_bytes, t.quota_cofre_bytes,
+      t.quota_bytes,
       coalesce((
         select sum(m.bytes) from medias m
           join galerias g on g.id = m.galeria_id

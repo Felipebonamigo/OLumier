@@ -99,7 +99,7 @@ export default async function AdminPage() {
           <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="border-b border-linha bg-carbon text-left">
-                {["Estúdio", "Situação", "Plano", "No ar", "Cofre", "Galerias", "Último acesso"].map(
+                {["Estúdio", "Situação", "Plano", "Espaço", "No ar / guardado", "Galerias", "Último acesso"].map(
                   (h) => (
                     <th
                       key={h}
@@ -116,8 +116,11 @@ export default async function AdminPage() {
                 const plano = planoPorId(e.plano_id);
                 const restam = e.status === "trial" ? dias(e.trial_ate) : null;
                 const noAr = BigInt(e.bytes_no_ar);
+                const guardado = BigInt(e.bytes_no_cofre);
+                /* Espaço único desde a migração 016: o que aperta é a soma. */
+                const usado = noAr + guardado;
                 const quota = BigInt(e.quota_bytes);
-                const apertado = quota > BigInt(0) && noAr * BigInt(100) > quota * BigInt(85);
+                const apertado = quota > BigInt(0) && usado * BigInt(100) > quota * BigInt(85);
 
                 return (
                   <tr key={e.id} className="border-b border-linha last:border-0 align-top">
@@ -152,17 +155,15 @@ export default async function AdminPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs tabular-nums">
                       <span className={apertado ? "text-alerta" : ""}>
-                        {formatarBytes(noAr)}
+                        {formatarBytes(usado)}
                       </span>
                       <span className="block text-[11px] text-texto-faint">
                         de {formatarBytes(quota)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs tabular-nums">
-                      {formatarBytes(BigInt(e.bytes_no_cofre))}
-                      <span className="block text-[11px] text-texto-faint">
-                        de {formatarBytes(BigInt(e.quota_cofre_bytes))}
-                      </span>
+                    <td className="px-4 py-3 font-mono text-xs tabular-nums text-texto-faint">
+                      {formatarBytes(noAr)}
+                      <span className="block text-[11px]">{formatarBytes(guardado)} guardado</span>
                     </td>
                     <td className="px-4 py-3 text-xs tabular-nums">
                       {e.galerias}

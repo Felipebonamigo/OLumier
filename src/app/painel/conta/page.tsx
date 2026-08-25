@@ -146,22 +146,27 @@ export default async function ContaPage() {
         )}
       </section>
 
-      {/* Espaço — dois baldes independentes, cada um com seu limite. */}
+      {/*
+       * UM limite só, e a quebra vem embaixo como INFORMAÇÃO.
+       *
+       * A distinção importa: enquanto foram dois baldes, cada barra era um teto
+       * que podia estourar sozinho. Agora existe um teto — a soma —, e saber
+       * quanto está no ar contra quanto está guardado é dado útil, não regra.
+       * Desenhar as duas barras de novo faria o fotógrafo procurar dois limites
+       * que não existem mais.
+       */}
       <section className="mt-6 rounded-xl border border-linha bg-carbon p-5">
         <h2 className="text-sm font-semibold">Espaço</h2>
-        <div className="mt-4 space-y-4">
+        <div className="mt-4">
           <Balde
-            rotulo="Galerias no ar"
-            usado={uso.noAr}
+            rotulo="Espaço do estúdio"
+            usado={uso.noAr + uso.noCofre}
             limite={BigInt(tenant.quota_bytes)}
-            nota="O que seus clientes conseguem abrir agora."
+            nota="Galerias no ar e entregas guardadas usam o mesmo espaço."
           />
-          <Balde
-            rotulo="Cofre"
-            usado={uso.noCofre}
-            limite={BigInt(tenant.quota_cofre_bytes)}
-            nota="Guardado, fora do ar. Mandar para cá libera espaço nas galerias."
-          />
+          <p className="mt-3 font-mono text-[11px] tabular-nums text-texto-faint">
+            {formatarBytes(uso.noAr)} no ar · {formatarBytes(uso.noCofre)} guardado
+          </p>
         </div>
       </section>
 

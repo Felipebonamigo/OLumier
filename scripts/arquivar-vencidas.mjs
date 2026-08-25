@@ -39,25 +39,28 @@ try {
   }
 
   /*
-   * O arquivamento por prazo NÃO recusa por falta de espaço no cofre — o prazo
-   * foi combinado com o casal, e segurar a galeria no ar quebraria o combinado E
-   * continuaria consumindo a quota das galerias no ar. Mas passar do contratado
-   * em silêncio seria pior ainda: aqui é onde isso vira visível.
+   * Arquivar nunca é recusado: com espaço único (migração 016) mover a galeria
+   * de estado não muda um byte do total ocupado. O prazo também foi combinado
+   * com o casal, e segurar a galeria no ar quebraria o combinado.
+   *
+   * O que este bloco faz é outra coisa: mostrar quem passou do espaço
+   * contratado. Estourar não bloqueia nada — só o próximo upload é recusado —,
+   * então sem este aviso o operador só descobriria pela fatura.
    */
   const { rows: acima } = await db.query(
     `select t.nome_estudio, t.email,
             coalesce(sum(m.bytes),0)::text as usado,
-            t.quota_cofre_bytes::text      as limite
+            t.quota_bytes::text            as limite
        from tenants t
-       join galerias g on g.tenant_id = t.id and g.estado = 'arquivada'
+       join galerias g on g.tenant_id = t.id
        join medias   m on m.galeria_id = g.id
-      group by t.id, t.nome_estudio, t.email, t.quota_cofre_bytes
-     having coalesce(sum(m.bytes),0) > t.quota_cofre_bytes`,
+      group by t.id, t.nome_estudio, t.email, t.quota_bytes
+     having coalesce(sum(m.bytes),0) > t.quota_bytes`,
   );
 
   if (acima.length > 0) {
     const gb = (b) => (Number(b) / 1024 ** 3).toFixed(1);
-    console.log(`${quando} ⚠ ${acima.length} estúdio(s) acima do cofre contratado:`);
+    console.log(`${quando} ⚠ ${acima.length} estúdio(s) acima do espaço contratado:`);
     for (const a of acima) {
       console.log(`  ! ${a.nome_estudio} (${a.email}): ${gb(a.usado)} GB de ${gb(a.limite)} GB`);
     }

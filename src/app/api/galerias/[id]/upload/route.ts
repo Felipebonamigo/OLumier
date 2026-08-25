@@ -9,7 +9,7 @@ import {
   LIMITE_POR_ARQUIVO,
   LIMITE_PUT_UNICO,
   TAMANHO_PARTE,
-  bytesNoAr,
+  bytesUsados,
   criarMediaPendente,
 } from "@/lib/medias";
 import {
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ erro: situacao.recado }, { status: 402 });
   }
 
-  const comprometido = await bytesNoAr(tenantId);
+  const comprometido = await bytesUsados(tenantId);
   const quota = BigInt(tenant.quota_bytes);
   if (comprometido + BigInt(bytes) > quota) {
     return NextResponse.json(

@@ -17,7 +17,7 @@
  * nada no resto do código depende desses números.
  */
 
-import { planoPorId, custoPecasCentavos } from "./planos";
+import { planoPorId, custoEspacoCentavos } from "./planos";
 
 export interface Socio {
   id: string;
@@ -40,66 +40,52 @@ export const SOCIOS: Socio[] = [
 ];
 
 /**
- * Reserva de custo por plano, em centavos.
+ * Folga sobre o custo teto: cobre alta do dólar sem comer o lucro dos sócios.
  *
- * Sai da planilha de custos validada, com folga proposital: a Cloudflare cobra
- * em DÓLAR e nós recebemos em real, então uma alta do câmbio não pode comer o
- * lucro dos sócios. A folga também cobre a taxa do Asaas.
+ * Uma só desde a unificação do plano (25/08/2026). Antes eram duas — 1,3 para a
+ * galeria e 1,5 para o cofre, porque o cofre vivia de margem ~zero e a folga
+ * era a única proteção cambial dele. Sem peça de cofre não há margem apertada a
+ * proteger: toda faixa da grade tem lucro gordo em cima da reserva, e 30% cobre
+ * dólar a ~R$ 7,15 sem tocar no repasse.
  *
- * Regra de bolso usada: custo teto do plano + ~40% de folga + R$ 3 de taxa.
+ * A folga real é maior que estes 30%, porque a reserva usa o custo com o espaço
+ * 100% cheio e a ocupação típica é de 30 a 60%.
  */
-export const RESERVA_POR_PLANO: Record<string, number> = {
-  "foto-100": 2500, // custo teto R$ 18
-  "foto-200": 4500, // custo teto R$ 37
-  "foto-500": 11000, // custo teto R$ 91
-  "filme-1000": 15000, // custo teto R$ 135
-  "filme-2000": 26000, // custo teto R$ 234
-  "filme-5000": 55000, // custo teto R$ 498
-};
-
-/**
- * Folgas sobre o custo teto: cobrem alta do dólar sem comer o lucro dos sócios.
- *
- * São DUAS de propósito (25/08/2026): a galeria tem lucro gordo em cima da
- * reserva, que já absorve câmbio ruim — 30% de folga basta. O cofre vive de
- * margem ~zero por desenho, então a folga é a ÚNICA proteção cambial dele;
- * 50% segura dólar até ~R$ 8 sem a peça virar subsídio.
- */
-export const FOLGA_GALERIA = 1.3;
-export const FOLGA_COFRE = 1.5;
+export const FOLGA_ESPACO = 1.3;
 /** Taxa do Asaas por cobrança, em centavos. */
 export const TAXA_COBRANCA = 300;
 
 /**
- * Reserva de uma montagem do quebra-cabeça.
+ * Reserva de custo de um plano, em centavos.
  *
- * A tabela acima não serve para as montagens novas: as peças combinam em mais
- * de cem planos possíveis, e uma tabela escrita à mão ou ficaria incompleta ou
- * envelheceria calada. Aqui a reserva sai do custo real da montagem — mesma
- * regra de bolso de antes (custo teto + folga + taxa), só que calculada, com a
- * folga de cada peça.
+ * Sempre calculada do espaço contratado, nunca tabelada. Já existiu uma tabela
+ * escrita à mão (`RESERVA_POR_PLANO`), e ela morreu na unificação de 25/08/2026
+ * por um motivo que vale lembrar: quando as quotas dos ids antigos passaram a
+ * somar galeria + cofre, os números da tabela viraram mentira em silêncio —
+ * `foto-100` reservava R$ 25 para um plano que passou a custar R$ 72. Reserva
+ * abaixo do custo é fatura de cartão sem dinheiro para cobrir, e uma tabela
+ * envelhece sem avisar. O cálculo, não.
  *
- * O custo vem da rota EM PRODUÇÃO (hoje: tudo R2 + espelho B2). Em montagem
- * grande isso pode passar do preço — `lucroCentavos` trava o lucro em zero e o
- * split não manda nada: 100% fica na conta até a obra da rota barata sair.
- * Distribuir "lucro" calculado numa rota que não existe seria pagar sócio com
- * dinheiro da fatura da Cloudflare.
+ * Regra: custo teto do espaço × folga cambial + taxa da cobrança.
+ *
+ * O custo vem da rota EM PRODUÇÃO (hoje: tudo R2 + espelho B2). Em faixa grande
+ * isso pode passar do preço — `lucroCentavos` trava o lucro em zero e o split
+ * não manda nada: 100% fica na conta até a obra da rota barata sair. Distribuir
+ * "lucro" calculado numa rota que não existe seria pagar sócio com dinheiro da
+ * fatura da Cloudflare.
  */
-function reservaDaMontagem(planoId: string): number | null {
+function reservaDoPlano(planoId: string): number | null {
   const plano = planoPorId(planoId);
-  if (!plano || !planoId.startsWith("g:")) return null;
-  const pecas = custoPecasCentavos({
-    segmento: plano.segmento,
-    galeriaGb: plano.quotaGb,
-    cofreGb: plano.cofreGb,
-  });
-  return Math.round(pecas.galeria * FOLGA_GALERIA + pecas.cofre * FOLGA_COFRE) + TAXA_COBRANCA;
+  if (!plano) return null;
+  const custo = custoEspacoCentavos({ segmento: plano.segmento, espacoGb: plano.quotaGb });
+  return Math.round(custo * FOLGA_ESPACO) + TAXA_COBRANCA;
 }
 
 /** Quanto sobra de lucro depois de separar a reserva de custo. */
 export function lucroCentavos(planoId: string, precoCentavos: number): number {
-  const reserva =
-    RESERVA_POR_PLANO[planoId] ?? reservaDaMontagem(planoId) ?? Math.round(precoCentavos * 0.35);
+  /* Id irreconhecível cai num terço do preço — chute conservador, e o único
+   * caminho em que a reserva não sai do espaço contratado. */
+  const reserva = reservaDoPlano(planoId) ?? Math.round(precoCentavos * 0.35);
   return Math.max(0, precoCentavos - reserva);
 }
 

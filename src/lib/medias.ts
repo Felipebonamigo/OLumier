@@ -69,11 +69,16 @@ export async function listarMedias(galeriaId: string) {
  * (pronto = false). Sem isso, vários envios em paralelo furariam a quota juntos.
  */
 export interface UsoDoEstudio {
-  /** Galerias no ar — é isto que a quota do plano limita. */
+  /** Galerias no ar (link aberto para o cliente final). */
   noAr: bigint;
-  /** Galerias arquivadas — limitado pela quota do cofre. */
+  /** Galerias arquivadas (fora do ar, guardadas). */
   noCofre: bigint;
 }
+/*
+ * Os dois continuam separados porque a TELA mostra a quebra ("700 GB no ar ·
+ * 300 GB arquivado") — mas isso é informação, não são dois limites. Desde a
+ * unificação de 25/08/2026 quem limita é a soma, e só ela. Ver `bytesUsados`.
+ */
 
 /**
  * Espaço usado, separado em dois baldes.
@@ -104,9 +109,18 @@ export async function usoDoEstudio(tenantId: string, exceto?: string): Promise<U
   };
 }
 
-/** Atalho para o caminho de upload, que só se importa com o espaço no ar. */
-export async function bytesNoAr(tenantId: string, exceto?: string): Promise<bigint> {
-  return (await usoDoEstudio(tenantId, exceto)).noAr;
+/**
+ * Espaço TOTAL ocupado — é o que o portão de upload compara com a quota.
+ *
+ * Soma o que está no ar e o que está arquivado. Chamava-se `bytesNoAr` e
+ * ignorava o arquivado, o que fazia sentido quando o cofre tinha balde próprio.
+ * Depois da unificação, ignorar o arquivado transformaria arquivar em espaço
+ * grátis: bastaria arquivar tudo para enviar sem limite, e a fatura do B2
+ * subiria sem receita atrás. `scripts/testar-quota.mjs` prende isto.
+ */
+export async function bytesUsados(tenantId: string, exceto?: string): Promise<bigint> {
+  const { noAr, noCofre } = await usoDoEstudio(tenantId, exceto);
+  return noAr + noCofre;
 }
 
 export async function criarMediaPendente(dados: {
