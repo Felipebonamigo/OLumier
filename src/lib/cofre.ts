@@ -88,6 +88,22 @@ export async function arquivarAgora(
       where id = $1 and tenant_id = $2 and estado = 'online'`,
     [galeriaId, tenantId],
   );
+
+  /*
+   * Arquivar por BOTÃO, não por prazo — e a distinção importa: aqui foi decisão
+   * de alguém, e o cliente do estúdio pode reclamar que a galeria saiu do ar
+   * antes do combinado. `arquivarVencidas` registra como 'sistema'.
+   */
+  const { registrarEvento, ACOES } = await import("./eventos");
+  await registrarEvento({
+    tenantId,
+    ator: "estudio",
+    acao: ACOES.GALERIA_ARQUIVADA,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    detalhe: { manual: true, bytes: tamanho.toString() },
+  });
+
   return { ok: true };
 }
 
@@ -127,6 +143,19 @@ export async function reativar(galeriaId: string, tenantId: string): Promise<Res
       where id = $1 and tenant_id = $2 and estado = 'arquivada'`,
     [galeriaId, tenantId],
   );
+
+  const { registrarEvento, ACOES } = await import("./eventos");
+  await registrarEvento({
+    tenantId,
+    ator: "estudio",
+    acao: ACOES.GALERIA_REATIVADA,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    // O prazo novo é o que o cliente do estúdio vai cobrar depois ("até quando
+    // fica no ar?"), e ele é recalculado aqui, não combinado antes.
+    detalhe: { bytes: tamanho.toString(), prazoEstendidoMeses: 12 },
+  });
+
   return { ok: true };
 }
 
@@ -142,7 +171,12 @@ export async function reativar(galeriaId: string, tenantId: string): Promise<Res
  * aviso; a decisão de apagar algo continua sendo do dono.
  */
 export async function arquivarVencidas() {
-  return consultar<{ id: string; titulo: string; estudio: string }>(
+  const arquivadas = await consultar<{
+    id: string;
+    titulo: string;
+    estudio: string;
+    tenant_id: string;
+  }>(
     `update galerias g
         set estado = 'arquivada', arquivada_em = now(), atualizado_em = now()
        from tenants t
@@ -150,8 +184,31 @@ export async function arquivarVencidas() {
         and g.estado = 'online'
         and g.expira_em is not null
         and g.expira_em < now()
-      returning g.id, g.titulo, t.nome_estudio as estudio`,
+      returning g.id, g.titulo, g.tenant_id, t.nome_estudio as estudio`,
   );
+
+  /*
+   * Ator 'sistema', e a diferença não é cosmética: quando o cliente do estúdio
+   * reclamar que a galeria saiu do ar, este registro prova que foi o PRAZO que
+   * venceu — o mesmo que o fotógrafo escolheu e combinou — e não alguém que
+   * apertou um botão. Arquivar por botão vira 'estudio', em `arquivarAgora`.
+   */
+  if (arquivadas.length > 0) {
+    const { registrarEvento, ACOES } = await import("./eventos");
+    for (const g of arquivadas) {
+      await registrarEvento({
+        tenantId: g.tenant_id,
+        estudio: g.estudio,
+        ator: "sistema",
+        acao: ACOES.GALERIA_ARQUIVADA,
+        alvoTipo: "galeria",
+        alvoId: g.id,
+        detalhe: { titulo: g.titulo, manual: false, motivo: "prazo vencido" },
+      });
+    }
+  }
+
+  return arquivadas;
 }
 
 /** Quem passou do cofre contratado — para o log da tarefa diária avisar. */

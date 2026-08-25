@@ -24,6 +24,8 @@ import { MINIMO_SENHA, trocarSenha } from "@/lib/senha";
 import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
 import { usoDoEstudio } from "@/lib/medias";
+import { registrarEvento, ACOES } from "@/lib/eventos";
+import { ipDaRequisicao } from "@/lib/origem";
 import {
   CAPITULOS_SUGERIDOS,
   apagarSecao,
@@ -331,6 +333,27 @@ export async function trocarPlanoAction(
     [plano.id, novaQuotaAr.toString(), novaQuotaCofre.toString(), tenantId],
   );
 
+  /*
+   * Guarda o plano ANTIGO e o novo. É a pergunta de uma cobrança contestada
+   * ("por que fui cobrado a mais em março?") e ela não tem resposta olhando o
+   * banco depois: lá só existe o plano atual.
+   */
+  await registrarEvento({
+    tenantId,
+    estudio: tenant.nome_estudio,
+    ator: "estudio",
+    acao: ACOES.PLANO_TROCADO,
+    alvoTipo: "conta",
+    alvoId: tenantId,
+    detalhe: {
+      de: tenant.plano_id,
+      para: plano.id,
+      nome: plano.nome,
+      precoCentavos: plano.precoCentavos,
+    },
+    ip: await ipDaRequisicao(),
+  });
+
   revalidatePath("/painel/conta");
   revalidatePath("/painel");
   return { ok: `Agora você está no ${plano.nome}.` };
@@ -366,6 +389,17 @@ export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: 
       where id = $1`,
     [tenantId],
   );
+
+  await registrarEvento({
+    tenantId,
+    estudio: tenant.nome_estudio,
+    ator: "estudio",
+    acao: ACOES.ASSINATURA_CANCELADA,
+    alvoTipo: "conta",
+    alvoId: tenantId,
+    detalhe: { plano: tenant.plano_id, assinaturaAsaas: tenant.asaas_assinatura_id },
+    ip: await ipDaRequisicao(),
+  });
 
   revalidatePath("/painel/conta");
   return { ok: "Assinatura cancelada. Suas galerias publicadas continuam no ar." };
@@ -543,6 +577,22 @@ export async function trocarSenhaAction(
     return { erro: recados[r.motivo] };
   }
   limparTentativas(chave);
+
+  /*
+   * Evento de segurança: troca de senha derruba todas as outras sessões. Se
+   * alguém perder acesso à conta, esta é a primeira linha a procurar — e o hash
+   * do IP diz se veio do mesmo lugar de sempre. A senha em si nunca entra aqui,
+   * nem a antiga nem a nova.
+   */
+  await registrarEvento({
+    tenantId,
+    ator: "estudio",
+    acao: ACOES.SENHA_TROCADA,
+    alvoTipo: "conta",
+    alvoId: tenantId,
+    detalhe: { outrasSessoesEncerradas: true },
+    ip: await ipDaRequisicao(),
+  });
 
   /*
    * Cookie novo para ESTE aparelho.

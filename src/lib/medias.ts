@@ -189,8 +189,33 @@ export async function buscarMedia(mediaId: string, tenantId: string) {
 }
 
 export async function apagarMedia(mediaId: string, tenantId: string) {
-  return consultarUm<Media>("delete from medias where id = $1 and tenant_id = $2 returning *", [
-    mediaId,
-    tenantId,
-  ]);
+  const apagada = await consultarUm<Media>(
+    "delete from medias where id = $1 and tenant_id = $2 returning *",
+    [mediaId, tenantId],
+  );
+
+  /*
+   * Apagar UMA foto não tem lixeira — some na hora, e é assim de propósito:
+   * quem descarta uma foto ruim no meio da seleção não quer ver as duzentas
+   * descartadas ocupando uma lista depois. Justamente por não ter volta, o
+   * registro importa: é a única memória de que aquele arquivo existiu.
+   */
+  if (apagada) {
+    const { registrarEvento, ACOES } = await import("./eventos");
+    await registrarEvento({
+      tenantId,
+      ator: "estudio",
+      acao: ACOES.MEDIA_APAGADA,
+      alvoTipo: "media",
+      alvoId: mediaId,
+      detalhe: {
+        nome: apagada.nome_original,
+        galeriaId: apagada.galeria_id,
+        bytes: String(apagada.bytes),
+        tipo: apagada.tipo,
+      },
+    });
+  }
+
+  return apagada;
 }

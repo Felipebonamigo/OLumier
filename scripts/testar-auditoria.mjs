@@ -191,6 +191,38 @@ try {
     return `${eventos.length} evento(s)`;
   });
 
+  /*
+   * Constante declarada e nunca usada é pior que ausente: dá a impressão de que
+   * a ação está sendo registrada quando ninguém a chama. Este teste lê o código
+   * do projeto e cobra o uso de cada uma — ação nova sem ponto de chamada deixa
+   * a suíte vermelha no mesmo dia em que for criada.
+   */
+  await etapa("toda ação declarada é usada em algum lugar do código", async () => {
+    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const path = await import("node:path");
+
+    const arquivos = [];
+    const varrer = (dir) => {
+      for (const nome of readdirSync(dir)) {
+        const cheio = path.join(dir, nome);
+        if (statSync(cheio).isDirectory()) varrer(cheio);
+        else if (/\.tsx?$/.test(nome) && !cheio.includes("config")) arquivos.push(cheio);
+      }
+    };
+    varrer("src");
+
+    const codigo = arquivos
+      .filter((f) => !f.endsWith(path.join("lib", "eventos.ts")))
+      .map((f) => readFileSync(f, "utf8"))
+      .join("\n");
+
+    const semUso = Object.keys(ACOES).filter((k) => !codigo.includes(`ACOES.${k}`));
+    if (semUso.length > 0) {
+      throw new Error(`declaradas mas nunca registradas: ${semUso.join(", ")}`);
+    }
+    return `${Object.keys(ACOES).length} ações, todas em uso`;
+  });
+
   await etapa("um estúdio não enxerga o log do outro", async () => {
     const { rows: o } = await db.query(
       `insert into tenants (nome_estudio, slug, email, senha_hash)

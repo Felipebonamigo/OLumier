@@ -73,6 +73,26 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
   if (await emailJaUsado(email)) return { erro: "Já existe uma conta com esse e-mail." };
 
   const tenant = await criarTenant({ nomeEstudio, email, senha, planoId });
+
+  /*
+   * O marco zero da conta. É o evento que ancora todos os outros: numa disputa,
+   * "desde quando esse estúdio usa o serviço" e "com qual plano ele entrou" são
+   * as duas primeiras perguntas, e nenhuma delas tem resposta confiável olhando
+   * a tabela `tenants` — lá só existe o estado de hoje.
+   */
+  const { registrarEvento, ACOES } = await import("@/lib/eventos");
+  const { ipDaRequisicao } = await import("@/lib/origem");
+  await registrarEvento({
+    tenantId: tenant.id,
+    estudio: nomeEstudio,
+    ator: "estudio",
+    acao: ACOES.CONTA_CRIADA,
+    alvoTipo: "conta",
+    alvoId: tenant.id,
+    detalhe: { plano: planoId, email },
+    ip: await ipDaRequisicao(),
+  });
+
   await criarSessao(tenant.id);
   redirect("/painel");
 }
