@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarSessao, sessaoAtual } from "@/lib/auth";
-import { criarGaleria, apagarGaleria } from "@/lib/tenants";
+import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
 import { consultar } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { lerAparencia } from "@/config/aparencia";
@@ -563,8 +563,19 @@ export async function apagarGaleriaAction(form: FormData) {
   const galeriaId = String(form.get("galeria_id") ?? "");
   if (!galeriaId) return;
 
-  // O apagarGaleria filtra por tenant_id também — id adivinhado não apaga galeria alheia.
+  // Vai para a LIXEIRA, não some: o arquivo continua no bucket por 30 dias.
+  // O apagarGaleria filtra por tenant_id também — id adivinhado não alcança galeria alheia.
   await apagarGaleria(tenantId, galeriaId);
   revalidatePath("/painel");
   redirect("/painel");
+}
+
+/** Tira a galeria da lixeira. Volta como rascunho — republicar é decisão de quem restaurou. */
+export async function restaurarGaleriaAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+
+  await restaurarGaleria(tenantId, galeriaId);
+  revalidatePath("/painel");
 }

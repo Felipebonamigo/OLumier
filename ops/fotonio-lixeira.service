@@ -1,0 +1,11 @@
+[Unit]
+Description=Olumier - destruir galerias vencidas na lixeira
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fotonio
+ExecStart=/usr/local/bin/node --env-file=/opt/fotonio/.env.production \
+  --experimental-strip-types --import /opt/fotonio/scripts/registrar-ts.mjs \
+  /opt/fotonio/scripts/limpar-lixeira.mjs --aplicar

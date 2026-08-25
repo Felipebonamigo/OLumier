@@ -149,7 +149,7 @@ export async function listarGalerias(tenantId: string) {
     `select g.*,
             (select count(*)::int from medias m where m.galeria_id = g.id and m.pronto) as total_medias
        from galerias g
-      where g.tenant_id = $1
+      where g.tenant_id = $1 and g.estado <> 'lixeira'
       order by coalesce(g.data_evento, g.criado_em::date) desc, g.criado_em desc`,
     [tenantId],
   );
@@ -191,41 +191,121 @@ export async function criarGaleria(dados: {
  * As chaves são lidas ANTES do delete — depois dele não haveria mais como saber
  * o que apagar.
  */
+/** Dias que uma galeria apagada espera na lixeira antes de sumir de vez. */
+export const PRAZO_LIXEIRA_DIAS = 30;
+
+/**
+ * Manda a galeria para a lixeira. NÃO apaga arquivo nenhum.
+ *
+ * Antes isto destruía a linha e os objetos do bucket na mesma ação. Trocado
+ * porque, entre todos os jeitos de perder as fotos de um casamento, o clique
+ * errado do fotógrafo é o mais provável — bem mais provável que falha de
+ * fornecedor. Os onze noves de durabilidade do R2 não cobrem o dedo humano.
+ *
+ * O arquivo continua no bucket e a mídia continua registrada; é o que permite
+ * `restaurarGaleria` devolver a galeria inteira em vez de molduras vazias.
+ * A destruição de verdade fica com `scripts/limpar-lixeira.mjs`, depois do prazo.
+ *
+ * O espaço continua contando na quota enquanto está na lixeira — o arquivo
+ * ocupa lugar de verdade, e fingir que não ocuparia deixaria o estúdio passar do
+ * plano sem perceber. Quem apagou para abrir espaço esvazia a lixeira à mão.
+ */
 export async function apagarGaleria(tenantId: string, galeriaId: string) {
-  // O tenant_id no where não é redundante: impede que um id adivinhado apague galeria de outro.
-  const chaves = await consultar<{
-    chave: string;
-    chave_thumb: string | null;
-    chave_preview: string | null;
-  }>(
-    `select m.chave, m.chave_thumb, m.chave_preview
-       from medias m
-       join galerias g on g.id = m.galeria_id
-      where m.galeria_id = $1 and g.tenant_id = $2`,
+  // O tenant_id no where não é redundante: impede que um id adivinhado alcance galeria de outro.
+  await consultar(
+    `update galerias
+        set estado = 'lixeira', apagada_em = now(), publicada = false, atualizado_em = now()
+      where id = $1 and tenant_id = $2 and estado <> 'lixeira'`,
     [galeriaId, tenantId],
   );
+}
 
+/** Tira a galeria da lixeira. Volta como rascunho: republicar é decisão de quem restaurou. */
+export async function restaurarGaleria(tenantId: string, galeriaId: string) {
+  await consultar(
+    `update galerias
+        set estado = 'online', apagada_em = null, atualizado_em = now()
+      where id = $1 and tenant_id = $2 and estado = 'lixeira'`,
+    [galeriaId, tenantId],
+  );
+}
+
+export interface GaleriaNaLixeira extends Galeria {
+  dias_restantes: number;
+}
+
+/** O que está na lixeira deste estúdio, com quantos dias faltam para sumir. */
+export async function listarLixeira(tenantId: string) {
+  return consultar<GaleriaNaLixeira>(
+    `select g.*,
+            (select count(*)::int from medias m where m.galeria_id = g.id and m.pronto) as total_medias,
+            greatest(
+              0,
+              $2::int - floor(extract(epoch from (now() - g.apagada_em)) / 86400)::int
+            ) as dias_restantes
+       from galerias g
+      where g.tenant_id = $1 and g.estado = 'lixeira'
+      order by g.apagada_em desc`,
+    [tenantId, PRAZO_LIXEIRA_DIAS],
+  );
+}
+
+export interface GaleriaVencida {
+  id: string;
+  tenant_id: string;
+  titulo: string;
+  chaves: string[];
+}
+
+/**
+ * Galerias que passaram do prazo na lixeira, já com as chaves a apagar.
+ *
+ * As chaves vêm JUNTO de propósito: depois do `delete` não haveria mais como
+ * saber o que apagar do bucket, e o arquivo viraria lixo invisível que só
+ * apareceria na fatura, meses depois, sem ninguém saber de onde veio.
+ */
+export async function galeriasVencidasNaLixeira() {
+  return consultar<GaleriaVencida>(
+    `select g.id, g.tenant_id, g.titulo,
+            coalesce(
+              array_remove(
+                array_agg(m.chave) || array_agg(m.chave_thumb) || array_agg(m.chave_preview),
+                null
+              ),
+              '{}'
+            ) as chaves
+       from galerias g
+       left join medias m on m.galeria_id = g.id
+      where g.estado = 'lixeira'
+        and g.apagada_em < now() - ($1 || ' days')::interval
+      group by g.id`,
+    [PRAZO_LIXEIRA_DIAS],
+  );
+}
+
+/**
+ * Destrói de vez: apaga a linha e os objetos do bucket.
+ *
+ * Chamada só pela limpeza da lixeira e pelo "esvaziar agora" do painel. NÃO
+ * apaga do espelho — a segunda cópia é justamente o que sobra quando tudo mais
+ * falhou, e apagá-la aqui transformaria este script no risco que ele deveria
+ * cobrir.
+ */
+export async function destruirGaleria(galeriaId: string, chaves: string[]) {
   const apagou = await consultar<{ id: string }>(
-    "delete from galerias where id = $1 and tenant_id = $2 returning id",
-    [galeriaId, tenantId],
+    "delete from galerias where id = $1 returning id",
+    [galeriaId],
   );
-  // Não era dele: não mexe em arquivo nenhum.
-  if (apagou.length === 0) return;
+  if (apagou.length === 0 || chaves.length === 0) return;
 
-  const todas = chaves.flatMap((m) =>
-    [m.chave, m.chave_thumb, m.chave_preview].filter((c): c is string => Boolean(c)),
-  );
-  if (todas.length === 0) return;
-
-  // O banco já é a fonte da verdade e a galeria já sumiu para o usuário. Se o
-  // bucket falhar aqui, registramos e seguimos: derrubar a ação faria a pessoa
-  // tentar de novo numa galeria que não existe mais.
+  // O banco já é a fonte da verdade e a galeria já sumiu. Se o bucket falhar
+  // aqui, registramos e seguimos — `varrer-orfaos.mjs` recolhe o que sobrar.
   const { apagarObjetos } = await import("./r2");
   try {
-    await apagarObjetos(todas);
+    await apagarObjetos(chaves);
   } catch (e) {
     console.error(
-      `[apagarGaleria] ${todas.length} objeto(s) da galeria ${galeriaId} podem ter ficado no bucket:`,
+      `[destruirGaleria] ${chaves.length} objeto(s) da galeria ${galeriaId} podem ter ficado no bucket:`,
       e,
     );
   }

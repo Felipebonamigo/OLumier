@@ -122,8 +122,22 @@ await etapa("arquivo REFERENCIADO pelo banco nunca é tratado como órfão", asy
 
 console.log("\nApagar a galeria (o caminho real do painel):\n");
 
-await etapa("apagar galeria remove as fotos do bucket, não só do banco", async () => {
-  const { apagarGaleria } = await import("../src/lib/tenants.ts");
+/*
+ * Este teste garantia que apagar não deixasse arquivo pago órfão no bucket. A
+ * garantia continua valendo; o que mudou foi ONDE ela acontece.
+ *
+ * Desde 25/08/2026 apagar manda a galeria para a LIXEIRA e não encosta no
+ * bucket — porque o clique errado do fotógrafo é o jeito mais provável de
+ * perder as fotos de um casamento, mais provável que qualquer falha de
+ * fornecedor. Quem destrói de verdade é `destruirGaleria`, depois dos 30 dias.
+ *
+ * Então o teste passou a cobrir os dois lados da mesma promessa: apagar
+ * PRESERVA (senão "restaurar" devolveria molduras vazias) e destruir LIMPA
+ * (senão o arquivo vira lixo invisível que só aparece na fatura).
+ */
+await etapa("apagar preserva; destruir é que remove do bucket", async () => {
+  const { apagarGaleria, destruirGaleria, galeriasVencidasNaLixeira, PRAZO_LIXEIRA_DIAS } =
+    await import("../src/lib/tenants.ts");
   const { rows: t } = await db.query("select id from tenants order by criado_em limit 1");
   const tenantId = t[0].id;
 
@@ -151,17 +165,39 @@ await etapa("apagar galeria remove as fotos do bucket, não só do banco", async
     if (!(await objetoExiste(c))) throw new Error(`${c} não foi plantado`);
   }
 
+  // 1. Apagar: vai para a lixeira e NÃO tira nada do bucket.
   await apagarGaleria(tenantId, galeriaId);
 
-  const { rows } = await db.query("select 1 from galerias where id = $1", [galeriaId]);
-  if (rows.length) throw new Error("a galeria continua no banco");
+  const { rows } = await db.query("select estado from galerias where id = $1", [galeriaId]);
+  if (rows.length === 0) throw new Error("a galeria foi destruída — deveria ir para a lixeira");
+  if (rows[0].estado !== "lixeira") throw new Error(`estado ${rows[0].estado}, esperava lixeira`);
+
+  for (const c of chaves) {
+    if (!(await objetoExiste(c))) {
+      throw new Error(`${c} sumiu do bucket ao apagar — restaurar devolveria moldura vazia`);
+    }
+  }
+
+  // 2. Passado o prazo, a limpeza encontra e destrói — banco e bucket.
+  await db.query(
+    `update galerias set apagada_em = now() - ($2 || ' days')::interval where id = $1`,
+    [galeriaId, PRAZO_LIXEIRA_DIAS + 1],
+  );
+  const vencidas = await galeriasVencidasNaLixeira();
+  const alvo = vencidas.find((v) => v.id === galeriaId);
+  if (!alvo) throw new Error("a limpeza não encontrou a galeria vencida");
+
+  await destruirGaleria(alvo.id, alvo.chaves);
+
+  const { rows: depois } = await db.query("select 1 from galerias where id = $1", [galeriaId]);
+  if (depois.length) throw new Error("a galeria continua no banco depois de destruída");
 
   const sobraram = [];
   for (const c of chaves) if (await objetoExiste(c)) sobraram.push(c);
   if (sobraram.length) {
     throw new Error(`${sobraram.length} arquivo(s) ficaram sendo cobrados: ${sobraram[0]}`);
   }
-  return "banco e bucket limpos";
+  return "apagar preservou, destruir limpou banco e bucket";
 });
 
 await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async () => {

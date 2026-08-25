@@ -50,7 +50,10 @@ export async function buscarGaleriaPublica(
        from galerias g
        join tenants t on t.id = g.tenant_id
       where t.slug = $1 and g.slug = $2
-        and ($3::boolean or g.publicada)`,
+        and ($3::boolean or g.publicada)
+        -- Galeria na lixeira não abre nem com o link certo, nem em pré-visualização:
+        -- para o casal ela já não existe, e ressuscitá-la é decisão do fotógrafo.
+        and g.estado <> 'lixeira'`,
     [estudioSlug, galeriaSlug, incluirRascunho],
   );
 }
