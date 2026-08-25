@@ -42,6 +42,7 @@ export const ACOES = {
   ASSINATURA_CANCELADA: "assinatura.cancelada",
   SENHA_TROCADA: "senha.trocada",
   CONTA_CRIADA: "conta.criada",
+  ESPELHO_PURGADO: "espelho.purgado",
 } as const;
 
 export type Acao = (typeof ACOES)[keyof typeof ACOES];

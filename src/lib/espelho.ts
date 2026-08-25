@@ -1,6 +1,12 @@
 import "server-only";
 import { Readable } from "node:stream";
-import { S3Client, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  GetObjectCommand,
+  HeadObjectCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
 import { Upload } from "@aws-sdk/lib-storage";
 import { BUCKET, urlDeLeitura } from "./r2";
 
@@ -183,6 +189,124 @@ export async function apagarDoEspelho(chaveOrigem: string): Promise<void> {
   await s3().send(
     new DeleteObjectCommand({ Bucket: ESPELHO_BUCKET, Key: chaveDoEspelho(chaveOrigem) }),
   );
+}
+
+export interface OpcoesPurga {
+  /** Limita a um estúdio. Sem isto, varre o espelho inteiro. */
+  tenantId?: string;
+  /** Limita a uma galeria. Só faz sentido com `exclusaoSolicitada`. */
+  galeriaId?: string;
+  /**
+   * Pedido de exclusão da LGPD: alcança TAMBÉM o que ainda tem linha no banco.
+   *
+   * Separado e explícito de propósito. A varredura normal só remove o que já
+   * não existe mais — este modo remove o que existe, a pedido do titular, e é
+   * a única operação do sistema capaz de destruir a segunda cópia de um arquivo
+   * vivo. Padrão nenhum deveria fazer isso sozinho.
+   */
+  exclusaoSolicitada?: boolean;
+  /** Sem isto, só relata. */
+  aplicar?: boolean;
+}
+
+export interface ResultadoPurga {
+  /** Chaves no espelho que não têm mais linha correspondente no banco. */
+  orfas: string[];
+  apagadas: number;
+  erros: string[];
+}
+
+/**
+ * Limpa o espelho.
+ *
+ * Resolve dois problemas que o espelho cria ao guardar cópia de tudo: a cópia
+ * de uma galeria já destruída continua sendo paga todo mês, e um pedido de
+ * exclusão da LGPD não é atendido de verdade enquanto ela existir.
+ *
+ * ── A REGRA QUE NÃO PODE CAIR ─────────────────────────────────────────────
+ * Só é órfã a chave que NÃO tem linha em `medias`. Apagar do espelho a cópia de
+ * um arquivo que ainda existe destrói exatamente a proteção que justifica o
+ * espelho — e destrói em silêncio, porque o arquivo principal continua no lugar
+ * e a ausência só aparece no dia do desastre. A comparação é contra TODAS as
+ * linhas, inclusive as com `pronto = false`: arquivo no meio do upload tem
+ * linha e não tem objeto ainda, e tratá-lo como órfão seria apagar o que está
+ * chegando.
+ */
+export async function purgarEspelho(opcoes: OpcoesPurga = {}): Promise<ResultadoPurga> {
+  const { consultar } = await import("./db");
+  const vazio: ResultadoPurga = { orfas: [], apagadas: 0, erros: [] };
+  if (!espelhoConfigurado) return { ...vazio, erros: ["espelho não configurado"] };
+
+  /*
+   * O prefixo do espelho é `espelho/<chave original>`, e a chave original
+   * começa pelo id do estúdio — então filtrar por estúdio é um prefixo, não uma
+   * varredura do bucket inteiro. É o que torna a operação viável quando houver
+   * muitos estúdios.
+   */
+  const prefixo = opcoes.tenantId
+    ? `espelho/${opcoes.tenantId}/${opcoes.galeriaId ? `${opcoes.galeriaId}/` : ""}`
+    : "espelho/";
+
+  const noEspelho: string[] = [];
+  let continuacao: string | undefined;
+  do {
+    const r = await s3().send(
+      new ListObjectsV2Command({
+        Bucket: ESPELHO_BUCKET,
+        Prefix: prefixo,
+        ContinuationToken: continuacao,
+      }),
+    );
+    for (const o of r.Contents ?? []) if (o.Key) noEspelho.push(o.Key);
+    continuacao = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (continuacao);
+
+  // De volta para a chave original: é ela que existe (ou não) no banco.
+  const origens = noEspelho.map((k) => k.replace(/^espelho\//, ""));
+  if (origens.length === 0) return vazio;
+
+  const linhas = await consultar<{ chave: string }>(
+    "select chave from medias where chave = any($1::text[])",
+    [origens],
+  );
+  const vivas = new Set(linhas.map((l) => l.chave));
+
+  const orfas = origens.filter((c) => !vivas.has(c));
+  // Exclusão solicitada alcança tudo; a varredura normal, só as órfãs.
+  const alvos = opcoes.exclusaoSolicitada ? origens : orfas;
+
+  const resultado: ResultadoPurga = { orfas, apagadas: 0, erros: [] };
+  if (!opcoes.aplicar || alvos.length === 0) return resultado;
+
+  for (const chave of alvos) {
+    try {
+      await apagarDoEspelho(chave);
+      resultado.apagadas++;
+    } catch (e) {
+      // Object Lock pode recusar objeto ainda dentro da retenção. Não é falha
+      // do código: é a trava funcionando, e quem pediu precisa saber disso.
+      resultado.erros.push(`${chave}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  if (resultado.apagadas > 0 || resultado.erros.length > 0) {
+    const { registrarEvento, ACOES } = await import("./eventos");
+    await registrarEvento({
+      tenantId: opcoes.tenantId ?? null,
+      ator: "sistema",
+      acao: ACOES.ESPELHO_PURGADO,
+      alvoTipo: opcoes.galeriaId ? "galeria" : "conta",
+      alvoId: opcoes.galeriaId ?? opcoes.tenantId ?? null,
+      detalhe: {
+        apagadas: resultado.apagadas,
+        orfas: orfas.length,
+        exclusaoSolicitada: Boolean(opcoes.exclusaoSolicitada),
+        erros: resultado.erros.length,
+      },
+    });
+  }
+
+  return resultado;
 }
 
 /** Diz se as credenciais do espelho funcionam — usado pelo teste e pela saúde. */

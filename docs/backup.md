@@ -135,8 +135,41 @@ correspondência que pode se perder justamente no desastre.
 
 Quando o fotógrafo apaga uma foto, o objeto sai do R2 e **fica** no espelho. É de
 propósito: apagar dos dois lugares ao mesmo tempo transformaria um clique errado
-em perda definitiva. A limpeza do que sobra é do `scripts/varrer-orfaos.mjs`,
-rodado à mão e com conferência.
+em perda definitiva.
+
+### Limpar o espelho
+
+Guardar cópia de tudo cria dois problemas que só a purga resolve: a cópia de uma
+galeria já destruída continua sendo paga todo mês, e um pedido de exclusão da
+LGPD não é atendido de verdade enquanto ela existir.
+
+**Dois modos, e a diferença entre eles é o que importa:**
+
+```bash
+# varredura — só o que NÃO tem mais linha no banco. Roda sozinha às 05:20.
+node ... scripts/purgar-espelho.mjs            # previsão
+node ... scripts/purgar-espelho.mjs --aplicar
+
+# exclusão da LGPD — alcança TAMBÉM o que ainda existe. Sempre à mão.
+node ... scripts/purgar-espelho.mjs --estudio=sirius --exclusao --aplicar
+node ... scripts/purgar-espelho.mjs --galeria=<uuid> --exclusao --aplicar
+```
+
+`--exclusao` é a única operação do sistema capaz de destruir a segunda cópia de
+um arquivo **vivo**. Por isso exige alvo explícito (`--estudio` ou `--galeria`) e
+nenhuma rotina automática a usa — o temporizador roda sempre sem ela.
+
+A regra que sustenta a segurança da varredura: **só é órfã a chave que não tem
+linha em `medias`**, comparada contra TODAS as linhas, inclusive `pronto = false`
+— arquivo no meio do upload tem linha e ainda não tem objeto, e tratá-lo como
+órfão apagaria o que está chegando. `scripts/testar-purga-espelho.mjs` prende
+isso; o teste central lá não é "a purga apaga", é "a purga não apaga o que não
+devia".
+
+**Object Lock atrapalha de propósito.** Objeto ainda dentro dos 30 dias de
+retenção recusa a exclusão, e o script reporta em vez de fingir sucesso. Num
+pedido de LGPD isso significa que a exclusão se completa quando a retenção
+vencer — e é isso que se responde ao titular.
 
 ## O bucket é próprio desde 25/08/2026
 
