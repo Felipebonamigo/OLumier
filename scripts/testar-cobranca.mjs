@@ -180,6 +180,7 @@ await etapa("percentuais somam 100%", async () => {
  */
 await etapa("a reserva de custo cobre o custo real de cada plano", async () => {
   const planos = await import("../src/config/planos.ts");
+  let sobObra = 0;
   for (const p of planos.planos) {
     const custo = planos.custoTetoCentavos({
       segmento: p.segmento,
@@ -189,15 +190,22 @@ await etapa("a reserva de custo cobre o custo real de cada plano", async () => {
     const lucro = socios.lucroCentavos(p.id, p.precoCentavos);
     const reserva = p.precoCentavos - lucro;
 
-    if (lucro <= 0) throw new Error(`plano ${p.id} não sobra lucro`);
-    if (reserva >= p.precoCentavos) throw new Error(`reserva do ${p.id} maior que o preço`);
-    if (reserva < custo) {
-      throw new Error(
-        `reserva do ${p.id} (R$${(reserva / 100).toFixed(0)}) não cobre o custo (R$${(custo / 100).toFixed(0)})`,
-      );
+    if (lucro > 0) {
+      // Distribuiu lucro: a reserva que ficou TEM de cobrir o custo real.
+      if (reserva < custo) {
+        throw new Error(
+          `reserva do ${p.id} (R$${(reserva / 100).toFixed(0)}) não cobre o custo (R$${(custo / 100).toFixed(0)})`,
+        );
+      }
+    } else {
+      // Lucro zero = reteve o preço inteiro — o máximo que dá para segurar.
+      // Acontece enquanto a rota atual (tudo R2 + espelho) custar mais que a
+      // grade, que foi feita para a rota da obra. Ver "dinheiro" no
+      // testar-planos, que prende a mesma regra montagem por montagem.
+      sobObra++;
     }
   }
-  return `${planos.planos.length} planos conferidos`;
+  return `${planos.planos.length} planos conferidos${sobObra ? `, ${sobObra} sob obra retendo 100%` : ""}`;
 });
 
 await etapa("sócio sem carteira não entra no split (em vez de quebrar a cobrança)", async () => {

@@ -22,10 +22,27 @@ import {
   idDaMontagem,
   planoPorId,
   custoTetoCentavos,
+  custoPecasCentavos,
   planos,
   todasAsMontagens,
 } from "../src/config/planos.ts";
-import { lucroCentavos, RESERVA_POR_PLANO } from "../src/config/socios.ts";
+import {
+  lucroCentavos,
+  RESERVA_POR_PLANO,
+  FOLGA_GALERIA,
+  FOLGA_COFRE,
+  TAXA_COBRANCA,
+} from "../src/config/socios.ts";
+
+/*
+ * Reserva que a montagem terá QUANDO a obra da rota B2 estiver entregue.
+ * Mesma regra do socios.ts, calculada aqui de novo de propósito: se a regra
+ * de lá mudar sem ninguém pensar no alvo, este teste conta a diferença.
+ */
+const reservaAlvo = (m) => {
+  const pecas = custoPecasCentavos(m, "alvo");
+  return Math.round(pecas.galeria * FOLGA_GALERIA + pecas.cofre * FOLGA_COFRE) + TAXA_COBRANCA;
+};
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -70,17 +87,19 @@ await etapa("tamanhos de galeria em ordem crescente", () => {
  * de 10 TB com o maior cofre). Abaixo dele a reserva não cobre a fatura da
  * Cloudflare e da Backblaze, e o sócio recebe zero.
  */
-await etapa("a galeria vai até 10 TB, com lucro no pior combo", () => {
+await etapa("a galeria vai até 10 TB, com lucro no pior combo (no alvo)", () => {
   const maior = GALERIAS.at(-1);
   igual(maior.gb, 10000, "maior faixa de galeria");
 
-  const pior = montar({ segmento: "ambos", galeriaGb: 10000, cofreGb: COFRES.at(-1).gb });
-  const custo = custoTetoCentavos({ segmento: "ambos", galeriaGb: 10000, cofreGb: COFRES.at(-1).gb });
-  const lucro = lucroCentavos(pior.id, pior.precoCentavos);
+  // No ALVO, porque na rota atual (tudo R2 + espelho) o pior combo segura 100%
+  // do dinheiro de propósito — ver a etapa "sob obra" na seção dinheiro.
+  const m = { segmento: "ambos", galeriaGb: 10000, cofreGb: COFRES.at(-1).gb };
+  const pior = montar(m);
+  const lucro = pior.precoCentavos - reservaAlvo(m);
   if (lucro <= 0) {
-    throw new Error(`${pior.nome} custa ${custo / 100} e não deixa lucro nenhum`);
+    throw new Error(`${pior.nome} não deixa lucro nem com a obra pronta`);
   }
-  return `R$ ${maior.precoCentavos / 100} · pior combo deixa R$ ${(lucro / 100).toFixed(2)}`;
+  return `R$ ${maior.precoCentavos / 100} · pior combo no alvo deixa R$ ${(lucro / 100).toFixed(2)}`;
 });
 
 await etapa("cofre é opcional e mais barato por GB que a galeria", () => {
@@ -171,34 +190,51 @@ await etapa("id antigo continua valendo o mesmo espaço", () => {
 
 console.log("\ndinheiro");
 
-await etapa("nenhuma montagem sai abaixo do custo", () => {
+/*
+ * Duas rotas, duas verdades:
+ *
+ *   ALVO  — obra da rota B2 entregue (galeria grande e cofre no B2, espelho
+ *           frio). É o piso de PREÇO: nenhuma montagem pode sair abaixo do
+ *           custo alvo com as folgas, senão a grade nasce errada.
+ *   ATUAL — tudo mora no R2 + espelho no B2. Algumas montagens grandes custam
+ *           mais que o preço; enquanto a obra não sai, elas têm de segurar
+ *           100% do dinheiro (lucro zero, split não manda nada).
+ */
+await etapa("no alvo, nenhuma montagem sai abaixo do custo + folga", () => {
   let pior = null;
   for (const m of todasAsMontagens()) {
     const p = montar(m);
-    const custo = custoTetoCentavos(m);
-    const margem = p.precoCentavos - custo;
-    if (margem <= 0) {
-      throw new Error(`${p.id} custa ${custo / 100} e vende por ${p.precoCentavos / 100}`);
+    const lucro = p.precoCentavos - reservaAlvo(m);
+    if (lucro <= 0) {
+      throw new Error(`${p.id}: reserva alvo ${reservaAlvo(m) / 100} engole o preço ${p.precoCentavos / 100}`);
     }
-    if (!pior || margem < pior.margem) pior = { id: p.id, margem };
+    if (!pior || lucro < pior.lucro) pior = { id: p.id, lucro };
   }
-  return `pior margem: ${pior.id} com R$ ${(pior.margem / 100).toFixed(2)}`;
+  return `pior lucro no alvo: ${pior.id} com R$ ${(pior.lucro / 100).toFixed(2)}`;
 });
 
 /*
  * A reserva é o que FICA na conta para pagar Cloudflare e Backblaze; o split
  * manda embora o resto. Reserva < custo significaria fatura do cartão sem
- * dinheiro para cobrir; lucro zero significaria sócio recebendo nada.
+ * dinheiro para cobrir. Onde nem o preço inteiro cobre o custo atual, o único
+ * comportamento aceitável é reter tudo — e é isso que se confere aqui.
  */
-await etapa("reserva cobre o custo e ainda sobra lucro", () => {
+await etapa("na rota atual, reserva cobre o custo — ou segura o preço inteiro", () => {
+  let sobObra = 0;
   for (const m of todasAsMontagens()) {
     const p = montar(m);
     const custo = custoTetoCentavos(m);
     const lucro = lucroCentavos(p.id, p.precoCentavos);
     const reserva = p.precoCentavos - lucro;
-    if (reserva < custo) throw new Error(`${p.id}: reserva ${reserva / 100} < custo ${custo / 100}`);
-    if (lucro <= 0) throw new Error(`${p.id}: lucro zerado`);
+    if (custo < p.precoCentavos) {
+      if (reserva < custo) throw new Error(`${p.id}: reserva ${reserva / 100} < custo ${custo / 100}`);
+    } else {
+      // Preço não cobre o custo atual: nada pode sair no split.
+      if (lucro !== 0) throw new Error(`${p.id}: distribui R$ ${(lucro / 100).toFixed(2)} vendendo abaixo do custo atual`);
+      sobObra++;
+    }
   }
+  return sobObra > 0 ? `${sobObra} montagem(ns) sob obra, retendo 100%` : "todas cobrem o custo atual";
 });
 
 await etapa("id antigo mantém a reserva que já estava na tabela", () => {

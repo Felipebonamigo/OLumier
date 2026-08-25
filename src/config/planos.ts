@@ -21,9 +21,14 @@
  * A grade de foto anterior perdia feio para o Pixieset Pro — R$ 132/mês por
  * 1 TB no anual (US$ 24, verificado na página deles), contra R$ 179 nossos por
  * 500 GB. Fotógrafo que comparasse lado a lado escolhia eles.
- * Foi corrigido descendo o preço do espaço no ar, o que a conta permitia:
- * acima de 500 GB servimos pelo B2 com Cloudflare na frente, R$ 0,033/GB em vez
+ * Foi corrigido descendo o preço do espaço no ar, contando com a rota barata:
+ * acima de 500 GB, servir pelo B2 com Cloudflare na frente, R$ 0,033/GB em vez
  * dos R$ 0,0825/GB do R2 — mesma promessa de download ilimitado por 40% do custo.
+ *
+ * ⚠️  Essa rota AINDA NÃO FOI CONSTRUÍDA (ver `ROTA_EM_PRODUCAO` abaixo). A
+ * grade aposta que a obra sai antes de o primeiro cliente grande encher o
+ * espaço; enquanto isso, montagem que não cobre o custo atual retém 100% do
+ * dinheiro no split — nada é distribuído abaixo do custo.
  */
 
 export type Segmento = "foto" | "filme" | "ambos";
@@ -43,10 +48,10 @@ export interface Faixa {
 /**
  * Peça 2 — espaço NO AR. É a única peça obrigatória.
  *
- * Custo nosso por GB/mês: R$ 0,0825 até 500 GB (rota R2, mais simples de operar)
- * e R$ 0,033 acima disso (rota B2 + Cloudflare). O degrau de custo em 1 TB é o
- * que permite o preço de 1 TB quase não subir em relação a 500 GB — e é de
- * propósito: é justamente a faixa onde o Pixieset Pro nos batia.
+ * Custo ALVO por GB/mês (primário + espelho): R$ 0,1155 até 500 GB (R2 +
+ * espelho B2) e R$ 0,046 acima disso (B2 + espelho frio). O degrau de custo em
+ * 1 TB é o que permite o preço de 1 TB quase não subir em relação a 500 GB — e
+ * é de propósito: é justamente a faixa onde o Pixieset Pro nos batia.
  */
 export const GALERIAS: Faixa[] = [
   { gb: 100, precoCentavos: 4900 },
@@ -58,8 +63,9 @@ export const GALERIAS: Faixa[] = [
   /*
    * O topo, para quem filma casamento em 4K o ano inteiro. R$ 0,080/GB, contra
    * R$ 0,0898 do 5 TB: o degrau continua barateando o GB, como todos os
-   * anteriores. Custo teto de R$ 330 e reserva de R$ 432 — o piso real desta
-   * faixa, e o motivo de ela não poder descer muito.
+   * anteriores. No custo ALVO (rota B2 + espelho frio, R$ 0,046/GB), a reserva
+   * fica em R$ 601 e sobra lucro — é o piso real da faixa. Na rota atual o
+   * custo passa do preço e a montagem retém tudo, por desenho.
    *
    * Existia como cofre desde o começo e faltava na galeria, o que travava
    * justamente o lado que ocupa espaço de verdade.
@@ -68,26 +74,54 @@ export const GALERIAS: Faixa[] = [
 ];
 
 /**
- * Peça 3 — cofre, opcional. Custo nosso: R$ 0,033/GB/mês (B2).
+ * Peça 3 — cofre, opcional. Custo ALVO: R$ 0,046/GB/mês (B2 + espelho frio).
  *
  * Margem menor de propósito. O cofre não está aqui para dar lucro: ele existe
  * para o fotógrafo nunca perder uma entrega — e, de quebra, é o que faz ninguém
  * cancelar, porque sair leva o arquivo junto. Nenhum concorrente vende isso.
  */
 export const COFRES: Faixa[] = [
+  /*
+   * Revisão de 25/08/2026: o espelho passou a copiar TUDO (galeria e cofre)
+   * para uma segunda empresa, e o custo do cofre dobrou — a grade anterior
+   * (39/59/99/149/239/449) ficava abaixo do custo em todas as faixas ≥ 1 TB.
+   * A grade nova cobre o custo alvo com folga de 1,5 (ver socios.ts) e margem
+   * de propósito pequena: cofre não existe para dar lucro, existe para o
+   * fotógrafo nunca perder uma entrega — e para ninguém cancelar.
+   */
   { gb: 500, precoCentavos: 3900 },
-  { gb: 1000, precoCentavos: 5900 },
-  { gb: 2000, precoCentavos: 9900 },
-  { gb: 3000, precoCentavos: 14900 },
-  { gb: 5000, precoCentavos: 23900 },
-  { gb: 10000, precoCentavos: 44900 },
+  { gb: 1000, precoCentavos: 7900 },
+  { gb: 2000, precoCentavos: 14900 },
+  { gb: 3000, precoCentavos: 21900 },
+  { gb: 5000, precoCentavos: 35900 },
+  { gb: 10000, precoCentavos: 71900 },
 ];
 
 /** Custo real por GB/mês, em centavos — a fonte de verdade da margem. */
 const CUSTO_R2_CENTAVOS_GB = 8.25;
 const CUSTO_B2_CENTAVOS_GB = 3.3;
-/** Acima disto a galeria é servida pelo B2 com Cloudflare na frente. */
+/** Espelho frio (Hetzner Storage Box via rclone) — alvo da obra, ainda não existe. */
+const CUSTO_ESPELHO_FRIO_CENTAVOS_GB = 1.3;
+/** Acima disto a galeria será servida pelo B2 com Cloudflare na frente. */
 const LIMITE_ROTA_R2_GB = 500;
+
+/**
+ * Onde os arquivos moram de verdade HOJE vs. onde a arquitetura quer que morem.
+ *
+ *   atual — TUDO (galeria de qualquer tamanho e cofre) no R2 a R$ 0,0825/GB,
+ *           mais o espelho no B2 a R$ 0,033/GB. A rota B2 prometida nos
+ *           comentários de 24/08 nunca foi construída: `arquivar-vencidas.mjs`
+ *           só muda estado no banco, e `r2.ts` serve de um bucket só.
+ *   alvo  — galeria ≤ 500 GB fica como está; galeria grande e cofre migram o
+ *           primário para o B2 (servido pela Cloudflare) e o espelho deles vai
+ *           para armazenamento frio em OUTRA empresa — a promessa "duas
+ *           empresas diferentes" da página de segurança vale para tudo.
+ *
+ * Quando a obra sair, `ROTA_EM_PRODUCAO` vira "alvo" e reserva e margem se
+ * corrigem sozinhas. Até lá, o custo que o código conta é o que a fatura cobra.
+ */
+export type Rota = "atual" | "alvo";
+export const ROTA_EM_PRODUCAO: Rota = "atual";
 
 export interface Montagem {
   segmento: Segmento;
@@ -115,17 +149,38 @@ export const formatarGb = (gb: number) => (gb >= 1000 ? `${gb / 1000} TB` : `${g
 const faixa = (lista: Faixa[], gb: number) => lista.find((f) => f.gb === gb);
 
 /**
- * Custo TETO da montagem (espaço 100% ocupado), em centavos.
+ * Custo TETO de cada peça da montagem (espaço 100% ocupado), em centavos.
  *
- * É teto porque Cloudflare e Backblaze cobram o que está guardado de verdade —
- * conta nova começa vazia e custa quase nada. Usar o teto é o que garante que
+ * É teto porque os fornecedores cobram o que está guardado de verdade — conta
+ * nova começa vazia e custa quase nada. Usar o teto é o que garante que
  * nenhuma combinação do quebra-cabeça sangre no pior caso.
+ *
+ * Separado por peça porque as folgas de câmbio são diferentes: a galeria tem
+ * lucro gordo que absorve dólar alto, o cofre vive de margem ~zero e precisa
+ * de folga maior (ver socios.ts).
  */
-export function custoTetoCentavos(m: Montagem): number {
-  const porGb = m.galeriaGb > LIMITE_ROTA_R2_GB ? CUSTO_B2_CENTAVOS_GB : CUSTO_R2_CENTAVOS_GB;
-  const galeria = m.galeriaGb * porGb;
-  const cofre = m.cofreGb * CUSTO_B2_CENTAVOS_GB;
-  return Math.round(galeria + cofre);
+export function custoPecasCentavos(
+  m: Montagem,
+  rota: Rota = ROTA_EM_PRODUCAO,
+): { galeria: number; cofre: number } {
+  if (rota === "atual") {
+    // Tudo no R2, espelhado no B2 — o que a fatura cobra hoje.
+    const porGb = CUSTO_R2_CENTAVOS_GB + CUSTO_B2_CENTAVOS_GB;
+    return { galeria: m.galeriaGb * porGb, cofre: m.cofreGb * porGb };
+  }
+  // Alvo: primário barato + espelho em OUTRA empresa, para cada peça.
+  const galeriaPorGb =
+    m.galeriaGb > LIMITE_ROTA_R2_GB
+      ? CUSTO_B2_CENTAVOS_GB + CUSTO_ESPELHO_FRIO_CENTAVOS_GB
+      : CUSTO_R2_CENTAVOS_GB + CUSTO_B2_CENTAVOS_GB;
+  const cofrePorGb = CUSTO_B2_CENTAVOS_GB + CUSTO_ESPELHO_FRIO_CENTAVOS_GB;
+  return { galeria: m.galeriaGb * galeriaPorGb, cofre: m.cofreGb * cofrePorGb };
+}
+
+/** Custo teto da montagem inteira — soma das peças. */
+export function custoTetoCentavos(m: Montagem, rota: Rota = ROTA_EM_PRODUCAO): number {
+  const pecas = custoPecasCentavos(m, rota);
+  return Math.round(pecas.galeria + pecas.cofre);
 }
 
 /** `g:` na frente para nunca colidir com os ids antigos, que são texto solto. */

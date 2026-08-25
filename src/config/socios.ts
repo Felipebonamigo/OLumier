@@ -17,7 +17,7 @@
  * nada no resto do código depende desses números.
  */
 
-import { planoPorId, custoTetoCentavos } from "./planos";
+import { planoPorId, custoPecasCentavos } from "./planos";
 
 export interface Socio {
   id: string;
@@ -57,10 +57,18 @@ export const RESERVA_POR_PLANO: Record<string, number> = {
   "filme-5000": 55000, // custo teto R$ 498
 };
 
-/** Folga sobre o custo teto: cobre alta do dólar sem comer o lucro dos sócios. */
-const FOLGA = 1.3;
+/**
+ * Folgas sobre o custo teto: cobrem alta do dólar sem comer o lucro dos sócios.
+ *
+ * São DUAS de propósito (25/08/2026): a galeria tem lucro gordo em cima da
+ * reserva, que já absorve câmbio ruim — 30% de folga basta. O cofre vive de
+ * margem ~zero por desenho, então a folga é a ÚNICA proteção cambial dele;
+ * 50% segura dólar até ~R$ 8 sem a peça virar subsídio.
+ */
+export const FOLGA_GALERIA = 1.3;
+export const FOLGA_COFRE = 1.5;
 /** Taxa do Asaas por cobrança, em centavos. */
-const TAXA_COBRANCA = 300;
+export const TAXA_COBRANCA = 300;
 
 /**
  * Reserva de uma montagem do quebra-cabeça.
@@ -68,17 +76,24 @@ const TAXA_COBRANCA = 300;
  * A tabela acima não serve para as montagens novas: as peças combinam em mais
  * de cem planos possíveis, e uma tabela escrita à mão ou ficaria incompleta ou
  * envelheceria calada. Aqui a reserva sai do custo real da montagem — mesma
- * regra de bolso de antes (custo teto + folga + taxa), só que calculada.
+ * regra de bolso de antes (custo teto + folga + taxa), só que calculada, com a
+ * folga de cada peça.
+ *
+ * O custo vem da rota EM PRODUÇÃO (hoje: tudo R2 + espelho B2). Em montagem
+ * grande isso pode passar do preço — `lucroCentavos` trava o lucro em zero e o
+ * split não manda nada: 100% fica na conta até a obra da rota barata sair.
+ * Distribuir "lucro" calculado numa rota que não existe seria pagar sócio com
+ * dinheiro da fatura da Cloudflare.
  */
 function reservaDaMontagem(planoId: string): number | null {
   const plano = planoPorId(planoId);
   if (!plano || !planoId.startsWith("g:")) return null;
-  const custo = custoTetoCentavos({
+  const pecas = custoPecasCentavos({
     segmento: plano.segmento,
     galeriaGb: plano.quotaGb,
     cofreGb: plano.cofreGb,
   });
-  return Math.round(custo * FOLGA) + TAXA_COBRANCA;
+  return Math.round(pecas.galeria * FOLGA_GALERIA + pecas.cofre * FOLGA_COFRE) + TAXA_COBRANCA;
 }
 
 /** Quanto sobra de lucro depois de separar a reserva de custo. */
