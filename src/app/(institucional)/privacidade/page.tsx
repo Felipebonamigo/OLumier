@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 /** Data da última revisão do texto — precisa mudar junto com o conteúdo. */
-const ATUALIZADO_EM = "20 de agosto de 2026";
+const ATUALIZADO_EM = "25 de agosto de 2026";
 
 export default function PrivacidadePage() {
   return (
@@ -43,6 +43,37 @@ export default function PrivacidadePage() {
           nunca informa documento.
         </li>
       </ul>
+
+      <h2>Registro de atividade da conta</h2>
+      <p>
+        Guardamos um registro das ações importantes feitas na sua conta — criar conta, apagar ou
+        restaurar uma galeria, apagar um arquivo, trocar de plano, cancelar a assinatura, trocar a
+        senha. De cada uma fica guardado:
+      </p>
+      <ul>
+        <li>qual ação, quando, e se partiu de você ou de uma rotina automática do sistema;</li>
+        <li>
+          o que é preciso para o registro continuar fazendo sentido depois — por exemplo, o nome da
+          galeria apagada e quantos arquivos ela tinha;
+        </li>
+        <li>
+          o <strong>endereço IP em forma de hash</strong>, nunca o IP em si — mesma prática do
+          registro de visitas.
+        </li>
+      </ul>
+      <p>
+        <strong>Por que isso existe:</strong> é o que permite responder &ldquo;o que aconteceu com
+        a galeria X?&rdquo; quando alguém perde um trabalho e precisa saber se foi apagado por
+        engano, se o prazo venceu, ou se houve falha nossa. Sem esse registro, ninguém consegue
+        reconstruir o que ocorreu — nem você, nem nós.
+      </p>
+      <p>
+        Esse registro <strong>não pode ser alterado nem apagado</strong>, nem por nós: o banco de
+        dados recusa qualquer tentativa. É o que faz dele um registro confiável em vez de um
+        rascunho. Por isso ele <strong>sobrevive ao encerramento da conta</strong> — a base legal é
+        o exercício regular de direitos (art. 7º, VI e art. 16, I da LGPD), e não guardamos ali
+        nome, e-mail, senha, documento nem qualquer conteúdo de foto.
+      </p>
 
       <h2>Dados dos visitantes das galerias</h2>
       <p>
@@ -92,6 +123,11 @@ export default function PrivacidadePage() {
           <strong>Cloudflare</strong> — armazena os arquivos e responde pelo DNS.
         </li>
         <li>
+          <strong>Backblaze</strong> — guarda a segunda cópia dos arquivos e o backup do banco,
+          ambos cifrados. É um provedor separado da Cloudflare de propósito: perder um não pode
+          significar perder os dois.
+        </li>
+        <li>
           <strong>Asaas</strong> — processa os pagamentos. Recebe nome, e-mail e CPF/CNPJ de quem
           assina. Não temos acesso ao número do seu cartão.
         </li>
@@ -107,12 +143,20 @@ export default function PrivacidadePage() {
           mas <em>nada é apagado</em> — é o comportamento contratado.
         </li>
         <li>
-          <strong>Ao apagar uma galeria</strong>, os arquivos são removidos do armazenamento junto,
-          e isso é definitivo.
+          <strong>Ao apagar uma galeria</strong>, ela vai para a lixeira e fica{" "}
+          <strong>30 dias</strong> lá — nada é removido do armazenamento nesse período, e você pode
+          restaurar tudo com um clique. Passado o prazo, os arquivos são apagados de vez do
+          armazenamento principal.
+        </li>
+        <li>
+          <strong>A cópia de segurança demora mais.</strong> Todo arquivo enviado ganha uma segunda
+          cópia num provedor diferente, para o caso de perdermos o armazenamento principal. Essa
+          cópia é protegida contra exclusão por 30 dias, então ela sobrevive por algum tempo à
+          exclusão da galeria. Para apagá-la antes disso, peça pelo e-mail acima.
         </li>
         <li>
           <strong>Ao encerrar a conta</strong>, os dados são apagados mediante pedido pelo e-mail
-          acima.
+          acima — com a exceção do registro de atividade descrito acima, que é imutável por desenho.
         </li>
       </ul>
 
@@ -131,8 +175,19 @@ export default function PrivacidadePage() {
       <h2>Segurança</h2>
       <p>
         Senhas com <em>hash</em>, tráfego sempre em HTTPS, links de arquivo temporários e assinados,
-        limite de tentativas de senha, backup diário do banco com cópia fora do servidor. Nenhum
-        sistema é perfeito; se descobrirmos um incidente que possa te afetar, avisamos.
+        limite de tentativas de senha. O armazenamento nunca é público: todo acesso a arquivo passa
+        por link assinado de validade curta.
+      </p>
+      <p>
+        Contra perda de dado, três camadas: <strong>backup diário</strong> do banco, cifrado e com
+        cópia fora do servidor; <strong>segunda cópia de todos os arquivos</strong> num provedor
+        diferente do principal, protegida contra exclusão; e a <strong>lixeira de 30 dias</strong>,
+        que dá tempo de desfazer um apagar por engano.
+      </p>
+      <p>
+        Nenhum sistema é perfeito, e nós não fingimos que o nosso é. O {marca.nome} é serviço de
+        entrega e de cofre — <strong>não substitui o seu backup</strong>, e nenhum serviço deveria
+        ser a sua única cópia. Se descobrirmos um incidente que possa te afetar, avisamos.
       </p>
 
       <h2>Mudanças</h2>
