@@ -22,6 +22,20 @@ const ATUALIZADO_EM = "25 de agosto de 2026";
  * de segurança que não se cumpre é pior que silêncio — e, num processo, vira
  * prova contra. Se um mecanismo for desligado, o parágrafo sai daqui no mesmo
  * dia.
+ *
+ * ── CORREÇÃO DE 25/08/2026 ────────────────────────────────────────────────
+ * O texto dizia que a trava impede a exclusão "mesmo por quem tem a senha da
+ * conta". Isso descreve Object Lock em modo COMPLIANCE. O que existe é
+ * GOVERNANCE, que uma credencial com a capacidade `bypassGovernance` remove —
+ * e a Backblaze concede essa capacidade por padrão a chaves criadas pelo
+ * painel. A frase era, literalmente, a promessa mais forte da página apoiada no
+ * mecanismo mais fraco.
+ *
+ * Governance é escolha, não descuido: compliance é IRREVERSÍVEL e impediria
+ * atender pedido de exclusão do titular (LGPD) dentro dos 30 dias. O texto
+ * agora diz o que a trava faz (barra o programa e o invasor) e o que ela não
+ * faz (barrar o administrador), e explica por quê. Ver
+ * `docs/arquitetura-armazenamento.md`.
  */
 export default function SegurancaPage() {
   return (
@@ -58,8 +72,22 @@ export default function SegurancaPage() {
       <h2>A segunda cópia é travada contra exclusão</h2>
       <p>
         Os arquivos copiados ficam sob <strong>Object Lock por 30 dias</strong>: uma trava do próprio
-        fornecedor que impede a exclusão antes do prazo, mesmo por quem tem a senha da conta.
-        Programa com defeito, comando errado ou invasor não conseguem apagar o que está travado.
+        fornecedor, aplicada no armazenamento e não no nosso programa. Um comando errado da nossa
+        parte, ou um invasor que roube uma credencial do sistema, não consegue apagar o que está
+        travado — o armazenamento recusa.
+      </p>
+      <p>
+        A trava é do tipo que <strong>nós ainda podemos remover</strong>, com uma credencial de
+        administrador que não fica no servidor. É o que nos permite atender de verdade um pedido seu
+        de apagar tudo: se a trava fosse absoluta, nem você conseguiria sair antes dos 30 dias.
+        Existe uma modalidade mais rígida, que nem o dono da conta desfaz — não usamos por essa
+        razão, e preferimos escrever isso a deixar você achar que é outra coisa.
+      </p>
+      <p>
+        Além dela, nossos programas de limpeza automática têm um limite próprio: <strong>nenhuma
+        rotina apaga mais que uma fração pequena das cópias de uma vez</strong>. Se uma faxina
+        noturna fosse remover muito mais que o normal, ela para sozinha e chama uma pessoa em vez de
+        continuar.
       </p>
 
       <h2>Apagou sem querer? Tem {PRAZO_LIXEIRA_DIAS} dias</h2>
