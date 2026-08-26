@@ -34,8 +34,20 @@
  *
  * A margem era mais fina do que parece: o script roda TODO DIA às 04:30 em
  * produção, pelo `fotonio-cofre.service`. Não era um defeito adormecido à espera
- * de alguém executar à mão; era um defeito executado quatro vezes na semana
- * passada, que só não encontrou nada para destruir.
+ * de alguém executar à mão — era um defeito EXECUTADO, que só não encontrou nada
+ * para destruir. `latente` descrevia o alvo, não o gatilho.
+ *
+ * O log de produção fecha a prova melhor que qualquer inferência sobre o banco.
+ * Entre 20 e 26 de agosto de 2026, em `/var/log/fotonio-cofre.log`:
+ *
+ *     execuções registradas:  10
+ *     × removido:              0
+ *     ↑ resgatado:             0
+ *     … adiado:                0
+ *     linhas distintas:        1 — "nenhum envio pendente há mais de 24h"
+ *
+ * Dez execuções, uma única mensagem possível: o script sempre saiu no
+ * `process.exit(0)` ANTES do laço. O ramo destrutivo nunca rodou uma vez.
  */
 const { decidirPendente } = await import("../src/lib/pendentes.ts");
 
