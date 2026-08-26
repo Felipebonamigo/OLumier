@@ -132,7 +132,7 @@ const FRACAO_DERIVADA_NO_R2 = 0.093;
  * A proteção não se perdeu com a rota: ela nunca morou aqui. Quem trava o lucro
  * em zero quando o custo engole o preço é `lucroCentavos`, em `socios.ts`, e
  * continua igual. Se um dia entrar espelho frio, é somar uma constante a
- * `custoEspacoCentavos` — não ressuscitar o seletor.
+ * `custoArmazenamentoCentavos` — não ressuscitar o seletor.
  */
 
 export interface Montagem {
@@ -158,13 +158,36 @@ export const formatarGb = (gb: number) => (gb >= 1000 ? `${gb / 1000} TB` : `${g
 const faixa = (gb: number) => ESPACOS.find((f) => f.gb === gb);
 
 /**
- * Custo TETO da montagem (espaço 100% ocupado), em centavos.
+ * Custo de ARMAZENAMENTO da montagem, com o espaço 100% ocupado, em centavos.
  *
- * É teto porque os fornecedores cobram o que está guardado de verdade — conta
- * nova começa vazia e custa quase nada. Usar o teto é o que garante que
- * nenhuma faixa sangre no pior caso.
+ * ── O QUE ESTE NÚMERO É, E O QUE ELE NÃO É ────────────────────────────────
+ * O nome ficou longo de propósito. Enquanto ele se chamava só `custoEspaco` e
+ * `custoTeto`, era natural ler "custo" como "o custo de ter um cliente" — e não
+ * é. Este número tem exatamente dois itens dentro:
+ *
+ *   ENTRA:  o original no B2, e a derivada que fica no R2.
+ *
+ *   NÃO ENTRA, e escala com o uso:
+ *     · IOF e spread do cartão sobre a parte em dólar — cobertos pela FOLGA de
+ *       30% em `socios.ts`, não somados aqui (medido: com IOF 3,5% e spread 3%
+ *       a reserva ainda aguenta o dólar a R$ 6,71);
+ *     · download acima da franquia do B2 (grátis até 3× do guardado por mês,
+ *       depois US$ 0,01/GB) — não modelado, e o único variável que pode morder
+ *       de verdade. Só dá para calibrar com galeria real em uso;
+ *     · requisições no R2 (uma por miniatura) — centavos.
+ *
+ *   NÃO ENTRA, e NÃO escala com GB:
+ *     · DAS-MEI, VPS, domínio, contabilidade. Esses não pertencem a este
+ *       cálculo: somá-los ao plano de 100 GB o faria parecer prejuízo, e
+ *       diluí-los entre clientes mudaria o custo de todo mundo a cada cliente
+ *       novo. O lugar deles é o PONTO DE EQUILÍBRIO — quantos clientes pagam a
+ *       operação —, em `src/config/custos-fixos.ts`.
+ *
+ * É TETO porque os fornecedores cobram o que está guardado de verdade: conta
+ * nova começa vazia e custa quase nada. Usar o teto é o que garante que nenhuma
+ * faixa sangre no pior caso.
  */
-export function custoEspacoCentavos(m: Montagem): number {
+export function custoArmazenamentoCentavos(m: Montagem): number {
   if (!Number.isFinite(m.espacoGb)) {
     /*
      * Falhar alto em vez de devolver NaN.
@@ -183,9 +206,9 @@ export function custoEspacoCentavos(m: Montagem): number {
   return m.espacoGb * porGb;
 }
 
-/** Custo teto arredondado — o que o resto do sistema consome. */
-export function custoTetoCentavos(m: Montagem): number {
-  return Math.round(custoEspacoCentavos(m));
+/** O mesmo custo de armazenamento, arredondado — o que o resto do sistema consome. */
+export function custoArmazenamentoTetoCentavos(m: Montagem): number {
+  return Math.round(custoArmazenamentoCentavos(m));
 }
 
 /** `g:` na frente para nunca colidir com os ids antigos, que são texto solto. */

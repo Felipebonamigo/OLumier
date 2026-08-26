@@ -129,6 +129,32 @@ Conta já criada não muda sozinha quando o plano cresce — este script alinha.
 Estúdio com `plano_id` que não existe mais é **pulado**, nunca reduzido: inventar
 quota ali poderia tirar espaço de alguém sem querer.
 
+### Quantos clientes pagam a operação
+
+```bash
+node --env-file=.env.local --experimental-strip-types \
+     --import ./scripts/registrar-ts.mjs scripts/ponto-de-equilibrio.mjs
+```
+
+Imprime o custo fixo do mês (DAS-MEI, VPS, domínio), a margem de cada faixa com
+IOF e câmbio inclusos, e quantos clientes fecham a conta — em duas ocupações,
+100% e 50%.
+
+**Dois números que o relatório mostra e que valem entender:**
+
+- **O custo de um plano não é o custo do negócio.** `custoArmazenamentoCentavos`,
+  em `planos.ts`, conta B2 e R2 e mais nada. Custo fixo não entra lá de propósito:
+  ele não cresce com GB, e somá-lo ao plano de 100 GB o faria parecer prejuízo.
+- **O custo fixo não está em reserva nenhuma.** O split manda o lucro embora, e a
+  reserva que fica cobre só o armazenamento. Quem paga DAS-MEI e VPS paga depois
+  da divisão — então, com 50% do lucro, cada real de custo fixo exige dois reais
+  de lucro total. Decisão em aberto; as três saídas estão listadas no rodapé do
+  relatório.
+
+Os valores de custo fixo, IOF e spread do cartão moram em
+`src/config/custos-fixos.ts`, e **três dos quatro são estimativa**. O relatório
+marca cada um com `~` e diz onde conferir. Corrigir é editar uma linha.
+
 ### O CORS do bucket
 
 O navegador fala direto com o bucket, que é outro domínio. A política de origens

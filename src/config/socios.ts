@@ -17,7 +17,7 @@
  * nada no resto do código depende desses números.
  */
 
-import { planoPorId, custoEspacoCentavos } from "./planos";
+import { planoPorId, custoArmazenamentoCentavos } from "./planos";
 
 export interface Socio {
   id: string;
@@ -85,7 +85,7 @@ export const TAXA_COBRANCA = 300;
 function reservaDoPlano(planoId: string): number | null {
   const plano = planoPorId(planoId);
   if (!plano) return null;
-  const custo = custoEspacoCentavos({ segmento: plano.segmento, espacoGb: plano.quotaGb });
+  const custo = custoArmazenamentoCentavos({ segmento: plano.segmento, espacoGb: plano.quotaGb });
   return Math.round(custo * FOLGA_ESPACO) + TAXA_COBRANCA;
 }
 

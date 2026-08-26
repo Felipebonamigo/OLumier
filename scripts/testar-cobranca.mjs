@@ -186,14 +186,14 @@ await etapa("a reserva de custo cobre o custo real de cada plano", async () => {
      * `espacoGb`, e não `galeriaGb`/`cofreGb`.
      *
      * A forma antiga é de quando o cofre era peça do plano, e ficou aqui depois
-     * da unificação de 25/08/2026. `custoTetoCentavos` lê `espacoGb`, então o
+     * da unificação de 25/08/2026. `custoArmazenamentoTetoCentavos` lê `espacoGb`, então o
      * custo virava NaN — e `reserva < NaN` é sempre falso. Esta etapa, que
      * existe justamente para provar que a reserva cobre o custo, não tinha como
      * ficar vermelha. Teste que não pode falhar é pior que teste nenhum: ocupa
-     * a vaga de um que poderia. Hoje `custoEspacoCentavos` recusa montagem sem
+     * a vaga de um que poderia. Hoje `custoArmazenamentoCentavos` recusa montagem sem
      * `espacoGb` em vez de devolver NaN, para o erro não voltar calado.
      */
-    const custo = planos.custoTetoCentavos({
+    const custo = planos.custoArmazenamentoTetoCentavos({
       segmento: p.segmento,
       espacoGb: p.quotaGb,
     });

@@ -26,8 +26,8 @@ import {
   montar,
   idDaMontagem,
   planoPorId,
-  custoTetoCentavos,
-  custoEspacoCentavos,
+  custoArmazenamentoTetoCentavos,
+  custoArmazenamentoCentavos,
   planos,
   todasAsMontagens,
 } from "../src/config/planos.ts";
@@ -37,7 +37,7 @@ import { lucroCentavos, FOLGA_ESPACO, TAXA_COBRANCA } from "../src/config/socios
  * A reserva da montagem. Mesma regra do socios.ts, refeita aqui de propósito:
  * se a de lá mudar sem ninguém pensar na grade, este teste conta a diferença.
  */
-const reserva = (m) => Math.round(custoEspacoCentavos(m) * FOLGA_ESPACO) + TAXA_COBRANCA;
+const reserva = (m) => Math.round(custoArmazenamentoCentavos(m) * FOLGA_ESPACO) + TAXA_COBRANCA;
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -224,7 +224,7 @@ await etapa("nenhuma montagem sai abaixo do custo + folga", () => {
 await etapa("a reserva que fica cobre o custo de cada montagem", () => {
   for (const m of todasAsMontagens()) {
     const p = montar(m);
-    const custo = custoTetoCentavos(m);
+    const custo = custoArmazenamentoTetoCentavos(m);
     const lucro = lucroCentavos(p.id, p.precoCentavos);
     const retido = p.precoCentavos - lucro;
     if (lucro > 0 && retido < custo) {
@@ -249,7 +249,7 @@ await etapa("a reserva que fica cobre o custo de cada montagem", () => {
  * pelo caso ruim.
  */
 await etapa("o custo por GB é o que a fatura cobra", () => {
-  const porGb = custoEspacoCentavos({ segmento: "foto", espacoGb: 1000 }) / 1000;
+  const porGb = custoArmazenamentoCentavos({ segmento: "foto", espacoGb: 1000 }) / 1000;
   if (Math.abs(porGb - 4.587) > 0.01) {
     throw new Error(
       `o código conta R$ ${(porGb / 100).toFixed(4)}/GB — a fatura cobra R$ 0,0459 ` +
