@@ -372,10 +372,27 @@ export function GaleriaCliente({
       )}
 
       {/*
-        Só aparece depois da primeira foto marcada. Antes disso seria um botão
-        que não faz nada, ocupando o lugar mais nobre da tela — e explicando um
-        recurso que a pessoa ainda não usou.
+        O combinado, dito ANTES da primeira marcação.
+
+        A barra abaixo só nasce depois da primeira foto — e isso está certo para
+        o BOTÃO de filtrar favoritas, que sem nenhuma favorita não faz nada. Mas
+        o contador viajava junto, e contador não é botão: é a REGRA. O casal
+        abria a galeria, marcava à vontade e descobria o limite ao ser recusado
+        na foto seguinte. Regra que só aparece quando você a quebra não é aviso,
+        é pegadinha.
+
+        Some sozinho na primeira marcação, porque a partir dali quem conta é o
+        contador da barra — dois números dizendo a mesma coisa competiriam.
+        `scripts/testar-selecao.mjs` prende os dois lados: que o aviso existe com
+        limite, e que ele NÃO aparece sem limite.
       */}
+      {limite !== null && selecao.aberta && favoritas.size === 0 && (
+        <p className="mt-6 text-center text-sm" style={{ color: "var(--g-suave)" }}>
+          Escolha até <strong style={{ color: "var(--g-destaque)" }}>{limite} fotos</strong> para o
+          álbum — toque no coração das que você quer.
+        </p>
+      )}
+
       {favoritas.size > 0 && (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button

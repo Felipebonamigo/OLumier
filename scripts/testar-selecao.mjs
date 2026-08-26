@@ -58,6 +58,39 @@ const { rows: fotos } = await db.query(
   [galeriaId],
 );
 
+/*
+ * O endereço público desta galeria. As etapas de API não precisam dele, mas a
+ * que confere o AVISO precisa: o que se testa ali é o HTML que o casal recebe,
+ * e não há como olhar isso pelo banco.
+ */
+const BASE = process.env.BASE_URL ?? "http://localhost:3040";
+const { rows: enderecos } = await db.query(
+  `select t.slug as estudio, g.slug as galeria, g.publicada
+     from galerias g join tenants t on t.id = g.tenant_id
+    where g.id = $1`,
+  [galeriaId],
+);
+const url = `${BASE}/g/${enderecos[0].estudio}/${enderecos[0].galeria}`;
+/* Publicada e sem senha: a etapa do aviso lê a página como um convidado leria, e
+ * o portão de senha devolveria o HTML errado. Restaurado no fim do arquivo. */
+const publicadaAntes = enderecos[0].publicada;
+await db.query("update galerias set publicada = true, senha_hash = null where id = $1", [galeriaId]);
+
+/*
+ * Texto da página com as tags fora.
+ *
+ * Sem isto o `<strong>` que destaca o número parte a frase no meio: o HTML traz
+ * `até <strong …>4 fotos</strong>`, e uma busca por "até 4" não casa. O teste
+ * ficaria vermelho com a correção já no lugar — pior que teste nenhum, porque
+ * mandaria procurar defeito onde não há.
+ */
+const textoDaPagina = async () => {
+  const r = await fetch(url, { headers: { connection: "close" }, cache: "no-store" });
+  if (!r.ok) throw new Error(`HTTP ${r.status} na galeria pública`);
+  const html = await r.text();
+  return html.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+};
+
 /** Estado limpo antes de cada bloco — o teste não pode depender do anterior. */
 const zerar = async () => {
   await db.query("delete from favoritas where galeria_id = $1", [galeriaId]);
@@ -104,6 +137,44 @@ await etapa("a mesma foto marcada pelos dois conta uma vez", async () => {
   if (e.total !== 0) throw new Error(`esperava 0 depois do segundo clique, veio ${e.total}`);
   if (r.favorita !== false) throw new Error("não devolveu que desmarcou");
   return "clique do segundo desmarca";
+});
+
+/* ── o limite dito ANTES ─────────────────────────────────────────────────── */
+
+/*
+ * O servidor recusa a foto que passa do combinado, e isso já está preso acima.
+ * Mas recusar é a última linha de defesa, não a primeira: até 26/08/2026 o casal
+ * abria a galeria, marcava à vontade e só descobria a regra ao esbarrar nela —
+ * a barra com o contador só nascia depois da PRIMEIRA foto marcada.
+ *
+ * O comentário no componente justificava esconder o BOTÃO de filtrar favoritas,
+ * e a justificativa é boa: botão que não faz nada ocupando o lugar mais nobre da
+ * tela. Só que o contador viajava junto, e o contador não é botão — é a regra.
+ * Regra que só aparece quando você a quebra não é aviso, é pegadinha.
+ */
+await etapa("o limite é dito antes de o casal marcar a primeira", async () => {
+  await db.query("update galerias set selecao_limite = 4 where id = $1", [galeriaId]);
+
+  const texto = await textoDaPagina();
+
+  /* Sem nenhuma favorita marcada: é exatamente o estado em que o casal chega. */
+  if (!/escolha até 4 fotos/i.test(texto)) {
+    throw new Error(
+      "a galeria não diz quantas fotos podem ser escolhidas antes da primeira marcação — " +
+        "o casal só descobriria a regra ao ser recusado",
+    );
+  }
+  return "diz o combinado antes";
+});
+
+await etapa("sem limite, não inventa aviso", async () => {
+  /* O `zerar` já deixou `selecao_limite` nulo. Anunciar "escolha até null" ou um
+   * número tirado do nada seria pior que o silêncio de antes. */
+  const texto = await textoDaPagina();
+  if (/escolha até \d+ fotos/i.test(texto)) {
+    throw new Error("anunciou um limite que não existe");
+  }
+  return "silêncio, como deve ser";
 });
 
 /* ── limite ──────────────────────────────────────────────────────────────── */
@@ -256,6 +327,10 @@ await etapa("exportar sai na ordem da galeria, não na de marcação", async () 
 });
 
 await zerar();
+/* Devolve a galeria ao estado em que estava: o teste do aviso precisou publicá-la
+ * para ler o HTML de convidado, e teste que deixa lixo atrás muda o resultado do
+ * próximo. */
+await db.query("update galerias set publicada = $1 where id = $2", [publicadaAntes, galeriaId]);
 await db.end();
 
 if (falhou) {
