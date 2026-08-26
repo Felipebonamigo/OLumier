@@ -46,6 +46,7 @@
   --luz: #cfd9ea;
   --luz-alta: #ffffff;
   --marca-traco: #cfd9ea;
+  --marca-fundo: #07080b;
   --acento: #d9a441;
   --acento-alto: #f2c877;
   --marfim: #f4f6fa;
@@ -98,6 +99,14 @@
      * pode ser sutil; a marca, não.
      */
     --marca-traco: light-dark(#2b3542, #cfd9ea);
+
+    /*
+     * O FUNDO DO DIAFRAGMA. O núcleo da marca tapa as órbitas que passam atrás
+     * dele — sem isso as elipses cruzam por dentro do diafragma e o centro vira
+     * um emaranhado. Acompanha o fundo da página nos dois temas, senão o
+     * recorte aparece como mancha.
+     */
+    --marca-fundo: light-dark(#f4f6fa, #07080b);
 
     /*
      * O ÂMBAR DO PROJETOR: só AÇÃO. Botão, link, foto marcada.

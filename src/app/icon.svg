@@ -1,10 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- O feixe atravessando a lente — mesma marca de src/components/marca-tile.tsx,
-       com fundo para a aba do navegador. Hex em vez de variável: favicon é
-       carregado fora do documento e não enxerga o CSS da página. -->
+  <!-- O átomo com o diafragma no núcleo — a mesma marca de
+       src/components/marca-tile.tsx. Mudou lá, mude aqui.
+
+       Esta é a versão ENXUTA (duas órbitas, diafragma sem lâmina), e não a
+       completa: a aba do navegador desenha isto a 16px, e as seis lâminas mais
+       a terceira órbita viram borrão cinza nesse tamanho. A silhueta é a mesma,
+       então as duas se reconhecem.
+
+       Hex em vez de variável: o favicon é carregado fora do documento e não
+       enxerga o CSS da página. Fundo escuro fixo pelo mesmo motivo — a aba pode
+       ser clara ou escura, e a marca precisa ler nas duas. -->
   <rect width="64" height="64" rx="14" fill="#07080b"/>
-  <path d="M 6 32 H 20" stroke="#cfd9ea" stroke-width="2.1" stroke-linecap="round" opacity=".55"/>
-  <circle cx="32" cy="32" r="15" stroke="#cfd9ea" stroke-width="2.9" fill="none"/>
-  <path d="M 45 32 H 59 M 45.5 25 L 58 19.5 M 45.5 39 L 58 44.5" stroke="#cfd9ea" stroke-width="2.1" stroke-linecap="round" opacity=".75"/>
-  <circle cx="32" cy="32" r="4.5" fill="#d9a441"/>
+
+  <!-- as órbitas -->
+  <g stroke="#cfd9ea" stroke-width="2.4" fill="none">
+    <ellipse cx="32" cy="32" rx="20.5" ry="8" transform="rotate(30 32 32)"/>
+    <ellipse cx="32" cy="32" rx="20.5" ry="8" transform="rotate(150 32 32)"/>
+  </g>
+
+  <!-- o diafragma: tapa as órbitas que passam atrás, senão o centro embola -->
+  <circle cx="32" cy="32" r="10" fill="#07080b" stroke="#cfd9ea" stroke-width="2.8"/>
+
+  <!-- a luz -->
+  <circle cx="32" cy="32" r="4.1" fill="#d9a441"/>
 </svg>

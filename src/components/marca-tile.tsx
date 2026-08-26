@@ -18,7 +18,42 @@ import { marca } from "@/config/marca";
  * SVG inline: escala sem pedido de rede, e o favicon (src/app/icon.svg) é este
  * mesmo desenho com fundo — mudou aqui, mude lá.
  */
+/** As três órbitas. Mesma elipse, três giros — 60° entre elas é o que fecha a simetria. */
+const ORBITAS = [30, 90, 150];
+
+/** Um elétron na ponta de cada órbita. Coordenadas calculadas, não estimadas. */
+const ELETRONS = [
+  [37.34, 31.7],
+  [24, 8.6],
+  [10.66, 31.7],
+] as const;
+
+/**
+ * As seis lâminas do diafragma. Cada uma sai da borda e entra girando 52° — é o
+ * giro que faz ler como lâmina em vez de raio de roda.
+ */
+const LAMINAS =
+  "M 24 16.5 L 26.6 21.97 M 30.5 20.25 L 27.06 25.24 M 30.5 27.75 L 24.46 27.27 " +
+  "M 24 31.5 L 21.4 26.03 M 17.5 27.75 L 20.94 22.76 M 17.5 20.25 L 23.54 20.73";
+
+/** A faísca de quatro pontas no núcleo — o gesto que o Movimento Átomo repete. */
+const FAISCA =
+  "M 24 20.4 L 24.81 23.19 L 27.6 24 L 24.81 24.81 L 24 27.6 " +
+  "L 23.19 24.81 L 20.4 24 L 23.19 23.19 Z";
+
 export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
+  /*
+   * ── DUAS VERSÕES, E O MOTIVO ──────────────────────────────────────────
+   * Três órbitas + seis lâminas + três elétrons são vinte e poucos traços. A
+   * 76px isso é um desenho; a 16px — favicon e selo do rodapé da galeria — vira
+   * borrão cinza. Marca que só funciona grande não é marca, é ilustração.
+   *
+   * Abaixo de 28px o desenho cai para o essencial: duas órbitas, o anel do
+   * diafragma sem lâmina, e o núcleo âmbar. A silhueta continua a mesma, então
+   * as duas se reconhecem como a mesma marca.
+   */
+  const miudo = tamanho < 28;
+
   return (
     <svg
       width={tamanho}
@@ -28,26 +63,49 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
       aria-hidden
       className="shrink-0"
     >
-      {/* o feixe que entra: fino, frio, vindo de fora do quadro */}
-      <path
-        d="M 2 24 H 15"
+      {/* as órbitas — o átomo, e a família */}
+      {(miudo ? [30, 150] : ORBITAS).map((giro) => (
+        <ellipse
+          key={giro}
+          cx="24"
+          cy="24"
+          rx="15.4"
+          ry="6"
+          transform={`rotate(${giro} 24 24)`}
+          stroke="var(--marca-traco)"
+          strokeWidth={miudo ? 1.9 : 1.5}
+          opacity={giro === 90 ? 0.85 : 1}
+        />
+      ))}
+
+      {!miudo &&
+        ELETRONS.map(([x, y]) => (
+          <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" fill="var(--marca-traco)" />
+        ))}
+
+      {/*
+        O diafragma no núcleo é o que diz GALERIA. Sem ele o símbolo falaria só
+        da família e não do que o produto faz — e foi por isso que ele venceu as
+        três propostas anteriores.
+      */}
+      <circle
+        cx="24"
+        cy="24"
+        r="7.5"
+        fill="var(--marca-fundo)"
         stroke="var(--marca-traco)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        opacity="0.55"
+        strokeWidth={miudo ? 2.1 : 1.8}
       />
-      {/* o anel: a lente, e o O */}
-      <circle cx="24" cy="24" r="11.5" stroke="var(--marca-traco)" strokeWidth="2.2" />
-      {/* o feixe que sai — aberto, porque a luz foi trabalhada */}
-      <path
-        d="M 34 24 H 46 M 34.5 18.5 L 45 14 M 34.5 29.5 L 45 34"
-        stroke="var(--marca-traco)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        opacity="0.75"
-      />
-      {/* o ponto focal — o único âmbar, onde a luz se concentra */}
-      <circle cx="24" cy="24" r="3.4" fill="var(--acento)" />
+      {!miudo && (
+        <path d={LAMINAS} stroke="var(--marca-traco)" strokeWidth="1" opacity="0.55" />
+      )}
+
+      {/* o único âmbar: a luz, no centro do diafragma */}
+      {miudo ? (
+        <circle cx="24" cy="24" r="3.1" fill="var(--acento)" />
+      ) : (
+        <path d={FAISCA} fill="var(--acento)" />
+      )}
     </svg>
   );
 }
@@ -86,13 +144,33 @@ export function MarcaLockup({ tamanho = 40 }: { tamanho?: number }) {
       <MarcaSimbolo tamanho={tamanho} />
       <span>
         {/*
-          Espaçamento largo entre as letras: o nome é francês na origem e ganha
-          ar de letreiro de cinema quando respira. Peso leve porque a marca não
-          precisa gritar — quem grita na tela é a foto do cliente.
+          O LOGOTIPO: duas palavras, dois pesos.
+
+          "Galeria" leve e "Átomo" forte — é a hierarquia do nome. Galeria é o
+          que a coisa É; Átomo é de quem ela é, e é a palavra que amarra na
+          família. Ler nessa ordem, com esse contraste, diz a parceria sem
+          precisar de uma linha explicando.
+
+          Caixa alta e entreletra larga, como no lockup do Movimento Átomo. A
+          Montserrat é a nossa e também a do site deles — não foi escolhida por
+          isso, mas é o que faz as duas marcas parecerem da mesma casa sem
+          copiar o desenho de ninguém.
         */}
         <span className="flex items-center gap-2">
-          <span className="block text-lg font-medium leading-tight tracking-[0.14em]">
-            {marca.nome}
+          <span className="block text-[17px] uppercase leading-tight tracking-[0.2em]">
+            {/* Derivado de `marca.nome`, nunca escrito à mão — é a regra do
+                config/marca.ts. Nome de uma palavra só cai no peso forte
+                inteiro, que continua sendo um logotipo válido. */}
+            {(() => {
+              const corte = marca.nome.lastIndexOf(" ");
+              if (corte < 0) return <span className="font-semibold">{marca.nome}</span>;
+              return (
+                <>
+                  <span className="font-light">{marca.nome.slice(0, corte)}</span>{" "}
+                  <span className="font-semibold">{marca.nome.slice(corte + 1)}</span>
+                </>
+              );
+            })()}
           </span>
           <SeloBeta />
         </span>
