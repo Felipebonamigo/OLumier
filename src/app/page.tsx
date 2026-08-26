@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
-import { planos, formatarReais, type Plano } from "@/config/planos";
 import { MontadorPlano } from "@/components/montador-plano";
 import { MarcaTile } from "@/components/marca-tile";
 import { SeletorTema } from "@/components/seletor-tema";
@@ -26,9 +25,6 @@ export const metadata: Metadata = {
  */
 
 export default function Home() {
-  const foto = planos.filter((p) => p.segmento === "foto");
-  const filme = planos.filter((p) => p.segmento === "filme");
-
   return (
     <main className="overflow-x-clip">
       {/* ── cabeçalho ─────────────────────────────────────────────────── */}
@@ -379,17 +375,6 @@ export default function Home() {
             </div>
           </Revelar>
 
-          <Revelar atraso={100}>
-            <div className="mt-14">
-              <p className="text-center text-sm text-texto-soft">
-                Ou comece por uma combinação pronta:
-              </p>
-              <div className="mt-6 grid gap-10 lg:grid-cols-2">
-                <PlanoGrupo titulo="Foto" planos={foto} />
-                <PlanoGrupo titulo="Filme" planos={filme} />
-              </div>
-            </div>
-          </Revelar>
         </div>
       </section>
 
@@ -444,31 +429,3 @@ export default function Home() {
   );
 }
 
-function PlanoGrupo({ titulo, planos }: { titulo: string; planos: Plano[] }) {
-  return (
-    <div>
-      <h3 className="font-mono text-[11px] uppercase tracking-[0.28em] text-texto-faint">{titulo}</h3>
-      <ul className="mt-4 divide-y divide-linha rounded-xl border border-linha bg-carbon">
-        {planos.map((p) => (
-          <li key={p.id} className="relative flex items-center justify-between gap-4 p-5">
-            {p.destaque && (
-              <span className="absolute -top-3 left-5 rounded-full bg-acento px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-void">
-                Mais pedido
-              </span>
-            )}
-            <div>
-              <p className="font-semibold">{p.nome}</p>
-              <p className="text-xs text-texto-soft">
-                no ar e arquivado juntos
-              </p>
-            </div>
-            <p className="whitespace-nowrap text-lg font-bold text-acento-alto">
-              {formatarReais(p.precoCentavos)}
-              <span className="text-xs font-normal text-texto-faint">/mês</span>
-            </p>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
