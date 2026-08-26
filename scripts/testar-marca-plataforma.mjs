@@ -44,10 +44,33 @@ const RAIZ = path.resolve(import.meta.dirname, "..");
 const ler = (p) => readFileSync(path.join(RAIZ, p), "utf8");
 
 /*
- * O domínio que está NO AR hoje. Não sai de `marca.ts` de propósito: se saísse,
- * a etapa concordaria com qualquer troca e não estaria conferindo nada.
+ * Os domínios que estão NO AR hoje. Não saem de `marca.ts` de propósito: se
+ * saíssem, as etapas concordariam com qualquer troca e não estariam conferindo
+ * nada.
+ *
+ * ── POR QUE SÃO DOIS, DESDE 26/08/2026 ────────────────────────────────────
+ *
+ * Era uma constante só, porque a suposição era que o site e o e-mail andariam
+ * juntos numa troca de marca. Não andam, e vale manter as duas separadas
+ * mesmo agora que apontam para o mesmo lugar: a próxima troca de marca vai ter
+ * os mesmos dois relógios, e reunir as constantes esconde isso.
+ *
+ * ⚠️ CORREÇÃO DE PREMISSA. A primeira versão deste bloco segurou o e-mail em
+ * `olumier.com.br` para não "anunciar um endereço que devolve a mensagem". A
+ * premissa era falsa, e medir derrubou: `olumier.com.br` tem MX nulo (`0 .` —
+ * RFC 7505, "este domínio não aceita e-mail") e SPF `-all`. Ele NUNCA recebeu.
+ * Segurar o e-mail lá não protegia ninguém; só mantinha a marca velha à vista
+ * numa página que promete resposta em 15 dias.
+ *
+ * Hoje as duas apontam para `galeriaatomo.com.br`, e a verdade é mais simples e
+ * mais feia: **não existe caixa de e-mail em domínio nenhum.** O que falta não
+ * é escolher entre dois domínios — é criar MX/encaminhamento para receber e
+ * verificar o domínio no Resend para enviar. Nada disso é código, e por isso
+ * teste nenhum aqui pega. O que este arquivo ainda faz é impedir que o campo
+ * ande sozinho num find-replace.
  */
-const DOMINIO_EM_PRODUCAO = "olumier.com.br";
+const DOMINIO_EM_PRODUCAO = "galeriaatomo.com.br";
+const DOMINIO_QUE_RECEBE_EMAIL = "galeriaatomo.com.br";
 
 let falhou = false;
 function etapa(nome, fn) {
@@ -132,10 +155,12 @@ etapa("marca.dominio ainda é o domínio que está no ar", () => {
 
 etapa("o e-mail de contato ainda é de um domínio que existe", () => {
   const dominioDoEmail = marca.email.split("@")[1];
-  if (dominioDoEmail !== DOMINIO_EM_PRODUCAO) {
+  if (dominioDoEmail !== DOMINIO_QUE_RECEBE_EMAIL) {
     throw new Error(
-      `contato virou "${marca.email}", num domínio que ainda não recebe e-mail. ` +
-        `Endereço de contato que volta é pior que endereço nenhum.`,
+      `contato virou "${marca.email}", fora do domínio canônico. ` +
+        `Nenhum dos nossos domínios recebe e-mail hoje (MX nulo), então o risco aqui não ` +
+        `é a caixa: é a marca velha reaparecer numa página que pede para escreverem. ` +
+        `Se mudou de propósito, troque DOMINIO_QUE_RECEBE_EMAIL junto.`,
     );
   }
   return marca.email;

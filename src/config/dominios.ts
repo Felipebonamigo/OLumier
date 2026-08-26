@@ -25,7 +25,7 @@
  *
  *   1. some o novo aqui, publica  ← nada muda para quem já usa
  *   2. DNS, certificado, e-mail
- *   3. `marca.dominio` passa a apontar para o novo
+ *   3. `marca.dominio` passa a apontar para o novo  ← FEITO em 26/08/2026
  *   4. meses depois, tira o antigo daqui — e o Caddy passa a só redirecionar
  *
  * O antigo NÃO sai junto com o passo 3. Enquanto houver um link de casamento
@@ -36,11 +36,18 @@
  * parecido (`estudio.olumier.com.br.golpe.net`) continua barrado em todos.
  */
 export const DOMINIOS_ATENDIDOS = [
-  /* O de hoje — tem galeria no ar e é o canônico até a fase 2. */
+  /* O ANTIGO, e ele fica. Passo 3 feito em 26/08/2026: o canônico virou
+   * `galeriaatomo.com.br` e o Caddy passou a redirecionar a raiz e o `www`
+   * daqui para lá. Mas o subdomínio de estúdio continua SERVINDO nos dois, sem
+   * redirecionar, porque é nele que mora link de galeria já entregue.
+   *
+   * Tirar daqui é o passo 4, e ele é de MESES, não de dias: no minuto em que
+   * este item sair, todo `estudio.olumier.com.br` perde o certificado — o
+   * `on_demand` pergunta a esta lista antes de emitir. Um link em WhatsApp não
+   * expira porque a gente trocou de marca. */
   "olumier.com.br",
-  /* Para onde o produto está indo. Já aceito aqui de propósito, antes de o DNS
-   * existir: aceitar um domínio que ainda não resolve não custa nada, e é o que
-   * permite o certificado sair no minuto em que o DNS entrar. */
+  /* O CANÔNICO desde 26/08/2026 — é o que `marca.dominio` responde. Fecha a
+   * linha Fotônio → Olumier → Galeria Átomo. */
   "galeriaatomo.com.br",
 ] as const;
 

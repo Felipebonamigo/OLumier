@@ -10,6 +10,7 @@ import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { DOMINIOS_ATENDIDOS } from "../src/config/dominios.ts";
+import { marca } from "../src/config/marca.ts";
 import http from "node:http";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
@@ -29,8 +30,34 @@ await db.query(
   [gslug],
 );
 
-const HOST = `${tslug}.olumier.com.br`;
-console.log(`estúdio: ${nome_estudio}\nsubdomínio simulado: ${HOST}\n`);
+/*
+ * ── CANÔNICO E LEGADO SÃO DOIS ENDEREÇOS, E O TESTE PRECISA DOS DOIS ──────
+ *
+ * Até 26/08/2026 este arquivo inteiro rodava contra `olumier.com.br` cravado
+ * aqui. Parecia detalhe e não era: na troca de marca, o domínio cravado virou o
+ * LEGADO, e o canônico — o que o produto passa a mostrar, montar em link e
+ * mandar por e-mail — ficou sem uma única etapa. A suíte seguia verde provando
+ * o endereço que estava saindo de cena.
+ *
+ * Agora `HOST` vem de `marca.dominio`, então as etapas abaixo acompanham a
+ * marca sozinhas na próxima troca.
+ *
+ * `HOST_LEGADO` é literal DE PROPÓSITO, e é a única coisa neste arquivo que
+ * deve continuar escrita à mão. Ele guarda a promessa de `DOMINIOS_ATENDIDOS`:
+ * link de galeria já entregue a um casal continua abrindo no endereço antigo,
+ * sem redirecionar. Essa promessa passou a valer no Caddy em 26/08/2026, onde a
+ * raiz e o `www` do antigo redirecionam mas o subdomínio de estúdio NÃO — e um
+ * `redir` escrito com um caractere a mais levaria o subdomínio junto, mandando
+ * o casal para a home. Antes desta etapa, nada no repositório acusava isso.
+ *
+ * Quando o passo 4 chegar (tirar o antigo de `DOMINIOS_ATENDIDOS`, meses depois),
+ * a etapa do legado fica vermelha — e aí ela sai junto, de propósito.
+ */
+const HOST = `${tslug}.${marca.dominio}`;
+const HOST_LEGADO = `${tslug}.olumier.com.br`;
+console.log(
+  `estúdio: ${nome_estudio}\nsubdomínio canônico: ${HOST}\nsubdomínio legado:   ${HOST_LEGADO}\n`,
+);
 
 let falhou = false;
 const etapa = async (nome, fn) => {
@@ -104,12 +131,41 @@ await etapa("o endereço bonito é mantido (reescrita, não redirecionamento)", 
   return "sem redirecionamento";
 });
 
-await etapa("o domínio principal continua funcionando como antes", async () => {
+await etapa("o domínio canônico continua servindo a rota interna", async () => {
+  const r = await pedir(`/g/${tslug}/${gslug}`, marca.dominio);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const t = await texto(r);
+  if (!t.includes(titulo)) throw new Error("a rota interna quebrou no canônico");
+  return `/g/estudio/galeria intacto em ${marca.dominio}`;
+});
+
+/*
+ * ── O LEGADO, E POR QUE ELE É UMA ETAPA E NÃO UM COMENTÁRIO ───────────────
+ *
+ * `DOMINIOS_ATENDIDOS` promete que o domínio antigo continua servindo enquanto
+ * houver link circulando. Promessa sem etapa é intenção: até 26/08/2026, se o
+ * `olumier.com.br` parasse de rotear estúdio, NENHUM teste acusava — e o
+ * sintoma apareceria num casal abrindo o link do próprio casamento.
+ *
+ * As duas etapas abaixo são o par que a configuração do Caddy pode quebrar de
+ * um jeito silencioso: lá a raiz e o `www` do antigo redirecionam para o
+ * canônico, mas o SUBDOMÍNIO de estúdio não pode redirecionar. Um `redir` com
+ * escopo largo demais faz a raiz parecer certa e manda o casal para a home.
+ */
+await etapa("LEGADO: o subdomínio de estúdio ainda abre a galeria", async () => {
+  const r = await pedir(`/${gslug}`, HOST_LEGADO);
+  if (!r.ok) throw new Error(`HTTP ${r.status} em ${HOST_LEGADO} — link já entregue quebrou`);
+  const t = await texto(r);
+  if (!t.includes(titulo)) throw new Error("abriu, mas não era a galeria");
+  return `${HOST_LEGADO}/${gslug} intacto`;
+});
+
+await etapa("LEGADO: a rota interna também segue de pé no domínio antigo", async () => {
   const r = await pedir(`/g/${tslug}/${gslug}`, "olumier.com.br");
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const t = await texto(r);
   if (!t.includes(titulo)) throw new Error("a rota antiga quebrou");
-  return "/g/estudio/galeria intacto";
+  return "/g/estudio/galeria intacto no legado";
 });
 
 /*
@@ -121,13 +177,18 @@ await etapa("o domínio principal continua funcionando como antes", async () => 
  * senha, mas quebrava exatamente a marca própria que o produto vende.
  */
 await etapa("galeria de OUTRO estúdio não abre neste endereço", async () => {
-  const marca = `vizinho-${Date.now()}`;
+  /* `slugVizinho`, e não `marca` como se chamava até 26/08/2026: o nome antigo
+   * SOMBREAVA o `marca` importado no topo do arquivo. Enquanto a comparação
+   * abaixo era um literal isso não custava nada; no instante em que ela passou a
+   * ler `marca.dominio`, virou `undefined` dentro deste escopo e a etapa acusou
+   * um destino que estava certo. Sombreamento não dá erro — dá resposta errada. */
+  const slugVizinho = `vizinho-${Date.now()}`;
   const {
     rows: [v],
   } = await db.query(
     `insert into tenants (slug, nome_estudio, email, senha_hash)
           values ($1, 'Estúdio Vizinho', $2, 'x') returning id, slug`,
-    [marca, `${marca}@teste`],
+    [slugVizinho, `${slugVizinho}@teste`],
   );
   await db.query(
     `insert into galerias (tenant_id, slug, titulo, publicada, estado)
@@ -143,7 +204,8 @@ await etapa("galeria de OUTRO estúdio não abre neste endereço", async () => {
     }
     const destino = r.headers.get("location") ?? "";
     if (destino.includes(`${tslug}.`)) throw new Error(`continuou neste domínio: ${destino}`);
-    if (!destino.includes("olumier.com.br")) throw new Error(`mandou para ${destino}`);
+    /* `marca.dominio` e não literal: ver a nota na etapa do painel, mais abaixo. */
+    if (!destino.includes(marca.dominio)) throw new Error(`mandou para ${destino}`);
     return "vai para o domínio principal";
   } finally {
     await db.query("delete from tenants where id = $1", [v.id]);
@@ -177,7 +239,8 @@ await etapa("o painel não abre por subdomínio de estúdio", async () => {
   const r = await pedir("/painel");
   if (r.status < 300 || r.status >= 400) throw new Error(`esperava redirecionamento, veio ${r.status}`);
   const destino = r.headers.get("location") ?? "";
-  if (!destino.includes("olumier.com.br") || destino.includes(`${tslug}.`)) {
+  /* `marca.dominio` e não literal: ver a nota na etapa do painel, mais abaixo. */
+  if (!destino.includes(marca.dominio) || destino.includes(`${tslug}.`)) {
     throw new Error(`mandou para ${destino}`);
   }
   return "manda para o domínio principal";
@@ -392,10 +455,22 @@ try {
      * lugar só, porque o cookie de sessão não valeria em dois endereços. */
     const r = await pedir("/painel", DOM_PROPRIO);
     const destino = r.headers.get("location") ?? "";
-    if (!destino.includes("olumier.com.br")) {
+    /* De `marca.dominio`, e não do literal que estava aqui até 26/08/2026.
+     *
+     * A propriedade sob teste é "o painel volta para o domínio CANÔNICO" — e
+     * qual é o canônico é justamente o que `marca.dominio` responde. Com o
+     * literal, a fase 2 da troca de marca reprovou esta etapa dizendo "painel
+     * não voltou para o domínio principal: https://galeriaatomo.com.br/painel",
+     * que é o destino certo. Teste que acusa o comportamento correto ensina a
+     * ignorá-lo.
+     *
+     * Não confundir com `testar-marca-plataforma.mjs`, onde o literal é o ponto:
+     * lá ele existe para RECUSAR a troca de endereço feita às cegas. Aqui ele só
+     * envelhecia. */
+    if (!destino.includes(marca.dominio)) {
       throw new Error(`painel não voltou para o domínio principal: ${destino}`);
     }
-    return "vai para o domínio principal";
+    return `vai para o domínio principal (${marca.dominio})`;
   });
 
   /*
@@ -432,4 +507,4 @@ if (falhou) {
   console.error("\n✗ o subdomínio tem problema");
   process.exit(1);
 }
-console.log(`\n✓ subdomínio pronto — falta só o DNS apontar *.olumier.com.br`);
+console.log(`\n✓ subdomínio pronto — canônico ${marca.dominio}, legado olumier.com.br`);

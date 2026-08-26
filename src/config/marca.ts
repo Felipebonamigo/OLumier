@@ -15,10 +15,22 @@
  *
  * `dominio` e `email` PARECEM texto e moram neste arquivo, mas não são: o
  * primeiro monta o link do "esqueci minha senha" e autoriza a emissão de
- * certificado TLS; o segundo é uma caixa que precisa existir para receber. Eles
- * mudam na FASE 2, quando galeriaatomo.com.br estiver respondendo e com e-mail
- * configurado — e o domínio antigo continua redirecionando, porque link de
- * galeria já entregue não pode quebrar.
+ * certificado TLS; o segundo é o endereço que a página de privacidade, os
+ * termos e o rodapé mandam a pessoa escrever.
+ *
+ * ── FASE 2 FEITA EM 26/08/2026 ────────────────────────────────────────────
+ * Os dois passaram para `galeriaatomo.com.br`, fechando a linha
+ * Fotônio → Olumier → Galeria Átomo. O `olumier.com.br` continua ATENDIDO
+ * (ver `config/dominios.ts`) e redireciona no Caddy: link de galeria já
+ * entregue não pode quebrar, e por isso o antigo não sai junto com a troca.
+ *
+ * ⚠️ O `email` mudou sabendo de um defeito que o endereço antigo escondia:
+ * NENHUM dos dois domínios recebe mensagem. `olumier.com.br` tem MX nulo
+ * (`0 .` — RFC 7505, "este domínio não aceita e-mail") e SPF `-all`;
+ * `galeriaatomo.com.br` não tem MX nenhum. Ou seja, `contato@olumier.com.br`
+ * NUNCA recebeu nada, e a página de privacidade promete resposta em 15 dias
+ * para uma caixa que devolve. Mover para o domínio novo não piorou coisa
+ * alguma; o que falta é CRIAR a caixa, e isso é trabalho de DNS, não de código.
  *
  * `scripts/testar-marca-plataforma.mjs` é o freio disso, e foi exercitado
  * contra o find-replace cego antes de existir.
@@ -30,10 +42,10 @@ export const marca = {
   simbolo: "GA",
   tagline: "Sua luz, entregue.",
   /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
-  dominio: "olumier.com.br",
+  dominio: "galeriaatomo.com.br",
   descricao:
     "Galerias de entrega para fotógrafos e filmakers. Downloads e streaming ilimitados, com a sua marca.",
-  email: "contato@olumier.com.br",
+  email: "contato@galeriaatomo.com.br",
 
   /*
    * BETA — a chave que liga o aviso, e a frase que o explica.
