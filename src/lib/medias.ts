@@ -247,3 +247,32 @@ export async function apagarMedia(mediaId: string, tenantId: string) {
 
   return apagada;
 }
+
+/**
+ * Atualiza a mídia depois de uma REPUBLICAÇÃO — o arquivo trocou, o id não.
+ *
+ * A diferença para `confirmarMedia` é a razão de existir desta função: lá a
+ * linha estava pendente e vira pronta; aqui ela já era pronta e continua sendo,
+ * porque nada pode piscar para o casal enquanto o fotógrafo republica.
+ *
+ * `espelhado_em` volta a null de propósito: a cópia no espelho é do conteúdo
+ * ANTIGO, e mantê-la marcada faria a passada da madrugada pular o arquivo para
+ * sempre. Espelho com conteúdo desatualizado é pior que espelho sem cópia — o
+ * primeiro mente, o segundo aparece na fila.
+ */
+export async function republicarMedia(
+  mediaId: string,
+  tenantId: string,
+  dados: { bytes: number; largura?: number | null; altura?: number | null },
+) {
+  return consultarUm<Media>(
+    `update medias
+        set bytes = $3,
+            largura = coalesce($4, largura),
+            altura = coalesce($5, altura),
+            espelhado_em = null
+      where id = $1 and tenant_id = $2 and pronto
+      returning *`,
+    [mediaId, tenantId, dados.bytes, dados.largura ?? null, dados.altura ?? null],
+  );
+}
