@@ -20,6 +20,7 @@ import {
 } from "@/lib/asaas";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
 import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
+import { lerSite, normalizarInstagram, normalizarWhatsapp } from "@/lib/site-estudio";
 import { MINIMO_SENHA, trocarSenha } from "@/lib/senha";
 import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
@@ -522,6 +523,94 @@ export async function salvarMarcaAction(
   revalidatePath("/painel/conta");
   revalidatePath("/painel");
   return { ok: "Marca salva." };
+}
+
+// --- site do estúdio (a vitrine em /e/<slug>) -------------------------------
+
+export interface EstadoSite {
+  erro?: string;
+  ok?: string;
+}
+
+/**
+ * Grava o conteúdo da vitrine.
+ *
+ * O objeto inteiro passa por `lerSite` ANTES de virar JSON no banco. Não é
+ * cinto e suspensório com a validação de cima: `lerSite` corta tamanho, joga
+ * fora depoimento vazio e descarta chave que não existe no formato — então o
+ * que entra no banco tem exatamente a forma que a página pública espera ler.
+ * Sem esse funil, um campo novo no formulário poderia gravar uma chave que
+ * `lerSite` ignora, e o fotógrafo veria "salvo" sem nada mudar na tela.
+ *
+ * WhatsApp e Instagram são conferidos aqui SEPARADAMENTE, antes, só para poder
+ * dizer o que está errado: `lerSite` trata valor inválido como ausente (o que é
+ * certo para a página pública, que não pode quebrar), e ausente em silêncio é
+ * exatamente o que não serve num formulário.
+ */
+export async function salvarSiteAction(
+  _estado: EstadoSite,
+  form: FormData,
+): Promise<EstadoSite> {
+  const tenantId = await exigirTenant();
+  const campo = (nome: string) => String(form.get(nome) ?? "").trim();
+
+  const whatsappBruto = campo("whatsapp");
+  const whatsapp = whatsappBruto ? normalizarWhatsapp(whatsappBruto) : "";
+  if (whatsapp === null) {
+    return { erro: "WhatsApp inválido. Use DDD + número, como (54) 99999-8888." };
+  }
+
+  const instagramBruto = campo("instagram");
+  const instagram = instagramBruto ? normalizarInstagram(instagramBruto) : "";
+  if (instagram === null) {
+    return { erro: "Instagram inválido. Use só o usuário, como sirius.fotografia." };
+  }
+
+  const email = campo("email");
+  if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return { erro: "E-mail de contato inválido." };
+  }
+
+  /*
+   * Os depoimentos chegam como JSON num campo escondido — a tela monta a lista
+   * e serializa. Um `catch` que devolve erro em vez de deixar estourar: o campo
+   * é escondido, então JSON quebrado aqui significa tela com defeito, e o
+   * fotógrafo precisa ver isso em vez de uma página de erro do servidor.
+   */
+  let depoimentos: unknown;
+  try {
+    depoimentos = JSON.parse(form.get("depoimentos") ? String(form.get("depoimentos")) : "[]");
+  } catch {
+    return { erro: "Não consegui ler os depoimentos. Recarregue a página e tente de novo." };
+  }
+
+  const site = lerSite({
+    ligado: form.get("ligado") === "on",
+    frase: campo("frase"),
+    selo: campo("selo"),
+    capaGaleria: campo("capaGaleria"),
+    sobreTitulo: campo("sobreTitulo"),
+    sobre: String(form.get("sobre") ?? ""),
+    citacao: campo("citacao"),
+    citacaoAutor: campo("citacaoAutor"),
+    depoimentosTitulo: campo("depoimentosTitulo"),
+    depoimentos,
+    contatoTitulo: campo("contatoTitulo"),
+    contatoTexto: String(form.get("contatoTexto") ?? ""),
+    whatsapp,
+    instagram,
+    email,
+    tema: campo("tema"),
+    tipografia: campo("tipografia"),
+  });
+
+  await consultar("update tenants set site = $1, atualizado_em = now() where id = $2", [
+    JSON.stringify(site),
+    tenantId,
+  ]);
+
+  revalidatePath("/painel/site");
+  return { ok: site.ligado ? "Site salvo e no ar." : "Site salvo (ainda não publicado)." };
 }
 
 // --- trocar a própria senha ------------------------------------------------

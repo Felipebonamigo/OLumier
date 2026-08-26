@@ -146,7 +146,9 @@ O certificado é emitido na primeira visita (leva alguns segundos).
 
 - A **raiz** do subdomínio lista as galerias públicas e **sem senha** do estúdio.
   Galeria protegida não aparece: listá-la entregaria a existência da entrega de
-  um casal para qualquer visitante.
+  um casal para qualquer visitante. Desde 26/08/2026 ela também é a **vitrine**
+  do estúdio quando o fotógrafo liga o site no painel — ver
+  [site-do-estudio.md](site-do-estudio.md).
 - O **painel** não abre por subdomínio de estúdio — redireciona para o domínio
   principal, senão haveria dois endereços para a mesma tela e o cookie de sessão
   não valeria nos dois.

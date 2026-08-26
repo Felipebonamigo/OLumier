@@ -45,6 +45,12 @@ export default async function PainelLayout({ children }: { children: React.React
               Galerias
             </Link>
             <Link
+              href="/painel/site"
+              className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"
+            >
+              Site
+            </Link>
+            <Link
               href="/painel/conta"
               className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"
             >
