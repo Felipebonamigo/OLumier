@@ -16,6 +16,27 @@ export const marca = {
   descricao:
     "Galerias de entrega para fotógrafos e filmakers. Downloads e streaming ilimitados, com a sua marca.",
   email: "contato@olumier.com.br",
+
+  /*
+   * BETA — a chave que liga o aviso, e a frase que o explica.
+   *
+   * O produto funciona de ponta a ponta: sobe, entrega, cobra, arquiva. O que
+   * ele ainda não tem é ESTRADA — pouquíssimos estúdios rodando, nenhuma
+   * temporada inteira de casamento passada por aqui. Quem entrega o casamento
+   * de um cliente pelo nosso link merece saber disso antes, e não depois.
+   *
+   * O aviso custa assinatura. Custa menos que a primeira conversa em que um
+   * fotógrafo descobre sozinho que era o primeiro.
+   *
+   * Sair do beta é virar isto para `false`: o selo some da marca inteira e do
+   * cadastro de uma vez. `scripts/testar-beta.mjs` confere que as páginas
+   * concordam com esta linha nos DOIS sentidos — inclusive que ninguém ficou
+   * chamando de beta um produto que já saiu dele.
+   */
+  beta: true,
+  betaExplicacao:
+    "Estamos em beta: o produto está no ar e funcionando, mas você está entre os primeiros a usar. " +
+    "Como em qualquer serviço, guarde os seus originais — os seus arquivos aqui são a entrega, não o seu backup.",
 } as const;
 
 /** Paleta — a sala de projeção: preto quente, dourado-champanhe, marfim. Espelha globals.css. */

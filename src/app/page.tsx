@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
 import { MontadorPlano } from "@/components/montador-plano";
-import { MarcaTile } from "@/components/marca-tile";
+import { MarcaTile, SeloBeta } from "@/components/marca-tile";
 import { SeletorTema } from "@/components/seletor-tema";
 import { TEMAS } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
@@ -62,9 +62,12 @@ export default function Home() {
     <main className="overflow-x-clip">
       {/* ── cabeçalho ─────────────────────────────────────────────────── */}
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-7">
+        {/* A home monta a marca à mão (serifada e maior que o lockup padrão),
+            então o selo entra aqui também — não sai de graça pelo MarcaLockup. */}
         <span className="flex items-center gap-3">
           <MarcaTile tamanho={38} />
           <span className="font-serif text-xl font-bold tracking-tight">{marca.nome}</span>
+          <SeloBeta />
         </span>
         <nav className="flex items-center gap-4 text-sm sm:gap-5">
           {/* Antes do login, e antes de qualquer conta: quem chegou decide como

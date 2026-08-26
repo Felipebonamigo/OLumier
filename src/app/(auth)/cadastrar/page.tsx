@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { MarcaLockup } from "@/components/marca-tile";
+import { marca } from "@/config/marca";
 import { FormCadastrar } from "./form";
 
 export const metadata: Metadata = { title: "Criar conta" };
@@ -16,6 +17,15 @@ export default function CadastrarPage() {
       <p className="mt-2 text-sm text-texto-soft">
         Suas galerias, com a sua marca. Sem limite de downloads.
       </p>
+
+      {/* O selo no cabeçalho diz a palavra; aqui a palavra vira frase. É a
+          última tela antes de alguém confiar a entrega de um cliente ao
+          produto — se o aviso não couber aqui, não cabe em lugar nenhum. */}
+      {marca.beta && (
+        <p className="mt-5 rounded-lg border border-acento/30 bg-acento/5 px-4 py-3 text-sm leading-relaxed text-texto-soft">
+          {marca.betaExplicacao}
+        </p>
+      )}
 
       <FormCadastrar />
 

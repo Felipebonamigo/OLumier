@@ -57,6 +57,29 @@ export function MarcaTile({ tamanho = 56 }: { tamanho?: number }) {
   return <MarcaSimbolo tamanho={tamanho} />;
 }
 
+/**
+ * O selo de beta.
+ *
+ * Some sozinho quando `marca.beta` virar false — não há segundo lugar para
+ * lembrar de editar. Fica ao lado do nome, e não numa faixa no topo da tela:
+ * faixa vira ruído que a pessoa aprende a não ver em dois dias, e este aviso
+ * precisa continuar legível no dia em que alguém for subir um casamento.
+ *
+ * `title` em vez de texto extra porque o selo aparece em cabeçalho apertado; a
+ * frase inteira mora no cadastro, que é onde a decisão acontece.
+ */
+export function SeloBeta() {
+  if (!marca.beta) return null;
+  return (
+    <span
+      title={marca.betaExplicacao}
+      className="rounded-full border border-acento/40 px-2 py-0.5 font-mono text-[9px] uppercase leading-none tracking-[0.18em] text-acento-alto"
+    >
+      beta
+    </span>
+  );
+}
+
 export function MarcaLockup({ tamanho = 40 }: { tamanho?: number }) {
   return (
     <span className="flex items-center gap-3">
@@ -67,8 +90,11 @@ export function MarcaLockup({ tamanho = 40 }: { tamanho?: number }) {
           ar de letreiro de cinema quando respira. Peso leve porque a marca não
           precisa gritar — quem grita na tela é a foto do cliente.
         */}
-        <span className="block text-lg font-medium leading-tight tracking-[0.14em]">
-          {marca.nome}
+        <span className="flex items-center gap-2">
+          <span className="block text-lg font-medium leading-tight tracking-[0.14em]">
+            {marca.nome}
+          </span>
+          <SeloBeta />
         </span>
         <span className="block font-mono text-[9px] uppercase tracking-[0.3em] text-texto-faint">
           galerias de entrega
