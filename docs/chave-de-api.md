@@ -52,7 +52,7 @@ create table chaves_api (
   id           uuid primary key default gen_random_uuid(),
   tenant_id    uuid not null references tenants(id) on delete cascade,
   nome         text not null,              -- "Lightroom do notebook"
-  prefixo      text not null,              -- "olu_a1b2c3" — o que a tela mostra
+  prefixo      text not null,              -- "ga_a1b2c3" — o que a tela mostra
   hash         text not null,              -- SHA-256 do segredo inteiro
   escopo       text not null default 'envio',
   ultimo_uso_em timestamptz,
@@ -72,12 +72,23 @@ O `prefixo` existe para a tela poder dizer *qual* chave é qual sem guardar o se
 ### Formato
 
 ```
-olu_a1b2c3_<32 bytes aleatórios em base62>
+ga_a1b2c3_<32 bytes aleatórios em base62>
 ```
 
 O prefixo legível na frente faz duas coisas: permite achar a linha no banco com um
 índice em vez de comparar hash contra todas, e deixa a chave reconhecível se cair num
 log ou num print.
+
+**`ga_` é decisão fechada, de Galeria Átomo, tomada em 26/08/2026.** O desenho dizia
+`olu_` até então, herdado do nome anterior — e o prefixo é a única coisa deste
+documento que fica cara se for decidida depois. Vale a mesma regra do escopo: chave já
+distribuída não muda de prefixo sem quebrar quem a usa, porque o prefixo não é
+enfeite, é a coluna indexada pela qual a linha é encontrada.
+
+Escolher agora custou uma linha. Se o produto trocar de nome uma terceira vez, **o
+prefixo não acompanha** — ele entra na mesma lista de identificadores que a troca de
+marca não pode arrastar, junto com nome de bucket, prefixo do Asaas e nome do banco
+(ver `src/config/marca.ts`).
 
 ### Escopos — e por que mais de um desde o começo
 
@@ -107,7 +118,7 @@ export async function tenantDaRequisicao(
 
 Ela tenta, nesta ordem:
 
-1. `Authorization: Bearer olu_…` → confere hash, escopo e `revogada_em`;
+1. `Authorization: Bearer ga_…` → confere hash, escopo e `revogada_em`;
 2. cookie de sessão → o painel segue funcionando exatamente como hoje.
 
 Rotas que mudam: `POST /api/galerias/:id/upload`, `POST /api/medias/:id/confirmar`,
@@ -245,4 +256,4 @@ ninguém usou ainda é o mesmo erro que a seção "Por que parei aqui" já nomei
 
 Este documento fica de pé e correto, pronto para o dia em que a resposta virar sim. O
 gatilho para reabrir não é o concorrente lançar nada: é a Carol entregar um casamento
-de verdade pelo Olumier e **pedir** o plugin.
+de verdade pela Galeria Átomo e **pedir** o plugin.
