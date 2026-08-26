@@ -12,7 +12,13 @@ import {
   bytesUsados,
   criarMediaPendente,
 } from "@/lib/medias";
-import { montarChaves, urlDeUpload, armazenamentoConfigurado } from "@/lib/r2";
+import {
+  montarChaves,
+  urlDeUpload,
+  armazenamentoConfigurado,
+  formatoDerivadaValido,
+  FORMATOS_DERIVADA,
+} from "@/lib/r2";
 import {
   armazemDeNovosUploads,
   urlDeEnvioDoOriginal,
@@ -67,6 +73,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     mime?: string;
     bytes?: number;
     comDerivadas?: boolean;
+    formatoDerivadas?: string;
     secaoId?: string;
     largura?: number;
     altura?: number;
@@ -132,7 +139,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     secaoId = s?.id ?? null;
   }
 
-  const chaves = montarChaves(tenantId, galeriaId, nome);
+  /*
+   * O formato das derivadas vem de quem envia, com WEBP no padrão.
+   *
+   * O navegador gera WEBP e não manda nada — nada muda para ele. Um plugin do
+   * Lightroom manda `avif` ou `jpeg`, porque o Lightroom não exporta WEBP.
+   * Formato desconhecido é RECUSADO em vez de virar o padrão calado: cair no
+   * WEBP em silêncio faria o cliente achar que mandou AVIF e receber uma chave
+   * `.webp` — defeito que só apareceria na galeria do casal.
+   */
+  const formato = corpo.formatoDerivadas ?? "webp";
+  if (!formatoDerivadaValido(formato)) {
+    return NextResponse.json(
+      { erro: `Formato de miniatura não aceito: ${String(formato)}.` },
+      { status: 415 },
+    );
+  }
+
+  const chaves = montarChaves(tenantId, galeriaId, nome, formato);
 
   // O navegador avisa se conseguiu gerar as derivadas. Quando não conseguir
   // (vídeo, HEIC que ele não decodifica), gravamos null e a grade usa o original.
@@ -168,8 +192,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   });
 
   const [urlThumb, urlPreview] = await Promise.all([
-    comDerivadas ? urlDeUpload(chaves.thumb, "image/webp") : Promise.resolve(null),
-    comDerivadas ? urlDeUpload(chaves.preview, "image/webp") : Promise.resolve(null),
+    comDerivadas ? urlDeUpload(chaves.thumb, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
+    comDerivadas ? urlDeUpload(chaves.preview, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
   ]);
 
   // Acima de 5 GB o PUT único não serve: abre o envio em partes e o navegador

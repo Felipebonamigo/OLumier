@@ -52,7 +52,12 @@ function s3(): S3Client {
  * bucket. Original e derivadas compartilham o mesmo uuid — dá para achar a
  * família de um arquivo olhando o prefixo.
  */
-export function montarChaves(tenantId: string, galeriaId: string, nomeArquivo: string) {
+export function montarChaves(
+  tenantId: string,
+  galeriaId: string,
+  nomeArquivo: string,
+  formatoDerivadas: FormatoDerivada = "webp",
+) {
   /*
    * A extensão entra na CHAVE do objeto, e o nome do arquivo vem do navegador —
    * ou seja, é texto escolhido por quem envia. Sem limpar, um nome como
@@ -67,11 +72,51 @@ export function montarChaves(tenantId: string, galeriaId: string, nomeArquivo: s
   const bruta = nomeArquivo.includes(".") ? nomeArquivo.split(".").pop()!.toLowerCase() : "";
   const ext = /^[a-z0-9]{1,10}$/.test(bruta) ? bruta : "bin";
   const base = `${tenantId}/${galeriaId}/${randomUUID()}`;
+  const d = FORMATOS_DERIVADA[formatoDerivadas];
   return {
     original: `${base}.${ext}`,
-    thumb: `${base}_thumb.webp`,
-    preview: `${base}_prev.webp`,
+    thumb: `${base}_thumb.${d.ext}`,
+    preview: `${base}_prev.${d.ext}`,
   };
+}
+
+/**
+ * O formato das derivadas deixou de ser WEBP cravado (26/08/2026).
+ *
+ * Enquanto só o navegador enviasse, WEBP fixo servia: é o que o `canvas` gera.
+ * Mas o Lightroom Classic exporta JPEG, JPEG XL, AVIF, PNG, TIFF, PSD e DNG — e
+ * NÃO exporta WEBP. Um cliente que mandasse AVIF gravaria bytes AVIF numa chave
+ * `.webp` assinada como `image/webp`, e a galeria do casal serviria o
+ * Content-Type errado.
+ *
+ * A extensão entra na CHAVE e o mime entra na ASSINATURA, então os dois têm de
+ * sair da mesma tabela — separá-los é como as duas dessincronizam.
+ */
+export const FORMATOS_DERIVADA = {
+  webp: { ext: "webp", mime: "image/webp" },
+  avif: { ext: "avif", mime: "image/avif" },
+  jpeg: { ext: "jpg", mime: "image/jpeg" },
+} as const;
+
+export type FormatoDerivada = keyof typeof FORMATOS_DERIVADA;
+
+export function formatoDerivadaValido(v: unknown): v is FormatoDerivada {
+  return typeof v === "string" && v in FORMATOS_DERIVADA;
+}
+
+/**
+ * O mime de uma derivada a partir da CHAVE já gravada.
+ *
+ * Na republicação o formato não é escolhido de novo: ele foi decidido quando a
+ * mídia nasceu e está na extensão da chave. Perguntar ao cliente outra vez
+ * deixaria ele assinar `.webp` como AVIF.
+ */
+export function mimeDaDerivada(chave: string): string {
+  const ext = chave.split(".").pop()?.toLowerCase() ?? "";
+  for (const f of Object.values(FORMATOS_DERIVADA)) {
+    if (f.ext === ext) return f.mime;
+  }
+  return FORMATOS_DERIVADA.webp.mime;
 }
 
 /**

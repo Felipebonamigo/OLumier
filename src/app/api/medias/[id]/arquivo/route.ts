@@ -9,7 +9,7 @@ import {
   republicarMedia,
 } from "@/lib/medias";
 import { buscarTenantPorId } from "@/lib/tenants";
-import { urlDeUpload, objetoExiste } from "@/lib/r2";
+import { urlDeUpload, objetoExiste, mimeDaDerivada } from "@/lib/r2";
 import { armazemDe, urlDeEnvioDoOriginal, conferirOriginal } from "@/lib/armazem";
 
 /**
@@ -113,10 +113,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
      * que gerou novas — quem republica sem gerar mantém as antigas, que ficam
      * desatualizadas mas continuam abrindo. */
     comDerivadas && media.chave_thumb
-      ? urlDeUpload(media.chave_thumb, "image/webp")
+      ? urlDeUpload(media.chave_thumb, mimeDaDerivada(media.chave_thumb))
       : Promise.resolve(null),
     comDerivadas && media.chave_preview
-      ? urlDeUpload(media.chave_preview, "image/webp")
+      ? urlDeUpload(media.chave_preview, mimeDaDerivada(media.chave_preview))
       : Promise.resolve(null),
   ]);
 
