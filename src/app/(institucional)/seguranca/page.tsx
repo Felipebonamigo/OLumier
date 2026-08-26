@@ -5,7 +5,7 @@ import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 
 export const metadata: Metadata = {
   title: "Segurança e backup",
-  description: `Como o ${marca.nome} guarda as fotos e os filmes que você entrega: duas empresas diferentes, trava contra exclusão e lixeira de ${PRAZO_LIXEIRA_DIAS} dias.`,
+  description: `Como o ${marca.nome} guarda as fotos e os filmes que você entrega: armazenamento profissional, trava contra exclusão e lixeira de ${PRAZO_LIXEIRA_DIAS} dias.`,
 };
 
 const ATUALIZADO_EM = "25 de agosto de 2026";
@@ -49,29 +49,34 @@ export default function SegurancaPage() {
         cada foto e cada filme depois que você aperta enviar.
       </p>
 
-      <h2>Cada arquivo em duas empresas diferentes</h2>
+      <h2>Onde suas fotos ficam</h2>
       <p>
-        Sua galeria fica na <strong>Cloudflare</strong>. Toda noite, uma cópia de cada original é
-        gravada na <strong>Backblaze</strong> — outra empresa, outra conta, outra chave de acesso.
+        Seus arquivos ficam na <strong>Backblaze</strong>, em armazenamento profissional com{" "}
+        <strong>99,999999999% de durabilidade</strong> declarada — em dez milhões de arquivos, a
+        expectativa é perder um a cada dez mil anos. As miniaturas e as prévias que você vê ao
+        navegar ficam na <strong>Cloudflare</strong>, que tem servidores perto do Brasil e é o que
+        faz a galeria abrir rápido.
       </p>
       <p>
-        Isso importa mais do que parece. As duas prometem{" "}
-        <strong>99,999999999% de durabilidade</strong> — em dez milhões de arquivos, a expectativa é
-        perder um a cada dez mil anos. Só que esse número mede disco queimando, e não é assim que
+        Aquele número de onze noves mede disco queimando, e vale a pena dizer que não é assim que
         dado some de verdade. Some quando uma conta é encerrada, um cartão é recusado, uma chave
-        vaza, ou um programa faz besteira. Nenhuma dessas coisas acontece nas duas empresas ao mesmo
-        tempo.
+        vaza ou um programa faz besteira. É contra isso que existe o resto desta página.
       </p>
       <p>
-        Em maio de 2024 o Google Cloud apagou por engano a conta inteira de um fundo de pensão
-        australiano — <strong>junto com os backups replicados em várias regiões</strong>. Eles se
-        recuperaram por um motivo só: tinham cópia em outro fornecedor. É exatamente esse cenário
-        que a segunda cópia cobre.
+        <strong>Estamos construindo a segunda cópia em outra empresa</strong>, e queremos ser exatos
+        sobre o que já existe: hoje seus originais têm uma cópia, no armazenamento acima. A cópia
+        adicional, em um fornecedor independente, entra ainda nesta fase do produto — e esta página
+        muda no mesmo dia, com a data. Preferimos escrever isso a deixar você supor.
+      </p>
+      <p>
+        Por isso repetimos abaixo, e sem constrangimento: <strong>guarde os seus originais</strong>.
+        Nenhum serviço deveria ser a sua única cópia, nem o nosso.
       </p>
 
-      <h2>A segunda cópia é travada contra exclusão</h2>
+      <h2>Travado contra exclusão</h2>
       <p>
-        Os arquivos copiados ficam sob <strong>Object Lock por 30 dias</strong>: uma trava do próprio
+        O backup do seu cadastro — quais galerias existem, quem tem acesso, o que está em cada
+        capítulo — fica sob <strong>Object Lock por 30 dias</strong>: uma trava do próprio
         fornecedor, aplicada no armazenamento e não no nosso programa. Um comando errado da nossa
         parte, ou um invasor que roube uma credencial do sistema, não consegue apagar o que está
         travado — o armazenamento recusa.
@@ -137,11 +142,11 @@ export default function SegurancaPage() {
 
       <h2>Se ainda assim algo der errado</h2>
       <p>
-        Nenhum sistema é infalível, e quem promete isso está vendendo. O que dá para prometer é o
-        desenho: para uma entrega sua se perder, teriam que falhar <em>ao mesmo tempo</em> a
-        Cloudflare, a Backblaze, a trava de exclusão e o backup do banco. E os limites da nossa
-        responsabilidade estão escritos, sem letra miúda, nos{" "}
-        <Link href="/termos">Termos de Uso</Link>.
+        Nenhum sistema é infalível, e quem promete isso está vendendo. As proteções desta página —
+        armazenamento de onze noves, trava de exclusão, lixeira de {PRAZO_LIXEIRA_DIAS} dias, backup
+        do cadastro com restauração ensaiada — cobrem os modos de falha que existem na prática:
+        disco, comando errado, mão errada na hora errada. E os limites da nossa responsabilidade
+        estão escritos, sem letra miúda, nos <Link href="/termos">Termos de Uso</Link>.
       </p>
 
       <p>

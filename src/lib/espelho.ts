@@ -105,13 +105,38 @@ export function DEVE_ESPELHAR(chave: string): boolean {
 export const ORIGINAIS_SEM_COPIA = `
   select id, chave, bytes::text as bytes, 'media' as origem
     from medias
-   where pronto and espelhado_em is null
+   where pronto and espelhado_em is null and armazem = 'r2'
   union all
   select null as id, logo_chave as chave, null as bytes, 'logo' as origem
     from tenants
    where logo_chave is not null
   order by origem, chave
 `;
+
+/**
+ * Quantos ORIGINAIS estão hoje com uma cópia só.
+ *
+ * Existe por causa de uma decisão consciente, tomada em 25/08/2026: o primário
+ * saiu do R2 e foi para o B2 para baixar o custo, e o segundo fornecedor
+ * (Hetzner) ficou para depois. Nesse arranjo o espelho não tem para onde
+ * copiar — arquivo que nasce no B2 não pode ser "espelhado" no próprio B2 — e
+ * a promessa de duas empresas fica suspensa até a Hetzner entrar.
+ *
+ * A decisão é legítima e é do dono do negócio. O que o código não pode fazer é
+ * deixá-la INVISÍVEL: cópia única não dói no dia em que se escolhe, dói meses
+ * depois, quando ninguém lembra que escolheu. Este contador é o que mantém o
+ * número na cara de quem opera — e é o que vai a zero no dia em que o espelho
+ * frio existir.
+ */
+export async function contarCopiaUnica(): Promise<{ arquivos: number; bytes: bigint }> {
+  const { consultarUm } = await import("./db");
+  const r = await consultarUm<{ arquivos: string; bytes: string }>(
+    `select count(*)::text as arquivos, coalesce(sum(bytes), 0)::text as bytes
+       from medias
+      where pronto and armazem = 'b2' and espelho_frio_em is null`,
+  );
+  return { arquivos: Number(r?.arquivos ?? 0), bytes: BigInt(r?.bytes ?? "0") };
+}
 
 /**
  * Onde o objeto mora no espelho.

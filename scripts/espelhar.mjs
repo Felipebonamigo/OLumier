@@ -25,6 +25,7 @@ import {
   conferirEspelho,
   DEVE_ESPELHAR,
   ORIGINAIS_SEM_COPIA,
+  contarCopiaUnica,
 } from "../src/lib/espelho.ts";
 
 const APLICAR = process.argv.includes("--aplicar");
@@ -74,6 +75,22 @@ try {
 
   console.log(`espelhados: ${t.espelhados} · mídias na fila: ${t.pendentes} · logos: ${logos}`);
   if (pulados > 0) console.log(`(${pulados} derivada(s) fora do espelho, por desenho)`);
+
+  /*
+   * O número que não pode ficar escondido. Desde 25/08/2026 o original nasce no
+   * B2, e o espelho não tem para onde copiá-lo — ele fica com CÓPIA ÚNICA até o
+   * espelho frio (Hetzner) existir. É decisão tomada, não defeito; mas decisão
+   * que some do log vira surpresa meses depois, quando ninguém lembra dela.
+   */
+  const so1 = await contarCopiaUnica();
+  if (so1.arquivos > 0) {
+    const gb = (Number(so1.bytes) / 1024 ** 3).toFixed(2);
+    console.log(
+      `\n⚠ ${so1.arquivos} arquivo(s) (${gb} GB) estão com CÓPIA ÚNICA no B2 — sem segundo\n` +
+        `  fornecedor, a promessa de "duas empresas" não vale para eles. Some quando o\n` +
+        `  espelho frio entrar (fase 4, docs/obra-rota-b2.md).`,
+    );
+  }
 
   if (fila.length === 0) {
     console.log("✓ nada a espelhar");

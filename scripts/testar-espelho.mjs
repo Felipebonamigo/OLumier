@@ -30,6 +30,7 @@ import {
   conferirEspelho,
   DEVE_ESPELHAR,
   ORIGINAIS_SEM_COPIA,
+  contarCopiaUnica,
 } from "../src/lib/espelho.ts";
 import { urlDeUpload } from "../src/lib/r2.ts";
 
@@ -103,6 +104,32 @@ await etapa("a varredura do espelho cobre a logo, não só as mídias", () => {
   if (!sql.includes("medias")) throw new Error("a varredura deixou de cobrir as mídias");
   if (!sql.includes("logo_chave")) {
     throw new Error("a logo do estúdio ficou de fora — é original e não se regenera");
+  }
+});
+
+/*
+ * ARQUIVO QUE JÁ NASCE NO B2 NÃO ENTRA NA FILA — e isso é ESCOLHA, não bug.
+ *
+ * O espelho copia do R2 para o B2. Um arquivo que já nasceu no B2 não tem para
+ * onde ir: copiá-lo para o próprio B2 seria a mesma cópia com dois nomes, e o
+ * job falharia todo dia tentando ler do R2 um objeto que nunca esteve lá.
+ *
+ * O Felipe decidiu em 25/08/2026 tirar o primário do R2 e aceitar CÓPIA ÚNICA
+ * até existir um segundo fornecedor (Hetzner). A decisão é dele e está tomada;
+ * o que o código não pode fazer é escondê-la. Por isso a exclusão é explícita
+ * aqui, com nome, em vez de o job simplesmente engasgar em silêncio — e por
+ * isso `contarCopiaUnica` existe.
+ */
+await etapa("arquivo nascido no B2 fica fora da fila, por escolha", () => {
+  const sql = ORIGINAIS_SEM_COPIA.toLowerCase();
+  if (!sql.includes("armazem")) {
+    throw new Error("a fila não filtra por armazém — mídia do B2 entraria e o job falharia todo dia");
+  }
+});
+
+await etapa("o sistema sabe dizer quantos estão com cópia única", () => {
+  if (typeof contarCopiaUnica !== "function") {
+    throw new Error("sem contador, a cópia única vira invisível — e invisível é como ela machuca");
   }
 });
 
