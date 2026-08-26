@@ -107,6 +107,54 @@ else
   [ "$TEM_TABELA" = "t" ] && echo "  banco em dia"
 fi
 
+# ── O portão de qualidade ────────────────────────────────────────────────────
+#
+# Até 26/08/2026 este script publicava sem conferir NADA: nem tipo, nem teste,
+# nem lint. Havia 14 erros de lint no repositório e a publicação seguia normal,
+# porque ninguém perguntava.
+#
+# Roda ANTES do `git archive` de propósito. Portão depois do empacotamento é
+# decoração: o custo de descobrir o problema já foi pago, e a tentação de
+# "deixa subir" é máxima justamente ali.
+#
+# O `--exigir-tudo` é o detalhe que faz este portão valer alguma coisa. A suíte
+# PULA em silêncio tudo que fala HTTP quando o servidor de desenvolvimento está
+# fora do ar, e mesmo assim sai com 0 — um portão ingênuo aprovaria com 11 de
+# 36 suítes e diria que conferiu. Segurança sem conferência é pior que portão
+# nenhum. Com a bandeira, pular vira reprovação. Ver `scripts/resultado-suite.mjs`.
+#
+# CONFERE A ÁRVORE DE TRABALHO, não o commit. Publicar árvore suja já é
+# perguntado lá em cima; se você respondeu "sim" ali, o que este portão mede
+# não é exatamente o que vai para o servidor.
+echo "→ conferindo antes de publicar"
+
+if ! npx tsc --noEmit; then
+  echo "✗ tipos quebrados — nada foi publicado."
+  exit 1
+fi
+echo "  tipos ok"
+
+if ! npm test -- --exigir-tudo; then
+  echo
+  echo "✗ suíte reprovada ou incompleta — nada foi publicado."
+  echo "  Se o motivo foi 'cobertura parcial', suba o servidor (npm run dev) e rode de novo."
+  exit 1
+fi
+
+# ATALHO DELIBERADO: o lint PERGUNTA em vez de bloquear, porque hoje há 14 erros
+# conhecidos (react-hooks e um <a> no error.tsx) e travar a publicação agora
+# seria travar o produto por dívida antiga. Assim que esses 14 forem a zero,
+# trocar este bloco por um `exit 1` seco — a pergunta existe só para atravessar
+# a dívida, não para conviver com ela.
+LINT=$( (npx eslint --format json 2>/dev/null || true) | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let e=0;for(const f of JSON.parse(s||"[]"))e+=f.errorCount;console.log(e)})' )
+if [ "${LINT:-0}" != "0" ]; then
+  echo "  ! eslint: $LINT erro(s)"
+  read -rp "  Publicar mesmo assim? [s/N] " r
+  [[ "$r" =~ ^[sS]$ ]] || exit 1
+else
+  echo "  lint ok"
+fi
+
 echo "→ empacotando $SHA"
 git archive --format=tar.gz -o /tmp/fotonio-deploy.tar.gz HEAD
 
