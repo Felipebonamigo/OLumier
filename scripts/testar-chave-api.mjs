@@ -28,6 +28,7 @@ import {
   listarChaves,
   revogarChave,
 } from "../src/lib/chaves-api.ts";
+import { tenantDaRequisicao } from "../src/lib/auth-api.ts";
 
 await exigirBancoDeTeste();
 
@@ -123,6 +124,35 @@ await etapa("lixo não confere", async () => {
   }
 });
 
+await etapa("nenhum sorteio gera chave que se recusa sozinha", async () => {
+  /*
+   * O bug que este passo prende: o prefixo já foi sorteado em base64url, cujo
+   * alfabeto contém `_` — o mesmo caractere que separa prefixo de segredo.
+   * Quando calhava um `_`, o corte caía dentro do prefixo e a chave BOA era
+   * recusada. Falhava em ~1 de cada 10 chaves, ou seja, passava na maioria das
+   * rodadas e voltaria como "às vezes o Lightroom não conecta".
+   *
+   * 60 chaves tornam o azar improvável de escapar; conferir todas torna o
+   * defeito determinístico em vez de intermitente.
+   */
+  const lote = [];
+  for (let i = 0; i < 60; i++) lote.push(await novaChave(`sorteio ${i}`, "envio"));
+
+  const recusadas = [];
+  for (const c of lote) {
+    if (!(await conferirChave(c.segredo))) recusadas.push(c.prefixo);
+  }
+  if (recusadas.length > 0) {
+    throw new Error(`${recusadas.length}/60 chaves boas recusadas — ex.: ${recusadas[0]}`);
+  }
+  /* E o prefixo não pode conter o separador, que é a causa raiz. */
+  const comSeparador = lote.filter((c) => c.prefixo.slice(PREFIXO.length).includes("_"));
+  if (comSeparador.length > 0) {
+    throw new Error(`prefixo com "_": ${comSeparador[0].prefixo}`);
+  }
+  return "60/60 conferem, nenhum prefixo com separador";
+});
+
 await etapa("o escopo volta como foi gravado", async () => {
   const c = await novaChave("só leitura", "leitura");
   igual((await conferirChave(c.segredo)).escopo, "leitura", "escopo");
@@ -164,6 +194,62 @@ await etapa("listar mostra as ativas e esconde o segredo", async () => {
     if (!c.prefixo?.startsWith(PREFIXO)) throw new Error(`prefixo estranho: ${c.prefixo}`);
   }
   return `${lista.length} ativa(s), só as colunas públicas`;
+});
+
+/* ── A porta: tenantDaRequisicao ───────────────────────────────────────────
+ *
+ * O caminho do COOKIE não é exercido aqui: ele depende do contexto de
+ * requisição do Next, e quem prova que ele continua de pé são as suítes que
+ * batem nas rotas de verdade (testar-upload, testar-multipart). O que este
+ * bloco prende é o caminho novo — o do cabeçalho — e a régua de escopo.
+ */
+const req = (cabecalho) =>
+  new Request("http://localhost/api/qualquer", {
+    headers: cabecalho ? { authorization: cabecalho } : {},
+  });
+
+await etapa("Bearer com chave de envio abre o envio", async () => {
+  const c = await novaChave("porta envio", "envio");
+  igual(await tenantDaRequisicao(req(`Bearer ${c.segredo}`), "envio"), estudio.id, "tenant");
+});
+
+await etapa("chave de leitura NÃO abre o envio", async () => {
+  const c = await novaChave("porta leitura", "leitura");
+  igual(await tenantDaRequisicao(req(`Bearer ${c.segredo}`), "envio"), null, "leitura em envio");
+});
+
+await etapa("chave de envio também lê — escrever implica ler", async () => {
+  const c = await novaChave("envio lê", "envio");
+  igual(await tenantDaRequisicao(req(`Bearer ${c.segredo}`), "leitura"), estudio.id, "tenant");
+});
+
+await etapa("sem cabeçalho e sem cookie não abre nada", async () => {
+  igual(await tenantDaRequisicao(req(null), "envio"), null, "sem authorization");
+});
+
+await etapa("cabeçalho malformado não abre", async () => {
+  const c = await novaChave("malformado", "envio");
+  for (const h of [
+    c.segredo, // sem o "Bearer "
+    `Basic ${c.segredo}`,
+    "Bearer",
+    "Bearer ",
+    `Bearer ${c.segredo}x`,
+  ]) {
+    igual(await tenantDaRequisicao(req(h), "envio"), null, `cabeçalho ${JSON.stringify(h)}`);
+  }
+});
+
+await etapa("Bearer é aceito sem depender de maiúscula", async () => {
+  const c = await novaChave("caixa", "envio");
+  igual(await tenantDaRequisicao(req(`bearer ${c.segredo}`), "envio"), estudio.id, "minúsculo");
+});
+
+await etapa("chave revogada fecha a porta na hora", async () => {
+  const c = await novaChave("porta revogada", "envio");
+  igual(await tenantDaRequisicao(req(`Bearer ${c.segredo}`), "envio"), estudio.id, "antes");
+  await revogarChave(c.id, estudio.id);
+  igual(await tenantDaRequisicao(req(`Bearer ${c.segredo}`), "envio"), null, "depois");
 });
 
 /* Limpa só o que este teste criou. Chave de outra sessão fica onde está. */

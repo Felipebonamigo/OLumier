@@ -57,9 +57,26 @@ function hashDe(segredo: string): string {
   return createHash("sha256").update(segredo).digest("hex");
 }
 
-/** base64url sem padding: cabe em cabeçalho HTTP e em arquivo de configuração. */
-function aleatorio(bytes: number): string {
+/**
+ * A parte secreta: base64url, que cabe em cabeçalho HTTP e em arquivo de
+ * configuração sem escapar nada.
+ */
+function segredoAleatorio(bytes: number): string {
   return randomBytes(bytes).toString("base64url");
+}
+
+/**
+ * A parte pública: HEX, e a escolha não é estética.
+ *
+ * O alfabeto do base64url inclui `_` — o mesmo caractere que separa o prefixo do
+ * segredo. Quando o sorteio caía num `_`, o corte de `conferirChave` acontecia
+ * dentro do prefixo, a busca ia para uma linha que não existe e a chave era
+ * recusada. Chave boa recusada, de vez em quando, sem nada no log: o defeito
+ * mais caro de achar depois. Hex não tem separador no alfabeto, e `ga_a1b2c3`
+ * é exatamente o formato que docs/chave-de-api.md desenhou.
+ */
+function prefixoAleatorio(bytes: number): string {
+  return randomBytes(bytes).toString("hex");
 }
 
 /**
@@ -71,8 +88,8 @@ export async function gerarChave(
   nome: string,
   escopo: Escopo = "envio",
 ): Promise<ChaveCriada> {
-  const prefixo = PREFIXO + aleatorio(BYTES_PREFIXO);
-  const segredo = `${prefixo}_${aleatorio(BYTES_SEGREDO)}`;
+  const prefixo = PREFIXO + prefixoAleatorio(BYTES_PREFIXO);
+  const segredo = `${prefixo}_${segredoAleatorio(BYTES_SEGREDO)}`;
 
   const linha = await consultarUm<{ id: string }>(
     `insert into chaves_api (tenant_id, nome, prefixo, hash, escopo)
