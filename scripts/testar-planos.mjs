@@ -34,11 +34,10 @@ import {
 import { lucroCentavos, FOLGA_ESPACO, TAXA_COBRANCA } from "../src/config/socios.ts";
 
 /*
- * Reserva que a montagem terá QUANDO a obra da rota B2 estiver entregue.
- * Mesma regra do socios.ts, calculada aqui de novo de propósito: se a regra
- * de lá mudar sem ninguém pensar no alvo, este teste conta a diferença.
+ * A reserva da montagem. Mesma regra do socios.ts, refeita aqui de propósito:
+ * se a de lá mudar sem ninguém pensar na grade, este teste conta a diferença.
  */
-const reservaAlvo = (m) => Math.round(custoEspacoCentavos(m, "alvo") * FOLGA_ESPACO) + TAXA_COBRANCA;
+const reserva = (m) => Math.round(custoEspacoCentavos(m) * FOLGA_ESPACO) + TAXA_COBRANCA;
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -200,49 +199,96 @@ await etapa("qualquer id de três peças resolve pela soma", () => {
 console.log("\ndinheiro");
 
 /*
- * Duas rotas, duas verdades:
- *
- *   ALVO  — obra entregue: TUDO no B2 com espelho frio em outra empresa.
- *           É o piso de PREÇO: nenhuma faixa pode sair abaixo do custo com a
- *           folga, senão a grade nasce errada.
- *   ATUAL — tudo no R2 + espelho no B2. Algumas faixas custam mais que o preço;
- *           enquanto a obra não sai, elas têm de segurar 100% do dinheiro.
+ * O piso de PREÇO: nenhuma faixa pode sair abaixo do custo com a folga
+ * cambial, senão a grade nasce errada e o erro só aparece na fatura.
  */
-await etapa("no alvo, nenhuma montagem sai abaixo do custo + folga", () => {
+await etapa("nenhuma montagem sai abaixo do custo + folga", () => {
   let pior = null;
   for (const m of todasAsMontagens()) {
     const p = montar(m);
-    const lucro = p.precoCentavos - reservaAlvo(m);
+    const lucro = p.precoCentavos - reserva(m);
     if (lucro <= 0) {
-      throw new Error(`${p.id}: reserva alvo ${reservaAlvo(m) / 100} engole o preço ${p.precoCentavos / 100}`);
+      throw new Error(`${p.id}: reserva ${reserva(m) / 100} engole o preço ${p.precoCentavos / 100}`);
     }
     if (!pior || lucro < pior.lucro) pior = { id: p.id, lucro };
   }
-  return `pior lucro no alvo: ${pior.id} com R$ ${(pior.lucro / 100).toFixed(2)}`;
+  return `pior lucro: ${pior.id} com R$ ${(pior.lucro / 100).toFixed(2)}`;
 });
 
 /*
  * A reserva é o que FICA na conta para pagar os fornecedores; o split manda
- * embora o resto. Onde nem o preço inteiro cobre o custo atual, o único
- * comportamento aceitável é reter tudo.
+ * embora o resto. Onde nem o preço inteiro cobrisse o custo, o único
+ * comportamento aceitável seria reter tudo — e a etapa seguinte exige que isso
+ * não esteja acontecendo em faixa nenhuma.
  */
-await etapa("na rota atual, reserva cobre o custo — ou segura o preço inteiro", () => {
-  let sobObra = 0;
+await etapa("a reserva que fica cobre o custo de cada montagem", () => {
   for (const m of todasAsMontagens()) {
     const p = montar(m);
     const custo = custoTetoCentavos(m);
     const lucro = lucroCentavos(p.id, p.precoCentavos);
-    const reserva = p.precoCentavos - lucro;
-    if (custo < p.precoCentavos) {
-      if (reserva < custo) throw new Error(`${p.id}: reserva ${reserva / 100} < custo ${custo / 100}`);
-    } else {
-      if (lucro !== 0) {
-        throw new Error(`${p.id}: distribui R$ ${(lucro / 100).toFixed(2)} vendendo abaixo do custo atual`);
-      }
-      sobObra++;
+    const retido = p.precoCentavos - lucro;
+    if (lucro > 0 && retido < custo) {
+      throw new Error(`${p.id}: reserva ${retido / 100} < custo ${custo / 100}`);
     }
   }
-  return sobObra > 0 ? `${sobObra} montagem(ns) sob obra, retendo 100%` : "todas cobrem o custo atual";
+  return `${todasAsMontagens().length} montagens conferidas`;
+});
+
+/*
+ * O CUSTO QUE O CÓDIGO CONTA TEM DE SER O QUE A FATURA COBRA.
+ *
+ * Fixado em número, e não derivado das constantes, de propósito: um teste que
+ * refaz a mesma conta do código concorda com ele até quando os dois estão
+ * errados. Este aqui é o valor conferido na página dos fornecedores, e
+ * discordar dele é o sintoma de que a arquitetura mudou e a régua não.
+ *
+ * Original no Backblaze B2 (R$ 0,0382/GB) mais a fatia de derivada que fica na
+ * Cloudflare — miniatura e preview são 9,3% dos bytes do original no PIOR
+ * perfil medido (fotos leves de 3 MB). O pior perfil, e não o típico de 2,7%,
+ * porque isto alimenta uma RESERVA: reserva é proteção, e proteção se calcula
+ * pelo caso ruim.
+ */
+await etapa("o custo por GB é o que a fatura cobra", () => {
+  const porGb = custoEspacoCentavos({ segmento: "foto", espacoGb: 1000 }) / 1000;
+  if (Math.abs(porGb - 4.587) > 0.01) {
+    throw new Error(
+      `o código conta R$ ${(porGb / 100).toFixed(4)}/GB — a fatura cobra R$ 0,0459 ` +
+        `(B2 R$ 0,0382 + 9,3% de derivada no R2)`,
+    );
+  }
+  return `R$ ${(porGb / 100).toFixed(4)}/GB`;
+});
+
+/*
+ * TODA FAIXA TEM DE LIBERAR DINHEIRO PARA O SPLIT.
+ *
+ * Entre 25 e 26/08/2026 nenhuma faixa de 1 TB para cima liberava um centavo. A
+ * reserva era calculada numa rota que tinha deixado de existir — tudo no R2
+ * mais um espelho CHEIO no B2, R$ 0,1207/GB — enquanto o original já nascia no
+ * B2 e o espelho tinha sido cancelado. Três vezes o custo real.
+ *
+ * Reter 100% foi a proteção CERTA enquanto a obra não saía: distribuir lucro
+ * calculado numa rota barata que ainda não existia seria pagar sócio com
+ * dinheiro da fatura. O que não pode é a proteção continuar ligada depois que o
+ * motivo acabou — o sócio não recebe, e nada na tela diz por quê.
+ *
+ * Este teste é o alarme dessa segunda metade: no dia em que o custo voltar a
+ * engolir o preço, ele fica vermelho e obriga a decisão a ser tomada por gente,
+ * em vez de o dinheiro parar sozinho e em silêncio.
+ */
+await etapa("toda faixa libera lucro para o split", () => {
+  const travadas = [];
+  for (const m of todasAsMontagens()) {
+    const p = montar(m);
+    if (lucroCentavos(p.id, p.precoCentavos) <= 0) travadas.push(p.id);
+  }
+  if (travadas.length > 0) {
+    throw new Error(
+      `${travadas.length} montagem(ns) retêm 100% e não repassam nada: ${travadas.slice(0, 4).join(", ")}` +
+        (travadas.length > 4 ? " …" : ""),
+    );
+  }
+  return `${todasAsMontagens().length} montagens, todas repassando`;
 });
 
 console.log("\nposição contra o mercado");

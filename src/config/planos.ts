@@ -51,9 +51,8 @@ export interface Faixa {
 /**
  * Peça 2 — o espaço do estúdio. Galeria no ar e arquivo somam aqui.
  *
- * Custo ALVO: R$ 0,0512/GB/mês (B2 a R$ 0,0382 + espelho frio a R$ 0,013),
- * igual em toda faixa — não há mais degrau de rota, porque não há mais duas
- * rotas: o arquivo pesado inteiro vai para o B2.
+ * Custo: R$ 0,0459/GB/mês (B2 a R$ 0,0382 mais a derivada que fica no R2),
+ * igual em toda faixa — o arquivo pesado inteiro vai para o B2.
  *
  * O R$/GB cai a cada degrau de propósito (0,490 → 0,080): é o que faz valer a
  * pena subir de faixa em vez de apagar entrega quando o espaço aperta. O teste
@@ -91,35 +90,50 @@ const CUSTO_R2_CENTAVOS_GB = 8.25;
  */
 const CUSTO_B2_CENTAVOS_GB = 3.82;
 /**
- * Espelho frio (Hetzner Storage Box via rclone) — alvo da obra, ainda não existe.
+ * Quanto de derivada cada GB de original arrasta para o R2.
  *
- * É o preço da caixa CHEIA: BX31, 10 TB por € 20,80. A caixa é cobrada inteira
- * mesmo vazia, então na BX11 (1 TB, € 3,20) o GB efetivo é 2,02 — 55% mais caro.
- * Usar o número da caixa cheia é seguro porque a obra só compra caixa depois que
- * existe cliente para enchê-la, e o excesso cai em cima da folga.
+ * Miniatura de 640 px mais preview de 2048 px, WebP q82, dão ~280 KB por foto.
+ * Sobre um original de 10 MB (casamento) são 2,7%; sobre um de 3 MB (fotos
+ * leves) são 9,3%. Vídeo não gera derivada e fica em ~0%.
+ *
+ * Fica o PIOR perfil, e não o típico, porque este número alimenta uma RESERVA —
+ * e reserva é proteção, que se calcula pelo caso ruim. A diferença é pequena
+ * (R$ 0,0459/GB contra R$ 0,0404) e some dentro da folga cambial.
+ *
+ * A quota do cliente conta só o original (`medias.bytes`, via trigger): a
+ * derivada é byte que pagamos e não cobramos. Por isso ela entra aqui como
+ * acréscimo ao GB vendido, e não como fatia dele.
  */
-const CUSTO_ESPELHO_FRIO_CENTAVOS_GB = 1.3;
+const FRACAO_DERIVADA_NO_R2 = 0.093;
 
 /**
- * Onde os arquivos moram de verdade HOJE vs. onde a arquitetura quer que morem.
+ * ── POR QUE NÃO EXISTE MAIS "ROTA" (26/08/2026) ───────────────────────────
  *
- *   atual — TUDO no R2 a R$ 0,0825/GB mais o espelho no B2 a R$ 0,0382. É o que
- *           a fatura cobra enquanto a obra da rota B2 não termina.
- *   alvo  — TUDO no B2 (R$ 0,0382) com espelho frio em Hetzner (R$ 0,013). A
- *           promessa "duas empresas diferentes" da página de segurança vale nas
- *           duas rotas: o que muda é qual delas é o primário.
+ * Até aqui o custo era calculado por uma de duas rotas: `atual` (tudo no R2
+ * mais um espelho cheio no B2, R$ 0,1207/GB) e `alvo` (tudo no B2 com espelho
+ * frio em Hetzner, R$ 0,0512/GB). A escolha existia para o código contar o que
+ * a fatura cobrava enquanto a obra da rota B2 não terminava — e cumpriu o
+ * papel: em faixa grande a reserva passava do preço, `lucroCentavos` travava o
+ * lucro em zero e o split retinha 100%, em vez de pagar sócio com dinheiro da
+ * fatura da Cloudflare.
  *
- * Medido em 25/08/2026, da máquina do Felipe: o B2 responde em 153 ms contra
- * 26 ms da Cloudflare, entrega 131 Mbps num fluxo e 207 Mbps em blocos
- * paralelos, e uma tela de 300 miniaturas leva 11,8 s contra 9,4 s. Mais lento,
- * porém a metade do preço — e o navegador continua tocando só as derivadas, que
- * ficam no R2 (ver `lib/armazem.ts`).
+ * A obra terminou e o espelho foi cancelado, e aí as duas rotas viraram
+ * descrições de mundos que não existem: `atual` cobrava por um espelho que não
+ * há e por um primário que mudou de casa; `alvo` cobrava por uma caixa da
+ * Hetzner que não foi comprada. Ficou a pior combinação possível — o código
+ * contando R$ 0,1207/GB contra R$ 0,0459 reais, e nenhuma faixa de 1 TB para
+ * cima repassando um centavo aos sócios, sem que nada na tela dissesse por quê.
  *
- * Quando a obra sair, isto vira "alvo" e reserva e margem se corrigem sozinhas.
- * Até lá, o custo que o código conta é o que a fatura cobra.
+ * Agora há um custo só, e ele descreve a arquitetura que está no ar: o
+ * ORIGINAL no Backblaze B2, a DERIVADA na Cloudflare (o navegador nunca toca o
+ * B2 — grade de 16 miniaturas em 1,14 s contra 2,32 s, medido em 25/08/2026), e
+ * nenhum espelho. Ver `lib/armazem.ts` e `docs/obra-rota-b2.md`.
+ *
+ * A proteção não se perdeu com a rota: ela nunca morou aqui. Quem trava o lucro
+ * em zero quando o custo engole o preço é `lucroCentavos`, em `socios.ts`, e
+ * continua igual. Se um dia entrar espelho frio, é somar uma constante a
+ * `custoEspacoCentavos` — não ressuscitar o seletor.
  */
-export type Rota = "atual" | "alvo";
-export const ROTA_EM_PRODUCAO: Rota = "atual";
 
 export interface Montagem {
   segmento: Segmento;
@@ -150,17 +164,28 @@ const faixa = (gb: number) => ESPACOS.find((f) => f.gb === gb);
  * nova começa vazia e custa quase nada. Usar o teto é o que garante que
  * nenhuma faixa sangre no pior caso.
  */
-export function custoEspacoCentavos(m: Montagem, rota: Rota = ROTA_EM_PRODUCAO): number {
-  const porGb =
-    rota === "atual"
-      ? CUSTO_R2_CENTAVOS_GB + CUSTO_B2_CENTAVOS_GB
-      : CUSTO_B2_CENTAVOS_GB + CUSTO_ESPELHO_FRIO_CENTAVOS_GB;
+export function custoEspacoCentavos(m: Montagem): number {
+  if (!Number.isFinite(m.espacoGb)) {
+    /*
+     * Falhar alto em vez de devolver NaN.
+     *
+     * Isto não é zelo: `testar-cobranca.mjs` passou semanas chamando com a
+     * forma antiga da montagem (`galeriaGb`/`cofreGb`, de quando o cofre era
+     * peça). `m.espacoGb` vinha `undefined`, o custo virava NaN, e a
+     * comparação `reserva < NaN` é sempre falsa — o teste que existe para
+     * provar que a reserva cobre o custo nunca teve como ficar vermelho.
+     * Um teste que não pode falhar é pior que teste nenhum, porque ocupa a
+     * vaga de um que poderia.
+     */
+    throw new Error(`montagem sem espacoGb: ${JSON.stringify(m)}`);
+  }
+  const porGb = CUSTO_B2_CENTAVOS_GB + FRACAO_DERIVADA_NO_R2 * CUSTO_R2_CENTAVOS_GB;
   return m.espacoGb * porGb;
 }
 
 /** Custo teto arredondado — o que o resto do sistema consome. */
-export function custoTetoCentavos(m: Montagem, rota: Rota = ROTA_EM_PRODUCAO): number {
-  return Math.round(custoEspacoCentavos(m, rota));
+export function custoTetoCentavos(m: Montagem): number {
+  return Math.round(custoEspacoCentavos(m));
 }
 
 /** `g:` na frente para nunca colidir com os ids antigos, que são texto solto. */

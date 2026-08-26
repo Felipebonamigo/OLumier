@@ -1,24 +1,31 @@
 # Obra: rota B2 — arquivo pesado sai do R2
 
-**Status: aprovado pelo Felipe em 25/08/2026. Fase 1 entregue; fases 2–6 pendentes.**
+**Status: ENTREGUE. O original nasce no B2 desde 25/08/2026 (fase 3); o espelho
+frio (fase 4) foi CANCELADO pelo Felipe — custo alto demais para o ganho, e a
+decisão é confiar nos onze noves do B2 por enquanto. A régua de custo do código
+foi corrigida em 26/08/2026; ver "Depois da obra", no fim.**
 
-## Por que existe
+## Por que existiu
 
 A grade de preços de 24/08/2026 foi calculada sobre uma rota de custo que nunca foi
-construída. Hoje TODO arquivo (galeria de qualquer tamanho, cofre, tudo) mora no
+construída. TODO arquivo (galeria de qualquer tamanho, cofre, tudo) morava no
 Cloudflare R2 a R$ 0,0825/GB/mês, mais o espelho no B2 a R$ 0,0382 — R$ 0,1207/GB
-no total. A grade assume R$ 0,0513/GB para galeria grande e cofre.
+no total. A grade assumia R$ 0,0513/GB para galeria grande e cofre.
 
-Consequência, já protegida no código desde 25/08 (`ROTA_EM_PRODUCAO = "atual"` em
-`planos.ts`): **114 das 147 montagens vendem abaixo do custo atual e retêm 100% do
-dinheiro no split** — nenhum sócio recebe nada na maior parte da grade. Esta obra é
-o que destrava o lucro.
+Consequência, protegida no código desde 25/08 (`ROTA_EM_PRODUCAO = "atual"` em
+`planos.ts`): **114 das 147 montagens vendiam abaixo do custo e retinham 100% do
+dinheiro no split** — nenhum sócio recebia nada na maior parte da grade. Esta obra
+foi o que destravou o lucro.
 
-| | Custo/GB hoje | Custo/GB pós-obra |
+| | Custo/GB antes | Custo/GB hoje |
 |---|---|---|
-| Galeria ≤ 500 GB | R$ 0,1207 | R$ 0,1207 (não muda) |
-| Galeria > 500 GB | R$ 0,1207 | **R$ 0,0513** |
-| Cofre | R$ 0,1207 | **R$ 0,0513** |
+| Galeria ≤ 500 GB | R$ 0,1207 | **R$ 0,0459** |
+| Galeria > 500 GB | R$ 0,1207 | **R$ 0,0459** |
+| Cofre | R$ 0,1207 | **R$ 0,0459** |
+
+> R$ 0,0459 = B2 a R$ 0,0382 mais a derivada que fica no R2 (9,3% dos bytes do
+> original, no pior perfil medido). Não há mais degrau por tamanho: o custo é o
+> mesmo em toda faixa, porque o arquivo pesado inteiro vai para o B2.
 
 > Preços conferidos nas páginas oficiais em 25/08/2026: R2 US$ 0,015/GB; B2
 > US$ 6,95/TB (era US$ 6,00 até 01/05/2026 — 16% de aumento, e o motivo de a grade
@@ -354,3 +361,51 @@ juntos, que é exatamente o acoplamento que esta arquitetura remove.
 6. Depois de configurada, rodar `scripts/chave-b2.mjs` apontando para o bucket
    novo e conferir se a chave veio com `bypassGovernance` — a Backblaze concede
    por padrão às chaves criadas pela interface, e aqui ela não é necessária.
+
+---
+
+## Depois da obra — a régua de custo (26/08/2026)
+
+A obra terminou e o espelho frio foi cancelado. Aí as duas rotas de
+`planos.ts` viraram descrições de mundos que não existem:
+
+- `atual` cobrava por um espelho que não há e por um primário que mudou de casa
+  (R$ 0,1207/GB);
+- `alvo` cobrava por uma caixa da Hetzner que não foi comprada (R$ 0,0512/GB).
+
+`ROTA_EM_PRODUCAO` ficou em `"atual"`, e o efeito foi caro em silêncio: o código
+contava R$ 0,1207/GB contra R$ 0,0459 reais, e **nenhuma faixa de 1 TB para cima
+repassou um centavo aos sócios** — retendo 100% para se proteger de um prejuízo
+que já não existia. Nada na tela dizia por quê.
+
+Reter 100% foi a proteção CERTA enquanto a obra não saía: distribuir lucro
+calculado numa rota barata que ainda não existia seria pagar sócio com dinheiro
+da fatura. O que não pode é a proteção continuar ligada depois que o motivo
+acabou.
+
+**O que mudou:** o tipo `Rota` e `ROTA_EM_PRODUCAO` foram removidos. Há um custo
+só, e ele descreve a arquitetura que está no ar — original no B2, derivada no
+R2, sem espelho. Se um dia entrar espelho frio, é somar uma constante a
+`custoEspacoCentavos`, não ressuscitar o seletor.
+
+A proteção não se perdeu junto: ela nunca morou na rota. Quem trava o lucro em
+zero quando o custo engole o preço é `lucroCentavos`, em `socios.ts`, e continua
+igual.
+
+**O alarme que faltava.** `testar-planos.mjs` agora exige que TODA faixa libere
+lucro para o split. No dia em que uma travar, o teste fica vermelho e obriga a
+decisão a ser tomada por gente — em vez de o dinheiro parar sozinho.
+
+### Um teste que não podia falhar
+
+No mesmo dia apareceu o motivo de ninguém ter notado antes.
+`testar-cobranca.mjs` chamava `custoTetoCentavos` com a forma antiga da montagem
+(`galeriaGb`/`cofreGb`, de quando o cofre era peça). A função lê `espacoGb`,
+então o custo virava `NaN` — e `reserva < NaN` é sempre falso. A etapa que existe
+justamente para provar que a reserva cobre o custo **nunca teve como ficar
+vermelha**.
+
+Corrigido dos dois lados: a chamada usa `espacoGb`, e `custoEspacoCentavos`
+recusa montagem sem `espacoGb` em vez de devolver `NaN`. Falhar alto é o que
+transforma esse tipo de erro em teste vermelho no mesmo dia, em vez de meses de
+verde sem sentido.

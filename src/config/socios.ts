@@ -68,11 +68,19 @@ export const TAXA_COBRANCA = 300;
  *
  * Regra: custo teto do espaço × folga cambial + taxa da cobrança.
  *
- * O custo vem da rota EM PRODUÇÃO (hoje: tudo R2 + espelho B2). Em faixa grande
- * isso pode passar do preço — `lucroCentavos` trava o lucro em zero e o split
- * não manda nada: 100% fica na conta até a obra da rota barata sair. Distribuir
- * "lucro" calculado numa rota que não existe seria pagar sócio com dinheiro da
- * fatura da Cloudflare.
+ * O custo vem de `planos.ts` e descreve a arquitetura que está no ar: original
+ * no B2, derivada no R2, sem espelho — R$ 0,0459/GB.
+ *
+ * Se um dia o custo voltar a passar do preço numa faixa, `lucroCentavos` trava
+ * o lucro em zero e o split não manda nada: 100% fica na conta. Distribuir
+ * "lucro" que a fatura vai comer seria pagar sócio com dinheiro do fornecedor.
+ *
+ * Essa trava já ficou ligada tempo demais uma vez. Entre 25 e 26/08/2026 o
+ * custo era calculado numa rota que tinha deixado de existir (R$ 0,1207/GB), e
+ * nenhuma faixa de 1 TB para cima repassou um centavo — protegendo contra um
+ * prejuízo que não existia mais. Por isso `testar-planos.mjs` agora exige que
+ * TODA faixa libere lucro: no dia em que uma travar, alguém é obrigado a
+ * decidir, em vez de o dinheiro parar sozinho e em silêncio.
  */
 function reservaDoPlano(planoId: string): number | null {
   const plano = planoPorId(planoId);
