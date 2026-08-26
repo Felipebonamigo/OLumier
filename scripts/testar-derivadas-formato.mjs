@@ -46,14 +46,23 @@ const igual = (a, b, o) => {
   if (a !== b) throw new Error(`${o}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 
-const { rows: gs } = await db.query(
-  "select id, tenant_id from galerias where estado = 'online' order by criado_em limit 1",
-);
-if (gs.length === 0) {
-  console.error("✗ sem galeria online no banco de teste");
+/*
+ * Galeria própria e descartável — a mesma razão de `testar-republicar`: a
+ * "primeira galeria online" é bancada compartilhada, e outras suítes limpam
+ * favoritas e mídias dela em bloco. Numa segunda sessão rodando a suíte no
+ * mesmo banco, isso vira falha intermitente que não é do produto.
+ */
+const { rows: ts } = await db.query("select id from tenants order by criado_em limit 1");
+if (ts.length === 0) {
+  console.error("✗ sem estúdio no banco de teste");
   process.exit(1);
 }
-const galeria = gs[0];
+const { rows: [galeria] } = await db.query(
+  `insert into galerias (tenant_id, slug, titulo, estado, publicada)
+        values ($1, $2, 'Formato das derivadas (teste)', 'online', false)
+     returning id, tenant_id`,
+  [ts[0].id, `formato-derivadas-teste-${Date.now()}`],
+);
 const cookie = cookieDeSessao(galeria.tenant_id);
 const chave = (await gerarChave(galeria.tenant_id, "formato derivadas", "envio")).segredo;
 
@@ -174,6 +183,9 @@ await etapa("republicar respeita o formato gravado na chave", async () => {
 });
 
 for (const id of criadas) await limpar(id);
+/* A midia sai antes da galeria: o DELETE dela tira os objetos do bucket, e a
+ * cascata deixaria arquivo pago para tras — o orfao que testar-limpeza caca. */
+await db.query("delete from galerias where id = $1", [galeria.id]);
 await db.query("delete from chaves_api where tenant_id = $1 and nome = 'formato derivadas'", [
   galeria.tenant_id,
 ]);
