@@ -1,9 +1,20 @@
 #!/usr/bin/env node
 /**
- * Solta a quota presa por envio que nunca terminou. Roda todo dia no servidor.
+ * Solta a quota presa por envio que nunca terminou.
  *
  *   node --env-file=.env.production --experimental-strip-types \
  *        --import ./scripts/registrar-ts.mjs scripts/limpar-pendentes.mjs
+ *
+ * ⚠ NÃO RODA SOZINHO. Esta linha dizia "roda todo dia no servidor" e era falsa:
+ * não existe `fotonio-pendentes.service` nem `.timer` — as unidades em `ops/`
+ * são backup, cofre, espelho, lixeira, purga e vigia, e nenhuma é esta.
+ *
+ * Enquanto continuar assim, envio abandonado prende quota PARA SEMPRE, que é
+ * exatamente o problema descrito abaixo. Em 26/08/2026 havia seis em produção,
+ * de um único estúdio, achados por acaso — ninguém os teria visto.
+ *
+ * A mentira era pior que a ausência: quem lesse o cabeçalho concluiria que a
+ * faxina estava resolvida e não procuraria mais.
  *
  * O PROBLEMA: a linha em `medias` nasce com `pronto = false` para reservar
  * espaço antes do envio começar — sem isso, dois uploads simultâneos furariam a

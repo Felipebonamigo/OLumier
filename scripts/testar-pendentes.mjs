@@ -128,5 +128,28 @@ await etapa("erro de REDE não é 'abandonado' — na dúvida, não apaga", asyn
   igual(r, { acao: "adiar" }, "decisão");
 });
 
+/* ── o caminho REAL, sem armazém falso ───────────────────────────────────── */
+
+/*
+ * As etapas acima injetam a consulta, o que prova a lógica e não prova a
+ * ligação. Esta usa `conferirOriginal` de verdade — o mesmo que o script usa —
+ * contra o ambiente de desenvolvimento, onde o B2 NÃO está configurado.
+ *
+ * Credencial ausente é a falha mais provável em produção: chave revogada,
+ * variável esquecida num deploy, segredo que não subiu. Nesses casos o armazém
+ * não responde "não tenho" — ele nem chega a ser perguntado. Se isso virasse
+ * "remover", um deploy com variável faltando apagaria a galeria inteira de um
+ * estúdio na primeira madrugada.
+ */
+await etapa("sem credencial do B2, a decisão é ADIAR e nunca remover", async () => {
+  const { arquivosConfigurado } = await import("../src/lib/b2.ts");
+  if (arquivosConfigurado) {
+    return "pulado — o B2 está configurado neste ambiente";
+  }
+  const r = await decidirPendente({ chave: "qualquer.jpg", armazem: "b2" });
+  igual(r, { acao: "adiar" }, "decisão sem credencial");
+  return "credencial ausente não apaga foto";
+});
+
 console.log(falhou ? "\n✗ decisão sobre pendentes com problema" : "\n✓ decisão sobre pendentes ok");
 process.exit(falhou ? 1 : 0);
