@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
+import { tenantDaRequisicao } from "@/lib/auth-api";
 import {
   buscarMedia,
   confirmarMedia,
@@ -19,8 +20,9 @@ import { armazemDe, conferirOriginal } from "@/lib/armazem";
  * e quota (que é o nosso custo) não pode ser sustentada por um dado que o usuário
  * escolhe. Se o objeto não estiver lá, a linha pendente é removida.
  */
-export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = await sessaoAtual();
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Navegador (cookie) ou programa (chave com escopo `envio`) — ver docs/chave-de-api.md.
+  const tenantId = await tenantDaRequisicao(request, "envio");
   if (!tenantId) {
     return NextResponse.json({ erro: "Sessão expirada." }, { status: 401 });
   }
@@ -84,7 +86,15 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   }
 }
 
-/** Remove um arquivo: sai do bucket e do banco (o trigger devolve o espaço). */
+/**
+ * Remove um arquivo: sai do bucket e do banco (o trigger devolve o espaço).
+ *
+ * Continua exigindo COOKIE, de propósito. O escopo `envio` da chave de API não
+ * apaga nada — é justamente o apagar que transforma um vazamento de chave em
+ * perda de dado, e apagar mídia entregue derruba junto a seleção do álbum, que
+ * cai em cascata por `favoritas.media_id`. Quem apaga entrega é gente no painel.
+ * Ver docs/chave-de-api.md.
+ */
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

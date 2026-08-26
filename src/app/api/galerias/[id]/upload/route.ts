@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { sessaoAtual } from "@/lib/auth";
+import { tenantDaRequisicao } from "@/lib/auth-api";
 import { consultarUm } from "@/lib/db";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { situacaoDoTenant } from "@/lib/assinatura";
@@ -31,7 +31,15 @@ import {
  * limite juntos.
  */
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = await sessaoAtual();
+  /*
+   * Navegador (cookie) OU programa (chave de API com escopo `envio`).
+   *
+   * A troca é DE PROPÓSITO só nesta linha. O portão de cobrança logo abaixo
+   * (`situacaoDoTenant(...).podeEnviar`) mora no corpo da rota, depois do tenant
+   * resolvido — então ele continua valendo para os dois caminhos de graça, e a
+   * chave de API não vira desvio do paywall. Ver docs/chave-de-api.md.
+   */
+  const tenantId = await tenantDaRequisicao(request, "envio");
   if (!tenantId) {
     return NextResponse.json({ erro: "Sessão expirada. Entre de novo." }, { status: 401 });
   }

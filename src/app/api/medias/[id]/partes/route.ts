@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { sessaoAtual } from "@/lib/auth";
+import { tenantDaRequisicao } from "@/lib/auth-api";
 import { consultarUm } from "@/lib/db";
 import {
   buscarMedia,
@@ -53,7 +53,7 @@ async function mediaComEnvioAberto(mediaId: string, tenantId: string) {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = await sessaoAtual();
+  const tenantId = await tenantDaRequisicao(request, "envio");
   if (!tenantId) return NextResponse.json({ erro: "Sessão expirada." }, { status: 401 });
 
   const { id } = await params;
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = await sessaoAtual();
+  const tenantId = await tenantDaRequisicao(request, "envio");
   if (!tenantId) return NextResponse.json({ erro: "Sessão expirada." }, { status: 401 });
 
   const { id } = await params;
@@ -159,8 +159,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-export async function DELETE(_r: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const tenantId = await sessaoAtual();
+/*
+ * Este DELETE aceita chave de API, e o de `confirmar` não. A diferença não é
+ * descuido: `mediaComEnvioAberto` só encontra mídia com envio AINDA ABERTO — ou
+ * seja, arquivo que nunca ficou pronto. Abortar é o fim do ciclo de envio, não
+ * exclusão de entrega, e sem ele um filme de 30 GB que falhar no meio deixa as
+ * partes ocupando espaço pago para sempre.
+ */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const tenantId = await tenantDaRequisicao(request, "envio");
   if (!tenantId) return NextResponse.json({ erro: "Sessão expirada." }, { status: 401 });
 
   const { id } = await params;
