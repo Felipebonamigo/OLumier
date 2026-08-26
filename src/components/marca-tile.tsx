@@ -3,7 +3,7 @@ import { marca } from "@/config/marca";
 /**
  * A marca: O FEIXE ATRAVESSANDO A LENTE.
  *
- * Um anel — o "O" de Olumier, e a lente — cortado por um feixe de luz que entra
+ * Um anel — a lente, e a órbita do átomo — cortado por um feixe de luz que entra
  * pela esquerda, atravessa e sai mais largo do outro lado. É a própria operação
  * do produto: a luz entra, passa pelo vidro, e chega maior do lado de fora.
  *

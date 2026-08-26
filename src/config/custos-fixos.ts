@@ -50,7 +50,7 @@ export interface CustoFixo {
  * CNPJ) e entram aqui INTEIROS, não rateados. Ratear exigiria escolher um
  * critério — por site? por receita? por disco? — e qualquer escolha seria um
  * chute que reduz o custo no papel. Inteiro é o número conservador: se o
- * Olumier se paga sozinho carregando a conta toda, se paga em qualquer rateio.
+ * Galeria Átomo se paga sozinho carregando a conta toda, se paga em qualquer rateio.
  */
 export const CUSTOS_FIXOS: CustoFixo[] = [
   {
@@ -72,7 +72,7 @@ export const CUSTOS_FIXOS: CustoFixo[] = [
     nome: "Domínio olumier.com.br",
     centavosPorMes: 333,
     confirmado: false,
-    nota: "Estimativa: ~R$ 40/ano no Registro.br, diluídos em 12 meses. Conferir na renovação. É o único item 100% do Olumier.",
+    nota: "Estimativa: ~R$ 40/ano no Registro.br, diluídos em 12 meses. Conferir na renovação. É o único item 100% da plataforma.",
   },
   {
     id: "contabilidade",

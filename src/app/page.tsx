@@ -288,7 +288,7 @@ export default function Home() {
                 n: "03",
                 titulo: "Mande um link",
                 texto:
-                  "seuestudio.olumier.com.br/ana-pedro. Um endereço seu, não um link genérico de nuvem. Com senha, se você quiser; com prazo, se você definir.",
+                  `seuestudio.${marca.dominio}/ana-pedro. Um endereço seu, não um link genérico de nuvem. Com senha, se você quiser; com prazo, se você definir.`,
               },
             ].map((g, i) => (
               <Revelar key={g.n} atraso={i * 90}>

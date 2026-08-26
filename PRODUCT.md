@@ -21,7 +21,7 @@ Pixellu, Pic-Time ou nuvem genérica (WeTransfer, Drive).
 **Secundário — o casal e a família.** Abre a galeria pelo link que o fotógrafo
 mandou, na maioria das vezes pelo celular, muitas vezes meses depois. Quer
 salvar as fotos, mostrar para os outros e marcar as preferidas para o álbum.
-**Nunca cria conta e nunca lê a palavra "Olumier"** — para essa pessoa, o
+**Nunca cria conta e nunca lê a palavra "Galeria Átomo"** — para essa pessoa, o
 produto é o estúdio que ela contratou.
 
 ## Product Purpose
@@ -110,7 +110,8 @@ Três coisas que um concorrente vizinho não copia de graça:
   validade curta;
 - a marca vive **só** em `src/config/marca.ts`; bucket, tabelas e pastas usam
   termos neutros, para o nome poder mudar sem migração (foi exatamente o que
-  permitiu a troca de Fotônio para Olumier sem tocar em dado);
+  permitiu DUAS trocas de nome sem tocar em dado: Fotônio → Olumier em
+  24/08/2026, e Olumier → Galeria Átomo em 26/08/2026);
 - dinheiro é sempre inteiro em centavos, nunca ponto flutuante;
 - SVG é recusado como logo de propósito — é documento, não imagem;
 - mudança de estrutura de banco é aplicada por migração versionada, e o
@@ -128,8 +129,12 @@ Três coisas que um concorrente vizinho não copia de graça:
 
 ## Brand Commitments
 
-- Nome **Olumier**, desde 24/08/2026, substituindo Fotônio. Domínio
-  `olumier.com.br`.
+- Nome **Galeria Átomo**, desde 26/08/2026. Antes: Fotônio (até 24/08/2026)
+  e Olumier (24/08 a 26/08/2026).
+- Domínio ainda `olumier.com.br`: `galeriaatomo.com.br` já responde na raiz,
+  mas **não tem DNS curinga**, e é o curinga que sustenta o subdomínio de cada
+  estúdio. Enquanto ele não existir, mudar `marca.dominio` quebra os links já
+  publicados. Ver `scripts/testar-marca-plataforma.mjs`.
 - Assinatura: **"Sua luz, entregue."**
 - Voz: direta e concreta, sem jargão de marketing e sem promessa que o sistema
   não cumpre. A interface fala de coisas que o fotógrafo reconhece — "a pasta do

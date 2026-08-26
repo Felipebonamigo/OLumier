@@ -115,7 +115,7 @@ export interface EstadoRecuperar {
  * Pede o link de recuperação.
  *
  * A RESPOSTA É SEMPRE A MESMA, exista o e-mail ou não. Dizer "não achei essa
- * conta" transformaria este formulário numa lista de clientes do Olumier: quem
+ * conta" transformaria este formulário numa lista de clientes da plataforma: quem
  * quisesse saber se um estúdio usa a plataforma bastaria digitar o e-mail dele.
  * Quem não tem conta simplesmente não recebe nada.
  */

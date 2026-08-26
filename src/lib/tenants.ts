@@ -137,7 +137,7 @@ export async function criarTenant(dados: {
  * Serve para gastar o MESMO tempo quando o e-mail não existe. Sem isso, a
  * resposta para um e-mail desconhecido volta na hora e a de um cliente demora o
  * scrypt inteiro — e essa diferença, medida de fora, revela quem é cliente do
- * Olumier. A mensagem na tela já é única de propósito; o relógio contava a
+ * Galeria Átomo. A mensagem na tela já é única de propósito; o relógio contava a
  * verdade assim mesmo.
  *
  * Calculado uma vez, na primeira necessidade, e reaproveitado.

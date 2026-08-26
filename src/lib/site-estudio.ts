@@ -3,7 +3,7 @@
  *
  * Puro de propósito, como `marca-estudio.ts`: nada aqui toca banco, sessão ou
  * bucket, então cada regra é testável sem subir nada. (Não confundir com
- * `config/marca.ts`, que é a marca do Olumier.)
+ * `config/marca.ts`, que é a marca do Galeria Átomo.)
  *
  * ── Por que campos fixos, e não blocos livres ──────────────────────────────
  * Um construtor de blocos ("arraste um título, arraste uma foto") dá liberdade
