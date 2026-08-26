@@ -1,6 +1,9 @@
 import "server-only";
 import { sessaoAtual } from "./auth";
 import { conferirChave, type Escopo } from "./chaves-api";
+import { buscarTenantPorId } from "./tenants";
+import { situacaoDoTenant } from "./assinatura";
+import { asaasConfigurado } from "./asaas";
 
 /**
  * Quem está falando com esta rota — navegador ou programa.
@@ -69,4 +72,40 @@ export async function tenantDaRequisicao(
   } catch {
     return null;
   }
+}
+
+/**
+ * Autoriza E confere o portão de cobrança, numa chamada só.
+ *
+ * ── POR QUE OS DOIS JUNTOS ────────────────────────────────────────────────
+ * Nas rotas antigas de envio o portão vem de graça: `situacaoDoTenant` já mora
+ * no corpo delas, então trocar a linha da autorização não abriu buraco nenhum.
+ * As rotas NOVAS nascem vazias — e uma rota nova que esquece o `podeEnviar`
+ * transforma a chave de API em desvio do paywall, silenciosamente, porque tudo
+ * continua funcionando (para quem não deveria poder).
+ *
+ * Deixar os dois numa função só é o que torna esse esquecimento impossível:
+ * quem quer escrever chama isto e recebe o erro pronto, ou o tenant.
+ *
+ * Devolve `{ tenantId }` ou `{ erro, status }` — nunca os dois.
+ */
+export async function tenantQuePodeEnviar(
+  req: Request,
+): Promise<{ tenantId: string } | { erro: string; status: number }> {
+  const tenantId = await tenantDaRequisicao(req, "envio");
+  if (!tenantId) return { erro: "Sessão expirada. Entre de novo.", status: 401 };
+
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { erro: "Conta não encontrada.", status: 401 };
+
+  /* Trial vencido, inadimplente ou cancelado não cria mais nada. O que já está
+   * publicado continua no ar — ver src/lib/assinatura.ts. */
+  const situacao = situacaoDoTenant(tenant, asaasConfigurado());
+  if (!situacao.podeEnviar) {
+    /* `recado` é opcional no tipo. Recusar sem dizer por quê deixaria o plugin
+     * mostrando um 402 mudo ao fotógrafo, que é pior que a frase genérica. */
+    return { erro: situacao.recado ?? "Assinatura inativa. Confira o plano na sua conta.", status: 402 };
+  }
+
+  return { tenantId };
 }
