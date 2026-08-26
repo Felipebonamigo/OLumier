@@ -7,6 +7,7 @@ import { SeletorTema } from "@/components/seletor-tema";
 import { TEMAS } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
 import { ESPACOS, formatarGb } from "@/config/planos";
+import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 
 export const metadata: Metadata = {
   title: `${marca.nome} — ${marca.tagline}`,
@@ -35,6 +36,89 @@ export const metadata: Metadata = {
  */
 const MENOR_ESPACO = ESPACOS[0];
 const MAIOR_ESPACO = ESPACOS[ESPACOS.length - 1];
+
+/*
+ * A FAQ.
+ *
+ * Regra de conteúdo, a mesma da página de segurança: só entra o que EXISTE e
+ * está ligado. Cada resposta abaixo foi conferida contra o comportamento real —
+ * a lixeira segura 30 dias porque `PRAZO_LIXEIRA_DIAS` diz 30, e cancelar não
+ * apaga entrega porque `cancelarAssinaturaAction` não apaga.
+ *
+ * Feita com <details>/<summary> nativos, e não com estado do React: abre sem
+ * JavaScript, entra no Ctrl+F do navegador (que é como muita gente procura
+ * resposta) e não custa um byte de script. É o degrau da escada em que o
+ * recurso da plataforma já resolve.
+ */
+const FAQ: { pergunta: string; resposta: React.ReactNode }[] = [
+  {
+    pergunta: "Preciso pagar para testar?",
+    resposta: (
+      <>
+        Não. São <strong>14 dias grátis e sem cartão</strong> — você cria a conta, sobe uma entrega
+        de verdade e vê o cliente abrindo o link antes de decidir qualquer coisa.
+      </>
+    ),
+  },
+  {
+    pergunta: "Meu cliente precisa criar conta ou instalar alguma coisa?",
+    resposta: (
+      <>
+        Não. Ele recebe <strong>um link</strong> e abre — no celular, no computador, sem cadastro e
+        sem aplicativo. Se você quiser, o link também pede uma senha que só você define.
+      </>
+    ),
+  },
+  {
+    pergunta: "O que acontece quando o prazo da galeria termina?",
+    resposta: (
+      <>
+        Ela desce para o <strong>cofre</strong>: o link para de abrir para o cliente e{" "}
+        <strong>nenhum arquivo é apagado</strong>. Um clique traz de volta, com o mesmo endereço.
+        Guardar no cofre não custa a mais — é o mesmo espaço do plano.
+      </>
+    ),
+  },
+  {
+    pergunta: "Apaguei uma galeria sem querer. Perdi tudo?",
+    resposta: (
+      <>
+        Não. Ela vai para a lixeira e fica lá por <strong>{PRAZO_LIXEIRA_DIAS} dias</strong>, com os
+        arquivos intactos no armazenamento. Restaurar devolve as mesmas fotos, o mesmo filme e os
+        mesmos capítulos — e ela volta como rascunho, para o link do cliente não reabrir sozinho.
+      </>
+    ),
+  },
+  {
+    pergunta: "Filme custa mais caro que foto?",
+    resposta: (
+      <>
+        Não. Vídeo aqui é <strong>só espaço</strong>, igual à foto: sem cobrança por hora de vídeo e
+        sem teto de resolução. Se o seu 4K couber no plano, ele sobe.
+      </>
+    ),
+  },
+  {
+    pergunta: "Posso cancelar quando quiser?",
+    resposta: (
+      <>
+        Pode, pelo próprio painel. <strong>O que você já entregou continua no ar</strong> — o que
+        para é o envio de coisa nova. Apagar o casamento de um casal por causa de um cancelamento do
+        fotógrafo seria punir quem não decidiu nada.
+      </>
+    ),
+  },
+  {
+    pergunta: "Onde as fotos ficam guardadas?",
+    resposta: (
+      <>
+        Em armazenamento profissional, com trava contra exclusão e backup diário do cadastro. Está
+        tudo escrito, sem marketing, na <Link href="/seguranca">página de segurança</Link> —
+        inclusive o que ainda <em>não</em> temos.
+      </>
+    ),
+  },
+];
 
 const PERGUNTAS = [
   {
@@ -480,6 +564,52 @@ export default function Home() {
               </Revelar>
             ))}
           </ol>
+        </div>
+      </section>
+
+      {/* ── perguntas frequentes ───────────────────────────────────────── */}
+      <section id="perguntas" className="scroll-mt-8 border-t border-linha">
+        <div className="mx-auto max-w-3xl px-6 py-24">
+          <Revelar>
+            <div className="max-w-2xl">
+              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+                Antes de decidir
+              </p>
+              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+                Perguntas frequentes
+              </h2>
+            </div>
+          </Revelar>
+
+          <div className="mt-10 border-t border-linha">
+            {FAQ.map((p, i) => (
+              <Revelar key={p.pergunta} atraso={Math.min(i, 4) * 60}>
+                {/* `group` + `open:` deixam a seta girar sem uma linha de JS. */}
+                <details className="group border-b border-linha">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left font-medium transition hover:text-acento-alto">
+                    {p.pergunta}
+                    <span
+                      aria-hidden
+                      className="shrink-0 text-xl leading-none text-texto-faint transition group-open:rotate-45"
+                    >
+                      +
+                    </span>
+                  </summary>
+                  <p className="max-w-[62ch] pb-6 text-sm leading-relaxed text-texto-soft">
+                    {p.resposta}
+                  </p>
+                </details>
+              </Revelar>
+            ))}
+          </div>
+
+          <p className="mt-8 text-sm text-texto-soft">
+            Ficou faltando alguma?{" "}
+            <a href={`mailto:${marca.email}`} className="text-acento underline underline-offset-4">
+              {marca.email}
+            </a>{" "}
+            — respondemos com detalhe técnico se você quiser.
+          </p>
         </div>
       </section>
 

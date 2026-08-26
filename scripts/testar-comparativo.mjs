@@ -28,6 +28,7 @@
  *      decisão, com este teste ficando vermelho antes.
  */
 import { ESPACOS, formatarGb } from "../src/config/planos.ts";
+import { PRAZO_LIXEIRA_DIAS } from "../src/lib/tenants.ts";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 
@@ -112,6 +113,57 @@ await etapa("nenhum concorrente é citado pelo nome", () => {
       `a home cita ${achados.join(", ")}. Número de concorrente envelhece sozinho e citar dá ` +
         `palco de graça — se a decisão mudou, mude este teste junto, de propósito.`,
     );
+  }
+});
+
+/*
+ * A FAQ.
+ *
+ * Prende três coisas, e nenhuma é a redação:
+ *
+ *   1. Ela existe e responde em HTML, sem depender de JavaScript. Feita com
+ *      <details>/<summary>, abre no navegador de quem bloqueia script e no
+ *      Ctrl+F do próprio navegador — que é como muita gente procura resposta.
+ *
+ *   2. Cada resposta que promete algo aponta para onde a promessa é cumprida.
+ *      "Guardamos com segurança" sem link para /seguranca é slogan.
+ *
+ *   3. O número de dias da lixeira sai de `PRAZO_LIXEIRA_DIAS`, não da mão de
+ *      quem escreveu. Prometer 30 dias na home e apagar em 15 é o tipo de
+ *      mentira que só aparece no dia em que alguém precisa restaurar.
+ */
+console.log("\na home responde as perguntas antes da conta");
+
+/* Só o pedaço da FAQ. Procurar no HTML inteiro daria falso verde: o rodapé já
+ * tem link para /seguranca e o número 30 aparece em classe do Tailwind. Teste
+ * que passa por causa de outra parte da página não está testando nada. */
+let faq = "";
+
+await etapa("a FAQ existe", () => {
+  const i = html.indexOf('id="perguntas"');
+  if (i === -1) throw new Error("não achei a FAQ (id=perguntas) na home");
+  faq = html.slice(i);
+  const abas = (faq.match(/<details/g) ?? []).length;
+  if (abas < 5) throw new Error(`só ${abas} pergunta(s) — a FAQ está pela metade`);
+  return `${abas} perguntas`;
+});
+
+await etapa("abre sem JavaScript", () => {
+  /* <details> é do navegador. Se um dia virar botão com onClick, quem tem
+   * script bloqueado passa a ver só os títulos, sem nenhuma resposta. */
+  if (!faq.includes("<summary")) throw new Error("as perguntas não usam <summary> — viraram JS?");
+});
+
+await etapa("o prazo da lixeira vem do código, não do texto", () => {
+  if (!faq.includes(String(PRAZO_LIXEIRA_DIAS))) {
+    throw new Error(`a FAQ não diz "${PRAZO_LIXEIRA_DIAS}", que é o prazo real da lixeira`);
+  }
+  return `${PRAZO_LIXEIRA_DIAS} dias`;
+});
+
+await etapa("a resposta sobre guarda aponta para a página de segurança", () => {
+  if (!faq.includes('href="/seguranca"')) {
+    throw new Error("a FAQ fala de segurança sem levar para /seguranca");
   }
 });
 
