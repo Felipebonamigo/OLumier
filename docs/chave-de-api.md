@@ -1,6 +1,17 @@
-# Chave de API por estúdio — desenho para aprovação
+# Chave de API por estúdio — desenho e obra
 
-**Estado: PROPOSTA. Nada disto foi construído.**
+**Estado: CONSTRUÍDO em 26/08/2026, menos o limite de uso (ver o fim).**
+O plugin do Lightroom continua sem existir — isto é a porta que ele vai usar.
+
+| Peça | Onde |
+|---|---|
+| Tabela | `db/migracoes/022-chaves-api.sql` |
+| Credencial | `src/lib/chaves-api.ts` |
+| Porta e portão | `src/lib/auth-api.ts` |
+| Rotas de galeria | `src/app/api/galerias/route.ts`, `…/[id]/secoes/route.ts` |
+| Republicar | `src/app/api/medias/[id]/arquivo/route.ts` |
+| Tela | `src/components/chaves-api.tsx` |
+| Testes | `testar-chave-api`, `testar-api-galerias`, `testar-republicar`, `testar-derivadas-formato` |
 
 Pela régua do `CLAUDE.md`, contrato de API com consumidor externo é *architectural*:
 design escrito e aprovado antes de qualquer código. Este arquivo é esse design.
@@ -155,11 +166,30 @@ graça porque já está no corpo; estas nascem vazias, e uma rota nova que esque
 
 O ganho de escrevê-las: elas servem ao painel também, e encolhem `actions.ts`.
 
-### Limite de uso
+### Limite de uso — NÃO construído, e de propósito
 
-Reaproveitar `src/lib/tentativas.ts`, que já existe e já é usado no portão da galeria.
-Chave é credencial de longa duração: sem freio, uma chave vazada sobe lixo até estourar
-a quota do estúdio.
+O desenho pedia reaproveitar `src/lib/tentativas.ts` com este argumento: *"sem freio,
+uma chave vazada sobe lixo até estourar a quota do estúdio"*.
+
+Ao construir, esse argumento não sobreviveu ao primeiro degrau da escada do
+`CLAUDE.md` — **isso precisa existir?**
+
+- **Estourar a quota já é impossível.** Todo envio passa por
+  `bytesUsados + bytes > quota` antes de assinar qualquer URL. O teto que o freio
+  ia defender já é defendido, por código que existe e é testado.
+- **Adivinhar chave não é ameaça.** O segredo é 32 bytes aleatórios. Não há
+  dicionário, não há força bruta — freio de tentativa protege senha curta, e isto
+  não é senha.
+- **O escopo já tirou o que dói.** Chave vazada não apaga galeria, não mexe na
+  conta, não vê cobrança.
+
+O que um freio ainda compraria é modesto e real: conter volume de requisição
+(carga de banco, custo de CPU) de uma chave vazada em laço, principalmente no
+`GET /api/galerias`, que não passa por quota nenhuma.
+
+**Teto do atalho:** se aparecer chave vazada em laço, ou se o `GET /api/galerias`
+virar caminho quente, o freio entra — por prefixo de chave, em `tentativas.ts`, uma
+noite. A saída está escrita para a próxima sessão não ler isto como esquecimento.
 
 ### Tela
 
