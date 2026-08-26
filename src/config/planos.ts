@@ -64,7 +64,15 @@ export const ESPACOS: Faixa[] = [
   { gb: 250, precoCentavos: 7999 },
   { gb: 500, precoCentavos: 10999 },
   /* A faixa que briga com o Pixieset Pro (1 TB por ~R$ 135 no cartão do
-   * brasileiro). Empate no preço, e lá o vídeo é 1 hora em HD. */
+   * brasileiro). Empate no preço, e lá o vídeo é 1 hora em HD.
+   *
+   * FOLGA DE UM CENTAVO, e ela é decisão, não acaso. `testar-planos` reprova
+   * esta faixa acima de R$ 140,00, e a regra dos ,99 obriga o degrau seguinte a
+   * ser R$ 149,99 — não existe reajuste pequeno aqui, o próximo passo estoura o
+   * teto junto. Se um dia o teste ficar vermelho neste ponto, não é defeito: é
+   * a grade encostando no limite de propósito. A saída é reler o preço do Pro
+   * (o número e a data da conferência estão no teste) e mover o teto por
+   * decisão — nunca afrouxar o teto para caber um preço já escolhido. */
   { gb: 1000, precoCentavos: 13999 },
   { gb: 2000, precoCentavos: 21999 },
   /* Degrau herdado do cofre: existia lá e faltava aqui. É o passo que evita o
