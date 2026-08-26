@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultarUm } from "@/lib/db";
 import { ehDominioPrincipal, estudioDoHost } from "@/config/dominios";
+import { dominioLiberaCertificado } from "@/lib/dominio-proprio";
 
 /**
  * Porteiro do certificado sob demanda.
@@ -16,6 +17,35 @@ import { ehDominioPrincipal, estudioDoHost } from "@/config/dominios";
  * os sites do servidor. Por isso o Caddy pergunta aqui antes, e só respondemos
  * "pode" para subdomínio de estúdio que existe de verdade.
  */
+/*
+ * ── LEIA ANTES DE COPIAR ISTO PARA OUTRA ROTA (26/08/2026) ────────────────
+ * Em 26/08/2026 eu escrevi aqui que o Next cacheava a resposta desta rota por
+ * URL, e que por isso um estúdio apagado continuaria liberando certificado.
+ * **Estava errado, e a medição está abaixo.**
+ *
+ * GET de route handler é DINÂMICO por padrão desde a v15.0.0-RC (está no
+ * changelog em `node_modules/next/dist/.../route.md`), e este projeto roda a
+ * 16.3.1. Medido com esta linha removida: mesma URL, `dominio_verificado_em`
+ * indo de null para agora entre as duas chamadas, resposta 403 → 200. Sem
+ * cache nenhum.
+ *
+ * O que eu tinha visto era outra coisa: uma segunda sessão rodava a suíte a
+ * cada dois minutos contra o mesmo banco, e o `finally` de um teste limpava
+ * `dominio_proprio` segundos depois do meu probe gravá-lo. O 403 era a resposta
+ * CERTA para um domínio que já não existia mais.
+ *
+ * ── ENTÃO POR QUE A LINHA FICA ───────────────────────────────────────────
+ * Não por causa daquele defeito, que não existe. Fica porque este endereço é
+ * uma decisão de AUTORIZAÇÃO — o Caddy pergunta se pode emitir certificado — e
+ * o padrão que a torna dinâmica já mudou uma vez, na v15. Fixar custa uma linha
+ * e tira essa rota da lista de coisas que um `revalidate` distraído poderia
+ * quebrar em silêncio.
+ *
+ * NÃO é padrão da casa. Não copie para toda rota nova: em GET comum a linha é
+ * cerimônia, e o resto do projeto vive bem sem ela.
+ */
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const dominio = request.nextUrl.searchParams.get("domain")?.toLowerCase().trim();
   if (!dominio) return new NextResponse("sem domínio", { status: 400 });
@@ -39,14 +69,30 @@ export async function GET(request: NextRequest) {
    * o parecido (`olumier.com.br.golpe.net`) — a comparação lá é por sufixo com
    * ponto, nunca `includes`. Emitir certificado para domínio alheio nos
    * transformaria em emissor de graça para um golpista. */
-  if (!slug) {
-    return new NextResponse("domínio de fora", { status: 403 });
+  if (slug) {
+    const estudio = await consultarUm<{ id: string }>("select id from tenants where slug = $1", [
+      slug,
+    ]);
+    if (!estudio) return new NextResponse("estúdio não encontrado", { status: 403 });
+    return new NextResponse("ok", { status: 200 });
   }
 
-  const estudio = await consultarUm<{ id: string }>("select id from tenants where slug = $1", [
-    slug,
-  ]);
-  if (!estudio) return new NextResponse("estúdio não encontrado", { status: 403 });
+  /*
+   * Domínio próprio do estúdio (migração 023).
+   *
+   * Vem por último de propósito: é o único caso que consulta o banco por um
+   * host que pode ser QUALQUER coisa, e as duas checagens acima resolvem o
+   * caminho comum sem chegar aqui.
+   *
+   * `dominioLiberaCertificado` só devolve true para domínio com a posse PROVADA
+   * por DNS. Sem isso, um estúdio digitando `padelizou.com.br` faria o Caddy
+   * tentar emitir certificado para domínio alheio — e a cota da Let's Encrypt é
+   * por SERVIDOR, com quatro produtos neste. É a mesma razão pela qual este
+   * porteiro existe, aplicada ao caso novo.
+   */
+  if (await dominioLiberaCertificado(dominio)) {
+    return new NextResponse("ok", { status: 200 });
+  }
 
-  return new NextResponse("ok", { status: 200 });
+  return new NextResponse("domínio de fora", { status: 403 });
 }

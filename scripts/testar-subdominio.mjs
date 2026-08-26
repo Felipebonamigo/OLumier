@@ -283,6 +283,147 @@ await etapa("domínio parecido continua barrado nos dois", async () => {
   return "HTTP 403 nos dois";
 });
 
+/* ── domínio próprio (migração 023) ──────────────────────────────────────── */
+
+console.log("\nDomínio próprio:\n");
+
+const DOM_PROPRIO = `teste-proprio-${Date.now()}.com.br`;
+const { rows: tp } = await db.query("select id from tenants where slug = $1", [tslug]);
+const tenantDoTeste = tp[0].id;
+
+/*
+ * O servidor guarda host → estúdio em cache com validade (ver VALIDADE_MS em
+ * lib/dominio-proprio.ts). Em produção quem grava limpa o cache no MESMO
+ * processo; aqui o teste escreve no banco por fora, então a mudança leva até
+ * uma validade para aparecer.
+ *
+ * Esperar um tempo fixo é o jeito errado: erra para os dois lados — lento
+ * quando dá certo, vermelho por acaso quando a máquina engasga. Tentar até
+ * valer não tem esse defeito e sobrevive a uma mudança na validade.
+ */
+const ateQue = async (tentar, oQue) => {
+  const limite = Date.now() + 8000;
+  let ultimo = "não chegou a rodar";
+  while (Date.now() < limite) {
+    try {
+      return await tentar();
+    } catch (e) {
+      ultimo = e.message;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+  throw new Error(`${oQue} não aconteceu em 8s — último: ${ultimo}`);
+};
+
+const soltarProprio = () =>
+  db.query(
+    `update tenants set dominio_proprio = null, dominio_token = null,
+            dominio_verificado_em = null where id = $1`,
+    [tenantDoTeste],
+  );
+
+try {
+  await etapa("domínio pedido mas NÃO verificado não libera certificado", async () => {
+    await db.query(
+      "update tenants set dominio_proprio = $2, dominio_token = 'tok', dominio_verificado_em = null where id = $1",
+      [tenantDoTeste, DOM_PROPRIO],
+    );
+    const r = await pedir(`/api/tls/permitir?domain=${DOM_PROPRIO}`, "olumier.com.br");
+    if (r.status !== 403) throw new Error(`veio ${r.status}, esperava 403`);
+    return "HTTP 403 sem prova de posse";
+  });
+
+  await etapa("domínio pedido e NÃO verificado também não serve a galeria", async () => {
+    const r = await pedir(`/${gslug}`, DOM_PROPRIO);
+    if (r.status === 200 && (await texto(r)).includes(titulo)) {
+      throw new Error("serviu a galeria sem prova de posse");
+    }
+    return `HTTP ${r.status}`;
+  });
+
+  await etapa("verificado libera o certificado", async () => {
+    await db.query("update tenants set dominio_verificado_em = now() where id = $1", [
+      tenantDoTeste,
+    ]);
+    return ateQue(async () => {
+      const r = await pedir(`/api/tls/permitir?domain=${DOM_PROPRIO}`, "olumier.com.br");
+      if (r.status !== 200) throw new Error(`veio ${r.status}`);
+      return "HTTP 200";
+    }, "o porteiro liberar");
+  });
+
+  await etapa("verificado serve a galeria pelo endereço do estúdio", async () =>
+    ateQue(async () => {
+      const r = await pedir(`/${gslug}`, DOM_PROPRIO);
+      if (r.status !== 200) throw new Error(`veio ${r.status}`);
+      /* Usa `texto()` e não o corpo cru: o título tem "&", que no HTML sai como
+       * "&amp;". Comparar no cru dá falso negativo — me custou uma caçada. */
+      if (!(await texto(r)).includes(titulo)) throw new Error("abriu, mas não é a galeria");
+      return `${DOM_PROPRIO}/${gslug} → ${titulo}`;
+    }, "a galeria abrir no domínio próprio"),
+  );
+
+  /*
+   * A ARMADILHA que o desenho (docs/dominio-proprio.md, item 6) apontou.
+   *
+   * O endereço curto era montado com `marca.dominio`, e isso jogava o visitante
+   * do domínio próprio de volta para o nosso no meio da navegação: o estúdio
+   * paga por um endereço e o nome dele some na primeira normalização de link.
+   *
+   * O defeito é silencioso — a página abre, só que no lugar errado. Este teste
+   * é a única coisa que o pega.
+   */
+  await etapa("o endereço curto NÃO devolve o visitante para o nosso domínio", async () => {
+    const r = await pedir(`/g/${tslug}/${gslug}`, DOM_PROPRIO);
+    if (r.status < 300 || r.status >= 400) throw new Error(`esperava redirecionamento, veio ${r.status}`);
+
+    const destino = r.headers.get("location") ?? "";
+    if (!destino.includes(DOM_PROPRIO)) {
+      throw new Error(`perdeu o domínio do estúdio: mandou para ${destino}`);
+    }
+    if (destino.includes("olumier.com.br") || destino.includes("galeriaatomo.com.br")) {
+      throw new Error(`vazou para o nosso domínio: ${destino}`);
+    }
+    return destino;
+  });
+
+  await etapa("o painel continua saindo do domínio do estúdio, de propósito", async () => {
+    /* Aqui o comportamento certo é o CONTRÁRIO do de cima: o painel mora num
+     * lugar só, porque o cookie de sessão não valeria em dois endereços. */
+    const r = await pedir("/painel", DOM_PROPRIO);
+    const destino = r.headers.get("location") ?? "";
+    if (!destino.includes("olumier.com.br")) {
+      throw new Error(`painel não voltou para o domínio principal: ${destino}`);
+    }
+    return "vai para o domínio principal";
+  });
+
+  /*
+   * A REMOÇÃO não é conferida por HTTP, de propósito.
+   *
+   * O acerto fica no cache do servidor por 60s (VALIDADE_ACERTO_MS). Em produção
+   * isso não atrasa nada: `soltarDominio()` limpa o cache no MESMO processo. Aqui
+   * o teste escreve no banco por fora, e esperar um minuto por uma asserção
+   * deixaria a suíte mais lenta para provar o que já está provado em
+   * `testar-dominio-proprio.mjs` — que roda em processo e vê o cache limpo.
+   *
+   * O que ESTE arquivo prova é a fiação: proxy e porteiro lendo a mesma régua.
+   * Domínio que ninguém reclamou é o outro lado dessa fiação, e é instantâneo.
+   */
+  await etapa("domínio que ninguém reclamou não serve nem libera", async () => {
+    const orfao = `nunca-reclamado-${Date.now()}.com.br`;
+    const r = await pedir(`/${gslug}`, orfao);
+    if (r.status === 200 && (await texto(r)).includes(titulo)) {
+      throw new Error("serviu a galeria num domínio de ninguém");
+    }
+    const c = await pedir(`/api/tls/permitir?domain=${orfao}`, "olumier.com.br");
+    if (c.status !== 403) throw new Error(`porteiro liberou domínio de ninguém: ${c.status}`);
+    return "galeria fora e certificado recusado";
+  });
+} finally {
+  await soltarProprio();
+}
+
 await db.end();
 
 if (falhou) {

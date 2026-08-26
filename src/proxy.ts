@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SUBDOMINIOS_RESERVADOS } from "@/config/subdominios";
-import { estudioDoHost } from "@/config/dominios";
+import { ehDominioPrincipal, estudioDoHost } from "@/config/dominios";
+import { estudioDoDominioProprio } from "@/lib/dominio-proprio";
 import { marca } from "@/config/marca";
 
 /**
@@ -35,18 +36,33 @@ const NOME_COOKIE = "olumier_sessao";
 // mesma: antes ela só existia aqui, e nada impedia um estúdio nascer com o
 // slug "www".
 
-/** Devolve o slug do estúdio quando o endereço é um subdomínio de algum domínio atendido. */
-function estudioDoEndereco(host: string | null): string | null {
+/**
+ * Devolve o slug do estúdio deste endereço — subdomínio nosso ou domínio próprio.
+ *
+ * A ordem é de custo crescente, e isso importa: o proxy roda em quase toda
+ * requisição do site.
+ *
+ *   1. `estudioDoHost` — string pura, resolve todo subdomínio nosso;
+ *   2. domínio principal — sai aqui, e é o caminho MAIS comum de todos;
+ *   3. só então o banco, para o host que não é nem um nem outro.
+ *
+ * Sem o degrau 2, cada visita a olumier.com.br viraria uma busca por domínio
+ * próprio. O cache absorveria, mas o certo é não perguntar.
+ */
+async function estudioDoEndereco(host: string | null): Promise<string | null> {
   const slug = estudioDoHost(host);
-  if (!slug || SUBDOMINIOS_RESERVADOS.has(slug)) return null;
-  return slug;
+  if (slug) return SUBDOMINIOS_RESERVADOS.has(slug) ? null : slug;
+
+  if (ehDominioPrincipal(host)) return null;
+
+  return estudioDoDominioProprio(host);
 }
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   // --- subdomínio do estúdio ------------------------------------------------
-  const estudio = estudioDoEndereco(request.headers.get("host"));
+  const estudio = await estudioDoEndereco(request.headers.get("host"));
   if (estudio) {
     // Rotas internas seguem intactas — reescrever /api ou /_next quebraria tudo.
     const interna =
@@ -76,7 +92,26 @@ export function proxy(request: NextRequest) {
           return NextResponse.redirect(new URL(pathname + search, `https://${marca.dominio}`));
         }
         const curto = tipo === "g" && resto.length ? `/${resto.join("/")}` : "/";
-        return NextResponse.redirect(new URL(curto + search, `https://${estudio}.${marca.dominio}`));
+        /*
+         * O HOST QUE CHEGOU É O HOST QUE VOLTA.
+         *
+         * Isto era `https://${estudio}.${marca.dominio}` — montado a partir do
+         * nosso domínio, o que estava certo enquanto o subdomínio fosse o único
+         * endereço possível. Com domínio próprio (migração 023) essa linha joga
+         * o visitante de carolinetedesco.com.br de volta para o olumier.com.br
+         * no meio da navegação: o estúdio paga por um endereço e o nome dele
+         * some na primeira normalização de link.
+         *
+         * O defeito seria silencioso — a página abre, só que no lugar errado.
+         *
+         * O host vem do cabeçalho da requisição, e não de `nextUrl`: em
+         * desenvolvimento os dois divergem (o `nextUrl` traz localhost, o
+         * cabeçalho traz o subdomínio simulado), e é o cabeçalho que diz por
+         * qual endereço a pessoa chegou.
+         */
+        const host = request.headers.get("host") ?? `${estudio}.${marca.dominio}`;
+        const protocolo = request.nextUrl.protocol === "http:" ? "http" : "https";
+        return NextResponse.redirect(new URL(curto + search, `${protocolo}://${host}`));
       }
 
       const galeria = pathname.replace(/^\/+|\/+$/g, "");

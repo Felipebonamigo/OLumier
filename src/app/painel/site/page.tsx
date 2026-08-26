@@ -2,10 +2,12 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { buscarTenantPorId } from "@/lib/tenants";
-import { consultar } from "@/lib/db";
+import { consultar, consultarUm } from "@/lib/db";
 import { marca } from "@/config/marca";
 import { lerSite } from "@/lib/site-estudio";
 import { EditorSite } from "@/components/editor-site";
+import { EnderecoDoEstudio } from "@/components/endereco-do-estudio";
+import { nomeDoRegistroTxt, valorDoRegistroTxt } from "@/lib/dominio-proprio";
 
 export const metadata: Metadata = { title: "Site do estúdio" };
 export const dynamic = "force-dynamic";
@@ -26,6 +28,24 @@ export default async function SitePage() {
   if (!tenant) redirect("/entrar");
 
   const site = lerSite(tenant.site);
+
+  /*
+   * As três colunas do domínio próprio, em consulta separada.
+   *
+   * Poderiam vir do `select *` de `buscarTenantPorId`, mas a interface `Tenant`
+   * teria de crescer — e `lib/tenants.ts` é dos arquivos mais disputados do
+   * repositório. Uma consulta de três colunas é mais barata que um conflito, e
+   * diz na cara o que esta tela precisa.
+   */
+  const dom = await consultarUm<{
+    dominio_proprio: string | null;
+    dominio_token: string | null;
+    dominio_verificado_em: Date | null;
+  }>(
+    `select dominio_proprio, dominio_token, dominio_verificado_em
+       from tenants where id = $1`,
+    [tenantId],
+  );
 
   /*
    * A mesma peneira da vitrine: publicada, no ar, sem senha e dentro do prazo.
@@ -58,6 +78,17 @@ export default async function SitePage() {
         site={site}
         galerias={galerias}
         endereco={`https://${tenant.slug}.${marca.dominio}`}
+      />
+
+      <EnderecoDoEstudio
+        dominio={dom?.dominio_proprio ?? null}
+        verificado={Boolean(dom?.dominio_verificado_em)}
+        registroNome={dom?.dominio_proprio ? nomeDoRegistroTxt(dom.dominio_proprio) : null}
+        registroValor={dom?.dominio_token ? valorDoRegistroTxt(dom.dominio_token) : null}
+        /* Para onde o A record aponta. Sem isto configurado, a tela diz para
+         * falar com o suporte em vez de mostrar um endereço em branco. */
+        ipDoServidor={process.env.IP_PUBLICO ?? null}
+        enderecoDaPlataforma={`${tenant.slug}.${marca.dominio}`}
       />
     </main>
   );
