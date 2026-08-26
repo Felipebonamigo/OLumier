@@ -435,6 +435,30 @@ console.log("\nposição contra o mercado");
  * Nossa faixa de 1 TB precisa caber perto disso, senão o fotógrafo que compara
  * lado a lado escolhe eles — e lá o vídeo é 1 h em HD, aqui é ilimitado em 4K.
  */
+/*
+ * ── OS CENTAVOS SÃO DECISÃO, NÃO SOBRA ────────────────────────────────────
+ *
+ * Toda faixa termina em 99 centavos. Duas razões, e a segunda é a que pesa:
+ *
+ *   1. R$ 49,99 lê mais barato que R$ 50,00 — psicologia de preço batida, e
+ *      que funciona.
+ *   2. O ANUAL cobra dez mensalidades. Noventa e nove centavos viram
+ *      R$ 9,90 a mais em cada plano por ano, sem que ninguém perceba diferença
+ *      na mensalidade. É receita que aparece só na soma.
+ *
+ * Sem esta etapa, a próxima faixa acrescentada à grade sairia em ,00 e
+ * quebraria o padrão em silêncio — e num lugar onde ninguém relê.
+ */
+await etapa("toda faixa termina em 99 centavos", () => {
+  const fora = ESPACOS.filter((e) => e.precoCentavos % 100 !== 99);
+  if (fora.length) {
+    throw new Error(
+      `fora do padrão: ${fora.map((e) => `${e.gb}GB=R$${(e.precoCentavos / 100).toFixed(2)}`).join(", ")}`,
+    );
+  }
+  return `${ESPACOS.length} faixas`;
+});
+
 await etapa("1 TB fica no páreo com o Pixieset Pro", () => {
   const e = ESPACOS.find((x) => x.gb === 1000);
   if (!e) throw new Error("sumiu a faixa de 1 TB");

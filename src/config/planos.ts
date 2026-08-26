@@ -60,20 +60,20 @@ export interface Faixa {
  * dinheiro, e passaria despercebida numa tabela.
  */
 export const ESPACOS: Faixa[] = [
-  { gb: 100, precoCentavos: 4900 },
-  { gb: 250, precoCentavos: 7900 },
-  { gb: 500, precoCentavos: 10900 },
+  { gb: 100, precoCentavos: 4999 },
+  { gb: 250, precoCentavos: 7999 },
+  { gb: 500, precoCentavos: 10999 },
   /* A faixa que briga com o Pixieset Pro (1 TB por ~R$ 135 no cartão do
    * brasileiro). Empate no preço, e lá o vídeo é 1 hora em HD. */
-  { gb: 1000, precoCentavos: 13900 },
-  { gb: 2000, precoCentavos: 21900 },
+  { gb: 1000, precoCentavos: 13999 },
+  { gb: 2000, precoCentavos: 21999 },
   /* Degrau herdado do cofre: existia lá e faltava aqui. É o passo que evita o
    * salto de R$ 219 para R$ 449 bater de frente com quem só precisava de 3 TB. */
-  { gb: 3000, precoCentavos: 29900 },
-  { gb: 5000, precoCentavos: 44900 },
+  { gb: 3000, precoCentavos: 29999 },
+  { gb: 5000, precoCentavos: 44999 },
   /* O topo, para quem filma casamento em 4K o ano inteiro. Acima do Pixieset
    * Ultimate, que nem aceita vídeo 4K — aqui não existe concorrente. */
-  { gb: 10000, precoCentavos: 79900 },
+  { gb: 10000, precoCentavos: 79999 },
 ];
 
 /*

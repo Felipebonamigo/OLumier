@@ -5,7 +5,7 @@
  *        --import ./scripts/registrar-ts.mjs scripts/testar-comparativo.mjs
  *
  * Por que existe: a seção responde a UMA objeção de venda — "o concorrente
- * cobra R$ 29,90 e aqui é R$ 49". A resposta honesta não é desconto, é o teto:
+ * cobra R$ 29,90 e aqui é R$ 49,99". A resposta honesta não é desconto, é o teto:
  * o pacote barato do concorrente guarda dezenas de GB, e um casamento com filme
  * não cabe lá por nenhum preço. Isso só continua verdade enquanto a NOSSA grade
  * continuar do jeito que está, e uma grade muda sem ninguém reler a home.
