@@ -100,7 +100,15 @@ export function PublicarGaleria({
           className="mt-0.5 h-4 w-4 accent-[color:var(--acento)]"
         />
         <span>
-          <span className="block text-sm font-medium">Galeria no ar</span>
+          {/*
+            "Publicada" e não "no ar" porque é o que esta caixa de fato controla.
+            As duas coisas se separam no cofre: lá `publicada` continua ligada de
+            propósito — é isso que faz reativar devolver a galeria sem o
+            fotógrafo republicar — enquanto o link NÃO está no ar. Chamar a caixa
+            de "no ar" a fazia afirmar, marcada, uma coisa falsa naquele estado.
+            O selo do cabeçalho é quem responde "abre agora?"; ver page.tsx.
+          */}
+          <span className="block text-sm font-medium">Galeria publicada</span>
           <span className="block text-xs text-texto-faint">
             Enquanto estiver desligada, o link não abre para ninguém.
           </span>
