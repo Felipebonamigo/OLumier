@@ -101,5 +101,54 @@ for (const arquivo of servicos) {
   }
 }
 
+/*
+ * ── A DIREÇÃO CONTRÁRIA, QUE FALTAVA (26/08/2026) ─────────────────────────
+ * Tudo acima pergunta "o serviço chama um script que presta?". Ninguém
+ * perguntava "o script que PRECISA ser chamado está mesmo em algum serviço?".
+ *
+ * O buraco custou caro no mesmo dia: procurei se `limpar-pendentes.mjs` rodava
+ * sozinho buscando uma unidade chamada `fotonio-pendentes`, não achei, e
+ * concluí — e escrevi no cabeçalho do script, e contei ao Felipe — que ele
+ * nunca rodava. É falso: ele é o SEGUNDO `ExecStart` do `fotonio-cofre.service`
+ * e roda todo dia às 04:30. O log de produção mostra as execuções de 23, 24, 25
+ * e 26 de agosto.
+ *
+ * O erro é de método, não de atenção: procurei unidade pelo NOME do script, e
+ * unidade não se chama como o script que ela chama. A informação que me
+ * desmentia estava versionada em `ops/fotonio-cofre.service` o tempo todo.
+ *
+ * Este teste é o grep que eu deveria ter feito, agora automático. Ele também
+ * pega o estrago pelo outro lado: script destrutivo que sai da agenda para de
+ * limpar e ninguém percebe, porque a falta de saída é indistinguível de "nada
+ * a fazer".
+ */
+const PRECISAM_DE_AGENDA = {
+  "limpar-pendentes.mjs": "solta a quota presa por envio abandonado",
+  "arquivar-vencidas.mjs": "manda para o cofre as galerias vencidas",
+  "limpar-lixeira.mjs": "apaga de vez o que passou do prazo na lixeira",
+  "espelhar.mjs": "faz a segunda cópia dos arquivos",
+};
+
+const agendados = new Set(
+  servicos.flatMap((arquivo) =>
+    execStarts(readFileSync(path.join(OPS, arquivo), "utf8")).flatMap((linha) =>
+      [...linha.matchAll(/scripts\/([a-z0-9-]+)\.mjs/g)]
+        .map((m) => `${m[1]}.mjs`)
+        .filter((n) => n !== "registrar-ts.mjs"),
+    ),
+  ),
+);
+
+for (const [script, papel] of Object.entries(PRECISAM_DE_AGENDA)) {
+  etapa(`${script} está em algum ops/*.service`, () => {
+    if (!agendados.has(script)) {
+      throw new Error(
+        `nenhum ExecStart cita scripts/${script} — ${papel}, e sem agenda isso deixa de acontecer em silêncio`,
+      );
+    }
+    return "agendado";
+  });
+}
+
 console.log(falhou ? "\n✗ os temporizadores têm problema\n" : "\n✓ temporizadores e scripts batem\n");
 process.exit(falhou ? 1 : 0);

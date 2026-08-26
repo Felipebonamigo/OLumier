@@ -27,8 +27,15 @@
  * proteger. O comentário dele dizia "melhor entregar a foto ao cliente do que
  * apagar o trabalho de alguém", e o código fazia o oposto para tudo no B2.
  *
- * Não doeu na única vez em que rodou porque as seis pendências estavam ausentes
- * nos DOIS armazéns: o veredito foi certo por coincidência, não por lógica.
+ * Não doeu, e o motivo não é sorte nem cuidado: em 26/08/2026 a produção tinha
+ * ZERO mídias, então não havia linha para o script julgar. As seis pendências
+ * que existiam moravam no `fotonio_dev`, todas com `armazem = 'r2'`, todas do
+ * "Estúdio Teste Fotônio" — sobra de teste, não trabalho de cliente.
+ *
+ * A margem era mais fina do que parece: o script roda TODO DIA às 04:30 em
+ * produção, pelo `fotonio-cofre.service`. Não era um defeito adormecido à espera
+ * de alguém executar à mão; era um defeito executado quatro vezes na semana
+ * passada, que só não encontrou nada para destruir.
  */
 const { decidirPendente } = await import("../src/lib/pendentes.ts");
 

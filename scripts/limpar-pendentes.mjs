@@ -5,16 +5,20 @@
  *   node --env-file=.env.production --experimental-strip-types \
  *        --import ./scripts/registrar-ts.mjs scripts/limpar-pendentes.mjs
  *
- * ⚠ NÃO RODA SOZINHO. Esta linha dizia "roda todo dia no servidor" e era falsa:
- * não existe `fotonio-pendentes.service` nem `.timer` — as unidades em `ops/`
- * são backup, cofre, espelho, lixeira, purga e vigia, e nenhuma é esta.
+ * RODA TODO DIA às 04:30, como o SEGUNDO `ExecStart` do `fotonio-cofre.service`
+ * — não existe unidade com o nome deste script, e é por isso que procurar por
+ * `fotonio-pendentes` não acha nada. O log de produção mostra as execuções.
  *
- * Enquanto continuar assim, envio abandonado prende quota PARA SEMPRE, que é
- * exatamente o problema descrito abaixo. Em 26/08/2026 havia seis em produção,
- * de um único estúdio, achados por acaso — ninguém os teria visto.
+ * Este parágrafo já disse "⚠ NÃO RODA SOZINHO", em 26/08/2026, e era falso: eu
+ * procurei a agenda pelo NOME do script em vez de procurar o script dentro das
+ * agendas, não achei, e escrevi a conclusão errada aqui. Ficou no repositório
+ * por pouco tempo e é registrado porque o engano é atraente: unidade não se
+ * chama como o script que ela chama, e `ops/fotonio-cofre.service` está
+ * versionado dizendo o contrário desde sempre.
  *
- * A mentira era pior que a ausência: quem lesse o cabeçalho concluiria que a
- * faxina estava resolvida e não procuraria mais.
+ * Isso importa para quem for mexer no que vem abaixo: este código apaga linha de
+ * banco sozinho, de madrugada, sem ninguém olhando. `scripts/testar-temporizadores.mjs`
+ * agora prende as duas pontas.
  *
  * O PROBLEMA: a linha em `medias` nasce com `pronto = false` para reservar
  * espaço antes do envio começar — sem isso, dois uploads simultâneos furariam a
