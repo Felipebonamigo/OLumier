@@ -19,9 +19,33 @@
 import pg from "pg";
 import { listarObjetos, apagarObjetos, BUCKET } from "../src/lib/r2.ts";
 import { listarArquivos, apagarArquivo, ARQUIVOS_BUCKET, arquivosConfigurado } from "../src/lib/b2.ts";
-import { chavesConhecidas } from "./varrer-orfaos-regras.mjs";
+import { chavesConhecidas, podeApagar } from "./varrer-orfaos-regras.mjs";
 
 const APAGAR = process.argv.includes("--apagar");
+
+/*
+ * O guarda do ambiente, ANTES de qualquer outra coisa.
+ *
+ * Fica aqui em cima de propósito: antes de conectar no banco, antes de listar o
+ * bucket. Recusar depois de listar custaria tempo e chamada paga sem necessidade
+ * — mas o motivo que importa é outro. Quanto mais código roda antes da recusa,
+ * mais fácil é alguém, um dia, mover a checagem para depois do apagamento sem
+ * perceber que a moveu para depois.
+ *
+ * Só vale para `--apagar`: relatar é sempre seguro, e relatar de outro ambiente
+ * é justamente como este problema foi descoberto.
+ *
+ * A regra e o porquê estão em varrer-orfaos-regras.mjs; o teste está em
+ * scripts/testar-varredura.mjs, que confere inclusive esta chamada existir.
+ */
+if (APAGAR) {
+  const veredito = podeApagar({ bucket: BUCKET, databaseUrl: process.env.DATABASE_URL });
+  if (!veredito.pode) {
+    console.error(`✗ --apagar recusado: ${veredito.motivo}`);
+    console.error(`\n  Sem --apagar a varredura roda normalmente e só relata.`);
+    process.exit(1);
+  }
+}
 
 /*
  * Margem de segurança: entre o PUT no bucket e a confirmação no banco existe uma
