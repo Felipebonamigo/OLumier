@@ -12,7 +12,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
-import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
+import { estudioDaRodada, galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { apagarObjetos, listarChaves, objetoExiste, BUCKET } from "../src/lib/r2.ts";
 /*
  * A regra de "quem tem dono" vem do módulo compartilhado, NÃO de uma consulta
@@ -100,7 +100,8 @@ await etapa("um órfão plantado é encontrado pela comparação com o banco", a
   try {
     const doBucket = await listarChaves(marca);
     const conhecidas = await chavesConhecidas(db);
-    const orfaos = doBucket.filter((c) => !conhecidas.has(c));
+    // `doBucket` veio da listagem do R2, então compara contra o conjunto do R2.
+    const orfaos = doBucket.filter((c) => !conhecidas.r2.has(c));
     if (!orfaos.includes(orfao)) throw new Error("a varredura não achou o órfão plantado");
     return `achou ${orfaos.length}`;
   } finally {
@@ -114,7 +115,8 @@ await etapa("arquivo REFERENCIADO pelo banco nunca é tratado como órfão", asy
   if (rows.length === 0) throw new Error("sem mídia no banco para conferir");
   const doBucket = await listarChaves();
   const conhecidas = await chavesConhecidas(db);
-  const orfaos = doBucket.filter((c) => !conhecidas.has(c));
+  // `doBucket` veio da listagem do R2, então compara contra o conjunto do R2.
+  const orfaos = doBucket.filter((c) => !conhecidas.r2.has(c));
   if (orfaos.includes(rows[0].chave)) {
     throw new Error("arquivo em uso foi classificado como órfão — a varredura apagaria foto de cliente");
   }
@@ -239,9 +241,107 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
 await etapa("o bucket está sem órfãos agora", async () => {
   const doBucket = await listarChaves();
   const conhecidas = await chavesConhecidas(db);
-  const orfaos = doBucket.filter((c) => !conhecidas.has(c));
+  // `doBucket` veio da listagem do R2, então compara contra o conjunto do R2.
+  const orfaos = doBucket.filter((c) => !conhecidas.r2.has(c));
   if (orfaos.length) throw new Error(`${orfaos.length} órfão(s): ${orfaos[0]}`);
   return `${doBucket.length} objetos, todos referenciados`;
+});
+
+console.log("\nDois armazéns — o original pode estar no B2, a derivada nunca:\n");
+
+/*
+ * ── POR QUE ESTA SEÇÃO EXISTE ─────────────────────────────────────────────
+ * A varredura listava só o R2 e comparava com um conjunto ÚNICO de chaves
+ * conhecidas, vindo dos dois armazéns misturados. Isso era inofensivo enquanto
+ * ela apagasse apenas o que veio da listagem do R2: chave de B2 no conjunto
+ * ficava inerte. Mas deixava órfão do B2 invisível — arquivo pago que ninguém
+ * referencia e nenhuma ferramenta enxerga.
+ *
+ * O conserto óbvio — separar as conhecidas por `medias.armazem` — é uma
+ * armadilha, e é ela que estas etapas prendem: `armazem` descreve UM dos três
+ * arquivos da linha. O original segue a coluna; `chave_thumb` e `chave_preview`
+ * ficam SEMPRE no R2 (ver `urlDaDerivada` em src/lib/armazem.ts, que lê a
+ * derivada sem passar pelo despachante).
+ *
+ * Separar por linha jogaria as derivadas de toda mídia do B2 no conjunto do B2.
+ * A varredura do R2 deixaria de reconhecê-las, chamaria de órfãs e, com
+ * `--apagar`, removeria miniatura e prévia de todas as galerias servidas do B2.
+ *
+ * E o estrago não apareceria como imagem quebrada: `urlDaDerivada` cai no
+ * `urlDoOriginal` quando a derivada falta. A galeria passaria a servir o
+ * ORIGINAL no lugar da miniatura — 800 fotos de casamento viram 800 downloads
+ * de arquivo cheio, com egresso pago do B2. Fica lenta e cara, não quebrada:
+ * ninguém abre chamado, e a conta chega no fim do mês.
+ */
+await etapa("as chaves conhecidas vêm separadas por armazém", async () => {
+  const c = await chavesConhecidas(db);
+  if (!(c.r2 instanceof Set) || !(c.b2 instanceof Set)) {
+    throw new Error("chavesConhecidas devia devolver { r2, b2 } — veio conjunto único");
+  }
+  return `r2 com ${c.r2.size}, b2 com ${c.b2.size}`;
+});
+
+await etapa("o original de mídia no B2 é conhecido pelo B2, não pelo R2", async () => {
+  const g = await galeriaDaRodada(db, { nome: "no-b2", medias: 1 });
+  const m = g.midias[0];
+  await db.query("update medias set armazem = 'b2' where id = $1", [m.id]);
+
+  const c = await chavesConhecidas(db);
+  if (!c.b2.has(m.chave)) {
+    throw new Error("o original do B2 não está nas conhecidas do B2 — a varredura do B2 o apagaria");
+  }
+  if (c.r2.has(m.chave)) {
+    throw new Error("o original do B2 aparece como conhecido do R2 — protegeria órfão homônimo lá");
+  }
+  return "original só no conjunto do B2";
+});
+
+await etapa("as derivadas de mídia no B2 continuam sendo conhecidas do R2", async () => {
+  /* A etapa mais importante do arquivo: é o caminho da perda silenciosa. */
+  const g = await galeriaDaRodada(db, { nome: "no-b2" });
+  const m = g.midias[0];
+  const { rows } = await db.query(
+    "select chave_thumb, chave_preview, armazem from medias where id = $1",
+    [m.id],
+  );
+  if (rows[0].armazem !== "b2") throw new Error("a bancada não ficou em b2");
+
+  const c = await chavesConhecidas(db);
+  for (const [qual, chave] of [
+    ["miniatura", rows[0].chave_thumb],
+    ["prévia", rows[0].chave_preview],
+  ]) {
+    if (!c.r2.has(chave)) {
+      throw new Error(
+        `a ${qual} de mídia do B2 saiu das conhecidas do R2 — a varredura apagaria e a galeria passaria a servir o original inteiro`,
+      );
+    }
+  }
+  return "miniatura e prévia protegidas no R2";
+});
+
+await etapa("a logo do estúdio continua sendo conhecida do R2", async () => {
+  // Ela não tem linha em `medias` e nunca vai para o B2. Já custou caro uma vez.
+  const t = await estudioDaRodada(db);
+  const logo = `${t.id}/logo-${Date.now()}.png`;
+  await db.query("update tenants set logo_chave = $1 where id = $2", [logo, t.id]);
+  const c = await chavesConhecidas(db);
+  if (!c.r2.has(logo)) throw new Error("a logo sairia como órfã — apagaria a marca do estúdio");
+  return "logo protegida";
+});
+
+await etapa("sem derivada, a leitura degrada para o original em vez de falhar", async () => {
+  /* Documenta o porquê de a etapa acima ser grave. Se um dia alguém trocar este
+   * fallback por erro, esta etapa avisa que o modo de falha mudou — de caro e
+   * silencioso para visível. */
+  const { urlDaDerivada } = await import("../src/lib/armazem.ts");
+  const g = await galeriaDaRodada(db, { nome: "principal" });
+  const m = g.midias[0];
+  const semDerivada = await urlDaDerivada(null, m.chave, "r2");
+  if (!semDerivada) throw new Error("não devolveu URL nenhuma");
+  const comDerivada = await urlDaDerivada(`${m.chave}_thumb.webp`, m.chave, "r2");
+  if (semDerivada === comDerivada) throw new Error("derivada ausente e presente deram a mesma URL");
+  return "cai no original — perda de derivada é cara, não visível";
 });
 
 // A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).

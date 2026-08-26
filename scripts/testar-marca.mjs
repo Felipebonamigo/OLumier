@@ -278,7 +278,8 @@ if (!servidor) {
       );
       if (r3.length === 0) throw new Error("nenhuma logo gravada — o teste não verificou nada");
       for (const l of r3) {
-        if (!conhecidas.has(l.logo_chave)) throw new Error(`logo ${l.logo_chave} seria apagada`);
+        // A logo vive sempre no R2 — nunca vai para o B2.
+        if (!conhecidas.r2.has(l.logo_chave)) throw new Error(`logo ${l.logo_chave} seria apagada`);
       }
       return `${r3.length} logo(s) protegida(s)`;
     });

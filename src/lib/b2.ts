@@ -9,6 +9,7 @@ import {
   UploadPartCommand,
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
+  ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { dispositionSegura } from "./r2";
@@ -139,6 +140,45 @@ export async function arquivoExiste(chave: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/**
+ * Lista o bucket inteiro, em páginas de 1000, com a data de gravação.
+ *
+ * Existe para a varredura de órfãos, e não para o caminho normal do app —
+ * gêmea de `listarObjetos` em `r2.ts`, de propósito e com a mesma forma de
+ * retorno, para o comparador tratar os dois armazéns sem saber qual é qual.
+ *
+ * Até 26/08/2026 ela não existia, e a consequência era invisível: o
+ * `varrer-orfaos.mjs` listava só o R2, então arquivo pago sem dono no B2 não
+ * aparecia em ferramenta nenhuma. O caçador de órfãos tinha o mesmo ponto cego
+ * do `limpar-pendentes.mjs`, que procurava no R2 o arquivo de mídia do B2.
+ *
+ * A DATA não é enfeite, e a razão é a mesma do R2: entre o envio e a
+ * confirmação no banco existe uma janela em que o objeto é, tecnicamente,
+ * órfão. Sem a data, a varredura apagaria o arquivo de quem está enviando
+ * NESTE momento — e aqui isso dói mais, porque o que mora no B2 é o original
+ * grande, o vídeo de casamento que ninguém quer subir duas vezes.
+ */
+export async function listarArquivos(
+  prefixo?: string,
+): Promise<Array<{ chave: string; modificadoEm: Date | null }>> {
+  const objetos: Array<{ chave: string; modificadoEm: Date | null }> = [];
+  let cursor: string | undefined;
+  do {
+    const r = await s3().send(
+      new ListObjectsV2Command({
+        Bucket: ARQUIVOS_BUCKET,
+        Prefix: prefixo,
+        ContinuationToken: cursor,
+      }),
+    );
+    for (const o of r.Contents ?? []) {
+      if (o.Key) objetos.push({ chave: o.Key, modificadoEm: o.LastModified ?? null });
+    }
+    cursor = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (cursor);
+  return objetos;
 }
 
 /**

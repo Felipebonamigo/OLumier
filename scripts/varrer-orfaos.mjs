@@ -18,6 +18,7 @@
  */
 import pg from "pg";
 import { listarObjetos, apagarObjetos, BUCKET } from "../src/lib/r2.ts";
+import { listarArquivos, apagarArquivo, ARQUIVOS_BUCKET, arquivosConfigurado } from "../src/lib/b2.ts";
 import { chavesConhecidas } from "./varrer-orfaos-regras.mjs";
 
 const APAGAR = process.argv.includes("--apagar");
@@ -37,35 +38,69 @@ const IDADE_MINIMA_H = 24;
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-console.log(`bucket: ${BUCKET}\n`);
-
-const doBucket = await listarObjetos();
-console.log(`  objetos no bucket: ${doBucket.length}`);
-
+/*
+ * DOIS ARMAZÉNS, DOIS CONJUNTOS. Cada bucket é comparado contra as chaves
+ * conhecidas DELE — ver `chavesConhecidas` para a razão, que é destrutiva se
+ * ignorada: as derivadas ficam sempre no R2 mesmo quando o original está no B2.
+ *
+ * Enquanto as credenciais `ARQUIVOS_*` não existirem no ambiente, o B2 é pulado
+ * com aviso. Silêncio aqui seria o defeito de novo: "0 órfãos" por não ter
+ * olhado é indistinguível de "0 órfãos" por não haver nenhum.
+ */
 const conhecidas = await chavesConhecidas(db);
-console.log(`  chaves conhecidas pelo banco: ${conhecidas.size}`);
-
 const corte = Date.now() - IDADE_MINIMA_H * 3600 * 1000;
-const candidatos = doBucket.filter((o) => !conhecidas.has(o.chave));
 
-// Sem data conhecida, trata como recente: na dúvida, não apaga.
-const novosDemais = candidatos.filter((o) => !o.modificadoEm || o.modificadoEm.getTime() > corte);
-const orfaos = candidatos.filter((o) => o.modificadoEm && o.modificadoEm.getTime() <= corte);
+const armazens = [
+  { nome: "R2", bucket: BUCKET, listar: listarObjetos, conhecidas: conhecidas.r2, ligado: true },
+  {
+    nome: "B2",
+    bucket: ARQUIVOS_BUCKET,
+    listar: listarArquivos,
+    conhecidas: conhecidas.b2,
+    ligado: arquivosConfigurado,
+  },
+];
 
-if (novosDemais.length > 0) {
-  console.log(
-    `  ${novosDemais.length} sem dono, mas com menos de ${IDADE_MINIMA_H}h — podem ser envios em andamento, preservados`,
-  );
+const orfaos = [];
+let objetosVistos = 0;
+
+for (const a of armazens) {
+  if (!a.ligado) {
+    console.log(`${a.nome}: sem credencial neste ambiente — NÃO conferido`);
+    console.log(`  (órfão no ${a.nome}, se houver, não aparece nesta varredura)\n`);
+    continue;
+  }
+
+  console.log(`${a.nome} — bucket ${a.bucket}`);
+  const doBucket = await a.listar();
+  objetosVistos += doBucket.length;
+  console.log(`  objetos no bucket: ${doBucket.length}`);
+  console.log(`  chaves conhecidas pelo banco: ${a.conhecidas.size}`);
+
+  const candidatos = doBucket.filter((o) => !a.conhecidas.has(o.chave));
+
+  // Sem data conhecida, trata como recente: na dúvida, não apaga.
+  const novosDemais = candidatos.filter((o) => !o.modificadoEm || o.modificadoEm.getTime() > corte);
+  const daqui = candidatos.filter((o) => o.modificadoEm && o.modificadoEm.getTime() <= corte);
+
+  if (novosDemais.length > 0) {
+    console.log(
+      `  ${novosDemais.length} sem dono, mas com menos de ${IDADE_MINIMA_H}h — podem ser envios em andamento, preservados`,
+    );
+  }
+  console.log(`  órfãos: ${daqui.length}\n`);
+
+  for (const o of daqui) orfaos.push({ ...o, armazem: a.nome });
 }
 
 if (orfaos.length === 0) {
-  console.log("\n✓ nenhum órfão — bucket e banco batem\n");
+  console.log(`✓ nenhum órfão — ${objetosVistos} objeto(s) conferido(s), bucket e banco batem\n`);
   await db.end();
   process.exit(0);
 }
 
-console.log(`\n  ⚠ órfãos encontrados: ${orfaos.length}`);
-for (const o of orfaos.slice(0, 20)) console.log(`     ${o.chave}`);
+console.log(`  ⚠ órfãos encontrados: ${orfaos.length}`);
+for (const o of orfaos.slice(0, 20)) console.log(`     [${o.armazem}] ${o.chave}`);
 if (orfaos.length > 20) console.log(`     … e mais ${orfaos.length - 20}`);
 
 if (!APAGAR) {
@@ -80,12 +115,34 @@ if (!APAGAR) {
 // Confere de novo, agora contra o banco lido AGORA: entre a listagem e este
 // ponto alguém pode ter confirmado um upload ou salvo uma logo.
 const conhecidas2 = await chavesConhecidas(db);
-const aindaOrfaos = orfaos.map((o) => o.chave).filter((c) => !conhecidas2.has(c));
+const aindaOrfaos = orfaos.filter((o) =>
+  o.armazem === "B2" ? !conhecidas2.b2.has(o.chave) : !conhecidas2.r2.has(o.chave),
+);
 const salvos = orfaos.length - aindaOrfaos.length;
 if (salvos > 0) console.log(`  (${salvos} deixaram de ser órfãos durante a varredura — preservados)`);
 
-console.log(`\n  apagando ${aindaOrfaos.length}…`);
-await apagarObjetos(aindaOrfaos);
-console.log(`✓ ${aindaOrfaos.length} objeto(s) órfão(s) removidos — deixaram de ser cobrados\n`);
+/* Cada um sai pelo seu armazém. O R2 apaga em lote; o B2 não tem lote nesta
+ * base de código, então vai um a um — e a falha de um não pode interromper os
+ * outros, senão um único objeto problemático deixa a conta inteira de pé. */
+const noR2 = aindaOrfaos.filter((o) => o.armazem === "R2").map((o) => o.chave);
+const noB2 = aindaOrfaos.filter((o) => o.armazem === "B2").map((o) => o.chave);
+
+console.log(`\n  apagando ${aindaOrfaos.length} (${noR2.length} no R2, ${noB2.length} no B2)…`);
+await apagarObjetos(noR2);
+
+let falhasB2 = 0;
+for (const chave of noB2) {
+  try {
+    await apagarArquivo(chave);
+  } catch (e) {
+    falhasB2++;
+    console.error(`  ! não saiu do B2: ${chave} — ${e.message}`);
+  }
+}
+
+const removidos = aindaOrfaos.length - falhasB2;
+console.log(`✓ ${removidos} objeto(s) órfão(s) removidos — deixaram de ser cobrados`);
+if (falhasB2) console.log(`  ${falhasB2} continuam no B2 e continuam sendo cobrados\n`);
+else console.log("");
 
 await db.end();
