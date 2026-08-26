@@ -31,6 +31,15 @@ export interface Tenant {
    * `cicloDe()` antes de usar. Ver migração 018 e `lucroCentavos` em socios.ts.
    */
   ciclo_cobranca: string;
+  /**
+   * Até quando o dinheiro JÁ RECEBIDO cobre o serviço — null se nada foi pago.
+   *
+   * Só o ramo `cancelado` de `situacaoDoTenant` consulta: cancelar para a
+   * renovação, não o acesso. A fonte de verdade da cobrança continua sendo o
+   * Asaas; esta coluna existe para que o cancelamento não engula meses que o
+   * estúdio já pagou. Ver migração 021.
+   */
+  pago_ate: Date | null;
   criado_em: Date;
 }
 

@@ -118,5 +118,45 @@ Cliente paga → Asaas desconta a taxa
                 (é dela que sai a fatura de Cloudflare, Backblaze e VPS)
 ```
 
-Reserva por plano em `RESERVA_POR_PLANO` (`src/config/socios.ts`), com folga
+Reserva por plano em `reservaDoPlano` (`src/config/socios.ts`), calculada do
+espaço contratado e com folga
 proposital: a Cloudflare cobra em dólar e recebemos em real.
+
+## Cancelar para a renovação, não o acesso
+
+O estúdio que cancela **continua enviando até o fim do período que já pagou**.
+Quem paga anual desembolsa doze meses de uma vez; cortar o envio no ato seria
+ficar com dinheiro de serviço não entregue.
+
+A conta mora na coluna `tenants.pago_ate` — "até quando o dinheiro que já
+entrou cobre o serviço". Quem escreve nela:
+
+| Evento | `status` | `pago_ate` |
+|---|---|---|
+| `PAYMENT_CONFIRMED` / `PAYMENT_RECEIVED` | `ativo` | agora + 1 mês (ou + **12** se anual) |
+| `PAYMENT_OVERDUE` | `inadimplente` | intocado |
+| `PAYMENT_DELETED` / `SUBSCRIPTION_DELETED` | `cancelado` | **intocado** — o dinheiro ficou conosco |
+| `PAYMENT_REFUNDED` / `PAYMENT_CHARGEBACK_REQUESTED` | `cancelado` | **null** — o dinheiro voltou |
+| cancelamento pelo painel | `cancelado` | **intocado** |
+
+Três detalhes que não são óbvios:
+
+- **O anual compra 12 meses, não 10.** O desconto está no preço (paga 10, leva
+  12). Se o período seguisse a fatura, todo estúdio anual ficaria dois meses
+  descoberto por ano — e descobriria justamente ao cancelar.
+- **O período conta a partir de agora, não soma.** O Asaas manda
+  `PAYMENT_CONFIRMED` *e* `PAYMENT_RECEIVED` para a mesma cobrança; somar daria
+  dois meses por um pagamento.
+- **Inadimplência não olha `pago_ate`.** É outra régua, e ainda não foi
+  decidida: a cobrança em aberto é a do período seguinte.
+
+Regra em `src/lib/assinatura.ts` (`fimDoPeriodoPago`, `efeitoDoEvento`), coluna
+na migração `021-periodo-pago.sql`, prova em:
+
+```bash
+node --env-file=.env.local --experimental-strip-types --import ./scripts/registrar-ts.mjs scripts/testar-periodo-pago.mjs
+```
+
+**O que ainda NÃO existe:** reembolso proporcional. Quem cancela recebe o
+serviço até o fim do período, não o dinheiro de volta — que é o padrão de
+mercado, mas é uma escolha, não um acidente.

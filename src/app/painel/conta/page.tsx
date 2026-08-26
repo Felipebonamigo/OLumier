@@ -139,6 +139,20 @@ export default async function ContaPage() {
           </p>
         )}
 
+        {/* Pode enviar, mas tem prazo — o caso de quem cancelou no meio de um
+            período já pago. Precisa de linha própria: o bloco acima só desenha
+            dentro de `!podeEnviar`, e um aviso enfiado lá nunca apareceria.
+            Cor de aviso, não de erro: nada está errado, só tem data para
+            acabar. */}
+        {situacaoEnvio.aviso && (
+          <p
+            role="status"
+            className="mt-3 rounded-lg border border-linha bg-void px-3 py-2 text-xs text-texto-soft"
+          >
+            {situacaoEnvio.aviso}
+          </p>
+        )}
+
         {asaasConfigurado() && !asaasEmProducao() && (
           <p className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta">
             Cobrança em modo de teste — nenhum dinheiro é movimentado de verdade.

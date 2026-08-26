@@ -2,11 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { consultar, consultarUm } from "@/lib/db";
 import { eventoEhNosso, tenantDaReferencia } from "@/lib/asaas";
+import { efeitoDoEvento, fimDoPeriodoPago } from "@/lib/assinatura";
 
 /**
  * Webhook do Asaas: é assim que sabemos que o cliente pagou (ou deixou de pagar).
  *
- * Dois cuidados que não são opcionais aqui:
+ * Três cuidados que não são opcionais aqui:
  *
  * 1. A conta do Asaas é COMPARTILHADA com o Atomatiza. Todo evento chega nos dois
  *    webhooks, então filtramos por `externalReference` — evento sem o prefixo
@@ -16,16 +17,12 @@ import { eventoEhNosso, tenantDaReferencia } from "@/lib/asaas";
  * 2. Responder 200 mesmo ao ignorar é proposital: erro faz o Asaas reenviar o
  *    evento em looping e, depois de muitas falhas, ele SUSPENDE a fila da conta
  *    inteira — o que derrubaria a cobrança do Atomatiza junto.
+ *
+ * 3. Cancelar e ESTORNAR não são a mesma coisa, embora os dois terminem a
+ *    assinatura. No cancelamento o dinheiro ficou conosco e o período pago
+ *    continua devido; no estorno ele voltou, e o período é zerado. Os quatro
+ *    eventos moravam no mesmo conjunto até 26/08/2026. Ver `efeitoDoEvento`.
  */
-
-const PAGOU = new Set(["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"]);
-const FALHOU = new Set(["PAYMENT_OVERDUE"]);
-const ACABOU = new Set([
-  "PAYMENT_DELETED",
-  "PAYMENT_REFUNDED",
-  "PAYMENT_CHARGEBACK_REQUESTED",
-  "SUBSCRIPTION_DELETED",
-]);
 
 export async function POST(request: NextRequest) {
   // O Asaas manda um token fixo que você define no painel dele.
@@ -72,22 +69,39 @@ export async function POST(request: NextRequest) {
   }
 
   const tenantId = tenantDaReferencia(referencia!);
-  const tenant = await consultarUm<{ id: string }>("select id from tenants where id = $1", [
-    tenantId,
-  ]);
+  // O ciclo vem junto porque é ele que diz quanto tempo um pagamento compra.
+  const tenant = await consultarUm<{ id: string; ciclo_cobranca: string }>(
+    "select id, ciclo_cobranca from tenants where id = $1",
+    [tenantId],
+  );
   if (!tenant) {
     // Referência nossa mas estúdio inexistente: registra e não quebra.
     console.warn(`[asaas] evento ${evento} para estúdio desconhecido ${tenantId}`);
     return NextResponse.json({ ok: true, ignorado: "estúdio não encontrado" });
   }
 
-  if (PAGOU.has(evento)) {
+  const efeito = efeitoDoEvento(evento);
+
+  if (efeito === "pagou") {
+    /*
+     * O período pago é contado a PARTIR DE AGORA, não somado ao que já havia.
+     *
+     * O Asaas manda PAYMENT_CONFIRMED e PAYMENT_RECEIVED para a mesma cobrança.
+     * Somar daria dois meses por um pagamento — e o erro só apareceria meses
+     * depois, num estúdio com acesso que ninguém pagou. Contar de agora torna o
+     * evento repetido inofensivo: o segundo reescreve o mesmo valor.
+     *
+     * O PREÇO tem desconto anual, o PERÍODO não: doze meses de disco por dez
+     * meses de fatura. Ver `fimDoPeriodoPago`.
+     */
     await consultar(
-      `update tenants set status = 'ativo', trial_ate = null, atualizado_em = now()
+      `update tenants
+          set status = 'ativo', trial_ate = null,
+              ultimo_pagamento_em = now(), pago_ate = $2, atualizado_em = now()
         where id = $1`,
-      [tenantId],
+      [tenantId, fimDoPeriodoPago(tenant.ciclo_cobranca, new Date())],
     );
-  } else if (FALHOU.has(evento)) {
+  } else if (efeito === "atrasou") {
     /*
      * Inadimplente NÃO derruba as galerias no ato: o cliente final do fotógrafo
      * não tem culpa de um boleto atrasado, e tirar as fotos do ar no primeiro
@@ -98,9 +112,19 @@ export async function POST(request: NextRequest) {
       `update tenants set status = 'inadimplente', atualizado_em = now() where id = $1`,
       [tenantId],
     );
-  } else if (ACABOU.has(evento)) {
+  } else if (efeito === "cancelou") {
+    // `pago_ate` fica de pé: o dinheiro do período corrente continua conosco, e
+    // o serviço dele é devido. Ver db/migracoes/021-periodo-pago.sql.
     await consultar(
       `update tenants set status = 'cancelado', atualizado_em = now() where id = $1`,
+      [tenantId],
+    );
+  } else if (efeito === "estornou") {
+    // Aqui o dinheiro VOLTOU. Manter o período seria deixar o disco correndo
+    // por nossa conta para quem pediu reembolso ou abriu chargeback.
+    await consultar(
+      `update tenants set status = 'cancelado', pago_ate = null, atualizado_em = now()
+        where id = $1`,
       [tenantId],
     );
   }

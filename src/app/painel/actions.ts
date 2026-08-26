@@ -19,6 +19,7 @@ import {
   cancelarAssinatura,
 } from "@/lib/asaas";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
+import { situacaoDoTenant } from "@/lib/assinatura";
 import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
 import { lerSite, normalizarInstagram, normalizarWhatsapp } from "@/lib/site-estudio";
 import { MINIMO_SENHA, trocarSenha } from "@/lib/senha";
@@ -460,9 +461,16 @@ export async function trocarPlanoAction(
  * por ninguém — não havia como cancelar pelo painel, só escrevendo para o
  * suporte. Os Termos prometem "cancele quando quiser"; agora é verdade.
  *
- * O conteúdo NÃO é apagado: o estúdio deixa de poder enviar coisa nova, e o que
- * já foi entregue continua no ar. Apagar foto de casamento por causa de um
- * cancelamento seria punir o casal por uma decisão do fotógrafo.
+ * Cancelar para a RENOVAÇÃO, não o acesso. O UPDATE abaixo NÃO toca em
+ * `pago_ate` de propósito: quem pagou doze meses e cancela no segundo continua
+ * enviando até o fim do período, porque o dinheiro daqueles dez meses ficou
+ * conosco. Até 26/08/2026 o envio parava no mesmo instante — dinheiro recebido,
+ * serviço não entregue. `scripts/testar-periodo-pago.mjs` vigia essa linha.
+ *
+ * O conteúdo NÃO é apagado: o estúdio deixa de poder enviar coisa nova quando o
+ * período acaba, e o que já foi entregue continua no ar. Apagar foto de
+ * casamento por causa de um cancelamento seria punir o casal por uma decisão do
+ * fotógrafo.
  */
 export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: string } | void> {
   const tenantId = await exigirTenant();
@@ -491,11 +499,25 @@ export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: 
     acao: ACOES.ASSINATURA_CANCELADA,
     alvoTipo: "conta",
     alvoId: tenantId,
-    detalhe: { plano: tenant.plano_id, assinaturaAsaas: tenant.asaas_assinatura_id },
+    detalhe: {
+      plano: tenant.plano_id,
+      assinaturaAsaas: tenant.asaas_assinatura_id,
+      /* Guardado porque é a resposta de uma reclamação previsível — "cancelei e
+       * fui cortado na hora". Sem isto, o banco depois só mostra o status. */
+      periodoPagoAte: tenant.pago_ate,
+    },
     ip: await ipDaRequisicao(),
   });
 
   revalidatePath("/painel/conta");
+
+  /* O recado diz até quando, e a data vem do banco, não de uma promessa: quem
+   * cancelou no meio de um anual precisa saber que os meses pagos não sumiram. */
+  const restante = situacaoDoTenant(
+    { status: "cancelado", trial_ate: null, pago_ate: tenant.pago_ate },
+    true,
+  );
+  if (restante.aviso) return { ok: restante.aviso };
   return { ok: "Assinatura cancelada. Suas galerias publicadas continuam no ar." };
 }
 

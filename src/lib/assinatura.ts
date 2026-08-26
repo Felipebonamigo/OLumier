@@ -6,7 +6,7 @@
  * nem configurar chave — e a dependência fica explícita em vez de escondida
  * num import.
  *
- * Duas decisões que valem explicar, porque não são óbvias:
+ * Três decisões que valem explicar, porque não são óbvias:
  *
  * 1. O portão só existe quando a cobrança está ligada. Enquanto o Asaas está
  *    adormecido, ninguém tem como pagar — travar a conta seria punir a pessoa
@@ -16,6 +16,8 @@
  *    recebeu a galeria não deve nada a ninguém, e derrubar as fotos do casamento
  *    dele para cobrar o fotógrafo seria pegar o refém errado. A pressão certa é
  *    o fotógrafo não conseguir entregar o PRÓXIMO trabalho.
+ *
+ * 3. Cancelar para a RENOVAÇÃO, não o acesso. Ver `pago_ate` mais abaixo.
  *
  * O trial só vale enquanto não venceu; depois disso é preciso assinar.
  */
@@ -27,6 +29,14 @@ export interface Situacao {
   motivo?: MotivoBloqueio;
   /** Texto pronto para a pessoa — sempre diz o que fazer, não só o que houve. */
   recado?: string;
+  /**
+   * Recado de quem PODE enviar mas tem prazo. Campo separado de `recado` de
+   * propósito: as duas telas que consultam esta regra desenham o recado dentro
+   * de `if (!podeEnviar)`, então um aviso enfiado ali nunca apareceria — e o
+   * estúdio cancelado descobriria o fim do período no dia em que o upload
+   * parasse.
+   */
+  aviso?: string;
 }
 
 const RECADOS: Record<MotivoBloqueio, string> = {
@@ -42,6 +52,26 @@ const RECADOS: Record<MotivoBloqueio, string> = {
 export interface ContaParaAvaliar {
   status: string;
   trial_ate: Date | string | null;
+  /**
+   * Até quando o dinheiro que JÁ ENTROU cobre o serviço. `null` = nada pago
+   * ainda (trial, ou assinatura que nunca chegou a ser cobrada).
+   */
+  pago_ate?: Date | string | null;
+}
+
+/** Data em dd/mm/aaaa com dois dígitos sempre — o dia 1 não pode virar "1/9". */
+function porExtenso(data: Date): string {
+  return data.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function comoData(valor: Date | string | null | undefined): Date | null {
+  if (!valor) return null;
+  const d = valor instanceof Date ? valor : new Date(valor);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boolean): Situacao {
@@ -57,13 +87,96 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
   }
 
   if (tenant.status === "inadimplente") {
+    /*
+     * O período pago NÃO vale aqui, e é de propósito. Inadimplência é a régua
+     * da cobrança em aberto — que é justamente a do período A SEGUIR —, e essa
+     * régua ninguém desenhou ainda. Misturar as duas faria o conserto do
+     * cancelamento decidir, de carona, uma política de atraso que não foi
+     * discutida.
+     */
     return { podeEnviar: false, motivo: "inadimplente", recado: RECADOS.inadimplente };
   }
+
   if (tenant.status === "cancelado") {
+    /*
+     * Cancelar para a RENOVAÇÃO, não o acesso.
+     *
+     * Até 26/08/2026 este ramo recusava na hora. No mensal ninguém notava — o
+     * mês cobrado já tinha sido usado. No anual o estrago era claro: o estúdio
+     * pagava doze meses de uma vez e, cancelando no segundo, perdia dez meses
+     * que estavam pagos. Dinheiro recebido, serviço não entregue.
+     */
+    const fim = comoData(tenant.pago_ate);
+    if (fim && fim.getTime() > Date.now()) {
+      return {
+        podeEnviar: true,
+        aviso: `Assinatura cancelada. Você continua enviando arquivos até ${porExtenso(fim)}, que é o fim do período já pago. Depois disso as galerias publicadas seguem no ar, mas o envio para.`,
+      };
+    }
     return { podeEnviar: false, motivo: "cancelado", recado: RECADOS.cancelado };
   }
 
   // Status desconhecido: liberar. Um bug de digitação numa coluna de texto não
   // pode virar bloqueio silencioso de quem está pagando em dia.
   return { podeEnviar: true };
+}
+
+// --- período pago ---------------------------------------------------------
+
+/**
+ * Até quando um pagamento cobre o serviço.
+ *
+ * O anual compra DOZE meses, não os dez que a fatura cobra: o desconto está no
+ * preço (paga 10, leva 12 — ver `MESES_PAGOS_NO_ANO` em src/config/planos.ts).
+ * Se o período seguisse a fatura, todo estúdio anual ficaria dois meses sem
+ * cobertura por ano, e descobriria exatamente ao cancelar.
+ *
+ * Ciclo que não reconhecemos cai em mensal. Errar para o lado curto custa dias
+ * de acesso; errar para o longo custa um ano de disco pago do bolso.
+ *
+ * Sobre a aritmética de mês: 31/01 + 1 mês cai em 03/03, porque fevereiro é
+ * curto. São dois dias a mais para o estúdio, uma vez por ano, e trocar isso
+ * por uma conta de calendário à mão não paga o próprio custo de leitura.
+ */
+export function fimDoPeriodoPago(ciclo: string | null | undefined, pagoEm: Date): Date {
+  const meses = ciclo === "anual" ? 12 : 1;
+  const fim = new Date(pagoEm.getTime());
+  fim.setMonth(fim.getMonth() + meses);
+  return fim;
+}
+
+/**
+ * O que cada evento do Asaas faz com a conta.
+ *
+ * Mora aqui, e não na rota, por causa de UMA distinção que é fácil perder de
+ * vista: "cancelou" e "estornou" acabavam no mesmo conjunto, e passaram a ter
+ * efeitos opostos sobre o período pago.
+ *
+ *   cancelou → o dinheiro FICOU conosco  → o período pago continua de pé
+ *   estornou → o dinheiro VOLTOU         → o período pago é zerado
+ *
+ * Juntos, um chargeback devolveria o dinheiro ao cliente e deixaria o acesso
+ * pago no ar — com o disco correndo por nossa conta. Separados, a regra é
+ * testável sem servidor e sem chave do Asaas.
+ */
+export type EfeitoDoEvento = "pagou" | "atrasou" | "cancelou" | "estornou";
+
+const EFEITOS: Record<string, EfeitoDoEvento> = {
+  // O Asaas manda os dois para a MESMA cobrança. Por isso o período conta a
+  // partir do momento do evento em vez de somar ao que já havia: dois avisos
+  // do mesmo pagamento não podem valer dois meses.
+  PAYMENT_CONFIRMED: "pagou",
+  PAYMENT_RECEIVED: "pagou",
+
+  PAYMENT_OVERDUE: "atrasou",
+
+  PAYMENT_DELETED: "cancelou",
+  SUBSCRIPTION_DELETED: "cancelou",
+
+  PAYMENT_REFUNDED: "estornou",
+  PAYMENT_CHARGEBACK_REQUESTED: "estornou",
+};
+
+export function efeitoDoEvento(evento: string): EfeitoDoEvento | null {
+  return EFEITOS[evento] ?? null;
 }
