@@ -10,6 +10,51 @@
  * As que precisam do servidor de desenvolvimento no ar são marcadas: sem ele,
  * o resultado é "pulado" em vez de vermelho, para não confundir "não rodou"
  * com "quebrou".
+ *
+ * ── SE VOCÊ ESTÁ ESCREVENDO UM TESTE, LEIA ISTO ───────────────────────────
+ *
+ * **Crie a sua própria galeria. Não pegue a primeira que aparecer.**
+ *
+ * O atalho natural é este, e em 26/08/2026 ele estava em 20 dos 47 arquivos:
+ *
+ *     select ... from galerias where estado = 'online' order by criado_em limit 1
+ *
+ * Todos caem na MESMA linha. E dois testes limpam a bancada inteira dela:
+ *
+ *     testar-favoritas.mjs   delete from favoritas where galeria_id = $1
+ *     testar-selecao.mjs     delete from favoritas where galeria_id = $1
+ *
+ * Numa rodada sequencial eles não se cruzam. Basta um segundo `npm test` no
+ * mesmo banco — outra sessão, outro terminal, um portão de deploy — para um
+ * apagar o que o outro acabou de criar.
+ *
+ * O sintoma é reconhecível e engana: **o vermelho muda de arquivo a cada
+ * rodada**. Vermelho que anda é ambiente, nunca código. Se você está depurando
+ * um teste que falha em lugar diferente cada vez, pare de olhar o seu código.
+ *
+ * O custo real não é o tempo perdido. Em 26/08/2026 isso reprovou um deploy
+ * fazendo o passo "a favorita sobreviveu" acusar PERDA DE DADO que o produto
+ * não tinha. Falso positivo em teste de perda de dado custa duas vezes: o
+ * deploy, e a confiança em quem grita — no dia em que a perda for real, aquele
+ * vermelho já vai ter virado ruído aceito.
+ *
+ * O molde (ver `testar-republicar.mjs` e `testar-derivadas-formato.mjs`):
+ *
+ *     const { rows: [galeria] } = await db.query(
+ *       `insert into galerias (tenant_id, slug, titulo, estado, publicada)
+ *             values ($1, $2, 'Meu teste', 'online', false)
+ *          returning id, tenant_id`,
+ *       [tenantId, `meu-teste-${Date.now()}`],
+ *     );
+ *
+ * E na limpeza, **a ORDEM importa**:
+ *
+ *     1º  a mídia, pelo DELETE da API   → tira os objetos do bucket
+ *     2º  a linha da galeria
+ *
+ * Ao contrário, a cascata do banco leva a linha da mídia e deixa o objeto pago
+ * no bucket — órfão que ninguém mais consegue relacionar a nada, e que só
+ * aparece na fatura. É o que `varrer-orfaos.mjs` sai caçando depois.
  */
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
