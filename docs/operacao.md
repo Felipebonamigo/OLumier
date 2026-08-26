@@ -136,9 +136,18 @@ node --env-file=.env.local --experimental-strip-types \
      --import ./scripts/registrar-ts.mjs scripts/ponto-de-equilibrio.mjs
 ```
 
-Imprime o custo fixo do mês (DAS-MEI, VPS, domínio), a margem de cada faixa com
-IOF e câmbio inclusos, e quantos clientes fecham a conta — em duas ocupações,
-100% e 50%.
+Imprime **custo total × preço × lucro** de cada faixa, em duas ocupações (100% e
+50%), mais uma tabela de como o lucro se move conforme a carteira cresce.
+
+`--clientes=N` troca quantos clientes a tabela assume (padrão 10). O número
+importa porque é ele que dilui o custo fixo: a fatia de um cliente só é
+R$ 129,33, a de vinte é R$ 6,47 — **não existe "custo total" sem dizer quantos
+clientes há**, e é exatamente por isso que o custo fixo não pode morar em
+`planos.ts`.
+
+Prejuízo sai com sinal negativo, sem travar em zero. É de propósito: um cliente
+só de 100 GB perde R$ 88,22 no mês, e "R$ 0,00" numa tabela de decisão lê-se
+como empate.
 
 **Dois números que o relatório mostra e que valem entender:**
 

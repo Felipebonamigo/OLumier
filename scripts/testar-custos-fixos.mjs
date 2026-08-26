@@ -23,6 +23,8 @@ import {
   custoFixoMensalCentavos,
   custosPorConfirmar,
   custoVariavelRealCentavos,
+  custoTotalPorClienteCentavos,
+  lucroTotalPorClienteCentavos,
   margemPorClienteCentavos,
   clientesParaEquilibrio,
 } from "../src/config/custos-fixos.ts";
@@ -159,6 +161,75 @@ await etapa("margem negativa devolve null, não número negativo", () => {
   );
   if (n !== null) throw new Error(`esperava null, veio ${n} (preço de R$ 0,01)`);
   return `${impossivel.nome} a R$ 0,01 não fecha, e diz isso`;
+});
+
+console.log("\ncusto TOTAL por cliente");
+
+/*
+ * O custo total é o variável mais a FATIA do custo fixo — e a fatia depende de
+ * quantos clientes existem. Sem essa divisão, "custo total" não tem valor
+ * único, e é exatamente por isso que o custo fixo não pode morar em
+ * `planos.ts`: lá não há como saber quantos clientes há.
+ */
+await etapa("custo total é o variável mais a fatia do custo fixo", () => {
+  const m = { segmento: "foto", espacoGb: 1000 };
+  for (const clientes of [1, 4, 25]) {
+    const total = custoTotalPorClienteCentavos(m, { clientes });
+    const esperado = custoVariavelRealCentavos(m) + custoFixoMensalCentavos() / clientes;
+    if (Math.abs(total - esperado) > 1) {
+      throw new Error(`${clientes} clientes: esperava ${esperado.toFixed(0)}, veio ${total.toFixed(0)}`);
+    }
+  }
+  return "confere em 1, 4 e 25 clientes";
+});
+
+await etapa("mais clientes diluem o custo fixo", () => {
+  const m = { segmento: "foto", espacoGb: 1000 };
+  let anterior = Infinity;
+  for (const clientes of [1, 2, 5, 10, 50]) {
+    const total = custoTotalPorClienteCentavos(m, { clientes });
+    if (total >= anterior) throw new Error(`${clientes} clientes não baratearam o custo`);
+    anterior = total;
+  }
+  /* Nunca abaixo do variável: o custo fixo dilui, não desaparece. */
+  const limite = custoVariavelRealCentavos(m);
+  if (custoTotalPorClienteCentavos(m, { clientes: 1e6 }) <= limite) {
+    throw new Error("o custo total caiu abaixo do variável — a fatia fixa virou negativa?");
+  }
+});
+
+/*
+ * PREJUÍZO TEM DE APARECER COMO PREJUÍZO.
+ *
+ * Um cliente só de 100 GB rende R$ 41,11 e a operação custa R$ 129,33: o mês
+ * fecha no vermelho. `lucroCentavos` em `socios.ts` trava em zero de propósito
+ * (lá o número vira repasse, e repasse negativo não existe), mas AQUI travar
+ * seria mentir numa tabela de decisão — "lucro R$ 0,00" lê-se como empate.
+ */
+await etapa("lucro negativo sai negativo, não travado em zero", () => {
+  const lucro = lucroTotalPorClienteCentavos({ segmento: "foto", espacoGb: 100 }, { clientes: 1 });
+  if (lucro >= 0) throw new Error(`um cliente de 100 GB deveria dar prejuízo, veio ${lucro}`);
+  return `R$ ${(lucro / 100).toFixed(2)} com um cliente só`;
+});
+
+/*
+ * A ponte entre as duas contas: no número de clientes que `clientesParaEquilibrio`
+ * devolve, o lucro por cliente tem de ter virado positivo — e um cliente a menos
+ * ainda tem de estar no vermelho. Se as duas funções discordarem, uma delas está
+ * errada, e é dinheiro.
+ */
+await etapa("o equilíbrio bate com o lucro por cliente", () => {
+  for (const e of ESPACOS) {
+    const m = { segmento: "foto", espacoGb: e.gb };
+    const n = clientesParaEquilibrio(m);
+    if (lucroTotalPorClienteCentavos(m, { clientes: n }) < 0) {
+      throw new Error(`${e.gb} GB: ainda no vermelho com ${n} clientes`);
+    }
+    if (n > 1 && lucroTotalPorClienteCentavos(m, { clientes: n - 1 }) >= 0) {
+      throw new Error(`${e.gb} GB: ${n - 1} clientes já bastariam — o equilíbrio está alto`);
+    }
+  }
+  return `${ESPACOS.length} faixas conferidas nos dois lados`;
 });
 
 console.log(falhou ? "\n✗ a conta de custos fixos tem problema\n" : "\n✓ custos fixos ok\n");

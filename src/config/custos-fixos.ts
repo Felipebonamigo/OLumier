@@ -151,23 +151,77 @@ export function clientesParaEquilibrio(
   return Math.ceil(custoFixoMensalCentavos() / margem);
 }
 
+// --- custo TOTAL: o variável mais a fatia do custo fixo -----------------------
+
+export interface Cenario {
+  /** Quantos clientes pagantes existem — é o que dilui o custo fixo. */
+  clientes: number;
+  ocupacao?: number;
+  precoCentavos?: number;
+}
+
+/**
+ * Custo TOTAL de um cliente, em centavos por mês.
+ *
+ * Variável (armazenamento + IOF + câmbio + taxa da cobrança) mais a fatia do
+ * custo fixo que cabe a ele: `custoFixoMensal / clientes`.
+ *
+ * Não existe "custo total" sem dizer quantos clientes há — a fatia fixa de um
+ * cliente só é R$ 129,33, e a de vinte é R$ 6,47. É essa dependência que
+ * impede o custo fixo de morar em `planos.ts`: lá não há como saber o número.
+ */
+export function custoTotalPorClienteCentavos(m: Montagem, cenario: Cenario): number {
+  if (!Number.isInteger(cenario.clientes) || cenario.clientes < 1) {
+    throw new Error(`clientes precisa ser inteiro >= 1, veio ${cenario.clientes}`);
+  }
+  return (
+    custoVariavelRealCentavos(m, cenario.ocupacao ?? 1) +
+    custoFixoMensalCentavos() / cenario.clientes
+  );
+}
+
+/**
+ * Lucro por cliente depois de TUDO, em centavos por mês.
+ *
+ * **Sai negativo quando dá prejuízo, de propósito.** `lucroCentavos` em
+ * `socios.ts` trava em zero porque lá o número vira repasse, e repasse negativo
+ * não existe. Aqui travar seria mentir numa tabela de decisão: "lucro R$ 0,00"
+ * lê-se como empate, e um cliente só de 100 GB não empata — perde R$ 88,22.
+ */
+export function lucroTotalPorClienteCentavos(m: Montagem, cenario: Cenario): number {
+  const preco = cenario.precoCentavos ?? montar(m).precoCentavos;
+  return preco - custoTotalPorClienteCentavos(m, cenario);
+}
+
 /** Uma linha do relatório, por faixa da grade. */
 export interface LinhaEquilibrio {
   gb: number;
   precoCentavos: number;
   custoVariavelCentavos: number;
-  margemCentavos: number;
+  /** A fatia do custo fixo, já dividida pelo número de clientes do cenário. */
+  fatiaFixaCentavos: number;
+  custoTotalCentavos: number;
+  lucroCentavos: number;
+  /** Lucro sobre o preço. Negativo quando o mês fecha no vermelho. */
+  margemPct: number;
+  /** Quantos clientes daquela faixa fechariam a conta. */
   clientes: number | null;
 }
 
-export function tabelaDeEquilibrio(ocupacao = 1): LinhaEquilibrio[] {
+export function tabelaDeEquilibrio(clientes: number, ocupacao = 1): LinhaEquilibrio[] {
   return ESPACOS.map((e) => {
     const m: Montagem = { segmento: "foto", espacoGb: e.gb };
+    const cenario: Cenario = { clientes, ocupacao };
+    const total = custoTotalPorClienteCentavos(m, cenario);
+    const lucro = lucroTotalPorClienteCentavos(m, cenario);
     return {
       gb: e.gb,
       precoCentavos: e.precoCentavos,
       custoVariavelCentavos: Math.round(custoVariavelRealCentavos(m, ocupacao)),
-      margemCentavos: Math.round(margemPorClienteCentavos(m, { ocupacao })),
+      fatiaFixaCentavos: Math.round(custoFixoMensalCentavos() / clientes),
+      custoTotalCentavos: Math.round(total),
+      lucroCentavos: Math.round(lucro),
+      margemPct: (lucro / e.precoCentavos) * 100,
       clientes: clientesParaEquilibrio(m, { ocupacao }),
     };
   });
