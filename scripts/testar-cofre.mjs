@@ -100,6 +100,36 @@ await etapa("o link avisa que está no cofre, sem dar erro", async () => {
   return "página explicativa, HTTP 200";
 });
 
+await etapa("o painel não chama de publicada uma galeria que está no cofre", async () => {
+  /* O selo lia `galeria.publicada`, e o cofre mora em `galeria.estado`. As duas
+   * colunas não se contradizem por acaso: arquivar de propósito NÃO mexe em
+   * `publicada`, para que reativar devolva a galeria ao ar sem o fotógrafo ter
+   * de republicar. O preço disso era a mesma tela dizer "publicada" em cima e
+   * "No cofre" embaixo — e quem bate o olho lê o de cima e acha que o link do
+   * casal está funcionando. */
+  const { rows: t } = await db.query("select tenant_id from galerias where id = $1", [galeriaId]);
+  const cookie = cookieDeSessao(t[0].tenant_id);
+  const r = await fetch(`${BASE}/painel/galerias/${galeriaId}`, {
+    headers: { cookie },
+    cache: "no-store",
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status} no painel da galeria`);
+  const html = await r.text();
+
+  /* Só o selo interessa, não a página inteira: a palavra "publicada" aparece em
+   * texto de ajuda ("enquanto não estiver publicada…") sem mentir sobre nada. */
+  const selo = html.match(/rounded-full border px-3 py-1 text-xs[^>]*>([^<]+)</);
+  if (!selo) throw new Error("não achei o selo de estado no cabeçalho da galeria");
+  const dito = selo[1].trim();
+  if (dito === "publicada") {
+    throw new Error(
+      `a galeria está no cofre e o selo diz "publicada" — o link do cliente não abre, ` +
+        `e a tela afirma que abre`,
+    );
+  }
+  return `selo diz "${dito}"`;
+});
+
 await etapa("enviar arquivo para galeria no cofre é recusado", async () => {
   const { rows: t } = await db.query(
     "select tenant_id from galerias where id = $1",

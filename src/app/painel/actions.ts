@@ -154,12 +154,21 @@ export async function definirCapaAction(form: FormData) {
 
 // --- capítulos --------------------------------------------------------------
 
-export async function criarSecaoAction(form: FormData) {
+export async function criarSecaoAction(form: FormData): Promise<{ erro?: string }> {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");
   const nome = String(form.get("nome") ?? "");
-  await criarSecao(galeriaId, tenantId, nome);
+  const criada = await criarSecao(galeriaId, tenantId, nome);
   revalidatePath(`/painel/galerias/${galeriaId}`);
+
+  /* `criarSecao` devolve null quando o nome está vazio ou já existe (ver
+   * lib/secoes.ts). Sem esta mensagem a recusa é MUDA: o campo limpa, nada
+   * aparece na lista, e o fotógrafo fica clicando achando que travou. Recusar em
+   * silêncio é o defeito que a checagem de repetido teria criado. */
+  if (!criada && nome.trim()) {
+    return { erro: `Já existe um capítulo chamado “${nome.trim()}”.` };
+  }
+  return {};
 }
 
 /** Cria os capítulos sugeridos de uma vez — a estrutura típica de um casamento. */

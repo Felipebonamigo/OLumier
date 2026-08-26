@@ -42,6 +42,25 @@ export async function criarSecao(galeriaId: string, tenantId: string, nome: stri
   const limpo = nome.trim().slice(0, 60);
   if (!limpo) return null;
 
+  /*
+   * Capítulo repetido é recusado — e "Making Of" x "making of" contam como o
+   * mesmo. Para qualquer pessoa eles SÃO o mesmo, e quem paga o preço da
+   * distinção não é o fotógrafo: é o casal, que abre o menu da galeria, vê duas
+   * entradas de nome idêntico e encontra as fotos partidas entre as duas.
+   *
+   * `lower()` nos dois lados em vez de `citext` ou índice único: a comparação
+   * mora ao lado da inserção, onde quem lê o código a encontra. Uma migração de
+   * tipo para uma regra desta altura seria subir dois degraus a mais da escada.
+   *
+   * O `null` de volta é o mesmo que o de nome vazio — o chamador já trata.
+   * `scripts/testar-secoes.mjs` prende os dois casos.
+   */
+  const repetido = await consultarUm<{ id: string }>(
+    "select id from secoes where galeria_id = $1 and lower(nome) = lower($2) limit 1",
+    [galeriaId, limpo],
+  );
+  if (repetido) return null;
+
   const prox = await consultarUm<{ n: number }>(
     "select coalesce(max(ordem), -1) + 1 as n from secoes where galeria_id = $1",
     [galeriaId],

@@ -469,7 +469,18 @@ export function GaleriaCliente({
                 onClick={() => alternarFavorita(it.id, ehFavorita)}
                 aria-pressed={ehFavorita}
                 aria-label={ehFavorita ? `Desmarcar ${it.nome}` : `Marcar ${it.nome} como favorita`}
-                className={`absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full backdrop-blur transition
+                /* 44px no toque, 36px no mouse.
+                 *
+                 * O dedo não mira: 36px é menor que o mínimo de alvo que a
+                 * Apple e o WCAG pedem, e este é o botão que o convidado mais
+                 * usa — errar aqui abre a foto em tela cheia em vez de
+                 * favoritar, que é o engano mais irritante possível no meio de
+                 * uma galeria de casamento.
+                 *
+                 * Cresce só abaixo de 900px, que é a mesma fronteira que este
+                 * arquivo já usa para decidir que não há hover. No desktop o
+                 * ponteiro é preciso e o círculo menor pesa menos sobre a foto. */
+                className={`absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full backdrop-blur transition max-[900px]:h-11 max-[900px]:w-11
                   ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}`}
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 55%, transparent)",

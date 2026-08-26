@@ -164,5 +164,70 @@ for (const tema of ["claro", "escuro"]) {
   }
 }
 
+/*
+ * O script do tema roda antes da primeira pintura — mas SÓ se estiver dentro do
+ * <head>. Solto entre <html> e <body> ele ainda executa, e por isso o defeito
+ * passou despercebido: o tema aplicava certo e nada parecia errado.
+ *
+ * O que quebrava era a hidratação. O React reclamava em toda página
+ * ("In HTML, <script> cannot be a child of <html>") e, ao encontrar o
+ * `data-js` que o script tinha acabado de escrever, tratava como divergência de
+ * atributo e refazia a árvore no cliente. Custo invisível em toda visita.
+ *
+ * Ver node_modules/next/dist/docs/01-app/02-guides/preventing-flash-before-hydration.md,
+ * que traz exatamente este caso: <head> em volta, e `suppressHydrationWarning`
+ * no <html> porque é o próprio script que muda os atributos da raiz.
+ */
+const BASE = process.env.BASE_URL ?? "http://localhost:3040";
+
+console.log("\no script do tema está no lugar certo");
+try {
+  const r = await fetch(BASE, { headers: { connection: "close" } });
+  if (!r.ok) throw new Error(`HTTP ${r.status} — o servidor de desenvolvimento está no ar?`);
+  const html = await r.text();
+
+  const fimDaCabeca = html.indexOf("</head>");
+  const posScript = html.indexOf("document.documentElement.dataset.js");
+
+  if (posScript === -1) {
+    falhou = true;
+    console.log("  ✗ o script de arranque sumiu da página");
+  } else if (fimDaCabeca === -1) {
+    falhou = true;
+    console.log("  ✗ a página não tem </head>");
+  } else if (posScript > fimDaCabeca) {
+    falhou = true;
+    console.log(
+      "  ✗ o script está FORA do <head> — o React trata como erro de hidratação " +
+        "em toda página e refaz a árvore no cliente",
+    );
+  } else {
+    console.log("  ✓ dentro do <head>, antes do primeiro pixel");
+  }
+
+  const tagHtml = html.slice(html.indexOf("<html"), html.indexOf(">", html.indexOf("<html")) + 1);
+  if (!/suppresshydrationwarning|data-tema|suppressHydrationWarning/i.test(tagHtml)) {
+    /* O atributo não aparece no HTML servido — ele é instrução para o React, não
+     * marcação. Confere na fonte, que é onde ele existe. */
+    const layout = readFileSync(path.join(RAIZ, "src/app/layout.tsx"), "utf8");
+    /* `<html` seguido de ESPAÇO: a tag de verdade tem atributos, e os comentários
+     * do arquivo citam "<html>" fechado sem espaço. Procurar só por "<html"
+     * casava com o comentário e media a coisa errada. */
+    const raiz = layout.match(/<html\s+[^>]*>/)?.[0] ?? "";
+    if (!raiz.includes("suppressHydrationWarning")) {
+      falhou = true;
+      console.log(
+        "  ✗ falta `suppressHydrationWarning` no <html> — o script escreve data-js " +
+          "e data-tema na raiz, e sem isso o React acusa divergência de atributo",
+      );
+    } else {
+      console.log("  ✓ o <html> avisa o React que os atributos da raiz mudam antes dele");
+    }
+  }
+} catch (e) {
+  falhou = true;
+  console.log(`  ✗ não consegui conferir — ${e.message}`);
+}
+
 console.log(falhou ? "\n✗ tema com problema" : "\n✓ tema ok");
-process.exit(falhou ? 1 : 0);
+process.exitCode = falhou ? 1 : 0;

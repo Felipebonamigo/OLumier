@@ -111,13 +111,36 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
           dataISO={dataISO}
           dataFormatada={dataEvento}
         />
-        <span
-          className={`rounded-full border px-3 py-1 text-xs ${
-            galeria.publicada ? "border-ok/40 bg-ok/10 text-ok" : "border-linha text-texto-faint"
-          }`}
-        >
-          {galeria.publicada ? "publicada" : "rascunho"}
-        </span>
+        {/*
+          O selo responde UMA pergunta: o link do cliente abre agora?
+
+          São três estados, não dois, e o terceiro é fácil de perder: no cofre,
+          `publicada` continua true de propósito — é isso que faz reativar
+          devolver a galeria ao ar sem o fotógrafo republicar. Ler só `publicada`
+          fazia a mesma tela dizer "publicada" em cima e "No cofre" embaixo, e
+          quem bate o olho lê o de cima.
+
+          `estado` vem antes de `publicada` porque o cofre vence a publicação:
+          arquivada com `publicada` true tem o link fora do ar do mesmo jeito.
+          `scripts/testar-cofre.mjs` prende isto.
+        */}
+        {(() => {
+          const noCofre = galeria.estado === "arquivada";
+          const noAr = !noCofre && galeria.publicada;
+          return (
+            <span
+              className={`rounded-full border px-3 py-1 text-xs ${
+                noAr
+                  ? "border-ok/40 bg-ok/10 text-ok"
+                  : noCofre
+                    ? "border-acento/40 bg-acento/10 text-acento-alto"
+                    : "border-linha text-texto-faint"
+              }`}
+            >
+              {noAr ? "publicada" : noCofre ? "no cofre" : "rascunho"}
+            </span>
+          );
+        })()}
       </header>
 
       {heicSemPrevia > 0 && (

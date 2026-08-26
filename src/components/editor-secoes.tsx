@@ -32,17 +32,25 @@ export function EditorSecoes({
   semCapitulo: number;
 }) {
   const [novo, setNovo] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
   const [nomeEditado, setNomeEditado] = useState("");
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
 
-  const executar = (acao: (f: FormData) => Promise<void>, campos: Record<string, string>) =>
+  /* Uma ação pode devolver `{ erro }` — hoje só a de criar, quando o nome já
+   * existe. As outras devolvem void e caem no `?.erro` como undefined, então
+   * nenhuma delas precisou mudar de assinatura por causa desta. */
+  const executar = (
+    acao: (f: FormData) => Promise<{ erro?: string } | void>,
+    campos: Record<string, string>,
+  ) =>
     iniciar(async () => {
       const f = new FormData();
       f.set("galeria_id", galeriaId);
       for (const [k, v] of Object.entries(campos)) f.set(k, v);
-      await acao(f);
+      const r = await acao(f);
+      setErro(r?.erro ?? null);
       router.refresh();
     });
 
@@ -201,6 +209,13 @@ export function EditorSecoes({
           Adicionar
         </button>
       </div>
+
+      {/* Logo abaixo do campo, que é onde o olho está depois de clicar. */}
+      {erro && (
+        <p role="alert" className="mt-2 text-xs text-alerta">
+          {erro}
+        </p>
+      )}
     </section>
   );
 }

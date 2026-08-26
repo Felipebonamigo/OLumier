@@ -8,6 +8,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { criarSecao } from "../src/lib/secoes.ts";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -58,6 +59,29 @@ await etapa("cria capítulos em ordem", async () => {
   );
   [capA, capB] = r.rows;
   return `${r.rows.map((s) => s.nome).join(" · ")}`;
+});
+
+await etapa("capítulo repetido é recusado, mesmo trocando maiúscula", async () => {
+  /* "Making Of" e "Making of" são o mesmo capítulo para qualquer humano, e o
+   * banco os aceitava como dois. O estrago não é no painel — é no menu que o
+   * casal vê, com duas entradas de mesmo nome e as fotos partidas entre elas.
+   *
+   * A comparação ignora caixa E espaço nas pontas: quem digita rápido erra
+   * nesses dois, e são justamente os que não mudam o nome aos olhos de ninguém. */
+  const { rows: t } = await db.query("select tenant_id from galerias where id = $1", [galeriaId]);
+  const tenantId = t[0].tenant_id;
+
+  const primeiro = await criarSecao(galeriaId, tenantId, "Making Of");
+  if (!primeiro) throw new Error("não criou nem o primeiro capítulo");
+
+  const repetido = await criarSecao(galeriaId, tenantId, "  making of  ");
+  if (repetido) {
+    await db.query("delete from secoes where id = any($1)", [[primeiro.id, repetido.id]]);
+    throw new Error(`criou "${repetido.nome}" com "Making Of" já existindo`);
+  }
+
+  await db.query("delete from secoes where id = $1", [primeiro.id]);
+  return "recusou a repetição";
 });
 
 await etapa("capítulo vazio não vira seção em branco na página", async () => {

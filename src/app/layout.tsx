@@ -37,8 +37,22 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR">
-      {/* Duas coisas ANTES da primeira pintura.
+    /*
+      `suppressHydrationWarning` na raiz porque é o script abaixo que escreve
+      `data-js` e `data-tema` no <html>, antes de o React existir. Sem isto o
+      React compara a raiz com o que ELE renderizou, não encontra os atributos,
+      e trata como divergência — em toda página, não só nas de tema.
+    */
+    <html lang="pt-BR" suppressHydrationWarning>
+      {/* O <head> explícito não é decoração: um <script> solto entre <html> e
+          <body> é HTML inválido, e o React recusa ("In HTML, <script> cannot be
+          a child of <html>") refazendo a árvore no cliente a cada visita. O
+          script rodava assim mesmo, e por isso o defeito viveu escondido — o
+          tema aplicava certo enquanto a hidratação quebrava em silêncio.
+          Ver docs/01-app/02-guides/preventing-flash-before-hydration.md no
+          pacote do Next, que descreve exatamente este caso.
+
+          Duas coisas ANTES da primeira pintura.
 
           A primeira liga o estado "com JavaScript": as entradas de scroll
           (.revelar) só escondem conteúdo sob html[data-js], então sem este
@@ -47,11 +61,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           A segunda aplica o tema que a pessoa escolheu. Precisa ser aqui, e
           não num efeito do React: qualquer coisa que espere a hidratação
           pintaria a página no tema errado antes de corrigir. */}
-      <script
-        dangerouslySetInnerHTML={{
-          __html: `document.documentElement.dataset.js="";${SCRIPT_TEMA}`,
-        }}
-      />
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `document.documentElement.dataset.js="";${SCRIPT_TEMA}`,
+          }}
+        />
+      </head>
       <body
         className={`${montserrat.variable} ${cormorant.variable} ${greatVibes.variable} antialiased`}
       >
