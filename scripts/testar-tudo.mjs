@@ -89,10 +89,33 @@ const suites = readdirSync(AQUI)
  * Deduzir do conteúdo elimina a lista: suíte nova que fale HTTP entra sozinha, e
  * ninguém precisa lembrar de nada.
  */
+/*
+ * `process.env.BASE_URL` e não `BASE_URL` solto: **`DATABASE_URL` contém
+ * `BASE_URL`**.
+ *
+ * Com a busca solta, todo teste que apenas MENCIONAVA a variável do banco —
+ * numa mensagem, num comentário, no nome de uma etapa — era classificado como
+ * dependente de HTTP. Em 26/08/2026 eram DEZ dos 51: auditoria, chave-api,
+ * dominio-proprio, isolamento, limpeza, lixeira, purga-espelho, quota,
+ * troca-plano e varredura.
+ *
+ * O efeito é o pior tipo: com o servidor de desenvolvimento fora, esses dez
+ * eram PULADOS em silêncio. Passavam de "não rodou" a "não conta", e a suíte
+ * dizia 17 de 50 sem que nada acusasse que dez deles rodariam bem. Foi assim
+ * que apareceu: o `testar-varredura`, que não fala HTTP nenhum, saiu como
+ * pulado porque tem uma etapa chamada "sem DATABASE_URL é RECUSADO".
+ *
+ * Os dois marcadores continuam sendo os certos, porque todo teste que fala com
+ * o servidor abre com `process.env.BASE_URL ?? "http://localhost:3040"` — os
+ * dois aparecem juntos nele. Conferido nos dez: oito não têm URL nenhuma no
+ * arquivo, e os outros dois usam endereço de mentira para montar objeto
+ * (`new Request("http://localhost/api/qualquer")`) ou para testar normalização
+ * de domínio. Nenhum abre conexão.
+ */
 const PRECISAM_DO_SERVIDOR = new Set(
   suites.filter((nome) => {
     const fonte = readFileSync(path.join(AQUI, `${nome}.mjs`), "utf8");
-    return fonte.includes("BASE_URL") || fonte.includes("localhost:3040");
+    return fonte.includes("process.env.BASE_URL") || fonte.includes("localhost:3040");
   }),
 );
 
