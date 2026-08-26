@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 /**
  * Aplica a política de CORS do bucket. Uso:
- *   node --env-file=.env.local scripts/configurar-cors.mjs
- *   node --env-file=.env.local scripts/configurar-cors.mjs --conferir   # só lê
+ *   node --env-file=.env.local --experimental-strip-types \
+ *     --import ./scripts/registrar-ts.mjs scripts/configurar-cors.mjs
+ *   ... scripts/configurar-cors.mjs --conferir   # só lê, não grava
+ *
+ * As bandeiras de TypeScript existem porque a lista de origens vem de
+ * `src/config/dominios.ts` — a mesma que o proxy e o porteiro do certificado
+ * usam. Uma cópia à mão aqui ficava para trás em toda troca de domínio.
  *
  * Para conferir o CORS do jeito que o navegador vê (sem precisar de token de
  * admin), use `scripts/testar-cors.mjs` — esse roda junto com `npm test`.
@@ -21,6 +26,7 @@
  * (Em 21/08/2026 isto foi feito direto pelo painel — o caminho manual está em
  * R2 → bucket → Configurações → Política de CORS → Editar.)
  */
+import { DOMINIOS_ATENDIDOS } from "../src/config/dominios.ts";
 import { S3Client, PutBucketCorsCommand, GetBucketCorsCommand } from "@aws-sdk/client-s3";
 
 const conferirApenas = process.argv.includes("--conferir");
@@ -53,12 +59,20 @@ if (!R2_ACCOUNT_ID || !chave || !segredo || !R2_BUCKET) {
  * `olumier.com.br.golpe.net` é barrado — a comparação é por host, não por
  * "contém". Isso é testado em scripts/testar-cors.mjs.
  */
+/*
+ * Sai de `config/dominios.ts`, a mesma lista que o proxy e o porteiro do
+ * certificado usam. Escrita à mão aqui, ela ficava para trás numa troca de
+ * domínio — e o sintoma não aparece no navegador de quem programa: "salvar no
+ * celular" simplesmente para de funcionar no telefone do convidado, sem erro
+ * visível para ninguém do lado de cá.
+ *
+ * O curinga cobre o subdomínio de cada estúdio, que é onde o casal de fato abre
+ * a galeria.
+ */
 const ORIGENS = [
   "http://localhost:3040",
   "http://localhost:3000",
-  "https://olumier.com.br",
-  "https://www.olumier.com.br",
-  "https://*.olumier.com.br",
+  ...DOMINIOS_ATENDIDOS.flatMap((d) => [`https://${d}`, `https://www.${d}`, `https://*.${d}`]),
 ];
 
 const ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;

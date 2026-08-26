@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultarUm } from "@/lib/db";
-import { marca } from "@/config/marca";
+import { ehDominioPrincipal, estudioDoHost } from "@/config/dominios";
 
 /**
  * Porteiro do certificado sob demanda.
@@ -20,22 +20,27 @@ export async function GET(request: NextRequest) {
   const dominio = request.nextUrl.searchParams.get("domain")?.toLowerCase().trim();
   if (!dominio) return new NextResponse("sem domínio", { status: 400 });
 
-  const base = marca.dominio.toLowerCase();
-
-  // O domínio principal e o www já têm certificado fixo no Caddy.
-  if (dominio === base || dominio === `www.${base}`) {
+  /*
+   * A pergunta aqui é "esta instalação atende este host?", e não "este é o
+   * domínio canônico?". Durante uma troca de marca as duas respostas divergem:
+   * atendemos dois domínios e o canônico é um só. Ler `marca.dominio` fazia o
+   * porteiro recusar o domínio novo — e sem o "ok" daqui o Caddy nunca emite o
+   * certificado, então o site novo não sobe nem com o DNS perfeito.
+   *
+   * `config/dominios.ts` é a fonte, a mesma que o `proxy.ts` usa. Duas cópias
+   * desta regra já significaram um aceitar o que o outro recusa.
+   */
+  if (ehDominioPrincipal(dominio)) {
     return new NextResponse("ok", { status: 200 });
   }
 
-  const sufixo = `.${base}`;
-  if (!dominio.endsWith(sufixo)) {
+  const slug = estudioDoHost(dominio);
+  /* `estudioDoHost` devolve null para host de fora, para sub-subdomínio e para
+   * o parecido (`olumier.com.br.golpe.net`) — a comparação lá é por sufixo com
+   * ponto, nunca `includes`. Emitir certificado para domínio alheio nos
+   * transformaria em emissor de graça para um golpista. */
+  if (!slug) {
     return new NextResponse("domínio de fora", { status: 403 });
-  }
-
-  const slug = dominio.slice(0, -sufixo.length);
-  // Um ponto no meio significa sub-subdomínio (a.b.olumier.com.br) — não é nosso formato.
-  if (!slug || slug.includes(".")) {
-    return new NextResponse("formato inválido", { status: 403 });
   }
 
   const estudio = await consultarUm<{ id: string }>("select id from tenants where slug = $1", [

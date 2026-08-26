@@ -8,6 +8,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { DOMINIOS_ATENDIDOS } from "../src/config/dominios.ts";
 import http from "node:http";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
@@ -221,6 +222,65 @@ await etapa("libera o domínio principal e o www", async () => {
     if (r.status !== 200) throw new Error(`${d} veio ${r.status}`);
   }
   return "os dois liberados";
+});
+
+/*
+ * ── A TRANSIÇÃO DE DOMÍNIO ────────────────────────────────────────────────
+ *
+ * Durante a troca de marca a instalação atende DOIS domínios ao mesmo tempo: o
+ * antigo, que tem galeria no ar, e o novo, para onde tudo está indo. Os dois
+ * precisam funcionar juntos, e a razão é o Caddy: ele emite certificado sob
+ * demanda e PERGUNTA a este porteiro antes. Se o porteiro recusar o domínio
+ * novo, o certificado nunca sai e o site novo não sobe — mesmo com o DNS certo.
+ * E se ele parar de aceitar o antigo, quem já recebeu link fica sem HTTPS.
+ *
+ * Por isso a lista de domínios atendidos é uma peça própria (config/dominios),
+ * separada de `marca.dominio`, que é o domínio CANÔNICO — o que entra em link de
+ * e-mail e no endereço mostrado. Atender e ser canônico são coisas diferentes:
+ * durante a transição atendemos dois e o canônico é um só.
+ */
+await etapa("atende os DOIS domínios durante a transição", async () => {
+  for (const d of DOMINIOS_ATENDIDOS) {
+    for (const nome of [d, `www.${d}`]) {
+      const r = await fetch(`${BASE}/api/tls/permitir?domain=${nome}`);
+      if (r.status !== 200) {
+        throw new Error(
+          `${nome} veio ${r.status} — sem isso o Caddy não emite certificado para ele`,
+        );
+      }
+    }
+  }
+  return DOMINIOS_ATENDIDOS.join(" e ");
+});
+
+await etapa("o subdomínio de estúdio vale em qualquer domínio atendido", async () => {
+  for (const d of DOMINIOS_ATENDIDOS) {
+    const r = await fetch(`${BASE}/api/tls/permitir?domain=${tslug}.${d}`);
+    if (r.status !== 200) throw new Error(`${tslug}.${d} veio ${r.status}`);
+  }
+  return `${tslug}.* liberado nos ${DOMINIOS_ATENDIDOS.length}`;
+});
+
+await etapa("o proxy reconhece o estúdio nos dois domínios", async () => {
+  /* O porteiro do certificado e o proxy leem o domínio em lugares DIFERENTES
+   * (`api/tls/permitir` e `src/proxy.ts`). Um pode aceitar e o outro não —
+   * o certificado sai, e o endereço abre a home em vez da galeria. */
+  for (const d of DOMINIOS_ATENDIDOS) {
+    const r = await pedir("/", `${tslug}.${d}`);
+    if (!r.corpo.includes(nome_estudio)) {
+      throw new Error(`${tslug}.${d} não abriu a vitrine do estúdio`);
+    }
+  }
+  return "proxy e porteiro de acordo";
+});
+
+await etapa("domínio parecido continua barrado nos dois", async () => {
+  /* `olumier.com.br.golpe.net` termina com o nosso nome e NÃO é nosso. */
+  for (const d of DOMINIOS_ATENDIDOS) {
+    const r = await fetch(`${BASE}/api/tls/permitir?domain=${tslug}.${d}.golpe.net`);
+    if (r.status !== 403) throw new Error(`${d}.golpe.net veio ${r.status}, esperava 403`);
+  }
+  return "HTTP 403 nos dois";
 });
 
 await db.end();

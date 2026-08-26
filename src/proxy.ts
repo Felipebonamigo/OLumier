@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SUBDOMINIOS_RESERVADOS } from "@/config/subdominios";
+import { estudioDoHost } from "@/config/dominios";
+import { marca } from "@/config/marca";
 
 /**
  * No Next 16 o antigo `middleware.ts` passou a se chamar `proxy.ts`.
@@ -17,22 +19,26 @@ import { SUBDOMINIOS_RESERVADOS } from "@/config/subdominios";
  */
 
 const NOME_COOKIE = "olumier_sessao";
-const DOMINIO_BASE = "olumier.com.br";
 
-// A lista mora em config/subdominios.ts para o CADASTRO usar a mesma: antes ela
-// só existia aqui, e nada impedia um estúdio nascer com o slug "www".
+/*
+ * O domínio base era escrito aqui à mão, e este arquivo era o único lugar que o
+ * sabia — o porteiro do certificado tinha a própria cópia, tirada de
+ * `marca.dominio`. Duas fontes para a mesma pergunta significam que uma delas
+ * pode aceitar um domínio que a outra recusa: o certificado sai e o endereço
+ * abre a home em vez da galeria do estúdio, ou o contrário.
+ *
+ * Agora os dois leem `config/dominios.ts`, que atende mais de um domínio ao
+ * mesmo tempo — é o que permite uma troca de marca sem derrubar link entregue.
+ */
 
-/** Devolve o slug do estúdio quando o endereço é um subdomínio dele. */
+// A lista de reservados mora em config/subdominios.ts para o CADASTRO usar a
+// mesma: antes ela só existia aqui, e nada impedia um estúdio nascer com o
+// slug "www".
+
+/** Devolve o slug do estúdio quando o endereço é um subdomínio de algum domínio atendido. */
 function estudioDoEndereco(host: string | null): string | null {
-  if (!host) return null;
-  const nome = host.split(":")[0].toLowerCase();
-
-  const sufixo = `.${DOMINIO_BASE}`;
-  if (!nome.endsWith(sufixo)) return null;
-
-  const slug = nome.slice(0, -sufixo.length);
-  // Sub-subdomínio (a.b.olumier.com.br) não é o nosso formato.
-  if (!slug || slug.includes(".") || SUBDOMINIOS_RESERVADOS.has(slug)) return null;
+  const slug = estudioDoHost(host);
+  if (!slug || SUBDOMINIOS_RESERVADOS.has(slug)) return null;
   return slug;
 }
 
@@ -53,7 +59,7 @@ export function proxy(request: NextRequest) {
       // subdomínio de estúdio é mandado para lá, senão haveria dois endereços
       // para a mesma tela e o cookie de sessão não valeria nos dois.
       if (pathname.startsWith("/painel") || pathname === "/entrar" || pathname === "/cadastrar") {
-        return NextResponse.redirect(new URL(pathname + search, `https://${DOMINIO_BASE}`));
+        return NextResponse.redirect(new URL(pathname + search, `https://${marca.dominio}`));
       }
 
       // `/g/` e `/e/` são a forma interna das páginas públicas, e estavam na
@@ -67,10 +73,10 @@ export function proxy(request: NextRequest) {
         if (dono !== estudio) {
           // Não é 404: a galeria existe, só não mora nesta casa. O visitante
           // com o link torto chega no endereço certo em vez de numa parede.
-          return NextResponse.redirect(new URL(pathname + search, `https://${DOMINIO_BASE}`));
+          return NextResponse.redirect(new URL(pathname + search, `https://${marca.dominio}`));
         }
         const curto = tipo === "g" && resto.length ? `/${resto.join("/")}` : "/";
-        return NextResponse.redirect(new URL(curto + search, `https://${estudio}.${DOMINIO_BASE}`));
+        return NextResponse.redirect(new URL(curto + search, `https://${estudio}.${marca.dominio}`));
       }
 
       const galeria = pathname.replace(/^\/+|\/+$/g, "");
