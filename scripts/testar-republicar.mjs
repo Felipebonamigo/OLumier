@@ -26,6 +26,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { gerarChave } from "../src/lib/chaves-api.ts";
 
@@ -66,11 +67,8 @@ const igual = (a, b, o) => {
  * Falso positivo em teste de perda de dado é caro duas vezes: para o deploy, e
  * para a confiança em quem grita. Galeria própria e descartável remove a chance.
  */
-const { rows: ts } = await db.query("select id from tenants order by criado_em limit 1");
-if (ts.length === 0) {
-  console.error("✗ sem estúdio no banco de teste");
-  process.exit(1);
-}
+// Bancada propria desta execucao (ver fixture-de-teste.mjs).
+const ts = [await estudioDaRodada(db)];
 const { rows: [nova] } = await db.query(
   `insert into galerias (tenant_id, slug, titulo, estado, publicada)
         values ($1, $2, 'Republicar (teste)', 'online', false)
@@ -235,6 +233,8 @@ await etapa("mídia que nunca ficou pronta não é republicável", async () => {
 await fetch(`${BASE}/api/medias/${mediaId}/confirmar`, { method: "DELETE", headers: { cookie } });
 await db.query("delete from galerias where id = $1", [galeria.id]);
 await db.query("delete from chaves_api where tenant_id = $1 and nome = 'republicar'", [galeria.tenant_id]);
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 console.log(falhou ? "\n✗ republicar com falha\n" : "\n✓ republicar ok\n");

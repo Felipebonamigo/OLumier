@@ -11,6 +11,7 @@
  * ninguém enxerga).
  */
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
+import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import pg from "pg";
 import {
   COR_PADRAO,
@@ -155,9 +156,10 @@ if (!servidor) {
   const db = new pg.Client({ connectionString: DATABASE_URL });
   await db.connect();
 
-  const { rows } = await db.query("select id, logo_chave from tenants order by criado_em limit 1");
-  const tid = rows[0].id;
-  const logoAntes = rows[0].logo_chave;
+  // Estudio proprio desta execucao (antes: o mais antigo do banco).
+  const estudio = await estudioDaRodada(db);
+  const tid = estudio.id;
+  const logoAntes = estudio.logo_chave;
 
   const cookie = cookieDeSessao(tid);
 
@@ -295,6 +297,8 @@ if (!servidor) {
     // Devolve o estúdio ao estado anterior e não deixa arquivo pago para trás.
     if (chaveNova) await apagarObjeto(chaveNova).catch(() => {});
     await db.query("update tenants set logo_chave = $1 where id = $2", [logoAntes, tid]);
+    // A bancada desta execucao sai inteira, na ordem certa (ver fixture-de-teste.mjs).
+    await limparRodada(db);
     await db.end();
   }
 }

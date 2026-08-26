@@ -10,6 +10,7 @@
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -25,22 +26,10 @@ if (!DATABASE_URL || !SESSION_SECRET) {
 const db = new pg.Client({ connectionString: DATABASE_URL });
 await db.connect();
 
-const { rows: tenants } = await db.query("select id, nome_estudio from tenants order by criado_em limit 1");
-if (tenants.length === 0) {
-  console.error("✗ nenhum tenant no banco — crie uma conta primeiro em /cadastrar");
-  process.exit(1);
-}
-const tenant = tenants[0];
+// Bancada propria desta execucao (ver fixture-de-teste.mjs).
+const tenant = await estudioDaRodada(db);
 
-const { rows: galerias } = await db.query(
-  "select id, titulo from galerias where tenant_id = $1 order by criado_em limit 1",
-  [tenant.id],
-);
-if (galerias.length === 0) {
-  console.error("✗ nenhuma galeria — crie uma em /painel/galerias/nova");
-  process.exit(1);
-}
-const galeria = galerias[0];
+const galeria = await galeriaDaRodada(db);
 
 console.log(`estúdio: ${tenant.nome_estudio}`);
 console.log(`galeria: ${galeria.titulo}\n`);
@@ -142,6 +131,8 @@ await etapa("remove o arquivo de teste", async () => {
   return `espaço devolvido (estúdio agora com ${rows[0].usado_bytes} B)`;
 });
 
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

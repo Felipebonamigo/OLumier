@@ -10,6 +10,7 @@ import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHash, createHmac } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -24,16 +25,9 @@ if (!DATABASE_URL || !SESSION_SECRET) {
 const db = new pg.Client({ connectionString: DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query(
-  `select g.id, g.slug as gslug, g.titulo, t.slug as tslug
-     from galerias g join tenants t on t.id = g.tenant_id
-    order by g.criado_em limit 1`,
-);
-if (rows.length === 0) {
-  console.error("✗ nenhuma galeria no banco");
-  process.exit(1);
-}
-const { id: galeriaId, gslug, tslug, titulo } = rows[0];
+// Bancada propria desta execucao (ver fixture-de-teste.mjs).
+const _b = await galeriaDaRodada(db);
+const galeriaId = _b.id, gslug = _b.gslug, tslug = _b.tslug, titulo = _b.titulo;
 const url = `${BASE}/g/${tslug}/${gslug}`;
 console.log(`galeria: ${titulo}\nlink:    ${url}\n`);
 
@@ -300,6 +294,8 @@ await etapa("recusa ação inventada no registro", async () => {
 
 // Deixa a galeria como estava para o Felipe testar à mão.
 await db.query("update galerias set senha_hash = null, publicada = true where id = $1", [galeriaId]);
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

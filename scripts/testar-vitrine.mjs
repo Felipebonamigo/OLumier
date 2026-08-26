@@ -21,6 +21,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 exigirBancoDeTeste();
 
@@ -43,12 +44,8 @@ const igual = (a, b, o) => {
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query("select id, slug, site from tenants order by criado_em limit 1");
-const estudio = rows[0];
-if (!estudio) {
-  console.error("✗ nenhum estúdio no banco de teste");
-  process.exit(1);
-}
+// Estudio proprio desta execucao (antes: o mais antigo do banco).
+const estudio = await estudioDaRodada(db);
 
 const url = `${BASE}/e/${estudio.slug}`;
 const siteOriginal = estudio.site;
@@ -184,6 +181,8 @@ try {
   // Devolve o que estava lá. O estúdio de teste é usado por outras suítes e
   // pelo dev que estiver com a tela aberta.
   await gravar(siteOriginal ?? {});
+  // A bancada desta execucao sai inteira, na ordem certa (ver fixture-de-teste.mjs).
+  await limparRodada(db);
   await db.end();
 }
 

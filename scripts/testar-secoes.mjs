@@ -8,6 +8,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { criarSecao, garantirSecoes } from "../src/lib/secoes.ts";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
@@ -17,12 +18,10 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query(
-  `select g.id, g.tenant_id, g.slug gslug, t.slug tslug
-     from galerias g join tenants t on t.id = g.tenant_id
-    order by g.criado_em limit 1`,
-);
-const { id: galeriaId, tenant_id: tenantId, gslug, tslug } = rows[0];
+/* Bancada propria desta execucao — antes: a galeria mais antiga do banco.
+ * Ver fixture-de-teste.mjs. */
+const bancada = await galeriaDaRodada(db);
+const galeriaId = bancada.id, tenantId = bancada.estudio.id, gslug = bancada.gslug, tslug = bancada.tslug;
 const url = `${BASE}/g/${tslug}/${gslug}`;
 
 await db.query("update galerias set publicada = true, senha_hash = null where id = $1", [galeriaId]);
@@ -222,6 +221,8 @@ for (const [i, f] of fotos.entries()) {
     f.id,
   ]);
 }
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

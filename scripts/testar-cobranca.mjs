@@ -9,6 +9,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -17,9 +18,14 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query("select id, status from tenants order by criado_em limit 1");
-const tenantId = rows[0].id;
-const statusOriginal = rows[0].status;
+// Estudio proprio desta execucao (ver fixture-de-teste.mjs).
+const estudio = await estudioDaRodada(db);
+const tenantId = estudio.id;
+/* Uma galeria publicada e no ar: a etapa do atraso prova que o boleto do
+ * fotografo NAO derruba a entrega do cliente dele, e sem galeria a checagem
+ * passaria vazia — que e pior que reprovar. */
+await galeriaDaRodada(db);
+const statusOriginal = estudio.status;
 
 let falhou = false;
 const etapa = async (nome, fn) => {
@@ -230,6 +236,8 @@ await etapa("sócio sem carteira não entra no split (em vez de quebrar a cobran
 });
 
 await db.query("update tenants set status = $1 where id = $2", [statusOriginal, tenantId]);
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

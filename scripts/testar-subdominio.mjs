@@ -8,6 +8,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { DOMINIOS_ATENDIDOS } from "../src/config/dominios.ts";
 import http from "node:http";
 
@@ -18,12 +19,11 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query(
-  `select t.slug tslug, g.slug gslug, g.titulo, t.nome_estudio
-     from galerias g join tenants t on t.id = g.tenant_id
-    order by g.criado_em limit 1`,
-);
-const { tslug, gslug, titulo, nome_estudio } = rows[0];
+/* Bancada propria desta execucao — antes: a galeria mais antiga do banco.
+ * Ver fixture-de-teste.mjs. */
+const bancada = await galeriaDaRodada(db);
+const tslug = bancada.tslug, gslug = bancada.gslug, titulo = bancada.titulo,
+  nome_estudio = bancada.estudio.nome_estudio;
 await db.query(
   "update galerias set publicada = true, senha_hash = null, estado = 'online' where slug = $1",
   [gslug],
@@ -424,6 +424,8 @@ try {
   await soltarProprio();
 }
 
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

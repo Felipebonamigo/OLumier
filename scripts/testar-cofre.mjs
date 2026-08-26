@@ -10,6 +10,7 @@ import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { execFileSync } from "node:child_process";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -31,12 +32,10 @@ const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query(
-  `select g.id, g.slug gslug, t.slug tslug
-     from galerias g join tenants t on t.id = g.tenant_id
-    order by g.criado_em limit 1`,
-);
-const { id: galeriaId, gslug, tslug } = rows[0];
+/* Bancada própria desta execução — antes: a galeria mais antiga do banco.
+ * Ver fixture-de-teste.mjs. */
+const bancada = await galeriaDaRodada(db);
+const galeriaId = bancada.id, gslug = bancada.gslug, tslug = bancada.tslug;
 const url = `${BASE}/g/${tslug}/${gslug}`;
 
 // Estado limpo para começar.
@@ -247,6 +246,8 @@ await etapa("uso separa o que está no ar do que está no cofre", async () => {
   return `${u[0].no_ar} bytes no ar · ${u[0].no_cofre} no cofre`;
 });
 
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

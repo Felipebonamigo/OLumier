@@ -15,6 +15,7 @@
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { conferirDocumento, cpfValido, cnpjValido, soDigitos } from "../src/lib/documento.ts";
 import { situacaoDoTenant } from "../src/lib/assinatura.ts";
 
@@ -134,7 +135,7 @@ await etapa("a coluna cpf_cnpj existe no banco", async () => {
   if (rows.length === 0) throw new Error("falta rodar db/migracoes/006-documento.sql");
 });
 
-const { rows: t } = await db.query("select id, quota_bytes from tenants order by criado_em limit 1");
+const t = [await estudioDaRodada(db)];
 const { rows: g } = await db.query(
   "select id from galerias where tenant_id = $1 and estado = 'online' order by criado_em limit 1",
   [t[0]?.id],
@@ -200,6 +201,8 @@ if (!t.length || !g.length) {
   });
 }
 
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

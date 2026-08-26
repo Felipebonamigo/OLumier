@@ -11,6 +11,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import {
   VALIDADE_MS,
   concluir,
@@ -44,10 +45,8 @@ const igual = (a, b, o) => {
   if (a !== b) throw new Error(`${o}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 
-const { rows: ts } = await db.query(
-  "select id, email, senha_hash from tenants order by criado_em limit 1",
-);
-const tenant = ts[0];
+// Estudio proprio desta execucao (antes: o mais antigo do banco).
+const tenant = await estudioDaRodada(db);
 const senhaOriginal = tenant.senha_hash;
 
 const VENCER = "update recuperacoes set expira_em = now() - interval '1 minute' where token_hash = $1";
@@ -328,6 +327,8 @@ try {
   // Devolve a conta ao estado anterior: os testes trocaram a senha de verdade.
   await db.query("update tenants set senha_hash = $1 where id = $2", [senhaOriginal, tenant.id]);
   await db.query("delete from recuperacoes where tenant_id = $1", [tenant.id]);
+  // A bancada desta execucao sai inteira, na ordem certa (ver fixture-de-teste.mjs).
+  await limparRodada(db);
   await db.end();
 }
 

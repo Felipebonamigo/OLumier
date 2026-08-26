@@ -8,6 +8,7 @@
  * lixo que vem junto quando se arrasta uma pasta.
  */
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
+import { galeriaDaRodada, estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import pg from "pg";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
@@ -174,7 +175,7 @@ await etapa("a ordem do fotógrafo sobrevive ao envio em PARALELO", async () => 
   const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await db.connect();
 
-  const t = (await db.query("select id from tenants order by criado_em limit 1")).rows[0];
+  const t = await estudioDaRodada(db);
   const g = await db.query(
     `insert into galerias (tenant_id, slug, titulo) values ($1,$2,'Ordem') returning id`,
     [t.id, `ordem-${Date.now()}`],
@@ -212,6 +213,8 @@ await etapa("a ordem do fotógrafo sobrevive ao envio em PARALELO", async () => 
   } finally {
     await db.query("delete from galerias where id = $1", [galeriaId]);
     // Sem fechar, o processo do teste nunca encerra.
+    // A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+    await limparRodada(db);
     await db.end();
   }
 });
@@ -220,10 +223,8 @@ console.log("\nEnvio direto para o capítulo:\n");
   const db = new pg.Client({ connectionString: DATABASE_URL });
   await db.connect();
 
-  const { rows } = await db.query(
-    `select g.id, t.id tid from galerias g join tenants t on t.id = g.tenant_id
-      order by g.criado_em limit 1`,
-  );
+  const _b = await galeriaDaRodada(db);
+  const rows = [{ id: _b.id, tid: _b.estudio.id }];
   const { id: galeriaId, tid } = rows[0];
   const cookie = cookieDeSessao(tid);
 

@@ -10,6 +10,7 @@
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -24,12 +25,10 @@ if (!DATABASE_URL || !SESSION_SECRET) {
 const db = new pg.Client({ connectionString: DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query(
-  `select g.id, g.slug gslug, t.id tid, t.slug tslug
-     from galerias g join tenants t on t.id = g.tenant_id
-    order by g.criado_em limit 1`,
-);
-const { id: galeriaId, gslug, tid, tslug } = rows[0];
+/* Bancada propria desta execucao — antes: a galeria mais antiga do banco.
+ * Ver fixture-de-teste.mjs. */
+const bancada = await galeriaDaRodada(db);
+const galeriaId = bancada.id, gslug = bancada.gslug, tslug = bancada.tslug, tid = bancada.estudio.id;
 
 const cookie = cookieDeSessao(tid);
 
@@ -147,6 +146,8 @@ await etapa("remoção apaga a família inteira do bucket", async () => {
   return `3 chaves removidas (${antes[0].chave_thumb ? "thumb + preview + original" : "original"})`;
 });
 
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 const economia = (1 - thumb.length / original.length) * 100;

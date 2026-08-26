@@ -13,6 +13,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada, marcaDaRodada } from "./fixture-de-teste.mjs";
 import { alternar, resumoDaGaleria } from "../src/lib/favoritas.ts";
 
 await exigirBancoDeTeste();
@@ -35,34 +36,25 @@ const igual = (a, b, o) => {
   if (a !== b) throw new Error(`${o}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 
-const { rows: gs } = await db.query(
-  `select g.id, g.tenant_id from galerias g
-    where exists (select 1 from medias m where m.galeria_id = g.id and m.pronto)
-    order by g.criado_em limit 1`,
-);
-if (gs.length === 0) {
-  console.error("sem galeria com mídia no banco de teste");
-  process.exit(1);
-}
-const galeriaId = gs[0].id;
-const tenantId = gs[0].tenant_id;
+/* Bancada própria desta execução. Antes daqui vinha a galeria mais antiga do
+ * banco, e o `delete from favoritas where galeria_id` do final apagava as
+ * favoritas de quem estivesse rodando junto — ver fixture-de-teste.mjs. */
+const bancada = await galeriaDaRodada(db, { nome: "favoritas", medias: 2 });
+const galeriaId = bancada.id;
+const tenantId = bancada.estudio.id;
 
-const { rows: ms } = await db.query(
-  "select id from medias where galeria_id = $1 and pronto order by ordem limit 2",
-  [galeriaId],
-);
-const foto = ms[0].id;
-const outraFoto = ms[1]?.id ?? ms[0].id;
+const foto = bancada.midias[0].id;
+const outraFoto = bancada.midias[1]?.id ?? bancada.midias[0].id;
 
-const VISITANTE_A = "teste-visitante-a";
-const VISITANTE_B = "teste-visitante-b";
+/* O visitante carrega a marca da execução. Com nome fixo, o `delete ... where
+ * visitante in (...)` do `limpar()` varria a lista de QUALQUER execução rodando
+ * junto — a galeria já estava isolada e este identificador ainda não. Foi o
+ * segundo fundo falso do mesmo defeito. */
+const VISITANTE_A = `visitante-a-${marcaDaRodada()}`;
+const VISITANTE_B = `visitante-b-${marcaDaRodada()}`;
 
 // Galeria descartável, para provar o isolamento entre galerias.
-const { rows: gv } = await db.query(
-  `insert into galerias (tenant_id, slug, titulo) values ($1, $2, 'Vizinha') returning id`,
-  [tenantId, `vizinha-favoritas-${Date.now()}`],
-);
-const galeriaVizinha = gv[0].id;
+const galeriaVizinha = (await galeriaDaRodada(db, { nome: "vizinha", medias: 1 })).id;
 
 async function limpar() {
   await db.query("delete from favoritas where visitante in ($1, $2)", [VISITANTE_A, VISITANTE_B]);

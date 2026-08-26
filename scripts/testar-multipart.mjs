@@ -12,6 +12,7 @@ import { cookieDeSessao } from "./sessao-de-teste.mjs";
 import { createHash } from "node:crypto";
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -25,11 +26,10 @@ if (!DATABASE_URL || !SESSION_SECRET) {
 
 const db = new pg.Client({ connectionString: DATABASE_URL });
 await db.connect();
-const { rows } = await db.query(
-  `select g.id, t.id tid from galerias g join tenants t on t.id = g.tenant_id
-    order by g.criado_em limit 1`,
-);
-const { id: galeriaId, tid } = rows[0];
+/* Bancada propria desta execucao — antes: a galeria mais antiga do banco.
+ * Ver fixture-de-teste.mjs. */
+const bancada = await galeriaDaRodada(db);
+const galeriaId = bancada.id, tid = bancada.estudio.id;
 const cookie = cookieDeSessao(tid);
 
 let falhou = false;
@@ -182,6 +182,8 @@ await etapa("REMONTA o arquivo a partir das partes, byte a byte", async () => {
   return `${(inteiro.length / MB).toFixed(0)} MB em 3 partes, tamanho confere (${hashEsperado}…)`;
 });
 
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

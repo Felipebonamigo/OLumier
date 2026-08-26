@@ -24,6 +24,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 exigirBancoDeTeste();
 
@@ -39,19 +40,9 @@ const {
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-const { rows } = await db.query(
-  `select g.id, g.tenant_id
-     from galerias g
-     join medias m on m.galeria_id = g.id and m.pronto
-    group by g.id
-   having count(m.id) >= 3
-    order by g.criado_em limit 1`,
-);
-if (rows.length === 0) {
-  console.error("✗ preciso de uma galeria com ao menos 3 fotos prontas");
-  process.exit(1);
-}
-const { id: galeriaId, tenant_id: tenantId } = rows[0];
+// Bancada propria desta execucao (ver fixture-de-teste.mjs). A selecao precisa de 3 fotos.
+const _b = await galeriaDaRodada(db, { medias: 3 });
+const galeriaId = _b.id, tenantId = _b.estudio.id;
 
 const { rows: fotos } = await db.query(
   "select id from medias where galeria_id = $1 and pronto order by ordem, criado_em limit 3",
@@ -331,6 +322,8 @@ await zerar();
  * para ler o HTML de convidado, e teste que deixa lixo atrás muda o resultado do
  * próximo. */
 await db.query("update galerias set publicada = $1 where id = $2", [publicadaAntes, galeriaId]);
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

@@ -10,6 +10,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { ehAdmin, administradores } from "../src/config/admin.ts";
 import { panoramaDosEstudios } from "../src/lib/admin.ts";
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
@@ -133,11 +134,10 @@ try {
   } else {
     console.log("\npela rota");
 
-    const { rows: ts } = await db.query("select id, email from tenants order by criado_em limit 1");
-    if (ts.length === 0) {
-      console.log("  – sem estúdio no banco para testar a rota");
-    } else {
-      const cookie = cookieDeSessao(ts[0].id);
+    // Estúdio próprio desta execução — antes vinha o mais antigo do banco.
+    {
+      const estudio = await estudioDaRodada(db);
+      const cookie = cookieDeSessao(estudio.id);
 
       await etapa("sem sessão a página não existe", async () => {
         const r = await fetch(`${BASE}/painel/admin`, { redirect: "manual" });
@@ -166,6 +166,8 @@ try {
   }
 } finally {
   restaurar();
+  // A bancada desta execucao sai inteira, na ordem certa (ver fixture-de-teste.mjs).
+  await limparRodada(db);
   await db.end();
 }
 

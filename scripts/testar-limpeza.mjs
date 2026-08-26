@@ -12,6 +12,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { apagarObjetos, listarChaves, objetoExiste, BUCKET } from "../src/lib/r2.ts";
 /*
  * A regra de "quem tem dono" vem do módulo compartilhado, NÃO de uma consulta
@@ -138,8 +139,7 @@ console.log("\nApagar a galeria (o caminho real do painel):\n");
 await etapa("apagar preserva; destruir é que remove do bucket", async () => {
   const { apagarGaleria, destruirGaleria, galeriasVencidasNaLixeira, PRAZO_LIXEIRA_DIAS } =
     await import("../src/lib/tenants.ts");
-  const { rows: t } = await db.query("select id from tenants order by criado_em limit 1");
-  const tenantId = t[0].id;
+  const tenantId = (await estudioDaRodada(db)).id;
 
   const g = await db.query(
     `insert into galerias (tenant_id, slug, titulo) values ($1,$2,'Galeria da Limpeza') returning id`,
@@ -202,7 +202,7 @@ await etapa("apagar preserva; destruir é que remove do bucket", async () => {
 
 await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async () => {
   const { apagarGaleria } = await import("../src/lib/tenants.ts");
-  const { rows: t } = await db.query("select id from tenants order by criado_em limit 1");
+  const t = [await estudioDaRodada(db)];
 
   const outro = await db.query(
     `insert into tenants (slug,nome_estudio,email,senha_hash)
@@ -244,6 +244,8 @@ await etapa("o bucket está sem órfãos agora", async () => {
   return `${doBucket.length} objetos, todos referenciados`;
 });
 
+// A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
+await limparRodada(db);
 await db.end();
 
 if (falhou) {
