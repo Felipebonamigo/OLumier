@@ -88,8 +88,11 @@ export interface Preset {
 
 export const PRESETS: Preset[] = [
   {
-    id: "olumier",
-    nome: "Olumier",
+    /* O estilo da casa. O id NAO e gravado no banco — `galerias.aparencia`
+     * guarda os cinco eixos, e `presetEquivalente` deduz o preset a partir
+     * deles. Por isso renomear aqui nao orfana galeria nenhuma. */
+    id: "atomo",
+    nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
     aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal" },
   },

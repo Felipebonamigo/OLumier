@@ -1,17 +1,35 @@
 /**
  * IDENTIDADE DA MARCA — ponto único de verdade.
  *
- * O nome da plataforma ainda pode mudar (decisão pendente com os sócios).
- * Por isso NADA no resto do código escreve "Olumier" direto: tudo lê daqui.
+ * NADA no resto do código escreve o nome da plataforma direto: tudo lê daqui.
  * Trocar de nome = editar este arquivo. Bucket, tabelas e pastas usam termos
  * neutros ("galerias", "app") de propósito, para não precisarem migrar junto.
+ *
+ * ── NOME E ENDEREÇO NÃO ANDAM JUNTOS (26/08/2026) ─────────────────────────
+ * Segunda troca de marca: Fotônio → Olumier → Galeria Átomo. Nas duas, a
+ * tentação foi a mesma — um localizar-e-substituir em "olumier" no repositório
+ * inteiro. Ele levaria junto quatro coisas que carregam a palavra e NÃO são
+ * nome nenhum: o prefixo do Asaas (gravado em toda assinatura viva, e a conta é
+ * dividida com o Atomatiza), os nomes dos buckets (onde os arquivos moram), o
+ * cookie de sessão, e os dois campos abaixo.
+ *
+ * `dominio` e `email` PARECEM texto e moram neste arquivo, mas não são: o
+ * primeiro monta o link do "esqueci minha senha" e autoriza a emissão de
+ * certificado TLS; o segundo é uma caixa que precisa existir para receber. Eles
+ * mudam na FASE 2, quando galeriaatomo.com.br estiver respondendo e com e-mail
+ * configurado — e o domínio antigo continua redirecionando, porque link de
+ * galeria já entregue não pode quebrar.
+ *
+ * `scripts/testar-marca-plataforma.mjs` é o freio disso, e foi exercitado
+ * contra o find-replace cego antes de existir.
  */
 
 export const marca = {
-  nome: "Olumier",
-  nomeSimples: "olumier",
-  simbolo: "Ol",
+  nome: "Galeria Átomo",
+  nomeSimples: "galeria-atomo",
+  simbolo: "GA",
   tagline: "Sua luz, entregue.",
+  /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
   dominio: "olumier.com.br",
   descricao:
     "Galerias de entrega para fotógrafos e filmakers. Downloads e streaming ilimitados, com a sua marca.",
