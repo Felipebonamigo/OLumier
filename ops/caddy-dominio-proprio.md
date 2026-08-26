@@ -1,6 +1,25 @@
 # Caddy: aceitar domínio próprio de estúdio
 
-**NÃO APLICADO.** Este arquivo é o passo a passo para quando for aplicar.
+**APLICADO em 26/08/2026**, com o Felipe acompanhando. Backup em
+`/etc/caddy/Caddyfile.antes-dominio-proprio`.
+
+Conferido depois do `reload`, contra a linha de base tirada antes:
+
+| | antes | depois |
+|---|---|---|
+| padelizou.com.br | 200 | 200 |
+| atomatiza.com.br | 307 | 307 |
+| pokepanda.com.br | 200 | 200 |
+| bonamigosystems.com.br | 200 | 200 |
+| olumier.com.br | 200 | 200 |
+| subdomínio de estúdio real | 200 | 200 |
+| estúdio inexistente | recusado | **recusado no TLS** (`HTTP 000`) |
+
+A última linha é a que prova que a troca não abriu nada: o `abort` saiu, e a
+recusa passou a vir do porteiro — que nega antes do handshake, então a
+requisição nem chega ao app.
+
+O resto do arquivo é o passo a passo, mantido para a próxima vez.
 
 O bloco final do `/etc/caddy/Caddyfile` só encaminha host que casa com a expressão
 regular dos nossos domínios; qualquer outro cai em `abort`. Domínio próprio não casa.
