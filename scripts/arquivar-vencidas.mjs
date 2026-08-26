@@ -2,40 +2,44 @@
 /**
  * Manda para o cofre as galerias que venceram. Roda todo dia no servidor
  * (temporizador do systemd). Uso manual:
- *   node --env-file=.env.production scripts/arquivar-vencidas.mjs
+ *   node --env-file=.env.production --experimental-strip-types \
+ *        --import ./scripts/registrar-ts.mjs scripts/arquivar-vencidas.mjs
  *
  * Só muda o estado — nenhum arquivo é apagado. A galeria sai do ar e volta em um
  * clique pelo painel.
+ *
+ * ── POR QUE ISTO AQUI É CASCA ─────────────────────────────────────────────
+ * Até 26/08/2026 este script rodava um `update` inline, com o MESMO SQL que
+ * `src/lib/cofre.ts` já tinha. Duas implementações da mesma regra — e a que
+ * rodava de verdade era a pior das duas: a do lib registra o arquivamento na
+ * auditoria com ator 'sistema', e a de cá não registrava nada.
+ *
+ * A diferença aparece no dia em que o cliente do estúdio reclama que a galeria
+ * saiu do ar. O registro é o que prova que foi o PRAZO — o mesmo que o fotógrafo
+ * escolheu e combinou — e não alguém que apertou um botão. Sem ele, arquivamento
+ * automático e manual ficam indistinguíveis depois do fato.
+ *
+ * Agora o script é só a casca: decide quando roda e escreve o log. A regra mora
+ * em um lugar só. Ver `arquivarVencidas` e `estudiosAcimaDoEspaco`.
  */
-import pg from "pg";
+import { arquivarVencidas, estudiosAcimaDoEspaco } from "../src/lib/cofre.ts";
+import { pool } from "../src/lib/db.ts";
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL não definida");
   process.exit(1);
 }
 
-const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await db.connect();
-
 try {
-  const { rows } = await db.query(
-    `update galerias g
-        set estado = 'arquivada', arquivada_em = now(), atualizado_em = now()
-       from tenants t
-      where t.id = g.tenant_id
-        and g.estado = 'online'
-        and g.expira_em is not null
-        and g.expira_em < now()
-      returning g.titulo, t.nome_estudio`,
-  );
-
+  const arquivadas = await arquivarVencidas();
   const quando = new Date().toISOString();
-  if (rows.length === 0) {
+
+  if (arquivadas.length === 0) {
     // Registra mesmo sem trabalho: log silencioso esconde tarefa que parou de rodar.
     console.log(`${quando} nenhuma galeria venceu`);
   } else {
-    console.log(`${quando} ${rows.length} galeria(s) para o cofre:`);
-    for (const r of rows) console.log(`  - ${r.nome_estudio}: ${r.titulo}`);
+    console.log(`${quando} ${arquivadas.length} galeria(s) para o cofre:`);
+    for (const g of arquivadas) console.log(`  - ${g.estudio}: ${g.titulo}`);
   }
 
   /*
@@ -47,17 +51,7 @@ try {
    * contratado. Estourar não bloqueia nada — só o próximo upload é recusado —,
    * então sem este aviso o operador só descobriria pela fatura.
    */
-  const { rows: acima } = await db.query(
-    `select t.nome_estudio, t.email,
-            coalesce(sum(m.bytes),0)::text as usado,
-            t.quota_bytes::text            as limite
-       from tenants t
-       join galerias g on g.tenant_id = t.id
-       join medias   m on m.galeria_id = g.id
-      group by t.id, t.nome_estudio, t.email, t.quota_bytes
-     having coalesce(sum(m.bytes),0) > t.quota_bytes`,
-  );
-
+  const acima = await estudiosAcimaDoEspaco();
   if (acima.length > 0) {
     const gb = (b) => (Number(b) / 1024 ** 3).toFixed(1);
     console.log(`${quando} ⚠ ${acima.length} estúdio(s) acima do espaço contratado:`);
@@ -69,5 +63,8 @@ try {
   console.error(`${new Date().toISOString()} FALHOU: ${e.message}`);
   process.exitCode = 1;
 } finally {
-  await db.end();
+  /* O pool de `lib/db.ts` fica pendurado no globalThis e seguraria o processo
+   * vivo depois do último `console.log` — num temporizador oneshot isso é uma
+   * tarefa que nunca termina. */
+  await pool().end();
 }

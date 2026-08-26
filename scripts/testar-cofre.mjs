@@ -14,6 +14,19 @@ import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
 
+/*
+ * Como o temporizador diário chama o script. As bandeiras de TypeScript entram
+ * porque `arquivar-vencidas.mjs` deixou de ter SQL próprio e passou a chamar
+ * `src/lib/cofre.ts` — mesmo formato do `ops/fotonio-espelho.service`.
+ */
+const ARGS_DIARIO = [
+  "--env-file=.env.local",
+  "--experimental-strip-types",
+  "--import",
+  "./scripts/registrar-ts.mjs",
+  "scripts/arquivar-vencidas.mjs",
+];
+
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
@@ -72,7 +85,7 @@ await etapa("prazo vencido é arquivado pelo script diário", async () => {
   ]);
   const saida = execFileSync(
     process.execPath,
-    ["--env-file=.env.local", "scripts/arquivar-vencidas.mjs"],
+    ARGS_DIARIO,
     { encoding: "utf8" },
   );
   const { rows: g } = await db.query("select estado, arquivada_em from galerias where id = $1", [
@@ -82,6 +95,53 @@ await etapa("prazo vencido é arquivado pelo script diário", async () => {
   if (!g[0].arquivada_em) throw new Error("não registrou quando arquivou");
   if (!saida.includes("cofre")) throw new Error("o script não registrou no log");
   return saida.trim().split("\n")[0].split(" ").slice(1).join(" ");
+});
+
+/*
+ * O arquivamento pelo PRAZO tem de deixar rastro, e com ator 'sistema'.
+ *
+ * Quando o cliente do estúdio reclamar que a galeria saiu do ar, este registro
+ * é o que prova que foi o prazo — o mesmo que o fotógrafo escolheu e combinou —
+ * e não alguém que apertou um botão. Arquivar por botão grava 'estudio', em
+ * `arquivarAgora`; sem o registro do temporizador, os dois casos ficam
+ * indistinguíveis depois do fato.
+ *
+ * `src/lib/cofre.ts` sempre soube fazer isso. O `scripts/arquivar-vencidas.mjs`
+ * é que rodava um `update` inline com o mesmo SQL e não gravava nada — duas
+ * implementações da mesma regra, e a que roda de verdade era a pior.
+ */
+await etapa("arquivar pelo prazo entra na auditoria como 'sistema'", async () => {
+  const { rows: antesEvento } = await db.query(
+    "select coalesce(max(id), 0)::text as ultimo from eventos",
+  );
+  const corte = antesEvento[0].ultimo;
+
+  // Devolve ao ar com o prazo vencido para o script ter o que arquivar.
+  await db.query(
+    `update galerias set estado = 'online', arquivada_em = null,
+            expira_em = now() - interval '1 day' where id = $1`,
+    [galeriaId],
+  );
+  execFileSync(process.execPath, ARGS_DIARIO, {
+    encoding: "utf8",
+  });
+
+  const { rows } = await db.query(
+    `select ator, detalhe from eventos
+      where id > $1 and acao = 'galeria.arquivada' and alvo_id = $2`,
+    [corte, galeriaId],
+  );
+  if (rows.length === 0) {
+    throw new Error("o script diário arquivou sem registrar evento — o rastro não existe");
+  }
+  if (rows.length > 1) throw new Error(`gravou ${rows.length} eventos para um arquivamento só`);
+  if (rows[0].ator !== "sistema") {
+    throw new Error(`ator ficou "${rows[0].ator}" — arquivamento por prazo não é ação do estúdio`);
+  }
+  if (rows[0].detalhe?.manual !== false) {
+    throw new Error("o detalhe não diz que foi automático");
+  }
+  return `ator=${rows[0].ator}, motivo=${rows[0].detalhe?.motivo}`;
 });
 
 await etapa("NENHUMA foto foi apagada ao arquivar", async () => {
@@ -165,7 +225,7 @@ await etapa("reativar traz de volta com o MESMO link", async () => {
 
 await etapa("galeria SEM prazo nunca é arquivada", async () => {
   await db.query("update galerias set expira_em = null where id = $1", [galeriaId]);
-  execFileSync(process.execPath, ["--env-file=.env.local", "scripts/arquivar-vencidas.mjs"], {
+  execFileSync(process.execPath, ARGS_DIARIO, {
     encoding: "utf8",
   });
   const { rows: g } = await db.query("select estado from galerias where id = $1", [galeriaId]);
