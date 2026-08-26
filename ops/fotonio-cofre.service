@@ -1,0 +1,18 @@
+[Unit]
+Description=Fotonio - cofre diario e limpeza de envios abandonados
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fotonio
+# As bandeiras de TypeScript entraram em 26/08/2026, quando o script deixou de
+# ter SQL proprio e passou a chamar src/lib/cofre.ts — que e o que faz o
+# arquivamento por prazo entrar na auditoria. Sem elas o node morre no primeiro
+# import, e como Type=oneshot aborta a sequencia, o limpar-pendentes abaixo nem
+# chega a rodar. Preso por scripts/testar-temporizadores.mjs.
+ExecStart=/usr/local/bin/node --env-file=/opt/fotonio/.env.production \
+  --experimental-strip-types --import /opt/fotonio/scripts/registrar-ts.mjs \
+  /opt/fotonio/scripts/arquivar-vencidas.mjs
+ExecStart=/usr/local/bin/node --env-file=/opt/fotonio/.env.production --experimental-strip-types --import /opt/fotonio/scripts/registrar-ts.mjs /opt/fotonio/scripts/limpar-pendentes.mjs
+StandardOutput=append:/var/log/fotonio-cofre.log
+StandardError=append:/var/log/fotonio-cofre.log

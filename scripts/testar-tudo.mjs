@@ -14,9 +14,17 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { codigoDeSaida } from "./resultado-suite.mjs";
 
 const AQUI = import.meta.dirname;
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
+
+/*
+ * `--exigir-tudo` transforma "pulado" em reprovação. É o modo que o `deploy.sh`
+ * usa: no dia a dia pular as suítes de HTTP sem servidor no ar é aceitável, na
+ * hora de publicar não é. Ver `resultado-suite.mjs`.
+ */
+const EXIGIR_TUDO = process.argv.includes("--exigir-tudo");
 
 const suites = readdirSync(AQUI)
   .filter((f) => f.startsWith("testar-") && f.endsWith(".mjs") && f !== "testar-tudo.mjs")
@@ -100,12 +108,22 @@ console.log(
   }`,
 );
 
-if (vermelhas.length) {
-  console.error(`\n✗ ${vermelhas.join(", ")}\n`);
-  process.exit(1);
-}
+if (vermelhas.length) console.error(`\n✗ ${vermelhas.join(", ")}\n`);
+
 if (pulados.length) {
-  console.log("\n⚠ cobertura parcial — suba o servidor e rode de novo antes de publicar\n");
-  process.exit(0);
+  console.log(
+    EXIGIR_TUDO
+      ? "\n✗ cobertura parcial, e esta execução exige tudo — suba o servidor e rode de novo\n"
+      : "\n⚠ cobertura parcial — suba o servidor e rode de novo antes de publicar\n",
+  );
+} else if (!vermelhas.length) {
+  console.log("\n✓ suíte inteira verde\n");
 }
-console.log("\n✓ suíte inteira verde\n");
+
+process.exit(
+  codigoDeSaida({
+    vermelhas: vermelhas.length,
+    pulados: pulados.length,
+    exigirTudo: EXIGIR_TUDO,
+  }),
+);

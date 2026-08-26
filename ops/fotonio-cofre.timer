@@ -1,0 +1,11 @@
+[Unit]
+Description=Verifica diariamente as galerias vencidas
+
+[Timer]
+OnCalendar=*-*-* 04:30:00
+# Se o servidor estava desligado na hora, roda assim que voltar.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
