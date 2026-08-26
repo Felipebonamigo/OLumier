@@ -6,6 +6,7 @@ import { MarcaTile } from "@/components/marca-tile";
 import { SeletorTema } from "@/components/seletor-tema";
 import { TEMAS } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
+import { ESPACOS, formatarGb } from "@/config/planos";
 
 export const metadata: Metadata = {
   title: `${marca.nome} — ${marca.tagline}`,
@@ -23,6 +24,38 @@ export const metadata: Metadata = {
  * depoimento inventado são mentira com tipografia bonita. Quando o Sirius e a
  * Carol estiverem usando de verdade, esta página ganha as palavras deles.
  */
+
+/*
+ * As três perguntas da seção de comparação.
+ *
+ * Os tamanhos saem de `ESPACOS`, nunca da mão de quem escreve o texto: se a
+ * grade ganhar um degrau embaixo, a frase acompanha em vez de virar mentira
+ * calada. É o mesmo motivo de `testar-comparativo.mjs` conferir que o número
+ * escrito na página é o número da grade.
+ */
+const MENOR_ESPACO = ESPACOS[0];
+const MAIOR_ESPACO = ESPACOS[ESPACOS.length - 1];
+
+const PERGUNTAS = [
+  {
+    pergunta: "Quanto cabe, no total?",
+    aqui: `De ${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)} — e o número é seu, não do pacote.`,
+    olhar:
+      "Onde o espaço vem embutido num plano, o teto costuma estar na casa das dezenas de GB. Um casamento fotografado e filmado passa disso sozinho, e teto não se compra separado: quando enche, a saída é mudar de serviço no meio da temporada.",
+  },
+  {
+    pergunta: "A senha tranca a página ou o arquivo?",
+    aqui: "O arquivo. Todo endereço é assinado e expira sozinho; o armazenamento não expõe nada.",
+    olhar:
+      "Dá para conferir em dez segundos, aqui ou em qualquer concorrente: abra uma foto da galeria numa aba anônima. Se ela carregar sem a senha, a senha trancava a porta — e o endereço da foto continua valendo depois que a entrega acabou.",
+  },
+  {
+    pergunta: "O filme conta como o quê?",
+    aqui: "Como espaço, igual à foto. Sem adicional por hora de vídeo e sem teto de resolução.",
+    olhar:
+      "É comum o vídeo ser cobrado por hora, à parte do espaço, e entregue só em HD. Para quem filma casamento em 4K, essa linha decide o preço do ano inteiro — e costuma aparecer depois da assinatura.",
+  },
+];
 
 export default function Home() {
   return (
@@ -375,6 +408,75 @@ export default function Home() {
             </div>
           </Revelar>
 
+          {/* ── a objeção, respondida onde ela nasce ────────────────────────
+              Vem DEPOIS do montador de propósito: a pergunta "por que não é
+              mais barato?" só existe depois de o preço aparecer.
+
+              Três decisões que valem mais que a diagramação:
+
+              1. Ninguém é citado pelo nome. Pacote fechado de concorrente muda
+                 de teto sem avisar, e uma tabela com o número deles envelhece
+                 em silêncio — vira mentira nossa por descuido alheio. Citar
+                 também dá palco de graça a quem ainda não tem o nosso.
+
+              2. Toda linha da coluna "aqui" é sobre NÓS, e cada uma é presa por
+                 teste: o espaço sai de `ESPACOS`, o filme por preço é
+                 `testar-planos`, o link assinado é `testar-galeria-publica`.
+                 Marketing que a suíte não alcança é onde a mentira mora.
+
+              3. A pergunta é feita "a qualquer galeria, a nossa inclusive". Não
+                 é falsa modéstia: é o que torna a seção verificável em dez
+                 segundos por quem está lendo, e o que a mantém honesta quando
+                 alguém empatar conosco.
+
+              `scripts/testar-comparativo.mjs` prende os três pontos. */}
+          <Revelar>
+            <div id="comparativo" className="mt-24 max-w-2xl scroll-mt-8">
+              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+                Antes de escolher
+              </p>
+              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+                Três perguntas para fazer a qualquer galeria — a nossa inclusive
+              </h2>
+              <p className="mt-4 text-texto-soft">
+                Pacote fechado quase sempre parece mais barato, e continua parecendo até a primeira
+                entrega grande. Estas são as perguntas que mudam a conta.
+              </p>
+            </div>
+          </Revelar>
+
+          <ol className="mt-12 border-t border-linha">
+            {PERGUNTAS.map((p, i) => (
+              <Revelar key={p.pergunta} atraso={i * 90}>
+                <li className="grid gap-x-10 gap-y-4 border-b border-linha py-8 md:grid-cols-[1.1fr_1fr]">
+                  <div className="flex gap-4">
+                    <span
+                      aria-hidden
+                      className="mt-1 font-mono text-[11px] tabular-nums text-texto-faint"
+                    >
+                      0{i + 1}
+                    </span>
+                    <h3 className="font-serif text-2xl font-semibold tracking-tight">
+                      {p.pergunta}
+                    </h3>
+                  </div>
+
+                  <div>
+                    {/* Rótulo em bloco, não colado no texto: como <span> inline
+                        o leitor de tela emenda "AquiDe 100 GB" numa palavra só,
+                        e o espaço só existia como margem visual. */}
+                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-acento-alto">
+                      Aqui
+                    </p>
+                    <p className="mt-1.5 max-w-[46ch] leading-relaxed text-texto">{p.aqui}</p>
+                    <p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-texto-soft">
+                      {p.olhar}
+                    </p>
+                  </div>
+                </li>
+              </Revelar>
+            ))}
+          </ol>
         </div>
       </section>
 
