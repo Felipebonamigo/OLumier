@@ -7,10 +7,40 @@ import {
   montar,
   formatarGb,
   formatarReais,
+  precoDoCicloCentavos,
+  economiaAnualCentavos,
+  type Ciclo,
   type Montagem,
   type Plano,
   type Segmento,
 } from "@/config/planos";
+
+/**
+ * O que vem em qualquer tamanho.
+ *
+ * A regra que esta lista sustenta: o tamanho muda só o ESPAÇO. Nenhum recurso
+ * fica atrás de um plano maior — é o oposto do pacote em escada, onde a senha
+ * na galeria ou a marca própria só aparecem no plano do meio.
+ *
+ * Só entra o que existe e está ligado, mesma regra da página de segurança. Cada
+ * linha abaixo foi conferida contra o produto, não contra o que seria bom
+ * vender: o cofre é `lib/cofre.ts`, a lixeira é `PRAZO_LIXEIRA_DIAS`, o link
+ * assinado é `armazem.ts`, e vídeo sem adicional é preso em `testar-planos.mjs`.
+ */
+const INCLUSO = [
+  "Galerias sem limite de quantidade",
+  "Downloads sem limite de vezes",
+  "Foto e filme no mesmo espaço, sem adicional por hora de vídeo",
+  "Sua marca: logo, cor de destaque e endereço próprio",
+  "Senha por galeria, quando você quiser",
+  "Capítulos para dividir a entrega em momentos",
+  "Favoritas: o cliente marca, você recebe a lista",
+  "Quatro estilos de galeria, com ajuste fino",
+  "Cofre: entrega vencida sai do ar sem ser apagada",
+  "Lixeira de 30 dias contra a mão errada",
+  "Links assinados que expiram sozinhos",
+  "Vitrine do estúdio, no seu endereço",
+];
 
 /**
  * O montador: o fotógrafo escolhe o que entrega e quanto espaço o estúdio tem.
@@ -77,11 +107,16 @@ export function MontadorPlano({
   acao,
 }: {
   inicial?: Montagem;
-  /** O botão do pé — quem usa o montador decide o que fazer com a escolha. */
-  acao?: (plano: Plano) => ReactNode;
+  /**
+   * O botão do pé — quem usa o montador decide o que fazer com a escolha.
+   * Recebe o ciclo junto porque é ele que define o valor da fatura: o botão que
+   * assina precisa saber se está mandando cobrar um mês ou dez.
+   */
+  acao?: (plano: Plano, ciclo: Ciclo) => ReactNode;
 }) {
   const [segmento, setSegmento] = useState<Segmento>(inicial?.segmento ?? "foto");
   const [espacoGb, setEspacoGb] = useState(inicial?.espacoGb ?? 1000);
+  const [ciclo, setCiclo] = useState<Ciclo>("mensal");
 
   const plano = montar({ segmento, espacoGb });
 
@@ -148,11 +183,72 @@ export function MontadorPlano({
         ))}
       </div>
 
+      {/* ── peça 3: como pagar ─────────────────────────────────────────── */}
+      <div className="mt-9 flex items-center gap-3">
+        <Numero n={3} />
+        <span className={PASSO}>Como pagar</span>
+      </div>
+
+      {/*
+       * O anual mostra o preço POR MÊS, com o total do ano embaixo. É a leitura
+       * honesta: quem compara plano compara mensalidade, e esconder que a
+       * cobrança sai de uma vez seria a surpresa errada na hora da fatura.
+       */}
+      <div
+        role="group"
+        aria-label="Ciclo de cobrança"
+        className="mt-3 inline-flex rounded-full border border-linha bg-void p-1"
+      >
+        {(["mensal", "anual"] as const).map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={ciclo === c}
+            onClick={() => setCiclo(c)}
+            className={`rounded-full px-5 py-2 text-sm transition ${
+              ciclo === c ? "bg-acento font-semibold text-void" : "text-texto-soft hover:text-texto"
+            }`}
+          >
+            {c === "mensal" ? "Mensal" : "Anual"}
+            {c === "anual" && (
+              <span
+                className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider ${
+                  ciclo === c ? "bg-void/20" : "bg-acento/15 text-acento-alto"
+                }`}
+              >
+                2 meses grátis
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── tudo que entrega ───────────────────────────────────────────── */}
+      <div className="mt-8 rounded-lg border border-linha bg-void p-5">
+        <p className={PASSO}>Incluso em qualquer tamanho</p>
+        <ul className="mt-4 grid gap-x-8 gap-y-2.5 text-sm text-texto-soft sm:grid-cols-2">
+          {INCLUSO.map((item) => (
+            <li key={item} className="flex gap-2.5">
+              <span aria-hidden className="mt-0.5 shrink-0 text-acento-alto">
+                ✓
+              </span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 border-t border-linha pt-3 text-xs text-texto-faint">
+          O tamanho muda só o espaço. Nenhum recurso fica atrás de um plano maior.
+        </p>
+      </div>
+
       {/* ── total ──────────────────────────────────────────────────────── */}
       <div className="mt-9 flex flex-col gap-4 border-t border-linha pt-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className={PASSO}>Seu plano</p>
-          <p className="mt-2 text-lg font-semibold">{plano.nome}</p>
+          <p className="mt-2 text-lg font-semibold">
+            {plano.nome}
+            {ciclo === "anual" && <span className="text-texto-soft"> · anual</span>}
+          </p>
           <p className="mt-1 text-xs text-texto-faint tabular-nums">
             {formatarGb(espacoGb)} · no ar e arquivado juntos
           </p>
@@ -162,7 +258,16 @@ export function MontadorPlano({
             {formatarReais(plano.precoCentavos)}
             <span className="text-sm font-normal text-texto-faint">/mês</span>
           </p>
-          {acao && <div className="mt-3">{acao(plano)}</div>}
+          {ciclo === "anual" && (
+            <p className="mt-1 text-xs text-texto-soft tabular-nums">
+              cobrado uma vez: {formatarReais(precoDoCicloCentavos(plano.precoCentavos, "anual"))}
+              /ano ·{" "}
+              <span className="text-acento-alto">
+                economiza {formatarReais(economiaAnualCentavos(plano.precoCentavos))}
+              </span>
+            </p>
+          )}
+          {acao && <div className="mt-3">{acao(plano, ciclo)}</div>}
         </div>
       </div>
     </div>

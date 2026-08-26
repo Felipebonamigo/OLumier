@@ -135,6 +135,51 @@ const FRACAO_DERIVADA_NO_R2 = 0.093;
  * `custoArmazenamentoCentavos` — não ressuscitar o seletor.
  */
 
+/**
+ * COMO A ASSINATURA É COBRADA.
+ *
+ * O mensal continua sendo o preço de referência da grade — `ESPACOS` guarda
+ * mensal, e o anual é DERIVADO dele. Nunca uma segunda tabela: duas tabelas de
+ * preço dessincronizam, e a que dessincroniza é sempre a que ninguém olha.
+ */
+export type Ciclo = "mensal" | "anual";
+
+/**
+ * Doze meses de espaço por dez meses de preço.
+ *
+ * "2 meses grátis" é o desconto anual mais comum do mercado e o mais fácil de
+ * explicar numa frase — e a frase importa, porque desconto que precisa de conta
+ * para ser entendido não converte.
+ *
+ * O que este número NÃO pode virar: um desconto que sai da reserva. O estúdio
+ * paga dez meses e ocupa o disco por doze, então quem segura o custo dos dois
+ * meses restantes é o LUCRO, nunca o dinheiro reservado para o fornecedor. Ver
+ * `lucroCentavos` em `socios.ts`, e as etapas do anual em `testar-planos.mjs`.
+ */
+export const MESES_PAGOS_NO_ANO = 10;
+
+/**
+ * Normaliza o que veio do banco.
+ *
+ * Qualquer coisa que não seja exatamente "anual" vira "mensal" — que é o que
+ * TODA assinatura era até a migração 018, e o padrão seguro: mensal reserva um
+ * mês de custo, e reservar de menos é o erro caro. O `check` da migração já
+ * impede lixo de entrar na coluna; isto protege o caminho de leitura.
+ */
+export function cicloDe(valor: string | null | undefined): Ciclo {
+  return valor === "anual" ? "anual" : "mensal";
+}
+
+/** O que a fatura cobra naquele ciclo, a partir do preço mensal da faixa. */
+export function precoDoCicloCentavos(precoMensalCentavos: number, ciclo: Ciclo): number {
+  return ciclo === "anual" ? precoMensalCentavos * MESES_PAGOS_NO_ANO : precoMensalCentavos;
+}
+
+/** Quanto o estúdio economiza no ano ao pagar de uma vez — para a tela, não para a conta. */
+export function economiaAnualCentavos(precoMensalCentavos: number): number {
+  return precoMensalCentavos * (12 - MESES_PAGOS_NO_ANO);
+}
+
 export interface Montagem {
   segmento: Segmento;
   /** Espaço total do estúdio, em GB — no ar e arquivado juntos. */

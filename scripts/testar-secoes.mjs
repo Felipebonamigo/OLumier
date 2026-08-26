@@ -8,7 +8,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
-import { criarSecao } from "../src/lib/secoes.ts";
+import { criarSecao, garantirSecoes } from "../src/lib/secoes.ts";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
@@ -18,11 +18,11 @@ const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
 const { rows } = await db.query(
-  `select g.id, g.slug gslug, t.slug tslug
+  `select g.id, g.tenant_id, g.slug gslug, t.slug tslug
      from galerias g join tenants t on t.id = g.tenant_id
     order by g.criado_em limit 1`,
 );
-const { id: galeriaId, gslug, tslug } = rows[0];
+const { id: galeriaId, tenant_id: tenantId, gslug, tslug } = rows[0];
 const url = `${BASE}/g/${tslug}/${gslug}`;
 
 await db.query("update galerias set publicada = true, senha_hash = null where id = $1", [galeriaId]);
@@ -68,9 +68,6 @@ await etapa("capítulo repetido é recusado, mesmo trocando maiúscula", async (
    *
    * A comparação ignora caixa E espaço nas pontas: quem digita rápido erra
    * nesses dois, e são justamente os que não mudam o nome aos olhos de ninguém. */
-  const { rows: t } = await db.query("select tenant_id from galerias where id = $1", [galeriaId]);
-  const tenantId = t[0].tenant_id;
-
   const primeiro = await criarSecao(galeriaId, tenantId, "Making Of");
   if (!primeiro) throw new Error("não criou nem o primeiro capítulo");
 
@@ -123,6 +120,61 @@ await etapa("ordem do fotógrafo é respeitada na página", async () => {
   await db.query("update secoes set ordem = 0 where id = $1", [capA.id]);
   await db.query("update secoes set ordem = 1 where id = $1", [capB.id]);
   return "reordenar muda a página";
+});
+
+/*
+ * `garantirSecoes` é o que o envio de pasta usa: ele lê "01 Making Of",
+ * "02 Cerimônia" do disco e precisa dos ids para carimbar cada foto. Chamar
+ * `criarSecao` direto não serve — ela devolve null tanto para "nome vazio"
+ * quanto para "já existe", e o envio precisa do id da que já existe, não de um
+ * erro. Sem isto, a segunda leva de fotos da mesma pasta perderia o capítulo.
+ */
+await etapa("garantir capítulos: cria o que falta e devolve o id do que já existe", async () => {
+  const r = await garantirSecoes(galeriaId, tenantId, ["Cerimônia", "Making Of"]);
+  if (r.length !== 2) throw new Error(`esperava 2, veio ${r.length}`);
+  const cerimonia = r.find((s) => s.nome === "Cerimônia");
+  if (cerimonia.id !== capA.id) throw new Error("não reusou a Cerimônia que já existia");
+  const making = r.find((s) => s.nome === "Making Of");
+  if (!making?.id) throw new Error("não criou o Making Of que faltava");
+  return `1 reusado, 1 criado`;
+});
+
+await etapa("garantir é idempotente: a segunda leva não duplica capítulo", async () => {
+  const antes = await db.query("select count(*)::int n from secoes where galeria_id = $1", [
+    galeriaId,
+  ]);
+  await garantirSecoes(galeriaId, tenantId, ["Cerimônia", "Making Of"]);
+  const depois = await db.query("select count(*)::int n from secoes where galeria_id = $1", [
+    galeriaId,
+  ]);
+  if (antes.rows[0].n !== depois.rows[0].n) {
+    throw new Error(`duplicou: ${antes.rows[0].n} → ${depois.rows[0].n}`);
+  }
+  return `${depois.rows[0].n} capítulos, sem repetir`;
+});
+
+await etapa("garantir casa por nome comparável — pasta 'making of' acha 'Making Of'", async () => {
+  const r = await garantirSecoes(galeriaId, tenantId, ["making of"]);
+  const esperado = await db.query(
+    "select id from secoes where galeria_id = $1 and nome = 'Making Of'",
+    [galeriaId],
+  );
+  if (r[0].id !== esperado.rows[0].id) throw new Error("criou um segundo em vez de casar");
+});
+
+await etapa("garantir ignora nome vazio em vez de estourar", async () => {
+  const r = await garantirSecoes(galeriaId, tenantId, ["   ", "Festa"]);
+  if (r.length !== 1) throw new Error(`esperava só a Festa, veio ${r.length}`);
+});
+
+await etapa("garantir recusa galeria de outro estúdio", async () => {
+  const r = await garantirSecoes(galeriaId, "00000000-0000-0000-0000-000000000000", ["Invasão"]);
+  if (r.length !== 0) throw new Error("deixou criar capítulo em galeria alheia");
+  const vazou = await db.query(
+    "select id from secoes where galeria_id = $1 and nome = 'Invasão'",
+    [galeriaId],
+  );
+  if (vazou.rows.length) throw new Error("criou mesmo assim");
 });
 
 await etapa("APAGAR capítulo não apaga as fotos", async () => {

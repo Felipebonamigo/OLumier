@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { marca } from "@/config/marca";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
-import { minhasFavoritas } from "@/lib/favoritas";
+import { estadoSelecao, minhasFavoritas } from "@/lib/favoritas";
 import {
   buscarGaleriaPublica,
   listarMediasPublicas,
@@ -182,6 +182,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * o banco.
    */
   const favoritasIniciais = await minhasFavoritas(galeria.id);
+  const selecao = await estadoSelecao(galeria.id);
 
   /*
    * Agrupa as fotos em capítulos preservando os índices do array original: o
@@ -255,6 +256,11 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         ) : (
           <GaleriaCliente
             favoritasIniciais={favoritasIniciais}
+            selecaoInicial={{
+              limite: selecao.limite,
+              aberta: selecao.aberta,
+              motivo: selecao.motivo,
+            }}
             itens={itens}
             permiteDownload={galeria.permite_download}
             galeriaId={galeria.id}

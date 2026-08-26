@@ -17,7 +17,7 @@
  * nada no resto do código depende desses números.
  */
 
-import { planoPorId, custoArmazenamentoCentavos } from "./planos";
+import { planoPorId, custoArmazenamentoCentavos, type Ciclo } from "./planos";
 
 export interface Socio {
   id: string;
@@ -89,11 +89,40 @@ function reservaDoPlano(planoId: string): number | null {
   return Math.round(custo * FOLGA_ESPACO) + TAXA_COBRANCA;
 }
 
-/** Quanto sobra de lucro depois de separar a reserva de custo. */
-export function lucroCentavos(planoId: string, precoCentavos: number): number {
-  /* Id irreconhecível cai num terço do preço — chute conservador, e o único
-   * caminho em que a reserva não sai do espaço contratado. */
-  const reserva = reservaDoPlano(planoId) ?? Math.round(precoCentavos * 0.35);
+/**
+ * Quanto sobra de lucro depois de separar a reserva de custo.
+ *
+ * ── POR QUE O CICLO ENTRA NESTA CONTA ─────────────────────────────────────
+ * A reserva segura, na conta, o dinheiro dos fornecedores; o split manda o
+ * resto embora na hora em que o pagamento cai. No mensal isso fecha sozinho:
+ * cobrou um mês, reserva um mês.
+ *
+ * No anual não. O estúdio paga UMA vez e ocupa o disco por DOZE meses. Se a
+ * reserva do anual continuasse sendo de um mês — ou mesmo dos dez que ele
+ * pagou — o split despacharia para as carteiras dos sócios um dinheiro que
+ * ainda vai ser gasto em armazenamento, e a conta só apareceria torta no
+ * décimo primeiro mês, com o cliente em dia e nenhum alarme tocando.
+ *
+ * Por isso o custo é multiplicado por 12 e a taxa de cobrança NÃO: são doze
+ * meses de disco, e uma cobrança só no ano. Essa economia de onze taxas é real
+ * e fica no lucro, que é o lugar certo dela.
+ */
+export function lucroCentavos(
+  planoId: string,
+  precoCentavos: number,
+  ciclo: Ciclo = "mensal",
+): number {
+  const meses = ciclo === "anual" ? 12 : 1;
+
+  const doPlano = reservaDoPlano(planoId);
+  const reserva =
+    doPlano === null
+      ? /* Id irreconhecível cai num terço do preço — chute conservador, e o
+         * único caminho em que a reserva não sai do espaço contratado. Aqui o
+         * preço JÁ é o do ciclo, então não se multiplica de novo. */
+        Math.round(precoCentavos * 0.35)
+      : (doPlano - TAXA_COBRANCA) * meses + TAXA_COBRANCA;
+
   return Math.max(0, precoCentavos - reserva);
 }
 
@@ -110,8 +139,16 @@ export interface FatiaSocio {
  * principal em vez de virar erro na cobrança. É de propósito — cobrança que
  * falha por configuração incompleta é muito pior que dinheiro parado.
  */
-export function montarFatias(planoId: string, precoCentavos: number): FatiaSocio[] {
-  const lucro = lucroCentavos(planoId, precoCentavos);
+export function montarFatias(
+  planoId: string,
+  precoCentavos: number,
+  ciclo: Ciclo = "mensal",
+): FatiaSocio[] {
+  /* O ciclo TEM de atravessar até aqui. `lucroCentavos` saber do anual não
+   * adianta nada se quem monta o split chamar sem contar: o cálculo fica certo
+   * num lugar e errado no outro, e as duas funções parecem corretas isoladas.
+   * `testar-planos.mjs` junta as duas de propósito. */
+  const lucro = lucroCentavos(planoId, precoCentavos, ciclo);
   const fatias: FatiaSocio[] = [];
 
   for (const socio of SOCIOS) {

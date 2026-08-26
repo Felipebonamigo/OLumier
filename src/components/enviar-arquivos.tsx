@@ -6,13 +6,17 @@ import { gerarDerivadas } from "@/lib/derivadas-client";
 import { enviarEmPartes } from "@/lib/multipart-client";
 import {
   PARALELOS,
+  type ArquivoComCaminho,
   arquivosDeArrasto,
   arquivoAceito,
+  comCaminhoDoInput,
   comRetentativa,
   emParalelo,
   manterAcordado,
-  ordenarNatural,
+  ordenarNaturalPorCaminho,
 } from "@/lib/fila-upload";
+import { capitulosDaPasta } from "@/lib/capitulos-pasta";
+import { garantirSecoesAction } from "@/app/painel/actions";
 
 type Situacao = "esperando" | "preparando" | "enviando" | "pronto" | "erro";
 
@@ -111,10 +115,38 @@ export function EnviarArquivos({
   }, [rodando]);
 
   const processar = useCallback(
-    async (brutos: File[]) => {
-      const arquivos = ordenarNatural(brutos.filter(arquivoAceito));
-      if (arquivos.length === 0) return;
+    async (brutos: ArquivoComCaminho[]) => {
+      const itens = ordenarNaturalPorCaminho(brutos.filter((b) => arquivoAceito(b.arquivo)));
+      if (itens.length === 0) return;
 
+      /*
+       * A pasta do fotógrafo JÁ está organizada — "01 Making Of", "02 Cerimônia".
+       * Ler isso aqui é o que evita ele refazer no painel o que já fez no disco.
+       *
+       * Acontece antes do primeiro arquivo subir, numa chamada só: descobrir o
+       * capítulo arquivo a arquivo seriam centenas de idas ao servidor.
+       * Se falhar, o envio segue para o destino escolhido na tela — perder o
+       * capítulo é chato, perder o casamento inteiro é inaceitável.
+       */
+      const porCaminho = new Map<string, string>();
+      const capitulos = capitulosDaPasta(itens.map((i) => i.caminho));
+      if (capitulos.length > 0) {
+        try {
+          const criados = await garantirSecoesAction(
+            galeriaId,
+            capitulos.map((c) => c.nome),
+          );
+          const idPorNome = new Map(criados.map((c) => [c.nome, c.id]));
+          for (const c of capitulos) {
+            const id = idPorNome.get(c.nome);
+            if (id) for (const caminho of c.caminhos) porCaminho.set(caminho, id);
+          }
+        } catch {
+          // segue sem capítulo; o fotógrafo move depois, e nada se perde
+        }
+      }
+
+      const arquivos = itens.map((i) => i.arquivo);
       const novos: ItemFila[] = arquivos.map((a, i) => ({
         id: `${Date.now()}-${i}-${a.name}`,
         nome: a.name,
@@ -170,7 +202,9 @@ export function EnviarArquivos({
                     comDerivadas: Boolean(derivadas),
                     largura: derivadas?.largura,
                     altura: derivadas?.altura,
-                    secaoId: destino || undefined,
+                    /* A pasta manda: o capítulo lido do disco vence o seletor da
+                     * tela, que é o palpite para quem soltou arquivos soltos. */
+                    secaoId: porCaminho.get(itens[i].caminho) || destino || undefined,
                     // A ordem que o fotógrafo escolheu é a narrativa do casamento.
                     indice: i,
                   }),
@@ -326,7 +360,7 @@ export function EnviarArquivos({
           {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
           className="hidden"
           onChange={(e) => {
-            processar([...(e.target.files ?? [])]);
+            processar([...(e.target.files ?? [])].map(comCaminhoDoInput));
             e.target.value = "";
           }}
         />
@@ -337,7 +371,7 @@ export function EnviarArquivos({
           accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
           className="hidden"
           onChange={(e) => {
-            processar([...(e.target.files ?? [])]);
+            processar([...(e.target.files ?? [])].map(comCaminhoDoInput));
             e.target.value = "";
           }}
         />

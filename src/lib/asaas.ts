@@ -1,5 +1,6 @@
 import "server-only";
 import { montarFatias } from "@/config/socios";
+import type { Ciclo } from "@/config/planos";
 
 /**
  * Cliente do Asaas — cobrança recorrente com split.
@@ -112,11 +113,15 @@ export async function criarAssinatura(dados: {
   clienteAsaasId: string;
   tenantId: string;
   planoId: string;
+  /** Já é o preço DO CICLO — mensal ou dez meses, conforme `ciclo`. */
   precoCentavos: number;
+  ciclo: Ciclo;
   descricao: string;
   primeiroVencimento: Date;
 }): Promise<AssinaturaAsaas> {
-  const fatias = montarFatias(dados.planoId, dados.precoCentavos);
+  /* O ciclo entra no split porque a reserva de custo depende dele: o anual
+   * cobra uma vez e ocupa disco por doze meses. Ver `lucroCentavos`. */
+  const fatias = montarFatias(dados.planoId, dados.precoCentavos, dados.ciclo);
 
   return chamar<AssinaturaAsaas>("/subscriptions", {
     method: "POST",
@@ -125,7 +130,7 @@ export async function criarAssinatura(dados: {
       billingType: "UNDEFINED", // o cliente escolhe entre Pix, boleto ou cartão
       value: dados.precoCentavos / 100,
       nextDueDate: dados.primeiroVencimento.toISOString().slice(0, 10),
-      cycle: "MONTHLY",
+      cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
       description: dados.descricao,
       externalReference: `${PREFIXO}${dados.tenantId}`,
       split: fatias.map((f) => ({
@@ -152,9 +157,14 @@ export async function atualizarAssinatura(dados: {
   assinaturaId: string;
   planoId: string;
   precoCentavos: number;
+  /** O ciclo da assinatura que já existe — trocar de ciclo NÃO passa por aqui. */
+  ciclo: Ciclo;
   descricao: string;
 }): Promise<AssinaturaAsaas> {
-  const fatias = montarFatias(dados.planoId, dados.precoCentavos);
+  /* Mesmo motivo de `criarAssinatura`: sem o ciclo, uma troca de plano dentro do
+   * anual recalcularia o split com reserva de um mês e mandaria embora o
+   * dinheiro dos outros onze. */
+  const fatias = montarFatias(dados.planoId, dados.precoCentavos, dados.ciclo);
 
   return chamar<AssinaturaAsaas>(`/subscriptions/${dados.assinaturaId}`, {
     method: "PUT",

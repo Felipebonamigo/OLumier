@@ -30,8 +30,10 @@ import {
   custoArmazenamentoCentavos,
   planos,
   todasAsMontagens,
+  precoDoCicloCentavos,
+  MESES_PAGOS_NO_ANO,
 } from "../src/config/planos.ts";
-import { lucroCentavos, FOLGA_ESPACO, TAXA_COBRANCA } from "../src/config/socios.ts";
+import { lucroCentavos, montarFatias, SOCIOS, FOLGA_ESPACO, TAXA_COBRANCA } from "../src/config/socios.ts";
 
 /*
  * A reserva da montagem. Mesma regra do socios.ts, refeita aqui de propósito:
@@ -248,6 +250,140 @@ await etapa("a reserva que fica cobre o custo de cada montagem", () => {
  * porque isto alimenta uma RESERVA: reserva é proteção, e proteção se calcula
  * pelo caso ruim.
  */
+/*
+ * ── O ANUAL ───────────────────────────────────────────────────────────────
+ *
+ * O anual cobra 10 meses e entrega 12. Isso é desconto, e desconto é decisão —
+ * o que NÃO pode acontecer é o desconto sair do bolso errado.
+ *
+ * A armadilha tem nome: a reserva. Ela existe para segurar, na conta, o
+ * dinheiro dos fornecedores; o resto o split manda embora na hora. No mensal a
+ * reserva cobre um mês, porque um mês é o que foi cobrado. No anual, o estúdio
+ * paga uma vez e ocupa o espaço por DOZE meses — se a reserva ainda for de um
+ * mês, ou mesmo de dez, o split despacha para as carteiras dos sócios um
+ * dinheiro que ainda vai ser gasto em armazenamento.
+ *
+ * E esse erro não aparece no dia em que acontece. Aparece no décimo primeiro
+ * mês, quando a fatura chega e o dinheiro dela já foi dividido — com o cliente
+ * em dia e nenhum alarme tocando.
+ */
+await etapa("o anual custa 10 meses e entrega 12", () => {
+  for (const m of todasAsMontagens()) {
+    const p = montar(m);
+    const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
+    const esperado = p.precoCentavos * MESES_PAGOS_NO_ANO;
+    if (anual !== esperado) {
+      throw new Error(`${p.id}: anual ${anual / 100} ≠ ${MESES_PAGOS_NO_ANO}× mensal ${esperado / 100}`);
+    }
+  }
+  return `${MESES_PAGOS_NO_ANO} meses pagos, ${12 - MESES_PAGOS_NO_ANO} de desconto`;
+});
+
+await etapa("a reserva do anual cobre DOZE meses de custo, não dez", () => {
+  let pior = null;
+  for (const m of todasAsMontagens()) {
+    const p = montar(m);
+    const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
+    const custoDoAno = custoArmazenamentoTetoCentavos(m) * 12;
+    const lucro = lucroCentavos(p.id, anual, "anual");
+    const retido = anual - lucro;
+
+    if (lucro > 0 && retido < custoDoAno) {
+      throw new Error(
+        `${p.id}: no anual fica R$ ${(retido / 100).toFixed(2)} para pagar ` +
+          `R$ ${(custoDoAno / 100).toFixed(2)} de armazenamento do ano — o split levaria a diferença`,
+      );
+    }
+    if (!pior || lucro < pior.lucro) pior = { id: p.id, lucro };
+  }
+  return `pior lucro anual: ${pior.id} com R$ ${(pior.lucro / 100).toFixed(2)}`;
+});
+
+await etapa("nenhuma faixa fica sem lucro no anual", () => {
+  for (const m of todasAsMontagens()) {
+    const p = montar(m);
+    const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
+    if (lucroCentavos(p.id, anual, "anual") <= 0) {
+      throw new Error(
+        `${p.id}: o anual não libera nada para o split. Ou o desconto é grande demais ` +
+          `para esta faixa, ou ela não devia existir no anual — decida, não deixe travar sozinho.`,
+      );
+    }
+  }
+});
+
+await etapa("o desconto do ano sai do lucro, nunca da reserva", () => {
+  /* Doze mensais e um anual guardam o MESMO espaço pelo mesmo tempo, então
+   * retêm o mesmo custo. A diferença entre os dois tem de ser exatamente os
+   * dois meses de desconto — se for maior, o anual está retendo de menos. */
+  for (const m of todasAsMontagens()) {
+    const p = montar(m);
+    const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
+    const lucroDoAnual = lucroCentavos(p.id, anual, "anual");
+    const lucroDe12Mensais = lucroCentavos(p.id, p.precoCentavos) * 12;
+    const perdido = lucroDe12Mensais - lucroDoAnual;
+    const doisMeses = p.precoCentavos * (12 - MESES_PAGOS_NO_ANO);
+
+    /* Tolerância de 11 taxas de cobrança: o anual cobra UMA vez no ano, o mensal
+     * cobra doze — essa economia é real e fica no lucro do anual. */
+    const folga = TAXA_COBRANCA * 11;
+    if (perdido > doisMeses + 1 || perdido < doisMeses - folga - 1) {
+      throw new Error(
+        `${p.id}: o anual custa R$ ${(perdido / 100).toFixed(2)} de lucro, e o desconto ` +
+          `de ${12 - MESES_PAGOS_NO_ANO} meses vale R$ ${(doisMeses / 100).toFixed(2)}`,
+      );
+    }
+  }
+  return "a diferença é o desconto, e só ele";
+});
+
+/*
+ * A conta certa só vale se QUEM MANDA O DINHEIRO usar ela.
+ *
+ * `lucroCentavos` pode conhecer o ciclo e `montarFatias` continuar chamando sem
+ * ele — e aí o split calcula sobre um preço anual usando reserva de um mês.
+ * O split fica gordo, a reserva fica curta, e nada acusa: as duas funções estão
+ * "certas" separadas. Esta etapa junta as duas.
+ */
+await etapa("o split do anual não passa do lucro do anual", () => {
+  /* Carteiras de mentira só para as fatias existirem: sem carteira o sócio é
+   * pulado, e o teste mediria uma lista vazia achando que passou. */
+  const salvas = SOCIOS.map((s) => [s.variavelCarteira, process.env[s.variavelCarteira]]);
+  for (const s of SOCIOS) process.env[s.variavelCarteira] = `carteira-de-teste-${s.id}`;
+
+  try {
+    for (const m of todasAsMontagens()) {
+      const p = montar(m);
+      const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
+      const fatias = montarFatias(p.id, anual, "anual");
+      if (fatias.length !== SOCIOS.length) {
+        throw new Error(`${p.id}: esperava ${SOCIOS.length} fatias, vieram ${fatias.length}`);
+      }
+      const enviado = fatias.reduce((s, f) => s + f.centavos, 0);
+      const lucro = lucroCentavos(p.id, anual, "anual");
+      if (enviado > lucro) {
+        throw new Error(
+          `${p.id}: o split manda R$ ${(enviado / 100).toFixed(2)} e o lucro do ano ` +
+            `é R$ ${(lucro / 100).toFixed(2)} — a diferença sai da reserva do fornecedor`,
+        );
+      }
+      const custoDoAno = custoArmazenamentoTetoCentavos(m) * 12;
+      if (anual - enviado < custoDoAno) {
+        throw new Error(
+          `${p.id}: depois do split ficam R$ ${((anual - enviado) / 100).toFixed(2)} na conta ` +
+            `para pagar R$ ${(custoDoAno / 100).toFixed(2)} de armazenamento do ano`,
+        );
+      }
+    }
+    return `${todasAsMontagens().length} montagens, split dentro do lucro`;
+  } finally {
+    for (const [chave, valor] of salvas) {
+      if (valor === undefined) delete process.env[chave];
+      else process.env[chave] = valor;
+    }
+  }
+});
+
 await etapa("o custo por GB é o que a fatura cobra", () => {
   const porGb = custoArmazenamentoCentavos({ segmento: "foto", espacoGb: 1000 }) / 1000;
   if (Math.abs(porGb - 4.587) > 0.01) {

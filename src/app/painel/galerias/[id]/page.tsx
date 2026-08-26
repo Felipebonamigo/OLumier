@@ -17,7 +17,8 @@ import { lerAparencia } from "@/config/aparencia";
 import { PrazoCofre } from "@/components/prazo-cofre";
 import { EditorGaleria } from "@/components/editor-galeria";
 import { paraCampoDeData } from "@/lib/datas";
-import { resumoDaGaleria } from "@/lib/favoritas";
+import { estadoSelecao, listaDaSelecao, resumoDaGaleria } from "@/lib/favoritas";
+import { PainelSelecao } from "@/components/painel-selecao";
 import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
 import { apagarGaleriaAction } from "../../actions";
 
@@ -44,6 +45,8 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
 
   // O que o cliente marcou. Uma consulta agregada, não uma por foto.
   const favoritas = await resumoDaGaleria(galeria.id);
+  const selecao = await estadoSelecao(galeria.id);
+  const listaSelecao = await listaDaSelecao(galeria.id);
 
   // URLs assinadas com validade curta: o objeto no bucket nunca fica público.
   // Aqui também usamos a miniatura — o painel de quem tem 600 fotos precisa abrir rápido.
@@ -224,36 +227,21 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
       />
       {/*
-        As escolhas do cliente. Só aparece quando alguém marcou alguma coisa —
-        uma caixa dizendo "0 favoritas" em toda galeria seria ruído permanente
-        para explicar um recurso que talvez nem seja usado naquele trabalho.
+        A escolha do álbum. Aparece sempre, e não só depois da primeira marcação
+        como a caixa antiga: as REGRAS (quantas fotos, até quando) precisam ser
+        definidas ANTES de mandar o link, que é justamente quando ainda não há
+        nenhuma marcada.
       */}
-      {favoritas.fotos > 0 && (
-        <section className="mt-8 rounded-xl border border-acento/30 bg-acento/[0.06] p-5">
-          <h2 className="text-sm font-semibold">
-            <span className="text-acento">♥</span> Escolhas do cliente
-          </h2>
-          <p className="mt-1 text-sm text-texto-soft">
-            <strong className="text-texto">{favoritas.fotos}</strong>{" "}
-            {favoritas.fotos === 1 ? "foto marcada" : "fotos marcadas"}
-            {favoritas.pessoas > 1 && (
-              <> por <strong className="text-texto">{favoritas.pessoas}</strong> pessoas</>
-            )}
-            .
-          </p>
-          <p className="mt-2 text-xs text-texto-faint">
-            O coração aparece na miniatura abaixo. Quando mais de uma pessoa marca a mesma foto,
-            o número ao lado do coração diz quantas — foto escolhida por todos costuma ser
-            decisão fechada.
-          </p>
-          {favoritas.pessoas > 1 && (
-            <p className="mt-1.5 text-xs text-texto-faint">
-              Pessoas diferentes são aparelhos diferentes: a noiva no celular e o noivo no
-              notebook contam como dois.
-            </p>
-          )}
-        </section>
-      )}
+      <PainelSelecao
+        galeriaId={galeria.id}
+        total={selecao.total}
+        limite={selecao.limite}
+        prazo={selecao.prazo ? selecao.prazo.toISOString() : null}
+        fechadaEm={selecao.fechadaEm ? selecao.fechadaEm.toISOString() : null}
+        aberta={selecao.aberta}
+        motivo={selecao.motivo}
+        lista={listaSelecao.map((l) => ({ nome: l.nome, capitulo: l.capitulo }))}
+      />
 
       <GradeMedias
         medias={exibidas}

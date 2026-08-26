@@ -23,6 +23,14 @@ export interface Tenant {
   cpf_cnpj: string | null;
   asaas_cliente_id: string | null;
   asaas_assinatura_id: string | null;
+  /**
+   * "mensal" ou "anual" — como esta assinatura é cobrada.
+   *
+   * Não é enfeite de tela: o cálculo da reserva de custo depende dele, porque o
+   * anual cobra uma vez e ocupa disco por doze meses. Passe sempre por
+   * `cicloDe()` antes de usar. Ver migração 018 e `lucroCentavos` em socios.ts.
+   */
+  ciclo_cobranca: string;
   criado_em: Date;
 }
 

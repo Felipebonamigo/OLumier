@@ -71,6 +71,53 @@ export async function criarSecao(galeriaId: string, tenantId: string, nome: stri
   );
 }
 
+/**
+ * Devolve o id de cada capítulo pedido, criando só os que faltam.
+ *
+ * É o que o envio de pasta precisa: ele lê "01 Making Of", "02 Cerimônia" do
+ * disco e tem de carimbar cada foto com um id. `criarSecao` sozinha não serve
+ * porque devolve `null` em dois casos diferentes — nome vazio e nome repetido —
+ * e o envio quer justamente o id do repetido, não um erro. Sem isto, a segunda
+ * leva de fotos da mesma pasta chegaria sem capítulo nenhum.
+ *
+ * A ordem da lista é preservada, porque ela é a ordem das pastas, que é a ordem
+ * da narrativa do casamento.
+ *
+ * SEQUENCIAL de propósito. Em paralelo, dois nomes que só diferem na caixa
+ * ("Making Of" e "making of" na mesma pasta) poderiam passar juntos pela
+ * checagem de repetido antes de qualquer um dos dois existir, e nasceriam os
+ * dois. São poucos capítulos por envio; a lentidão não se nota, e a duplicata
+ * apareceria no menu do casal, que é onde ninguém quer descobrir.
+ */
+export async function garantirSecoes(
+  galeriaId: string,
+  tenantId: string,
+  nomes: string[],
+): Promise<{ nome: string; id: string }[]> {
+  if (!(await galeriaDoTenant(galeriaId, tenantId))) return [];
+
+  const saida: { nome: string; id: string }[] = [];
+  for (const bruto of nomes) {
+    const nome = bruto.trim().slice(0, 60);
+    if (!nome) continue;
+
+    /* Procura antes de criar: o caso comum é o capítulo já existir, e assim o
+     * envio da segunda leva não gasta uma tentativa de inserção por pasta. */
+    const existente = await consultarUm<{ id: string; nome: string }>(
+      "select id, nome from secoes where galeria_id = $1 and lower(nome) = lower($2) limit 1",
+      [galeriaId, nome],
+    );
+    if (existente) {
+      saida.push({ nome: existente.nome, id: existente.id });
+      continue;
+    }
+
+    const criada = await criarSecao(galeriaId, tenantId, nome);
+    if (criada) saida.push({ nome: criada.nome, id: criada.id });
+  }
+  return saida;
+}
+
 export async function renomearSecao(secaoId: string, tenantId: string, nome: string) {
   const limpo = nome.trim().slice(0, 60);
   if (!limpo) return;

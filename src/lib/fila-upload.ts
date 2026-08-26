@@ -91,27 +91,53 @@ export function arquivoAceito(f: File): boolean {
 }
 
 /**
+ * Arquivo mais o caminho de onde ele veio — é o caminho que vira capítulo.
+ *
+ * Precisa andar ao lado do `File` porque as duas formas de mandar uma pasta
+ * guardam o caminho em lugares diferentes, e uma delas não guarda:
+ *
+ *   <input webkitdirectory> → `File.webkitRelativePath` vem preenchido
+ *   arrastar a pasta        → `File` vem SEM caminho; ele está na entrada
+ *
+ * Perder o caminho aqui é perder a organização que o fotógrafo já fez no disco.
+ */
+export interface ArquivoComCaminho {
+  arquivo: File;
+  /** "Casamento/Cerimônia/foto.jpg" — relativo ao que foi solto na tela. */
+  caminho: string;
+}
+
+/** Caminho de um arquivo vindo do `<input>`; cai no nome quando não há pasta. */
+export function comCaminhoDoInput(f: File): ArquivoComCaminho {
+  return { arquivo: f, caminho: f.webkitRelativePath || f.name };
+}
+
+/**
  * Extrai os arquivos de uma pasta arrastada.
  *
  * Arrastar pasta não entrega `files` — entrega "entradas" que precisam ser
  * percorridas uma a uma, inclusive as subpastas (fotógrafo costuma separar em
  * "Cerimônia", "Festa"…).
  */
-export async function arquivosDeArrasto(dt: DataTransfer): Promise<File[]> {
+export async function arquivosDeArrasto(dt: DataTransfer): Promise<ArquivoComCaminho[]> {
   const entradas = [...dt.items]
     .map((i) => (i.kind === "file" ? i.webkitGetAsEntry?.() : null))
     .filter(Boolean) as FileSystemEntry[];
 
   // Navegador sem suporte a pasta: usa a lista simples de arquivos.
-  if (entradas.length === 0) return [...dt.files].filter(arquivoAceito);
+  if (entradas.length === 0) {
+    return [...dt.files].filter(arquivoAceito).map(comCaminhoDoInput);
+  }
 
-  const achados: File[] = [];
+  const achados: ArquivoComCaminho[] = [];
   const percorrer = async (entrada: FileSystemEntry): Promise<void> => {
     if (entrada.isFile) {
       const f = await new Promise<File | null>((res) =>
         (entrada as FileSystemFileEntry).file(res, () => res(null)),
       );
-      if (f && arquivoAceito(f)) achados.push(f);
+      /* `fullPath` é o único lugar onde o caminho existe neste fluxo: o `File`
+       * que a entrada devolve vem com `webkitRelativePath` vazio. */
+      if (f && arquivoAceito(f)) achados.push({ arquivo: f, caminho: entrada.fullPath || f.name });
       return;
     }
     if (entrada.isDirectory) {
@@ -131,10 +157,24 @@ export async function arquivosDeArrasto(dt: DataTransfer): Promise<File[]> {
   return achados;
 }
 
+/** Compara como o fotógrafo espera: foto_2 antes de foto_10. */
+const colador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
+
 /** Ordena como o fotógrafo espera: foto_2 antes de foto_10. */
 export function ordenarNatural(arquivos: File[]): File[] {
-  const col = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
-  return [...arquivos].sort((a, b) => col.compare(a.name, b.name));
+  return [...arquivos].sort((a, b) => colador.compare(a.name, b.name));
+}
+
+/**
+ * Ordena pelo CAMINHO, não pelo nome.
+ *
+ * Com pastas, o caminho carrega a ordem certa de graça: "01 Making Of/x.jpg"
+ * vem antes de "02 Cerimônia/a.jpg" mesmo com "a" < "x". Ordenar só pelo nome
+ * embaralharia os capítulos entre si e a galeria sairia com a festa no meio da
+ * cerimônia.
+ */
+export function ordenarNaturalPorCaminho(itens: ArquivoComCaminho[]): ArquivoComCaminho[] {
+  return [...itens].sort((a, b) => colador.compare(a.caminho, b.caminho));
 }
 
 /** Mantém a tela acesa enquanto a fila roda; devolve como soltar. */

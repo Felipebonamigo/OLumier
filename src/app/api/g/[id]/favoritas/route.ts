@@ -1,6 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultarUm } from "@/lib/db";
-import { alternar, garantirVisitante, minhasFavoritas } from "@/lib/favoritas";
+import {
+  alternar,
+  estadoSelecao,
+  fecharSelecao,
+  garantirVisitante,
+  minhasFavoritas,
+} from "@/lib/favoritas";
 import { temAcessoLiberado } from "@/lib/galerias-publicas";
 
 /**
@@ -46,13 +52,59 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const r = await alternar(id, mediaId, visitante);
   if (!r) return NextResponse.json({ erro: "foto não é desta galeria" }, { status: 404 });
 
-  return NextResponse.json(r);
+  /*
+   * Recusa da seleção não é erro de servidor nem de permissão: é uma regra que o
+   * fotógrafo definiu. 409 (conflito com o estado atual) diz isso, e o `motivo`
+   * é o que a tela usa para explicar em português em vez de um "não deu".
+   */
+  if ("erro" in r) {
+    const estado = await estadoSelecao(id);
+    return NextResponse.json(
+      { erro: r.erro, total: estado.total, limite: estado.limite },
+      { status: 409 },
+    );
+  }
+
+  const estado = await estadoSelecao(id);
+  return NextResponse.json({ ...r, limite: estado.limite, cheia: estado.cheia });
 }
 
-/** As favoritas deste visitante. Usada só para reconciliar depois de um erro. */
+/** A lista da galeria e o estado da seleção. Reconcilia a tela depois de um erro. */
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const permissao = await galeriaLiberada(id);
   if (!permissao.ok) return NextResponse.json({ erro: "sem acesso" }, { status: permissao.status });
-  return NextResponse.json({ favoritas: await minhasFavoritas(id) });
+  const estado = await estadoSelecao(id);
+  return NextResponse.json({
+    favoritas: await minhasFavoritas(id),
+    total: estado.total,
+    limite: estado.limite,
+    cheia: estado.cheia,
+    aberta: estado.aberta,
+    motivo: estado.motivo,
+  });
+}
+
+/**
+ * "Terminei minha escolha".
+ *
+ * Fica junto das favoritas de propósito: é a mesma régua de acesso (link, e
+ * senha quando houver) e o mesmo recurso — a seleção. Uma rota separada
+ * duplicaria `galeriaLiberada`, que é onde mora a autorização.
+ */
+export async function PUT(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+
+  const permissao = await galeriaLiberada(id);
+  if (!permissao.ok) return NextResponse.json({ erro: "sem acesso" }, { status: permissao.status });
+
+  const antes = await estadoSelecao(id);
+  if (!antes.aberta) {
+    // Já estava fechada: para quem clicou, o resultado é o mesmo que ele queria.
+    return NextResponse.json({ fechada: true, total: antes.total, motivo: antes.motivo });
+  }
+
+  await fecharSelecao(id);
+  const depois = await estadoSelecao(id);
+  return NextResponse.json({ fechada: true, total: depois.total, motivo: depois.motivo });
 }

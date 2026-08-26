@@ -9,7 +9,7 @@ import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { lerAparencia } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
-import { planoPorId, GB } from "@/config/planos";
+import { planoPorId, GB, cicloDe, precoDoCicloCentavos, type Ciclo } from "@/config/planos";
 import { buscarTenantPorId } from "@/lib/tenants";
 import {
   asaasConfigurado,
@@ -31,10 +31,12 @@ import {
   CAPITULOS_SUGERIDOS,
   apagarSecao,
   criarSecao,
+  garantirSecoes,
   moverMediasParaSecao,
   moverSecao,
   renomearSecao,
 } from "@/lib/secoes";
+import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -152,6 +154,46 @@ export async function definirCapaAction(form: FormData) {
   revalidatePath(`/painel/galerias/${galeriaId}`);
 }
 
+// --- seleção do álbum -------------------------------------------------------
+
+/**
+ * Limite e prazo da escolha do cliente.
+ *
+ * Campo vazio significa "sem regra", não zero: quem não quer limite deixa em
+ * branco, e o banco tem um `check` que recusa limite <= 0 caso algo passe daqui.
+ */
+export async function salvarRegrasSelecaoAction(form: FormData): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+
+  const limiteBruto = String(form.get("limite") ?? "").trim();
+  const limite = limiteBruto ? Number(limiteBruto) : null;
+  if (limite !== null && (!Number.isFinite(limite) || limite < 1)) {
+    return { erro: "O limite precisa ser um número maior que zero — ou deixe em branco." };
+  }
+
+  const prazoBruto = String(form.get("prazo") ?? "").trim();
+  /* `<input type=date>` manda "2026-09-30", que vira meia-noite UTC — no Brasil
+   * isso é 21h do dia ANTERIOR, e a seleção fecharia um dia antes do combinado.
+   * O fim do dia local é o que a data significa para quem digitou. */
+  const prazo = prazoBruto ? new Date(`${prazoBruto}T23:59:59`) : null;
+  if (prazo !== null && Number.isNaN(prazo.getTime())) {
+    return { erro: "Data inválida." };
+  }
+
+  await definirRegrasSelecao(galeriaId, tenantId, { limite, prazo });
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  return {};
+}
+
+/** Reabre a escolha que o cliente encerrou. Cliente muda de ideia, e é normal. */
+export async function reabrirSelecaoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  await reabrirSelecao(galeriaId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
 // --- capítulos --------------------------------------------------------------
 
 export async function criarSecaoAction(form: FormData): Promise<{ erro?: string }> {
@@ -179,6 +221,30 @@ export async function criarCapitulosSugeridosAction(form: FormData) {
     await criarSecao(galeriaId, tenantId, nome);
   }
   revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * Garante os capítulos que o envio de pasta encontrou e devolve os ids.
+ *
+ * Chamada UMA vez por envio, antes do primeiro arquivo subir: o envio precisa
+ * saber em qual capítulo carimbar cada foto, e descobrir isso arquivo a arquivo
+ * seriam centenas de idas ao servidor numa pasta de casamento.
+ *
+ * Recebe os nomes em JSON e não em campos de formulário porque a ordem importa
+ * (é a ordem das pastas, que é a ordem da narrativa) e `FormData` com chaves
+ * repetidas é um jeito ruim de carregar uma lista ordenada.
+ */
+export async function garantirSecoesAction(
+  galeriaId: string,
+  nomes: string[],
+): Promise<{ nome: string; id: string }[]> {
+  const tenantId = await exigirTenant();
+  /* Teto de segurança: uma pasta com centenas de subpastas é engano do
+   * fotógrafo (ou pasta errada arrastada), não um casamento com 300 capítulos.
+   * Sem isto, um clique errado criaria centenas de linhas em `secoes`. */
+  const capitulos = await garantirSecoes(galeriaId, tenantId, nomes.slice(0, 50));
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  return capitulos;
 }
 
 export async function renomearSecaoAction(form: FormData) {
@@ -220,6 +286,7 @@ export async function moverMediasAction(form: FormData) {
  */
 export async function criarAssinaturaAction(
   documento: string,
+  ciclo: Ciclo = "mensal",
 ): Promise<{ erro?: string } | void> {
   const tenantId = await exigirTenant();
 
@@ -258,21 +325,31 @@ export async function criarAssinaturaAction(
     const minimo = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
     const vencimento = fimTrial > minimo ? fimTrial : minimo;
 
+    /* O preço da fatura é o do CICLO: no anual são dez mensalidades cobradas de
+     * uma vez. A grade continua guardando só o mensal — o anual é derivado,
+     * nunca uma segunda tabela para dessincronizar. */
+    const precoDoCiclo = precoDoCicloCentavos(plano.precoCentavos, ciclo);
+
     const assinatura = await criarAssinatura({
       clienteAsaasId: cliente.id,
       tenantId,
       planoId: plano.id,
-      precoCentavos: plano.precoCentavos,
-      descricao: `${marca.nome} — ${plano.nome}`,
+      precoCentavos: precoDoCiclo,
+      ciclo,
+      descricao: `${marca.nome} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}`,
       primeiroVencimento: vencimento,
     });
 
+    /* O ciclo é gravado JUNTO com o id da assinatura, na mesma escrita. Se
+     * ficasse para depois, uma falha no meio deixaria uma assinatura anual
+     * marcada como mensal — e a próxima troca de plano recalcularia o split com
+     * reserva de um mês, mandando embora o dinheiro dos outros onze. */
     await consultar(
       `update tenants
-          set asaas_cliente_id = $1, asaas_assinatura_id = $2,
+          set asaas_cliente_id = $1, asaas_assinatura_id = $2, ciclo_cobranca = $3,
               assinatura_criada_em = now(), atualizado_em = now()
-        where id = $3`,
-      [cliente.id, assinatura.id, tenantId],
+        where id = $4`,
+      [cliente.id, assinatura.id, ciclo, tenantId],
     );
 
     revalidatePath("/painel/conta");
@@ -325,11 +402,18 @@ export async function trocarPlanoAction(
   // estúdio não fica com espaço que ninguém está cobrando.
   if (asaasConfigurado() && tenant.asaas_assinatura_id) {
     try {
+      /* Trocar de PLANO mantém o ciclo — quem paga por ano continua pagando por
+       * ano, com o valor da faixa nova. Trocar de CICLO é outra operação, e o
+       * Asaas não muda ciclo de assinatura no lugar: teria de cancelar e
+       * recriar. Enquanto essa segunda operação não existir, o ciclo atual é o
+       * que vale, e é ele que entra no split. */
+      const ciclo = cicloDe(tenant.ciclo_cobranca);
       await atualizarAssinatura({
         assinaturaId: tenant.asaas_assinatura_id,
         planoId: plano.id,
-        precoCentavos: plano.precoCentavos,
-        descricao: `${marca.nome} — ${plano.nome}`,
+        precoCentavos: precoDoCicloCentavos(plano.precoCentavos, ciclo),
+        ciclo,
+        descricao: `${marca.nome} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}`,
       });
     } catch (e) {
       return { erro: e instanceof Error ? e.message : "não consegui atualizar a assinatura" };

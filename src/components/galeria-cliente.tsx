@@ -46,6 +46,7 @@ export function GaleriaCliente({
   capitulos,
   celularProvavel,
   favoritasIniciais,
+  selecaoInicial,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
@@ -55,11 +56,18 @@ export function GaleriaCliente({
   /** Palpite do servidor pelo user-agent, só para a primeira pintura não piscar. */
   celularProvavel: boolean;
   /**
-   * Ids das fotos que ESTE visitante já marcou. Vem do servidor para a primeira
-   * pintura já sair com os corações certos — buscar depois faria a galeria
-   * inteira piscar de vazia para marcada a cada visita.
+   * Ids das fotos já escolhidas NESTA galeria. Desde a migração 019 a lista é
+   * uma só, compartilhada: a noiva no celular e o noivo no notebook veem a mesma
+   * escolha. Vem do servidor para a primeira pintura já sair com os corações
+   * certos — buscar depois faria a galeria piscar de vazia para marcada.
    */
   favoritasIniciais: string[];
+  /** Regras que o fotógrafo definiu para a escolha do álbum. */
+  selecaoInicial: {
+    limite: number | null;
+    aberta: boolean;
+    motivo: "fechada" | "prazo" | null;
+  };
 }) {
   const [aberto, setAberto] = useState<number | null>(null);
   const [baixandoTudo, setBaixandoTudo] = useState(false);
@@ -73,6 +81,11 @@ export function GaleriaCliente({
 
   const [favoritas, setFavoritas] = useState<Set<string>>(() => new Set(favoritasIniciais));
   const [soFavoritas, setSoFavoritas] = useState(false);
+  const [selecao, setSelecao] = useState(selecaoInicial);
+  const [fechando, setFechando] = useState(false);
+
+  const limite = selecao.limite;
+  const cheia = limite !== null && favoritas.size >= limite;
 
   /*
    * Marca na tela ANTES de o servidor responder, e desfaz se falhar.
@@ -99,6 +112,34 @@ export function GaleriaCliente({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mediaId }),
         });
+
+        /*
+         * 409 é regra da seleção, não falha de rede: a lista encheu, o prazo
+         * venceu ou alguém já clicou em "terminei" no outro aparelho. Cada um
+         * tem sua frase — "não consegui salvar" mandaria a pessoa conferir a
+         * conexão por um limite que o fotógrafo escolheu.
+         */
+        if (r.status === 409) {
+          const d: { erro: "cheia" | "fechada" | "prazo"; limite: number | null } = await r.json();
+          mexer(eraFavorita);
+          if (d.erro === "cheia") {
+            setAviso(
+              `Você já escolheu ${d.limite} fotos, que é o combinado. Desmarque uma para trocar.`,
+            );
+          } else {
+            /* Guardado fora do callback: dentro dele o TypeScript não mantém o
+             * estreitamento do `else`, e "cheia" voltaria ao tipo. */
+            const motivo = d.erro;
+            setSelecao((s) => ({ ...s, aberta: false, motivo }));
+            setAviso(
+              motivo === "prazo"
+                ? "O prazo para escolher terminou. Fale com quem enviou o link."
+                : "A escolha foi encerrada. Fale com quem enviou o link.",
+            );
+          }
+          return;
+        }
+
         if (!r.ok) throw new Error(String(r.status));
         const d: { favorita: boolean } = await r.json();
         // O servidor é quem manda: se discordar do palpite, ele vence.
@@ -110,6 +151,34 @@ export function GaleriaCliente({
     },
     [galeriaId],
   );
+
+  /**
+   * "Terminei minha escolha" — o sinal que faltava para o fotógrafo.
+   *
+   * Confirma antes porque é uma porta que o cliente não reabre sozinho: depois
+   * disso a lista tranca, e só o fotógrafo destranca.
+   */
+  const encerrarSelecao = useCallback(async () => {
+    if (
+      !confirm(
+        `Encerrar a escolha com ${favoritas.size} ${favoritas.size === 1 ? "foto" : "fotos"}?\n\n` +
+          "Depois disso a lista fica travada e quem fez as fotos é avisado. Para mudar, será preciso pedir a ele.",
+      )
+    ) {
+      return;
+    }
+    setFechando(true);
+    try {
+      const r = await fetch("/api/g/" + galeriaId + "/favoritas", { method: "PUT" });
+      if (!r.ok) throw new Error(String(r.status));
+      setSelecao((s) => ({ ...s, aberta: false, motivo: "fechada" }));
+      setAviso(null);
+    } catch {
+      setAviso("Não consegui encerrar agora. Confira sua conexão e tente de novo.");
+    } finally {
+      setFechando(false);
+    }
+  }, [galeriaId, favoritas.size]);
 
   const fechar = useCallback(() => setAberto(null), []);
   const anterior = useCallback(
@@ -324,7 +393,48 @@ export function GaleriaCliente({
               ? `Mostrando ${favoritas.size} ${favoritas.size === 1 ? "favorita" : "favoritas"} · ver todas`
               : `♥ Ver só as favoritas (${favoritas.size})`}
           </button>
+
+          {/*
+            O contador só existe quando há limite. Sem limite ele seria um número
+            crescendo sozinho, sem nada a dizer — e o botão ao lado já mostra
+            quantas foram escolhidas.
+          */}
+          {limite !== null && selecao.aberta && (
+            <span
+              className="text-sm"
+              style={{ color: cheia ? "var(--g-destaque)" : "var(--g-suave)" }}
+            >
+              {favoritas.size} de {limite}
+              {cheia && " · desmarque uma para trocar"}
+            </span>
+          )}
+
+          {selecao.aberta && (
+            <button
+              type="button"
+              onClick={encerrarSelecao}
+              disabled={fechando}
+              className="rounded-full px-4 py-2 text-sm transition hover:opacity-85 disabled:opacity-50"
+              style={{ border: "1px solid var(--g-linha)", color: "var(--g-suave)" }}
+            >
+              {fechando ? "Encerrando…" : "Terminei minha escolha"}
+            </button>
+          )}
         </div>
+      )}
+
+      {/*
+        Seleção trancada. Aparece mesmo com zero fotos marcadas: quem abre o link
+        depois do prazo precisa entender por que os corações não respondem — sem
+        isto, o botão simplesmente não faz nada e parece defeito.
+      */}
+      {!selecao.aberta && selecao.motivo && (
+        <p className="mt-6 text-center text-sm" style={{ color: "var(--g-suave)" }}>
+          {selecao.motivo === "prazo"
+            ? "O prazo para escolher as fotos terminou."
+            : `Escolha encerrada${favoritas.size > 0 ? ` com ${favoritas.size} ${favoritas.size === 1 ? "foto" : "fotos"}` : ""}.`}{" "}
+          Para mudar alguma coisa, fale com quem enviou o link.
+        </p>
       )}
 
       {/* Menu de capítulos — o cliente pula direto ao momento que quer ver. */}
@@ -468,7 +578,18 @@ export function GaleriaCliente({
                 type="button"
                 onClick={() => alternarFavorita(it.id, ehFavorita)}
                 aria-pressed={ehFavorita}
-                aria-label={ehFavorita ? `Desmarcar ${it.nome}` : `Marcar ${it.nome} como favorita`}
+                /* Trancada, o coração vira só indicação do que foi escolhido.
+                 * Deixar clicável para o servidor recusar depois faria o coração
+                 * piscar e voltar — parece defeito, não regra. As marcadas
+                 * continuam visíveis; o que some é a possibilidade de mexer. */
+                disabled={!selecao.aberta}
+                aria-label={
+                  !selecao.aberta
+                    ? `${it.nome}${ehFavorita ? " — escolhida" : ""}`
+                    : ehFavorita
+                      ? `Desmarcar ${it.nome}`
+                      : `Marcar ${it.nome} como favorita`
+                }
                 /* 44px no toque, 36px no mouse.
                  *
                  * O dedo não mira: 36px é menor que o mínimo de alvo que a
@@ -481,7 +602,8 @@ export function GaleriaCliente({
                  * arquivo já usa para decidir que não há hover. No desktop o
                  * ponteiro é preciso e o círculo menor pesa menos sobre a foto. */
                 className={`absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full backdrop-blur transition max-[900px]:h-11 max-[900px]:w-11
-                  ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}`}
+                  ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}
+                  ${!selecao.aberta && !ehFavorita ? "hidden" : ""}`}
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 55%, transparent)",
                   color: ehFavorita ? "var(--g-destaque)" : "var(--g-texto)",

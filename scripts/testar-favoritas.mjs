@@ -102,12 +102,12 @@ try {
     await Promise.all([
       db.query(
         `insert into favoritas (galeria_id, media_id, visitante) values ($1,$2,$3)
-         on conflict (media_id, visitante) do nothing`,
+         on conflict (galeria_id, media_id) do nothing`,
         [galeriaId, foto, VISITANTE_A],
       ),
       db.query(
         `insert into favoritas (galeria_id, media_id, visitante) values ($1,$2,$3)
-         on conflict (media_id, visitante) do nothing`,
+         on conflict (galeria_id, media_id) do nothing`,
         [galeriaId, foto, VISITANTE_A],
       ),
     ]);
@@ -125,23 +125,37 @@ try {
 
   console.log("\nresumo para o fotógrafo");
 
-  await etapa("conta pessoas e fotos distintas", async () => {
+  /*
+   * ── MUDOU NA MIGRAÇÃO 019 ────────────────────────────────────────────────
+   * Até a 018, cada visitante tinha a SUA lista e o painel mostrava quantas
+   * pessoas marcaram a mesma foto. A partir da 019 a seleção é UMA, da galeria:
+   * "o álbum tem 40 fotos" é uma frase sobre a galeria, não sobre cada aparelho,
+   * e "terminei" também é do casal, não de um celular.
+   *
+   * Estas duas etapas travavam o modelo antigo — foi por elas que a mudança
+   * apareceu vermelha em vez de passar despercebida, que é o serviço que se
+   * espera delas. Agora travam o novo. As regras da seleção (limite, prazo,
+   * fechar) moram em `testar-selecao.mjs`.
+   */
+  await etapa("a lista é uma só: dois aparelhos somam na mesma", async () => {
     await limpar();
     await alternar(galeriaId, foto, VISITANTE_A);
-    await alternar(galeriaId, foto, VISITANTE_B);
     await alternar(galeriaId, outraFoto, VISITANTE_B);
 
     const r = await resumoDaGaleria(galeriaId);
-    igual(r.porMedia.get(foto), 2, "quantas marcaram a primeira");
-    igual(r.pessoas, 2, "pessoas");
-    igual(r.fotos, foto === outraFoto ? 1 : 2, "fotos distintas");
+    igual(r.fotos, foto === outraFoto ? 1 : 2, "fotos na lista da galeria");
+    igual(r.pessoas, foto === outraFoto ? 1 : 2, "pessoas que contribuíram");
     return `${r.fotos} foto(s), ${r.pessoas} pessoa(s)`;
   });
 
-  await etapa("desmarcar de um não apaga a do outro", async () => {
+  await etapa("clique do segundo na MESMA foto desmarca, não empilha", async () => {
+    await limpar();
     await alternar(galeriaId, foto, VISITANTE_A);
-    const r = await resumoDaGaleria(galeriaId);
-    igual(r.porMedia.get(foto), 1, "restou uma marcação");
+    igual((await resumoDaGaleria(galeriaId)).fotos, 1, "depois do primeiro");
+
+    await alternar(galeriaId, foto, VISITANTE_B);
+    igual((await resumoDaGaleria(galeriaId)).fotos, 0, "depois do segundo");
+    return "uma linha por foto, não por pessoa";
   });
 
   // --- pela rota, com senha ------------------------------------------------
