@@ -10,7 +10,16 @@
 
 export type Capa = "imersa" | "jornal" | "dividida" | "minima";
 export type Tema = "noite" | "claro" | "creme";
-export type Tipografia = "serifada" | "moderna" | "manuscrita";
+export type Tipografia =
+  | "serifada"
+  | "playfair"
+  | "lora"
+  | "moderna"
+  | "jost"
+  | "raleway"
+  | "manuscrita"
+  | "parisienne"
+  | "petit";
 export type Grade = "colunas" | "linhas" | "quadrada" | "editorial";
 export type Densidade = "compacta" | "normal" | "arejada";
 
@@ -59,10 +68,27 @@ export const OPCOES = {
     { id: "claro", nome: "Claro", desc: "Fundo branco, ar de revista" },
     { id: "creme", nome: "Creme", desc: "Tons terrosos, clima quente" },
   ],
+  /*
+   * ── DE CATEGORIA PARA FONTE (26/08/2026) ────────────────────────────────
+   * Antes eram três categorias — "Serifada", "Moderna", "Manuscrita" — e o
+   * fotógrafo não escolhia a fonte, escolhia um adjetivo. Agora a lista tem
+   * nome de fonte, agrupada por família para continuar navegável.
+   *
+   * Os três ids ORIGINAIS ficam, apontando para as mesmas fontes de sempre.
+   * Eles estão gravados em galerias já ENTREGUES: mudar o que `serifada`
+   * significa trocaria a cara da galeria de um casal sem ninguém tocar nela.
+   * `scripts/testar-aparencia.mjs` prende isso.
+   */
   tipografia: [
-    { id: "serifada", nome: "Serifada", desc: "Clássica e elegante" },
-    { id: "moderna", nome: "Moderna", desc: "Sem serifa, direta" },
-    { id: "manuscrita", nome: "Manuscrita", desc: "Assinatura, romântica" },
+    { id: "serifada", nome: "Cormorant", desc: "Serifada · clássica e fina", familia: "Serifadas" },
+    { id: "playfair", nome: "Playfair", desc: "Serifada · contraste alto", familia: "Serifadas" },
+    { id: "lora", nome: "Lora", desc: "Serifada · encorpada, boa em texto", familia: "Serifadas" },
+    { id: "moderna", nome: "Montserrat", desc: "Sem serifa · geométrica", familia: "Sem serifa" },
+    { id: "jost", nome: "Jost", desc: "Sem serifa · seca e moderna", familia: "Sem serifa" },
+    { id: "raleway", nome: "Raleway", desc: "Sem serifa · leve e arejada", familia: "Sem serifa" },
+    { id: "manuscrita", nome: "Great Vibes", desc: "Manuscrita · assinatura", familia: "Manuscritas" },
+    { id: "parisienne", nome: "Parisienne", desc: "Manuscrita · convite", familia: "Manuscritas" },
+    { id: "petit", nome: "Petit Formal", desc: "Manuscrita · formal e legível", familia: "Manuscritas" },
   ],
   grade: [
     { id: "colunas", nome: "Colunas", desc: "Alturas variadas, estilo mural" },
@@ -176,10 +202,28 @@ export const TEMAS: Record<Tema, Record<string, string>> = {
  * `var(--font-serif)` não existe em tempo de execução e o título cairia na fonte
  * padrão do sistema.
  */
+/*
+ * Cada fonte com uma PILHA de reserva de verdade, não só o nome.
+ *
+ * Se o woff2 não chegar — rede ruim no celular do convidado, bloqueador —, o
+ * título cai no reserva. Um reserva da mesma família mantém a página parecida
+ * com o que o fotógrafo escolheu; sem ele, cai em Times e a entrega inteira
+ * muda de tom no pior momento possível.
+ *
+ * As três primeiras variáveis são as antigas (`serif-app`, `sans-app`,
+ * `script-app`) e não podem ser renomeadas: os ids que as usam estão gravados
+ * em galerias entregues.
+ */
 export const FONTES_TITULO: Record<Tipografia, string> = {
   serifada: 'var(--font-serif-app), "Iowan Old Style", Palatino, Georgia, serif',
+  playfair: 'var(--font-titulo-playfair), "Times New Roman", Georgia, serif',
+  lora: 'var(--font-titulo-lora), Georgia, "Times New Roman", serif',
   moderna: 'var(--font-sans-app), system-ui, "Segoe UI", sans-serif',
+  jost: 'var(--font-titulo-jost), "Futura", "Century Gothic", system-ui, sans-serif',
+  raleway: 'var(--font-titulo-raleway), "Segoe UI", system-ui, sans-serif',
   manuscrita: 'var(--font-script-app), "Segoe Script", cursive',
+  parisienne: 'var(--font-titulo-parisienne), "Segoe Script", cursive',
+  petit: 'var(--font-titulo-petit), "Segoe Script", cursive',
 };
 
 /** Espaçamento entre as fotos e quantas cabem por linha. */

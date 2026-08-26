@@ -6,6 +6,7 @@ import {
   OPCOES,
   PRESETS,
   presetEquivalente,
+  FONTES_TITULO,
   type Aparencia,
 } from "@/config/aparencia";
 import { salvarAparenciaAction } from "@/app/painel/actions";
@@ -50,6 +51,65 @@ export function EditorAparencia({
       router.refresh();
     });
   }
+
+  /**
+   * O seletor de fonte.
+   *
+   * Não usa o `Eixo` genérico por dois motivos, e os dois são sobre a decisão
+   * que o fotógrafo está tomando:
+   *
+   *   1. Cada nome é DESENHADO NA PRÓPRIA FONTE. "Playfair" escrito em
+   *      Montserrat não ajuda ninguém a escolher Playfair — a amostra é a
+   *      informação, o nome é só a etiqueta.
+   *
+   *   2. Agrupado por família. Nove pastilhas soltas viram uma parede; com
+   *      Serifadas, Sem serifa e Manuscritas separadas, quem já sabe o clima
+   *      que quer olha só um terço da lista.
+   *
+   * O texto de amostra é o nome da fonte e não "Aa": num alfabeto de duas
+   * letras, manuscrita e serifada se parecem demais.
+   */
+  const SeletorDeFonte = () => {
+    const familias = [...new Set(OPCOES.tipografia.map((o) => o.familia))];
+    return (
+      <div className="sm:col-span-2">
+        <span className="block text-xs font-medium text-texto-soft">Fonte do título</span>
+        <div className="mt-2 flex flex-col gap-3">
+          {familias.map((familia) => (
+            <div key={familia}>
+              <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-texto-faint">
+                {familia}
+              </span>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {OPCOES.tipografia
+                  .filter((o) => o.familia === familia)
+                  .map((op) => {
+                    const ativo = ap.tipografia === op.id;
+                    return (
+                      <button
+                        key={op.id}
+                        type="button"
+                        title={op.desc}
+                        aria-pressed={ativo}
+                        onClick={() => mudar({ ...ap, tipografia: op.id })}
+                        style={{ fontFamily: FONTES_TITULO[op.id] }}
+                        className={`rounded-lg border px-3.5 py-2 text-base leading-none transition ${
+                          ativo
+                            ? "border-acento bg-acento/10 text-acento-alto"
+                            : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+                        }`}
+                      >
+                        {op.nome}
+                      </button>
+                    );
+                  })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const Eixo = <K extends keyof Aparencia>({
     eixo,
@@ -137,7 +197,7 @@ export function EditorAparencia({
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Eixo eixo="capa" titulo="Capa" />
           <Eixo eixo="tema" titulo="Cores" />
-          <Eixo eixo="tipografia" titulo="Tipografia do título" />
+          <SeletorDeFonte />
           <Eixo eixo="grade" titulo="Grade das fotos" />
           <Eixo eixo="densidade" titulo="Espaçamento" />
         </div>

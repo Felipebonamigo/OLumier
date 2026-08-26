@@ -1,5 +1,15 @@
 import type { Metadata } from "next";
-import { Montserrat, Cormorant_Garamond, Great_Vibes } from "next/font/google";
+import {
+  Montserrat,
+  Cormorant_Garamond,
+  Great_Vibes,
+  Playfair_Display,
+  Lora,
+  Jost,
+  Raleway,
+  Parisienne,
+  Petit_Formal_Script,
+} from "next/font/google";
 import { marca } from "@/config/marca";
 import { SCRIPT_TEMA } from "@/config/tema";
 import "./globals.css";
@@ -26,6 +36,80 @@ const greatVibes = Great_Vibes({
   weight: "400",
   display: "swap",
 });
+
+/*
+ * ── AS FONTES QUE O FOTÓGRAFO PODE ESCOLHER ───────────────────────────────
+ *
+ * As três acima são da CASA: a interface inteira as usa, então valem o
+ * pré-carregamento. As seis abaixo existem só para o eixo de tipografia da
+ * galeria, e cada estúdio usa UMA.
+ *
+ * `preload: false` em todas elas, e isso não é detalhe de performance — é o
+ * argumento do produto. A galeria do casal abre rápido porque carrega miniatura
+ * de dezenas de KB em vez dos megabytes que o concorrente serve; pré-carregar
+ * nove fontes numa página que usa uma jogaria isso fora numa linha.
+ *
+ * Sem `preload`, o navegador só busca o arquivo quando encontra um elemento que
+ * pede aquela família. Na galeria isso é exatamente a fonte escolhida. No
+ * painel, onde o seletor mostra cada nome desenhado na própria fonte, todas
+ * descem — e ali tudo bem: é a página do fotógrafo, e ver a fonte é o objetivo.
+ *
+ * `scripts/testar-aparencia.mjs` recusa uma fonte oferecida sem carregar aqui,
+ * e recusa uma fonte de galeria sem `preload: false`.
+ */
+const playfair = Playfair_Display({
+  variable: "--font-titulo-playfair",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const lora = Lora({
+  variable: "--font-titulo-lora",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const jost = Jost({
+  variable: "--font-titulo-jost",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const raleway = Raleway({
+  variable: "--font-titulo-raleway",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const parisienne = Parisienne({
+  variable: "--font-titulo-parisienne",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  preload: false,
+});
+const petitFormal = Petit_Formal_Script({
+  variable: "--font-titulo-petit",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  preload: false,
+});
+
+/** Todas as variáveis de fonte, num lugar só — o <body> não precisa saber quantas são. */
+const FONTES = [
+  montserrat,
+  cormorant,
+  greatVibes,
+  playfair,
+  lora,
+  jost,
+  raleway,
+  parisienne,
+  petitFormal,
+]
+  .map((f) => f.variable)
+  .join(" ");
 
 export const metadata: Metadata = {
   title: {
@@ -69,7 +153,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body
-        className={`${montserrat.variable} ${cormorant.variable} ${greatVibes.variable} antialiased`}
+        className={`${FONTES} antialiased`}
       >
         {children}
       </body>

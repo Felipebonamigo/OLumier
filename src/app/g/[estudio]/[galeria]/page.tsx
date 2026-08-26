@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { marca } from "@/config/marca";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
 import { estadoSelecao, minhasFavoritas } from "@/lib/favoritas";
 import {
   buscarGaleriaPublica,
@@ -249,7 +250,36 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       />
 
       <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
-        {itens.length === 0 ? (
+        {itens.length === 0 && ehDono ? (
+          /*
+           * A prévia com a galeria vazia mostrava só "as fotos estão sendo
+           * preparadas" — bem no momento em que o fotógrafo está escolhendo capa,
+           * tipografia, grade e densidade. Ele decidia a aparência olhando para
+           * uma frase cinza, e só via o resultado depois de subir o casamento.
+           *
+           * Agora entram fotos de mentira, com proporções variadas de propósito:
+           * é o que faz a grade "colunas" e a "editorial" mostrarem o que
+           * realmente fazem. Só na prévia do DONO — o cliente nunca vê isto.
+           */
+          <>
+            <p
+              className="pt-8 text-center text-xs"
+              style={{ color: "var(--g-tenue)" }}
+            >
+              Fotos de exemplo, só para você ver o resultado — o cliente não vê esta tela.
+            </p>
+            <GaleriaCliente
+              favoritasIniciais={[]}
+              selecaoInicial={{ limite: null, aberta: false, motivo: null }}
+              itens={fotosDeDemonstracao(aparencia.tema)}
+              permiteDownload={false}
+              galeriaId={galeria.id}
+              aparencia={aparencia}
+              capitulos={[]}
+              celularProvavel={celularProvavel}
+            />
+          </>
+        ) : itens.length === 0 ? (
           <p className="py-20 text-center text-sm" style={{ color: "var(--g-suave)" }}>
             As fotos ainda estão sendo preparadas. Volte em breve.
           </p>
