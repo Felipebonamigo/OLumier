@@ -29,6 +29,15 @@ galeriaatomo.com.br, www.galeriaatomo.com.br {
 
 ## 2. O matcher do subdomínio de estúdio
 
+> **Antes de mexer, olhe o Caddyfile do servidor.** `ops/caddy-dominio-proprio.md`
+> APAGA esta linha — lá a regex some inteira e quem decide passa a ser só o
+> porteiro em `/api/tls/permitir`. Se aquele documento já foi aplicado, **esta
+> seção inteira não tem o que fazer**: sem regex, o `galeriaatomo` já entra,
+> porque `config/dominios.ts` lista os dois domínios e o porteiro responde `200`
+> para os subdomínios dos dois.
+>
+> Só siga daqui se a linha `@estudio` ainda existir no arquivo.
+
 Uma linha, no bloco de TLS sob demanda que já existe:
 
 ```caddy
@@ -71,7 +80,15 @@ Isto edita registros **dentro** da zona existente na Cloudflare — não recria
 zona, não troca provedor de DNS. Seguro apesar do DS publicado; a regra dura do
 DNSSEC só vale para recriar ou mover a zona.
 
-E o subdomínio: o matcher acima continua aceitando `olumier`, de propósito.
-Enquanto houver link de galeria circulando com o endereço antigo, ele precisa
-continuar abrindo com HTTPS válido — o redirecionamento do bloco nomeado não
-cobre `estudio.olumier.com.br`, que passa pelo `@estudio`.
+E o subdomínio: `estudio.olumier.com.br` precisa continuar abrindo com HTTPS
+válido, de propósito. Enquanto houver link de galeria circulando com o endereço
+antigo, o redirecionamento do bloco nomeado acima **não** cobre esse caso — ele
+vale só para `olumier.com.br` e `www`, e o subdomínio passa por outro caminho.
+
+Como isso se sustenta depende de qual versão do Caddyfile está no servidor:
+
+- **Com a regex** (seção 2): ela lista `olumier` e continua listando.
+- **Sem a regex** (depois de `ops/caddy-dominio-proprio.md`): quem sustenta é
+  `DOMINIOS_ATENDIDOS` em `config/dominios.ts`, que mantém `olumier.com.br` ao
+  lado do novo. Tirar o olumier de lá derruba as galerias antigas — é o mesmo
+  cuidado, mudou só o arquivo onde ele mora.
