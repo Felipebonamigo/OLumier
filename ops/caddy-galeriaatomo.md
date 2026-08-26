@@ -40,24 +40,28 @@ galeriaatomo.com.br, www.galeriaatomo.com.br {
 }
 ```
 
-## 2. O matcher do subdomínio de estúdio
+## 2. O matcher do subdomínio de estúdio — **não existe mais**
 
-> **Hoje esta seção VALE — faça o que ela diz.** Em 26/08/2026 a linha `@estudio`
-> continua no servidor: `ops/caddy-dominio-proprio.md`, que a apagaria, **não foi
-> aplicado** e não será sem o Felipe presente, porque o bloco final dele toca o
-> arquivo que serve também Padelizou, Atomatiza, Poke Panda e Bonamigo. Este
-> documento não depende daquele e não presume nada dele.
+> **Nada a fazer aqui. Pule para a seção 3.**
 >
-> A ressalva existe só para o dia em que a ordem se inverter: se aquele documento
-> for aplicado antes deste, a regex some inteira e quem decide passa a ser só o
-> porteiro em `/api/tls/permitir` — e aí **esta seção não tem mais o que fazer**,
-> porque `config/dominios.ts` lista os dois domínios e o porteiro responde `200`
-> para os subdomínios dos dois.
+> Em 26/08/2026, à tarde, `ops/caddy-dominio-proprio.md` foi aplicado com o
+> Felipe acompanhando, e a linha `@estudio` **saiu do servidor**. Conferido:
+> `grep` no `/etc/caddy/Caddyfile` não devolve mais a regex, e o comentário na
+> linha 188 registra a troca. Versões anteriores deste documento mandavam
+> procurar a linha e editá-la — quem seguir aquilo hoje vai caçar uma linha que
+> não existe.
 >
-> Então: olhe o Caddyfile do servidor antes. Achou `@estudio`, siga daqui. Não
-> achou, pule para a seção 3.
+> Quem decide passou a ser o porteiro em `/api/tls/permitir`, que o
+> `on_demand_tls { ask ... }` (linha 9 do Caddyfile) consulta **antes** de
+> emitir cada certificado. E quem o porteiro consulta é `DOMINIOS_ATENDIDOS`
+> em `src/config/dominios.ts`, que já lista `olumier.com.br` e
+> `galeriaatomo.com.br`. Ou seja: **o domínio novo já está autorizado no lado
+> do aplicativo, sem tocar em Caddy nenhum.** Falta só o DNS.
 
-Uma linha, no bloco de TLS sob demanda que já existe:
+O texto abaixo fica como registro do que existia, e do porquê — a armadilha do
+curinga continua verdadeira e vale para quem for mexer em TLS aqui um dia.
+
+A linha era esta:
 
 ```caddy
 @estudio header_regexp host Host ^[a-z0-9-]+\.(fotonio|olumier|galeriaatomo)\.com\.br$
@@ -68,10 +72,34 @@ curinga faz o Caddy pedir certificado curinga por ACME, que exige desafio DNS �
 sem o módulo de DNS compilado no binário, a tentativa falha e derruba o TLS dos
 outros nomes do domínio. Foi assim que o `www` caiu uma vez.
 
-O que existe aqui é certificado **sob demanda**, um por host, com o aplicativo
-respondendo quem pode. O lado do aplicativo já está pronto: `config/dominios.ts`
-lista os dois domínios, e `api/tls/permitir` responde `200` para os subdomínios
-dos dois. Conferido por `scripts/testar-subdominio.mjs`.
+O que existe é certificado **sob demanda**, um por host, com o aplicativo
+respondendo quem pode. Conferido por `scripts/testar-subdominio.mjs`.
+
+### Medido na produção em 26/08/2026, antes do DNS existir
+
+O porteiro já responde certo para o domínio novo — dá para conferir sem esperar
+o DNS, porque a pergunta vai por parâmetro:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' \
+  'https://olumier.com.br/api/tls/permitir?domain=SEU_HOST'
+```
+
+| host perguntado                                   | resposta |
+|---------------------------------------------------|----------|
+| `galeriaatomo.com.br`                             | `200`    |
+| `www.galeriaatomo.com.br`                         | `200`    |
+| `caroline-tedesco-fotografia.galeriaatomo.com.br` | `200`    |
+| `caroline-tedesco-fotografia.olumier.com.br`      | `200`    |
+| `teste.galeriaatomo.com.br`                       | `403`    |
+| `olumier.com.br.golpe.net`                        | `403`    |
+
+As duas recusas são o porteiro funcionando, não falha: `teste` não é estúdio
+que existe, e o último é o ataque por sufixo que o `estudioDoHost` bloqueia
+comparando com ponto em vez de `includes`.
+
+Ou seja: **o lado do aplicativo está pronto e provado.** Quando os três A
+entrarem em cinza, o certificado sobe na primeira visita, sem tocar em nada.
 
 ## 3. Aplicar
 
@@ -104,10 +132,12 @@ válido, de propósito. Enquanto houver link de galeria circulando com o endere�
 antigo, o redirecionamento do bloco nomeado acima **não** cobre esse caso — ele
 vale só para `olumier.com.br` e `www`, e o subdomínio passa por outro caminho.
 
-Como isso se sustenta depende de qual versão do Caddyfile está no servidor:
+Quem sustenta isso é `DOMINIOS_ATENDIDOS` em `src/config/dominios.ts`, que
+mantém `olumier.com.br` ao lado do novo. **Tirar o olumier de lá derruba as
+galerias antigas** — o porteiro passaria a recusar o certificado e o link que o
+casal tem salvo pararia de abrir com HTTPS válido.
 
-- **Com a regex** (seção 2): ela lista `olumier` e continua listando.
-- **Sem a regex** (depois de `ops/caddy-dominio-proprio.md`): quem sustenta é
-  `DOMINIOS_ATENDIDOS` em `config/dominios.ts`, que mantém `olumier.com.br` ao
-  lado do novo. Tirar o olumier de lá derruba as galerias antigas — é o mesmo
-  cuidado, mudou só o arquivo onde ele mora.
+Não existe data para remover o olumier dessa lista, e é de propósito: link de
+galeria entregue não expira, e ninguém controla quem guardou qual endereço. O
+custo de manter o nome antigo na lista é uma linha; o de remover é uma galeria
+que não abre na casa de um cliente, sem aviso e sem sintoma do nosso lado.
