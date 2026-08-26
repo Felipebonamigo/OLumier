@@ -7,6 +7,19 @@ contra o limite do Let's Encrypt — que é por semana e não perdoa pressa.
 Ordem: os três registros A primeiro (`@`, `www` e o **curinga** `*`), confirmar
 que resolvem, e só então mexer aqui.
 
+> **Os três em "DNS only" — nuvem cinza, não laranja.** A Cloudflare cria
+> registro novo já com o proxy LIGADO, e é aí que a armadilha mora: com o proxy
+> na frente quem termina o TLS é a Cloudflare, o Caddy nunca recebe o handshake,
+> e o certificado sob demanda **nunca é emitido**. A página abre — pelo
+> certificado da Cloudflare — e o defeito só aparece no primeiro domínio próprio
+> de fotógrafo, que depende justamente do certificado sob demanda. O curinga `*`
+> é o mais importante dos três aqui, porque é ele que serve os subdomínios de
+> estúdio.
+>
+> Hoje o `olumier.com.br` está certo: `@`, `www` e `estudio` resolvem só para
+> `179.197.233.184`, sem nenhum endereço da Cloudflare no meio. É esse o estado
+> que o domínio novo tem que copiar.
+
 ## 1. Bloco novo
 
 Vai junto dos outros, em `/etc/caddy/Caddyfile`. É cópia do bloco do olumier —
@@ -29,14 +42,20 @@ galeriaatomo.com.br, www.galeriaatomo.com.br {
 
 ## 2. O matcher do subdomínio de estúdio
 
-> **Antes de mexer, olhe o Caddyfile do servidor.** `ops/caddy-dominio-proprio.md`
-> APAGA esta linha — lá a regex some inteira e quem decide passa a ser só o
-> porteiro em `/api/tls/permitir`. Se aquele documento já foi aplicado, **esta
-> seção inteira não tem o que fazer**: sem regex, o `galeriaatomo` já entra,
+> **Hoje esta seção VALE — faça o que ela diz.** Em 26/08/2026 a linha `@estudio`
+> continua no servidor: `ops/caddy-dominio-proprio.md`, que a apagaria, **não foi
+> aplicado** e não será sem o Felipe presente, porque o bloco final dele toca o
+> arquivo que serve também Padelizou, Atomatiza, Poke Panda e Bonamigo. Este
+> documento não depende daquele e não presume nada dele.
+>
+> A ressalva existe só para o dia em que a ordem se inverter: se aquele documento
+> for aplicado antes deste, a regex some inteira e quem decide passa a ser só o
+> porteiro em `/api/tls/permitir` — e aí **esta seção não tem mais o que fazer**,
 > porque `config/dominios.ts` lista os dois domínios e o porteiro responde `200`
 > para os subdomínios dos dois.
 >
-> Só siga daqui se a linha `@estudio` ainda existir no arquivo.
+> Então: olhe o Caddyfile do servidor antes. Achou `@estudio`, siga daqui. Não
+> achou, pule para a seção 3.
 
 Uma linha, no bloco de TLS sob demanda que já existe:
 
