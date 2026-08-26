@@ -11,6 +11,8 @@ import { situacaoDoTenant } from "@/lib/assinatura";
 import { PlanoConta } from "@/components/plano-conta";
 import { EditorMarca } from "@/components/editor-marca";
 import { TrocarSenha } from "@/components/trocar-senha";
+import { ChavesApi } from "@/components/chaves-api";
+import { listarChaves } from "@/lib/chaves-api";
 import { MINIMO_SENHA } from "@/lib/recuperacao";
 import { urlDeLeitura } from "@/lib/r2";
 
@@ -33,6 +35,7 @@ export default async function ContaPage() {
 
   const plano = planoPorId(tenant.plano_id);
   const uso = await usoPorEstado(tenantId);
+  const chavesApi = await listarChaves(tenantId);
 
   // O bucket não tem endereço público: a logo é guardada como chave e ganha um
   // link assinado a cada render.
@@ -193,6 +196,17 @@ export default async function ContaPage() {
       />
 
       <TrocarSenha minimo={MINIMO_SENHA} />
+
+      <ChavesApi
+        chaves={chavesApi.map((c) => ({
+          id: c.id,
+          nome: c.nome,
+          prefixo: c.prefixo,
+          escopo: c.escopo,
+          criada_em: c.criada_em.toISOString(),
+          ultimo_uso_em: c.ultimo_uso_em ? c.ultimo_uso_em.toISOString() : null,
+        }))}
+      />
 
       {/* Dados */}
       <section className="mt-6 rounded-xl border border-linha bg-carbon">

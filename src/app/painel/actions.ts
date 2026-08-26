@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarSessao, sessaoAtual } from "@/lib/auth";
+import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
 import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
 import { consultar } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
@@ -832,4 +833,55 @@ export async function restaurarGaleriaAction(form: FormData) {
 
   await restaurarGaleria(tenantId, galeriaId);
   revalidatePath("/painel");
+}
+
+/* ── Chaves de API ─────────────────────────────────────────────────────────
+ *
+ * A credencial de quem não é navegador — plugin do Lightroom, script do próprio
+ * fotógrafo. Ver docs/chave-de-api.md.
+ */
+
+export interface EstadoChave {
+  erro?: string;
+  /**
+   * O segredo recém-criado, para a tela mostrar UMA vez.
+   *
+   * Ele existe só nesta resposta: o banco guardou o hash, e não há rota que o
+   * devolva de novo. Se a pessoa fechar a página sem copiar, o caminho é revogar
+   * e criar outra — que é o certo, e é o que a tela diz.
+   */
+  segredo?: string;
+}
+
+export async function criarChaveApiAction(
+  _estado: EstadoChave,
+  form: FormData,
+): Promise<EstadoChave> {
+  const tenantId = await exigirTenant();
+
+  const nome = String(form.get("nome") ?? "").trim();
+  if (!nome) return { erro: "Dê um nome à chave — “Lightroom do notebook”, por exemplo." };
+
+  const escopo = form.get("escopo") === "leitura" ? "leitura" : "envio";
+
+  /* Um teto por estúdio. Não é segurança — é higiene: lista de vinte chaves
+   * ninguém audita, e chave que ninguém audita é chave que fica viva depois de
+   * vazar. */
+  const ativas = await listarChaves(tenantId);
+  if (ativas.length >= 10) {
+    return { erro: "Você já tem 10 chaves ativas. Revogue uma antes de criar outra." };
+  }
+
+  const chave = await gerarChave(tenantId, nome, escopo);
+  revalidatePath("/painel/conta");
+  return { segredo: chave.segredo };
+}
+
+export async function revogarChaveApiAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const id = String(form.get("chave_id") ?? "");
+  if (!id) return;
+
+  await revogarChave(id, tenantId);
+  revalidatePath("/painel/conta");
 }
