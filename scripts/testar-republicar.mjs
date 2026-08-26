@@ -49,15 +49,35 @@ const igual = (a, b, o) => {
   if (a !== b) throw new Error(`${o}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 
-const { rows: gs } = await db.query(
-  `select g.id, g.tenant_id, g.titulo from galerias g
-    where g.estado = 'online' order by g.criado_em limit 1`,
-);
-if (gs.length === 0) {
-  console.error("✗ sem galeria online no banco de teste");
+/*
+ * ── GALERIA PRÓPRIA, E NÃO A PRIMEIRA QUE APARECER ────────────────────────
+ *
+ * A versão anterior pegava `a primeira galeria online` — a mesma que meia dúzia
+ * de outras suítes usa. Dois desses testes limpam a bancada assim:
+ *
+ *     delete from favoritas where galeria_id = $1
+ *
+ * (`testar-favoritas.mjs:282` e `testar-selecao.mjs:96`.) Numa rodada sequencial
+ * eles não se cruzam com esta, mas basta uma segunda sessão rodando a suíte no
+ * mesmo banco — coisa comum neste repositório — para a favorita deste teste
+ * sumir no meio do caminho. Foi o que reprovou o deploy de 26/08/2026: o passo
+ * "a favorita sobreviveu" acusou perda de dado que o produto não tinha.
+ *
+ * Falso positivo em teste de perda de dado é caro duas vezes: para o deploy, e
+ * para a confiança em quem grita. Galeria própria e descartável remove a chance.
+ */
+const { rows: ts } = await db.query("select id from tenants order by criado_em limit 1");
+if (ts.length === 0) {
+  console.error("✗ sem estúdio no banco de teste");
   process.exit(1);
 }
-const galeria = gs[0];
+const { rows: [nova] } = await db.query(
+  `insert into galerias (tenant_id, slug, titulo, estado, publicada)
+        values ($1, $2, 'Republicar (teste)', 'online', false)
+     returning id, tenant_id, titulo`,
+  [ts[0].id, `republicar-teste-${Date.now()}`],
+);
+const galeria = nova;
 const cookie = cookieDeSessao(galeria.tenant_id);
 
 const chaveEnvio = (await gerarChave(galeria.tenant_id, "republicar", "envio")).segredo;
@@ -111,16 +131,6 @@ await etapa("prepara e envia a foto original", async () => {
   chaveOriginal = rows[0].chave;
   return `${png1.length} bytes`;
 });
-
-/*
- * A capa de uma galeria compartilhada é estado de OUTROS testes: `testar-secoes`
- * e `testar-derivadas` usam a mesma galeria, e deixá-la sem capa faz a suíte
- * falhar de forma intermitente, dependendo da ordem. Guardar e devolver no fim.
- */
-const { rows: [capaAntes] } = await db.query(
-  "select capa_media_id from galerias where id = $1",
-  [galeria.id],
-);
 
 await etapa("o casal marca a foto como favorita, e ela vira capa", async () => {
   await db.query(
@@ -216,12 +226,14 @@ await etapa("mídia que nunca ficou pronta não é republicável", async () => {
   return "409 — republicar é para entrega feita, não para envio interrompido";
 });
 
-/* Limpeza — e a galeria volta exatamente como estava. */
+/*
+ * Limpeza. O DELETE da mídia vem ANTES do da galeria de propósito: ele tira os
+ * objetos do bucket também, e apagar a linha da galeria primeiro levaria a
+ * mídia em cascata deixando o arquivo pago para trás — que é justamente o
+ * órfão que `testar-limpeza` sai caçando.
+ */
 await fetch(`${BASE}/api/medias/${mediaId}/confirmar`, { method: "DELETE", headers: { cookie } });
-await db.query("update galerias set capa_media_id = $1 where id = $2", [
-  capaAntes.capa_media_id,
-  galeria.id,
-]);
+await db.query("delete from galerias where id = $1", [galeria.id]);
 await db.query("delete from chaves_api where tenant_id = $1 and nome = 'republicar'", [galeria.tenant_id]);
 await db.end();
 
