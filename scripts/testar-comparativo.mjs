@@ -167,6 +167,40 @@ await etapa("a resposta sobre guarda aponta para a página de segurança", () =>
   }
 });
 
+/*
+ * ── A HOME VENDE O QUE O PRODUTO ENTREGA ──────────────────────────────────
+ *
+ * O problema inverso do resto deste arquivo. As etapas acima impedem a página
+ * de prometer DEMAIS; estas impedem de prometer DE MENOS. O produto ganhou
+ * escolha de álbum, capítulos pela pasta, nove fontes, vitrine — e a home
+ * seguiu vendendo a versão de uma semana atrás. Página de venda que não conta
+ * o que existe perde a venda em silêncio, que é o pior jeito de perder.
+ *
+ * Cada palavra exigida aqui corresponde a um recurso NO AR com teste próprio:
+ * seleção (testar-selecao), capítulos (testar-capitulos-pasta), fontes
+ * (testar-aparencia), vitrine (testar-site-estudio), filme sem adicional
+ * (testar-planos, testar-multipart). Se um deles for desligado um dia, a
+ * palavra sai daqui JUNTO — mesma regra da página de segurança.
+ */
+console.log("\na home vende o que existe");
+
+const VENDAS = [
+  ["a escolha do álbum", /escolha do álbum/i],
+  ["a lista pronta para o Lightroom", /Lightroom/],
+  ["capítulos nascendo das pastas", /pastas? viram? capítulos|subpastas viram capítulos/i],
+  ["o filme em 4K dentro da galeria", /4K/],
+  ["as nove fontes de título", /nove fontes/i],
+  ["a vitrine do estúdio", /vitrine/i],
+];
+
+for (const [nome, padrao] of VENDAS) {
+  await etapa(`a home conta sobre ${nome}`, () => {
+    if (!padrao.test(html)) {
+      throw new Error(`a página de venda não menciona — o recurso existe e está mudo`);
+    }
+  });
+}
+
 console.log(falhou ? "\n✗ a comparação da home saiu do lugar" : "\n✓ comparação da home ok");
 /* `exitCode` e não `exit()`: deixa o Node fechar o que estiver aberto e sair
  * sozinho. Ver a etapa da home — sair à força aqui custa o código de saída. */

@@ -205,6 +205,25 @@ export default function Home() {
             <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-texto-faint">
               14 dias grátis · sem cartão
             </p>
+
+            {/* A faixa de fatos: o que é isto, em três segundos. Números da
+                grade real (ESPACOS) — se ela mudar, isto acompanha. */}
+            <ul className="mt-10 flex flex-wrap gap-x-7 gap-y-2 border-t border-linha pt-6 font-mono text-[11px] uppercase tracking-[0.14em] text-texto-soft">
+              {[
+                "foto e filme 4K",
+                `de ${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)}`,
+                "downloads sem limite",
+                "escolha do álbum",
+                "sua marca, seu endereço",
+              ].map((f) => (
+                <li key={f} className="flex items-center gap-2">
+                  <span aria-hidden className="text-acento">
+                    ·
+                  </span>
+                  {f}
+                </li>
+              ))}
+            </ul>
           </div>
 
           {/* Duas "galerias" sobrepostas, desenhadas em CSS — o produto antes
@@ -257,13 +276,13 @@ export default function Home() {
                 n: "01",
                 titulo: "Arraste a pasta do casamento",
                 texto:
-                  "Centenas de fotos sobem em paralelo, direto do navegador. A conexão caiu? O envio retoma sozinho de onde parou — inclusive o filme de 30 GB.",
+                  "Centenas de fotos sobem em paralelo, direto do navegador — e as subpastas viram capítulos sozinhas: Making Of, Cerimônia, Festa, na ordem do dia. A conexão caiu? O envio retoma de onde parou, inclusive o filme de 30 GB.",
               },
               {
                 n: "02",
                 titulo: "Escolha a cara da entrega",
                 texto:
-                  "Capa, tema, tipografia e grade — quatro estilos prontos ou a sua combinação. Sua logo no topo, seus capítulos contando a ordem do dia.",
+                  "Quatro estilos prontos ou a sua combinação: capa, cores, grade, espaçamento e nove fontes de título — cada uma mostrada nela mesma. A prévia já abre com fotos, para você decidir vendo, e a sua logo assina o topo.",
               },
               {
                 n: "03",
@@ -308,8 +327,12 @@ export default function Home() {
                     "um toque e a foto cai no rolo do iPhone ou do Android — não no app “Arquivos”, onde ninguém acha depois.",
                   ],
                   [
-                    "Favoritas",
-                    "o casal marca as fotos do álbum com um coração. Você recebe a lista pronta, sem planilha nem prints no WhatsApp.",
+                    "O filme junto das fotos",
+                    "o casal assiste em 4K na própria galeria, com os capítulos do lado — sem link de nuvem perdido no e-mail.",
+                  ],
+                  [
+                    "A escolha do álbum",
+                    "eles marcam as favoritas com um coração, no celular de cada um, numa lista só — e a galeria conta e trava no número combinado.",
                   ],
                   [
                     "Sem limite",
@@ -373,6 +396,59 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── ato 3½: da escolha ao álbum ─────────────────────────────────
+          Seção própria porque é um FLUXO, não um recurso: começa no contrato
+          ("40 fotos inclusas"), passa pelo casal e termina no Lightroom. É
+          também a resposta ao concorrente que vende "seleção" — só que aqui
+          ela termina onde o trabalho de verdade continua: na sua mesa.
+
+          Numerada porque É uma sequência real, com ordem que importa. */}
+      <section className="border-y border-linha bg-carbon/40">
+        <div className="mx-auto max-w-6xl px-6 py-24">
+          <Revelar>
+            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+              Da escolha ao álbum
+            </p>
+            <h2 className="mt-4 max-w-[26ch] font-serif text-4xl font-bold tracking-tight">
+              O álbum se escolhe na galeria. A lista chega pronta no Lightroom.
+            </h2>
+          </Revelar>
+
+          <div className="mt-12 grid gap-4 lg:grid-cols-3">
+            {[
+              {
+                n: "01",
+                titulo: "Você define o combinado",
+                texto:
+                  "O contrato diz 40 fotos? A galeria conta — “12 de 40” — e trava no teto: a 41ª pede para desmarcar uma. Com prazo, se você quiser: passou a data, a escolha fecha sozinha.",
+              },
+              {
+                n: "02",
+                titulo: "O casal fecha junto",
+                texto:
+                  "A lista é uma só: a noiva no celular e o noivo no notebook veem a mesma escolha. Quando terminam, eles encerram — e a lista trava, para o álbum não mudar depois de diagramado. Mudaram de ideia? Você reabre em um clique.",
+              },
+              {
+                n: "03",
+                titulo: "Os nomes caem no Lightroom",
+                texto:
+                  "Um botão copia os nomes dos arquivos, na ordem da galeria, prontos para colar no filtro do Lightroom. Sem planilha, sem print de WhatsApp, sem conferir foto por foto.",
+              },
+            ].map((p, i) => (
+              <Revelar key={p.n} atraso={i * 90}>
+                <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+                  <span className="select-none font-serif text-5xl font-bold leading-none text-acento/25">
+                    {p.n}
+                  </span>
+                  <h3 className="mt-4 text-lg font-semibold">{p.titulo}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-texto-soft">{p.texto}</p>
+                </div>
+              </Revelar>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── ato 4: a ferramenta — bento assimétrico, célula a célula ───── */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <Revelar>
@@ -424,8 +500,8 @@ export default function Home() {
           {/* Aparência — os 4 presets como amostras */}
           <Revelar className="lg:col-span-1">
             <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">Quatro caras</h3>
-              <p className="mt-2 text-sm text-texto-soft">Ou a sua: capa, tema, letra e grade.</p>
+              <h3 className="font-semibold">Quatro estilos, nove fontes</h3>
+              <p className="mt-2 text-sm text-texto-soft">Ou a sua combinação: capa, cores, grade e espaçamento.</p>
               {/* As cores saem de TEMAS, os temas de galeria de verdade — não de
                   tokens da interface. Estas amostras mostram o que o CASAL vai
                   ver; se usassem os tokens do painel, virariam de lado junto com
@@ -458,13 +534,48 @@ export default function Home() {
             </div>
           </Revelar>
 
+          {/* Lixeira — o seguro contra a mão errada, que é o acidente mais comum */}
+          <Revelar className="lg:col-span-1">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">Lixeira de {PRAZO_LIXEIRA_DIAS} dias</h3>
+              <p className="mt-2 text-sm text-texto-soft">
+                Apagou sem querer? Restaurar traz tudo de volta — fotos, filme, capítulos e a
+                escolha do casal.
+              </p>
+            </div>
+          </Revelar>
+
+          {/* Chave de API — nicho, mas é diferencial de quem automatiza */}
+          <Revelar atraso={60} className="lg:col-span-1">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">API para o seu fluxo</h3>
+              <p className="mt-2 text-sm text-texto-soft">
+                Crie galerias e envie arquivos por API, com chaves que nascem e morrem no seu
+                painel.
+              </p>
+            </div>
+          </Revelar>
+
+          {/* Vitrine — o endereço que vai na bio, não só o das entregas */}
+          <Revelar className="sm:col-span-2 lg:col-span-2">
+            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
+              <h3 className="font-semibold">A vitrine do estúdio</h3>
+              <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-texto-soft">
+                O mesmo endereço das entregas também é o seu cartão de visita: capa, sobre,
+                depoimentos e contato com botão de WhatsApp — pronto para pôr na bio, sem montar
+                site em outro lugar.
+              </p>
+            </div>
+          </Revelar>
+
           {/* Segurança */}
           <Revelar atraso={120} className="sm:col-span-2 lg:col-span-2">
             <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
               <h3 className="font-semibold">Guardado como coisa séria</h3>
               <p className="mt-2 max-w-[52ch] text-sm leading-relaxed text-texto-soft">
                 Senha por galeria, links assinados que expiram, backup diário com cópia fora do
-                servidor — e restauração ensaiada, não prometida.
+                servidor — e restauração ensaiada, não prometida. Está tudo escrito, sem letra
+                miúda, na <Link href="/seguranca" className="text-acento underline underline-offset-4">página de segurança</Link>.
               </p>
             </div>
           </Revelar>
