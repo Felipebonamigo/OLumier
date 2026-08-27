@@ -126,7 +126,10 @@ const PRECISAM_DE_AGENDA = {
   "limpar-pendentes.mjs": "solta a quota presa por envio abandonado",
   "arquivar-vencidas.mjs": "manda para o cofre as galerias vencidas",
   "limpar-lixeira.mjs": "apaga de vez o que passou do prazo na lixeira",
-  "espelhar.mjs": "faz a segunda cópia dos arquivos",
+  /* Aqui havia `espelhar.mjs` ("faz a segunda cópia dos arquivos"). O espelho
+   * foi removido em 27/08/2026 — script, unidades e colunas. Ver
+   * `scripts/testar-sem-espelho.mjs`, que agora cobra o contrário: que ele NÃO
+   * volte sozinho. */
 };
 
 const agendados = new Set(

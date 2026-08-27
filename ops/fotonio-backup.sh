@@ -25,7 +25,11 @@ PG_DUMP=/usr/lib/postgresql/14/bin/pg_dump
 BANCO=fotonio
 DESTINO=/opt/fotonio-backups
 RCLONE=/usr/local/bin/rclone
-COFRE=cofre-olumier:banco   # bucket PROPRIO no B2 (olumier-espelho), com chave propria
+# Bucket PROPRIO no B2 (olumier-espelho), com chave propria e Object Lock. O
+# nome vem do espelho de arquivos, removido em 27/08/2026; o bucket FICA porque
+# e onde moram estes backups cifrados. Nao pode ser o mesmo dos originais
+# (olumier-arquivos): juntos, uma chave vazada levaria os dois.
+COFRE=cofre-olumier:banco
 DIARIOS=7
 SEMANAIS=4
 # Chave do Resend para avisar quando falha. Reaproveita a do Atomatiza (mesmo

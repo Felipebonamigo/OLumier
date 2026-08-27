@@ -9,15 +9,12 @@
  * número do B2, então enquanto o arquivo pesado não morar lá, boa parte da
  * tabela vende abaixo do custo.
  *
- * Este é o caminho de SERVIR galeria, não um backup: diferente do espelho, aqui
- * falha tem de ser barulhenta. Por isso as etapas prendem as três coisas que
- * separam "funciona" de "parece funcionar":
+ * Este é o caminho de SERVIR galeria, e falha aqui tem de ser barulhenta — o
+ * cliente do fotógrafo está do outro lado. Por isso as etapas prendem as duas
+ * coisas que separam "funciona" de "parece funcionar":
  *   1. o byte que volta é o mesmo que subiu;
  *   2. Range devolve 206 com a fatia exata — sem isso o player 4K não faz seek,
- *      e "o vídeo não passa do começo" é o defeito mais caro de descobrir tarde;
- *   3. o primário NUNCA divide bucket com o espelho — se dividisse, as duas
- *      cópias morreriam no mesmo acidente e a promessa da página de segurança
- *      viraria mentira sem ninguém perceber.
+ *      e "o vídeo não passa do começo" é o defeito mais caro de descobrir tarde.
  *
  * Sem ARQUIVOS_* configurado as etapas de rede são PULADAS em vez de vermelhas:
  * "não rodou" e "quebrou" não podem ter a mesma cor.
@@ -32,7 +29,6 @@ import {
   apagarArquivo,
   conferirArmazemArquivos,
 } from "../src/lib/b2.ts";
-import { ESPELHO_BUCKET, espelhoConfigurado } from "../src/lib/espelho.ts";
 
 let falhou = false;
 let pulados = 0;
@@ -75,20 +71,25 @@ await etapa("sem configuração, a falha diz o que falta", () => {
 });
 
 /*
- * A invariante que sustenta a página /seguranca: duas cópias em lugares que não
- * caem juntos. Primário e espelho no mesmo bucket seriam UMA cópia com dois
- * nomes — e o pior tipo de falha, a que passa despercebida porque tudo funciona
- * no dia a dia.
+ * ── AQUI HAVIA "primário e espelho não dividem bucket" (removido 27/08/2026) ─
+ *
+ * O espelho de arquivos foi cancelado — ver `scripts/testar-sem-espelho.mjs`.
+ * Sem segunda cópia, não há dois buckets do app para comparar, e a conferência
+ * virou uma que só sabia dizer "sim" a si mesma.
+ *
+ * A invariante NÃO some junto, ela muda de lugar: o bucket dos originais
+ * (`ARQUIVOS_BUCKET`) não pode ser o mesmo onde o rclone guarda os backups
+ * cifrados do banco (`cofre-olumier`, hoje `olumier-espelho`). Se fossem o
+ * mesmo, uma chave com permissão de apagar levaria os arquivos E o backup na
+ * mesma tacada — que é exatamente o desastre que o backup existe para cobrir.
+ *
+ * Essa comparação não cabe aqui: o app não conhece o destino do rclone, e o
+ * `ops/fotonio-backup.sh` — que conhece — hoje confere o CONTEÚDO do dump e não
+ * o bucket de destino. Ou seja, ninguém prende esta invariante automaticamente;
+ * ela é mantida à mão, pelos nomes serem diferentes (`olumier-arquivos` para os
+ * originais, `olumier-espelho` para o cofre do banco). Está escrito aqui para
+ * quem for mexer em bucket saber o que não pode juntar.
  */
-await etapa("primário e espelho não dividem bucket", () => {
-  if (!arquivosConfigurado || !espelhoConfigurado) {
-    return "um dos dois ainda não configurado";
-  }
-  if (ARQUIVOS_BUCKET === ESPELHO_BUCKET) {
-    throw new Error(`primário e espelho no mesmo bucket "${ARQUIVOS_BUCKET}"`);
-  }
-  return `${ARQUIVOS_BUCKET} ≠ ${ESPELHO_BUCKET}`;
-});
 
 console.log("\nida e volta");
 

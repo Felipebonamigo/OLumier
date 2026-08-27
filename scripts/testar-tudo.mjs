@@ -97,7 +97,8 @@ const suites = readdirSync(AQUI)
  * numa mensagem, num comentário, no nome de uma etapa — era classificado como
  * dependente de HTTP. Em 26/08/2026 eram DEZ dos 51: auditoria, chave-api,
  * dominio-proprio, isolamento, limpeza, lixeira, purga-espelho, quota,
- * troca-plano e varredura.
+ * troca-plano e varredura. (A suíte purga-espelho saiu em 27/08/2026, com o
+ * espelho; o episódio continua valendo como aviso.)
  *
  * O efeito é o pior tipo: com o servidor de desenvolvimento fora, esses dez
  * eram PULADOS em silêncio. Passavam de "não rodou" a "não conta", e a suíte

@@ -202,11 +202,11 @@ await etapa("O QUE IMPORTA: o id não mudou e a favorita sobreviveu", async () =
   return "seleção do álbum e capa intactas";
 });
 
-await etapa("republicar devolve o arquivo à fila do espelho", async () => {
-  const { rows } = await db.query("select espelhado_em from medias where id = $1", [mediaId]);
-  igual(rows[0].espelhado_em, null, "espelhado_em");
-  return "espelhado_em zerado — a cópia antiga não vale para o conteúdo novo";
-});
+/* Aqui havia "republicar devolve o arquivo à fila do espelho". O espelho foi
+ * removido em 27/08/2026 junto com a coluna `espelhado_em` — ver
+ * `scripts/testar-sem-espelho.mjs`. A etapa saiu porque não havia mais coluna a
+ * conferir, não porque a regra deixou de valer: se voltar uma segunda cópia,
+ * volta esta etapa, porque republicar troca o conteúdo sem trocar o id. */
 
 await etapa("mídia que nunca ficou pronta não é republicável", async () => {
   const r = await api(`/api/galerias/${galeria.id}/upload`, {

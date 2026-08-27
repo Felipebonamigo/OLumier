@@ -22,20 +22,20 @@ import { dispositionSegura } from "./r2";
  * de preços foi calculada com esse número: enquanto o arquivo pesado não morar
  * aqui, boa parte da tabela vende abaixo do custo (ver docs/obra-rota-b2.md).
  *
- * ── O QUE ESTE MÓDULO NÃO É ───────────────────────────────────────────────
- * Não é o espelho (`lib/espelho.ts`), que também fala com o B2. São papéis
- * opostos e por isso módulos separados:
+ * ── ESTE É O CAMINHO DE SERVIR, E ELE LANÇA ALTO ──────────────────────────
+ * Falha aqui é o cliente do fotógrafo olhando para uma foto que não abre, e
+ * engolir isso em silêncio transformaria um defeito em mistério.
  *
- *   espelho.ts  — cópia de segurança. NUNCA lança: se o B2 cair, o upload do
- *                 fotógrafo continua e o arquivo espera a próxima passada.
- *   b2.ts       — caminho de SERVIR galeria. Lança alto: falha aqui é o cliente
- *                 do fotógrafo olhando para uma foto que não abre, e engolir
- *                 isso em silêncio transformaria um defeito em mistério.
+ * Existia ao lado um `lib/espelho.ts`, com a regra OPOSTA: nunca lançar, porque
+ * cópia de segurança atrasada é melhor que upload barrado. Ele foi removido em
+ * 27/08/2026 com o resto do espelho — ver `scripts/testar-sem-espelho.mjs`. A
+ * consequência para quem mexer aqui: o `olumier-arquivos` guarda a ÚNICA cópia
+ * dos originais, e não há mais de onde restaurar um objeto perdido.
  *
- * Buckets e credenciais também são separados — e `scripts/testar-b2.mjs` prende
- * isso. Primário e espelho no mesmo bucket seriam UMA cópia com dois nomes, e a
- * promessa de "duas empresas diferentes" da página /seguranca morreria sem
- * ninguém notar, porque no dia a dia tudo continuaria funcionando.
+ * O bucket dos originais não pode ser o mesmo onde o rclone guarda os backups
+ * cifrados do banco (`olumier-espelho`, que manteve o nome antigo). Juntos,
+ * uma chave com permissão de apagar levaria os arquivos e o backup na mesma
+ * tacada — o desastre que o backup existe para cobrir.
  *
  * ── POR QUE ARQUIVOS_* E NÃO B2_* ─────────────────────────────────────────
  * O ambiente já tinha `B2_KEY_ID`, `B2_APPLICATION_KEY` e `B2_BUCKET` sobrando

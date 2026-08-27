@@ -5,7 +5,8 @@
 | O que | Protegido? |
 |---|---|
 | **Banco** (`fotonio`: estúdios, galerias, mídias, seções, acessos) | ✅ dump diário, cópia fora do servidor, restauração ensaiada |
-| **Fotos e vídeos** (Cloudflare R2) | ❌ **cópia única** — ver "O risco que continua aberto" |
+| **Originais** (Backblaze B2, `olumier-arquivos`) | ❌ **cópia única** — o espelho foi removido em 27/08/2026, ver a seção abaixo |
+| **Derivadas** (miniatura e preview, Cloudflare R2) | ➖ regeneráveis a partir do original |
 
 ## Como funciona
 
@@ -59,117 +60,28 @@ Só depois de conferir é que se decide promover o banco restaurado.
 gerenciador de senhas do Felipe. **Sem ela o backup é inútil** — é a troca que a
 criptografia impõe.
 
-## O espelho dos arquivos
+## O espelho dos arquivos — REMOVIDO em 27/08/2026
 
-O banco tem backup desde sempre; os arquivos passaram a ter em 25/08/2026.
+Entre 25 e 27/08/2026 cada **original** era copiado para um segundo bucket no
+Backblaze (`olumier-espelho`), por um temporizador às 04:10, com purga às 05:20.
 
-Antes, foto e vídeo viviam **só no R2**: uma cópia, um fornecedor, uma conta.
-Disco não é o risco — a Cloudflare declara durabilidade de onze noves. O risco é
-a **conta**: suspensão, cartão recusado, chave vazada com permissão de apagar,
-engano humano. Qualquer um leva as entregas de todos os clientes de uma vez, e o
-banco restaurado passa a apontar para arquivos que não existem mais.
+O espelho foi **cancelado** junto com a obra da rota B2, em 26/08 — a grade de
+preços foi recalculada sem ele (R$ 0,0459/GB, ver `config/planos.ts`). Só que
+nada tinha sido desligado: por um dia os dois temporizadores continuaram
+copiando e purgando para um espelho que a empresa já havia decidido não ter.
 
-O espelho copia cada **original** para o Backblaze B2, num bucket com credencial
-própria. Miniatura e preview ficam de fora de propósito: são geradas no navegador
-e a galeria cai para o original sozinha se sumirem.
+Saíram: `src/lib/espelho.ts`, os scripts `espelhar`/`purgar-espelho`, as
+unidades `fotonio-espelho` e `fotonio-purga-espelho`, as variáveis `ESPELHO_*`
+e as colunas `medias.espelhado_em` e `medias.espelho_frio_em` (migração
+`024-sem-espelho.sql`). `scripts/testar-sem-espelho.mjs` prende a remoção.
 
-| | Onde | Quando |
-|---|---|---|
-| Banco | dump cifrado no B2 | 03:40 |
-| **Arquivos** | **espelho no B2** | **04:10** |
-| Cofre (galerias vencidas) | move dentro do R2 | 04:33 |
+**O que isso significa hoje:** os originais têm **uma cópia**, no
+`olumier-arquivos`. Não há de onde restaurar um objeto perdido. A página
+`/seguranca` diz isso ao cliente com essas palavras.
 
-```bash
-# o que ainda está com uma cópia só (não copia nada)
-node --env-file=.env.production --experimental-strip-types \
-     --import ./scripts/registrar-ts.mjs scripts/espelhar.mjs
-
-# copiar
-node ... scripts/espelhar.mjs --aplicar --limite=2000
-```
-
-A passada é noturna, não no momento do upload: espelhar durante o envio faria o
-fotógrafo esperar a cópia de um vídeo de 30 GB para ver "pronto", e uma queda do
-B2 viraria falha de upload. O preço é a janela — arquivo enviado às 10h fica com
-cópia única até a madrugada. É aceitável porque o risco coberto não escolhe hora,
-e fechar a janela custaria upload travado todo dia.
-
-### Ligar o espelho
-
-Precisa de bucket e chave **próprios** — não reaproveitar a chave do Padelizou,
-que é justamente o acoplamento que este trabalho remove.
-
-1. Backblaze → **Buckets** → *Create a Bucket*: nome `olumier-espelho`, privado.
-2. Anotar o **Endpoint** que aparece no bucket (`s3.us-east-005.backblazeb2.com`
-   ou a região que sair) e a região embutida nele.
-3. **Application Keys** → *Add a New Application Key*, restrita a esse bucket,
-   com permissão de leitura e escrita.
-4. Pôr no `/opt/fotonio-shared/.env.production` (e no `.env.local` para testar):
-
-   ```
-   ESPELHO_ENDPOINT=https://s3.us-east-005.backblazeb2.com
-   ESPELHO_ACCESS_KEY_ID=...
-   ESPELHO_SECRET_ACCESS_KEY=...
-   ESPELHO_BUCKET=olumier-espelho
-   ESPELHO_REGIAO=us-east-005
-   ```
-
-5. Instalar o temporizador:
-
-   ```bash
-   scp ops/fotonio-espelho.{service,timer} root@SERVIDOR:/etc/systemd/system/
-   ssh root@SERVIDOR 'systemctl daemon-reload && systemctl enable --now fotonio-espelho.timer'
-   ```
-
-Sem essas variáveis o sistema roda igual, só sem segunda cópia — e o
-`scripts/espelhar.mjs` recusa dizendo exatamente o que falta.
-
-### Onde o objeto fica
-
-A chave do espelho é **derivada** da chave de origem: `espelho/<chave original>`.
-Nunca sorteada, e sem índice à parte — no dia de restaurar, o banco tem em mãos
-só a chave original, e uma correspondência que dependa de outra tabela é uma
-correspondência que pode se perder justamente no desastre.
-
-### Apagar não apaga do espelho
-
-Quando o fotógrafo apaga uma foto, o objeto sai do R2 e **fica** no espelho. É de
-propósito: apagar dos dois lugares ao mesmo tempo transformaria um clique errado
-em perda definitiva.
-
-### Limpar o espelho
-
-Guardar cópia de tudo cria dois problemas que só a purga resolve: a cópia de uma
-galeria já destruída continua sendo paga todo mês, e um pedido de exclusão da
-LGPD não é atendido de verdade enquanto ela existir.
-
-**Dois modos, e a diferença entre eles é o que importa:**
-
-```bash
-# varredura — só o que NÃO tem mais linha no banco. Roda sozinha às 05:20.
-node ... scripts/purgar-espelho.mjs            # previsão
-node ... scripts/purgar-espelho.mjs --aplicar
-
-# exclusão da LGPD — alcança TAMBÉM o que ainda existe. Sempre à mão.
-node ... scripts/purgar-espelho.mjs --estudio=sirius --exclusao --aplicar
-node ... scripts/purgar-espelho.mjs --galeria=<uuid> --exclusao --aplicar
-```
-
-`--exclusao` é a única operação do sistema capaz de destruir a segunda cópia de
-um arquivo **vivo**. Por isso exige alvo explícito (`--estudio` ou `--galeria`) e
-nenhuma rotina automática a usa — o temporizador roda sempre sem ela.
-
-A regra que sustenta a segurança da varredura: **só é órfã a chave que não tem
-linha em `medias`**, comparada contra TODAS as linhas, inclusive `pronto = false`
-— arquivo no meio do upload tem linha e ainda não tem objeto, e tratá-lo como
-órfão apagaria o que está chegando. `scripts/testar-purga-espelho.mjs` prende
-isso; o teste central lá não é "a purga apaga", é "a purga não apaga o que não
-devia".
-
-**Object Lock atrapalha de propósito.** Objeto ainda dentro dos 30 dias de
-retenção recusa a exclusão, e o script reporta em vez de fingir sucesso. Num
-pedido de LGPD isso significa que a exclusão se completa quando a retenção
-vencer — e é isso que se responde ao titular.
+⚠️ **O bucket `olumier-espelho` continua existindo e NÃO pode ser apagado** —
+é onde moram os backups cifrados do banco (`cofre-olumier:banco`). O nome ficou
+do espelho; o inquilino de hoje é outro.
 
 ## O bucket é próprio desde 25/08/2026
 
@@ -177,8 +89,9 @@ Até então o backup do banco morava numa pasta (`fotonio/`) **dentro do bucket 
 Padelizou**, usando a chave de lá — se aquela chave fosse trocada, o backup do
 Olumier parava junto, e sem avisar até a próxima falha.
 
-Agora banco e espelho vivem no `olumier-espelho`, com chave própria restrita a
-esse bucket:
+Agora o backup do banco vive no `olumier-espelho`, com chave própria restrita a
+esse bucket. O nome do bucket vem do espelho de arquivos que dividia o espaço com
+ele até 27/08/2026; hoje o backup é o único inquilino:
 
 | Remote | O quê | Caminho |
 |---|---|---|

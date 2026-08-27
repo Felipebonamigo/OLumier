@@ -18,7 +18,7 @@ exigirBancoDeTeste();
 /*
  * Como o temporizador diário chama o script. As bandeiras de TypeScript entram
  * porque `arquivar-vencidas.mjs` deixou de ter SQL próprio e passou a chamar
- * `src/lib/cofre.ts` — mesmo formato do `ops/fotonio-espelho.service`.
+ * `src/lib/cofre.ts` — mesmo formato dos outros `ops/*.service`.
  */
 const ARGS_DIARIO = [
   "--env-file=.env.local",

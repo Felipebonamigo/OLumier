@@ -13,10 +13,17 @@ const ATUALIZADO_EM = "25 de agosto de 2026";
 /**
  * A página que responde ao medo real do fotógrafo: "e se eu perder tudo?".
  *
- * Existe porque as proteções construídas — segunda cópia em outro fornecedor,
- * Object Lock, lixeira, backup ensaiado — não vendem nada enquanto estiverem só
- * no `docs/`. Nenhum concorrente afirma isto publicamente, e é o argumento que
+ * Existe porque as proteções construídas — Object Lock, lixeira, backup do
+ * cadastro com restauração ensaiada — não vendem nada enquanto estiverem só no
+ * `docs/`. Nenhum concorrente afirma isto publicamente, e é o argumento que
  * justifica não sermos os mais baratos em toda faixa.
+ *
+ * A lista já incluiu "segunda cópia em outro fornecedor". O espelho de arquivos
+ * foi cancelado em 27/08/2026 (ver `scripts/testar-sem-espelho.mjs`) e o
+ * parágrafo que o prometia foi trocado por um que diz que ele NÃO existe. Pela
+ * regra abaixo, essa era a única saída: a página havia se comprometido a mudar
+ * "no mesmo dia", e uma promessa de segurança que envelhece em silêncio é
+ * exatamente o que ela existe para não ser.
  *
  * Regra de conteúdo desta página: só entra o que EXISTE e está ligado. Promessa
  * de segurança que não se cumpre é pior que silêncio — e, num processo, vira
@@ -63,10 +70,10 @@ export default function SegurancaPage() {
         vaza ou um programa faz besteira. É contra isso que existe o resto desta página.
       </p>
       <p>
-        <strong>Estamos construindo a segunda cópia em outra empresa</strong>, e queremos ser exatos
-        sobre o que já existe: hoje seus originais têm uma cópia, no armazenamento acima. A cópia
-        adicional, em um fornecedor independente, entra ainda nesta fase do produto — e esta página
-        muda no mesmo dia, com a data. Preferimos escrever isso a deixar você supor.
+        Sendo exatos sobre o que existe: <strong>seus originais têm uma cópia</strong>, no
+        armazenamento acima. <strong>Não mantemos uma segunda cópia em outra empresa</strong> — e
+        escrevemos isso aqui, em vez de deixar você supor que mantemos. O que está protegido em
+        dois lugares é o seu cadastro, do jeito descrito logo abaixo.
       </p>
       <p>
         Por isso repetimos abaixo, e sem constrangimento: <strong>guarde os seus originais</strong>.

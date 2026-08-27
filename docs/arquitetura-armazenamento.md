@@ -1,7 +1,16 @@
 # Arquitetura de armazenamento — desenho revisado
 
-**Status: aprovado pelo Felipe em 25/08/2026.** Substitui o desenho anterior de
-`obra-rota-b2.md`, que mantinha galeria pequena no R2 e cobrava cofre à parte.
+**Status: aprovado pelo Felipe em 25/08/2026, com o ESPELHO CANCELADO depois.**
+Substitui o desenho anterior de `obra-rota-b2.md`, que mantinha galeria pequena
+no R2 e cobrava cofre à parte.
+
+⚠️ **A coluna "ESPELHO" abaixo descreve um mundo que não existe.** O espelho
+frio na Hetzner nunca foi comprado, e o espelho de arquivos no B2 foi removido
+em 27/08/2026 — código, temporizadores, variáveis e colunas do banco. O custo
+real em vigor é **R$ 0,0459/GB** (original no B2 + derivada no R2, sem espelho
+nenhum), calculado em `config/planos.ts`. O desenho fica registrado porque o
+raciocínio de custo e de latência continua valendo; a segunda cópia, não.
+Ver `scripts/testar-sem-espelho.mjs` e `docs/backup.md`.
 
 Este documento existe porque o desenho de 24/08 foi construído sobre duas
 suposições que a medição derrubou no dia seguinte. Ele registra o que ficou de
@@ -30,8 +39,11 @@ derivadas            R2  sempre            sem espelho (regeneráveis)
 banco                VPS                   dump cifrado no B2
 ```
 
-**Custo alvo: R$ 0,0512/GB/mês** (B2 R$ 0,0382 + espelho frio R$ 0,013), igual
-em toda faixa. Contra R$ 0,1207 da rota atual — **2,36× mais barato**.
+**Custo alvo na época: R$ 0,0512/GB/mês** (B2 R$ 0,0382 + espelho frio
+R$ 0,013), igual em toda faixa. Contra R$ 0,1207 da rota de então.
+
+**Custo real hoje: R$ 0,0459/GB/mês** — o espelho frio saiu da conta junto com
+a decisão de não tê-lo.
 
 Três regras sustentam o desenho:
 

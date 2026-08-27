@@ -2,10 +2,10 @@
 Description=Olumier - destruir galerias vencidas na lixeira
 
 [Timer]
-# 04:50 — depois do espelho (04:10) e do cofre (04:33). A ordem importa: o
-# espelho precisa ter copiado o arquivo ANTES de a limpeza poder destrui-lo,
-# senao uma galeria criada e apagada dentro da mesma janela sumiria sem nunca
-# ter tido segunda copia.
+# 04:50 — depois do cofre (04:33), para a limpeza ver o estado ja arquivado.
+# Ate 27/08/2026 vinha tambem depois do espelho (04:10), que precisava ter
+# copiado o arquivo antes de a limpeza poder destrui-lo. O espelho foi removido
+# e nao ha mais segunda copia: o que esta limpeza apaga nao volta.
 OnCalendar=*-*-* 04:50:00
 Persistent=true
 

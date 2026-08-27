@@ -42,7 +42,10 @@ export const ACOES = {
   ASSINATURA_CANCELADA: "assinatura.cancelada",
   SENHA_TROCADA: "senha.trocada",
   CONTA_CRIADA: "conta.criada",
-  ESPELHO_PURGADO: "espelho.purgado",
+  /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
+   * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
+   * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque
+   * evento de auditoria sem nome vira texto órfão na tela do estúdio. */
 } as const;
 
 export type Acao = (typeof ACOES)[keyof typeof ACOES];

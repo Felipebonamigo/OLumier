@@ -349,10 +349,13 @@ export async function galeriasVencidasNaLixeira() {
 /**
  * Destrói de vez: apaga a linha e os objetos do bucket.
  *
- * Chamada só pela limpeza da lixeira e pelo "esvaziar agora" do painel. NÃO
- * apaga do espelho — a segunda cópia é justamente o que sobra quando tudo mais
- * falhou, e apagá-la aqui transformaria este script no risco que ele deveria
- * cobrir.
+ * Chamada só pela limpeza da lixeira e pelo "esvaziar agora" do painel.
+ *
+ * Aqui havia a ressalva de que o ESPELHO não era tocado — a segunda cópia era o
+ * que sobrava quando tudo mais falhava. O espelho foi removido em 27/08/2026
+ * (ver `scripts/testar-sem-espelho.mjs`), então esta função apaga a única cópia
+ * que existe: depois dela, o arquivo não volta de lugar nenhum. É por isso que
+ * ela só é chamada depois do prazo da lixeira ou por um pedido explícito.
  */
 export async function destruirGaleria(galeriaId: string, chaves: string[]) {
   /*

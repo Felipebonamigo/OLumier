@@ -9,10 +9,11 @@
  * que apaga arquivo de galeria de verdade — apagar no painel só move para a
  * lixeira.
  *
- * NÃO toca no espelho. A segunda cópia é justamente o que sobra quando tudo
- * mais falhou; apagá-la aqui transformaria esta limpeza no risco que ela
- * deveria cobrir. O que o espelho acumula de galeria destruída é recolhido pelo
- * `varrer-orfaos.mjs`, à mão e com conferência.
+ * Aqui havia a ressalva de que o ESPELHO não era tocado, porque a segunda cópia
+ * era o que sobrava quando tudo mais falhava. O espelho foi removido em
+ * 27/08/2026 (ver `scripts/testar-sem-espelho.mjs`), então esta limpeza apaga a
+ * única cópia existente. O prazo da lixeira é o que separa o engano do
+ * definitivo — e é a última rede que sobrou.
  */
 import pg from "pg";
 import { galeriasVencidasNaLixeira, destruirGaleria, PRAZO_LIXEIRA_DIAS } from "../src/lib/tenants.ts";

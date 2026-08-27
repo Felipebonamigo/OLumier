@@ -255,10 +255,11 @@ export async function apagarMedia(mediaId: string, tenantId: string) {
  * linha estava pendente e vira pronta; aqui ela já era pronta e continua sendo,
  * porque nada pode piscar para o casal enquanto o fotógrafo republica.
  *
- * `espelhado_em` volta a null de propósito: a cópia no espelho é do conteúdo
- * ANTIGO, e mantê-la marcada faria a passada da madrugada pular o arquivo para
- * sempre. Espelho com conteúdo desatualizado é pior que espelho sem cópia — o
- * primeiro mente, o segundo aparece na fila.
+ * Aqui havia o zeramento de `espelhado_em`, porque a cópia no espelho era do
+ * conteúdo ANTIGO. O espelho foi removido em 27/08/2026 e a coluna com ele —
+ * ver `scripts/testar-sem-espelho.mjs`. Se um dia voltar uma segunda cópia,
+ * este é um dos lugares que ela precisa tocar: republicação troca o arquivo sem
+ * trocar o id, e uma cópia marcada como feita nunca mais entraria na fila.
  */
 export async function republicarMedia(
   mediaId: string,
@@ -269,8 +270,7 @@ export async function republicarMedia(
     `update medias
         set bytes = $3,
             largura = coalesce($4, largura),
-            altura = coalesce($5, altura),
-            espelhado_em = null
+            altura = coalesce($5, altura)
       where id = $1 and tenant_id = $2 and pronto
       returning *`,
     [mediaId, tenantId, dados.bytes, dados.largura ?? null, dados.altura ?? null],

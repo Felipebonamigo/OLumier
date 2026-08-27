@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 /**
- * Confere e conserta a chave do Backblaze B2 usada pelo espelho.
+ * Confere e conserta a chave do Backblaze B2 que guarda os ORIGINAIS.
+ *
+ * Nasceu apontado para o espelho de arquivos; o espelho foi cancelado em
+ * 27/08/2026 (ver `scripts/testar-sem-espelho.mjs`) e o script foi reapontado
+ * em vez de apagado — o `olumier-arquivos` guarda as fotos dos clientes, que é
+ * o bucket que mais precisa de uma chave incapaz de furar a própria trava.
  *
  *   ... scripts/chave-b2.mjs                 → mostra o que a chave atual pode fazer
  *   ... scripts/chave-b2.mjs --criar-restrita → cria uma chave nova SEM bypassGovernance
  *
- * Por que existe: o bucket do espelho tem Object Lock (governance, 30 dias), que
+ * Por que existe: o bucket tem Object Lock (governance, 30 dias), que
  * deveria impedir qualquer exclusão antes do prazo. Só que a Backblaze concede
  * a capacidade `bypassGovernance` por padrão às chaves criadas pela INTERFACE —
  * e com ela a trava vira decoração: uma chave roubada apaga o arquivo travado
@@ -22,27 +27,27 @@ const AUTORIZAR = "https://api.backblazeb2.com/b2api/v3/b2_authorize_account";
 
 const CRIAR = process.argv.includes("--criar-restrita");
 
-const keyId = process.env.ESPELHO_ACCESS_KEY_ID;
-const appKey = process.env.ESPELHO_SECRET_ACCESS_KEY;
-const bucketNome = process.env.ESPELHO_BUCKET;
+const keyId = process.env.ARQUIVOS_ACCESS_KEY_ID;
+const appKey = process.env.ARQUIVOS_SECRET_ACCESS_KEY;
+const bucketNome = process.env.ARQUIVOS_BUCKET;
 
 if (!keyId || !appKey || !bucketNome) {
-  console.error("Faltam ESPELHO_ACCESS_KEY_ID, ESPELHO_SECRET_ACCESS_KEY e ESPELHO_BUCKET.");
+  console.error("Faltam ARQUIVOS_ACCESS_KEY_ID, ARQUIVOS_SECRET_ACCESS_KEY e ARQUIVOS_BUCKET.");
   process.exit(1);
 }
 
 /*
- * O que o espelho REALMENTE precisa fazer:
+ * O que o app REALMENTE precisa fazer com os originais:
  *   listBuckets  — o cliente S3 resolve o bucket no começo
- *   listFiles    — saber se o objeto já está lá (não repagar a cópia)
- *   readFiles    — conferir conteúdo, e restaurar no dia do desastre
- *   writeFiles   — gravar a cópia
+ *   listFiles    — saber se o objeto já está lá
+ *   readFiles    — servir a galeria e conferir o que foi gravado
+ *   writeFiles   — gravar o original enviado pelo fotógrafo
  *   deleteFiles  — a limpeza de órfãos, com conferência, e os testes
  *
  * O que fica de FORA, de propósito:
  *   bypassGovernance — furar o Object Lock. É o buraco que este script fecha.
  *   writeKeys/deleteKeys — uma chave que cria outras chaves não é restrita.
- *   writeBuckets/deleteBuckets — o espelho não administra bucket.
+ *   writeBuckets/deleteBuckets — o app não administra bucket.
  */
 const CAPACIDADES = ["listBuckets", "listFiles", "readFiles", "writeFiles", "deleteFiles"];
 
@@ -84,8 +89,8 @@ if (!CRIAR) {
         ? "\nPara consertar: rode de novo com --criar-restrita"
         : "\nEsta chave não pode criar outra (falta writeKeys).\n" +
             "  Rode com a chave MESTRA da conta:\n" +
-            "    ESPELHO_ACCESS_KEY_ID=<keyID mestre> ESPELHO_SECRET_ACCESS_KEY=<applicationKey mestre> \\\n" +
-            `    ESPELHO_BUCKET=${bucketNome} node scripts/chave-b2.mjs --criar-restrita`,
+            "    ARQUIVOS_ACCESS_KEY_ID=<keyID mestre> ARQUIVOS_SECRET_ACCESS_KEY=<applicationKey mestre> \\\n" +
+            `    ARQUIVOS_BUCKET=${bucketNome} node scripts/chave-b2.mjs --criar-restrita`,
     );
   }
   process.exit(0);
@@ -114,7 +119,7 @@ const rk = await fetch(`${api}/b2api/v3/b2_create_key`, {
   headers: { Authorization: conta.authorizationToken, "Content-Type": "application/json" },
   body: JSON.stringify({
     accountId: conta.accountId,
-    keyName: "olumier-espelho-restrita",
+    keyName: "olumier-arquivos-restrita",
     capabilities: CAPACIDADES,
     bucketId: bucket.bucketId,
   }),
@@ -129,8 +134,8 @@ console.log("\n✓ chave nova criada, sem bypassGovernance");
 console.log(`  capacidades: ${nova.capabilities.join(", ")}`);
 console.log(`  presa ao bucket: ${bucketNome}`);
 console.log("\n── COLE NO .env.production E REINICIE O SERVIÇO ──");
-console.log(`ESPELHO_ACCESS_KEY_ID=${nova.applicationKeyId}`);
-console.log(`ESPELHO_SECRET_ACCESS_KEY=${nova.applicationKey}`);
+console.log(`ARQUIVOS_ACCESS_KEY_ID=${nova.applicationKeyId}`);
+console.log(`ARQUIVOS_SECRET_ACCESS_KEY=${nova.applicationKey}`);
 console.log(
   "\n(a Backblaze só mostra a chave secreta uma vez — se perder, crie outra)\n" +
     "Depois de trocar, apague a chave antiga no painel da Backblaze: enquanto ela\n" +

@@ -123,10 +123,12 @@ etapa("o cookie de sessão sobreviveu à troca de nome", () => {
 });
 
 etapa("os buckets seguem com o nome antigo", () => {
-  for (const [chave, esperado] of [
-    ["ARQUIVOS_BUCKET", "olumier-arquivos"],
-    ["ESPELHO_BUCKET", "olumier-espelho"],
-  ]) {
+  /* `ESPELHO_BUCKET` saiu daqui em 27/08/2026 com o espelho — ver
+   * `scripts/testar-sem-espelho.mjs`, que agora exige que nenhuma `ESPELHO_*`
+   * exista no ambiente. O BUCKET `olumier-espelho` continua de pé, mas quem
+   * fala com ele é o rclone (backup cifrado do banco), e a configuração dele
+   * não passa por variável de ambiente do app. */
+  for (const [chave, esperado] of [["ARQUIVOS_BUCKET", "olumier-arquivos"]]) {
     const valor = process.env[chave];
     /* Vazio no dev é normal (o dev grava no R2). Só confere quando existe: o que
      * importa é que ninguém o REESCREVA com o nome novo. */

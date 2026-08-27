@@ -3,7 +3,7 @@
  * Prova que o envio de e-mail funciona DE VERDADE, pelo código do app. Uso:
  *
  *   node --conditions=react-server --experimental-strip-types \
- *     --import ./scripts/registrar-ts.mjs scripts/testar-email.mjs destino@exemplo.com
+ *     --import ./scripts/registrar-ts.mjs scripts/provar-email.mjs destino@exemplo.com
  *
  * `--conditions=react-server` existe porque `src/lib/email.ts` importa
  * `server-only`, que fora do Next resolve para um módulo que estoura de
@@ -12,6 +12,11 @@
  * reescrever o `fetch` aqui, e aí o teste provaria o teste, não o app.
  *
  * MANDA E-MAIL DE VERDADE. Passe um destino que seja seu.
+ *
+ * NÃO se chama `testar-*` de propósito: `testar-tudo.mjs` descobre as suítes
+ * pelo nome, e uma que MANDA E-MAIL DE VERDADE não pode entrar na bateria que
+ * roda a cada `npm test`. Isto aqui é prova manual, rodada quando se quer saber
+ * se o envio funciona — não teste automático.
  *
  * ── POR QUE ISTO EXISTE ───────────────────────────────────────────────────
  * Em 24/08/2026 `RESEND_API_KEY=cole_aqui` foi para o .env.production e o
@@ -23,7 +28,7 @@ import { enviarEmail, emailConfigurado, motivoEmailIndisponivel, moldura } from 
 
 const destino = process.argv[2];
 if (!destino?.includes("@")) {
-  console.error("uso: ... scripts/testar-email.mjs voce@seudominio.com");
+  console.error("uso: ... scripts/provar-email.mjs voce@seudominio.com");
   process.exit(2);
 }
 
