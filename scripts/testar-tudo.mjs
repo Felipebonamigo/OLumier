@@ -148,6 +148,12 @@ for (const nome of suites) {
     process.execPath,
     [
       "--env-file=.env.local",
+      /* A mesma condição que o Next usa no servidor. Sem ela, `server-only`
+       * resolve para o módulo que estoura de propósito, e toda suíte que toca
+       * uma peça de `src/lib` morre na importação — foi o que aconteceu com
+       * `testar-asaas.mjs`. Ligada, o resolvedor enxerga o que a aplicação
+       * enxerga; é a suíte ficar mais parecida com produção, não menos. */
+      "--conditions=react-server",
       "--experimental-strip-types",
       "--import",
       "./scripts/registrar-ts.mjs",

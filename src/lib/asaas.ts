@@ -18,6 +18,14 @@ import type { Ciclo } from "@/config/planos";
 const PREFIXO = "olumier:";
 
 function base(): string {
+  /* Configurável só para o teste local poder apontar para um servidor de
+   * mentira e conferir o que o cliente FAZ com respostas que a API de verdade
+   * não devolve sob encomenda — 502 com HTML, corpo vazio, JSON quebrado.
+   * Mesmo motivo do `EMAIL_API` em `lib/email.ts`. Em produção a variável não
+   * existe e vale a escolha abaixo. */
+  const forcado = process.env.ASAAS_API?.trim();
+  if (forcado) return forcado;
+
   // Sandbox por padrão: começar apontando para produção é como testar cobrança
   // com o cartão de alguém.
   return process.env.ASAAS_AMBIENTE === "producao"
@@ -44,7 +52,31 @@ async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> 
   });
 
   const texto = await r.text();
-  const dados = texto ? JSON.parse(texto) : {};
+
+  /*
+   * O parse vem DEPOIS de admitir que a resposta pode não ser JSON.
+   *
+   * Até 27/08/2026 esta linha era `texto ? JSON.parse(texto) : {}`, antes de
+   * qualquer olhada no status. Uma resposta não-JSON — 502, 429, página de WAF —
+   * estourava com "Unexpected token '<'" e DESTRUÍA a única informação que
+   * diria o que houve: o status. Aconteceu no ensaio contra o sandbox, e o
+   * fotógrafo leria isso na tela.
+   */
+  let dados: {
+    errors?: { description?: string }[];
+    [k: string]: unknown;
+  } = {};
+  if (texto) {
+    try {
+      dados = JSON.parse(texto);
+    } catch {
+      const tipo = r.headers.get("content-type") ?? "sem tipo";
+      throw new Error(
+        `Asaas: HTTP ${r.status} devolveu algo que não é JSON (${tipo}): ` +
+          `${texto.slice(0, 180).replace(/\s+/g, " ").trim()}`,
+      );
+    }
+  }
 
   if (!r.ok) {
     // O Asaas devolve os problemas numa lista; junta tudo para o log ser útil.
@@ -100,6 +132,8 @@ export interface AssinaturaAsaas {
   status: string;
   nextDueDate: string;
   value: number;
+  /** O Asaas devolve a assinatura apagada com este campo — ver `criarAssinatura`. */
+  deleted?: boolean;
 }
 
 /**
@@ -121,6 +155,33 @@ export async function criarAssinatura(dados: {
 }): Promise<AssinaturaAsaas> {
   /* O ciclo entra no split porque a reserva de custo depende dele: o anual
    * cobra uma vez e ocupa disco por doze meses. Ver `lucroCentavos`. */
+  const referencia = `${PREFIXO}${dados.tenantId}`;
+
+  /*
+   * Procura antes de criar — o MESMO padrão de `garantirCliente`, e por um
+   * motivo pior que o dele.
+   *
+   * `criarAssinaturaAction` só grava o `asaas_assinatura_id` DEPOIS que esta
+   * função volta. Se a assinatura nasce no Asaas e a resposta se perde no
+   * caminho (rede, 502, parse), a ação cai no catch, nada é gravado, e a guarda
+   * `if (tenant.asaas_assinatura_id) return` não dispara no clique seguinte: o
+   * fotógrafo vê "erro", clica de novo e passa a ter DUAS assinaturas ativas
+   * cobrando todo mês. Reproduzido em 27/08/2026 contra o sandbox.
+   *
+   * A mordida final era o cancelamento: o webhook trata SUBSCRIPTION_DELETED
+   * sem olhar QUAL assinatura, então quem percebesse a cobrança dobrada e
+   * cancelasse uma perderia o acesso continuando a pagar a outra.
+   *
+   * Só `ACTIVE` e não apagada conta. Reaproveitar uma assinatura morta seria
+   * pior que duplicar: o estúdio pagaria e nunca receberia cobrança, porque a
+   * assinatura devolvida não emite mais nada.
+   */
+  const existentes = await chamar<{ data: AssinaturaAsaas[] }>(
+    `/subscriptions?externalReference=${encodeURIComponent(referencia)}`,
+  );
+  const viva = existentes.data?.find((a) => a.status === "ACTIVE" && !a.deleted);
+  if (viva) return viva;
+
   const fatias = montarFatias(dados.planoId, dados.precoCentavos, dados.ciclo);
 
   return chamar<AssinaturaAsaas>("/subscriptions", {
@@ -132,7 +193,7 @@ export async function criarAssinatura(dados: {
       nextDueDate: dados.primeiroVencimento.toISOString().slice(0, 10),
       cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
       description: dados.descricao,
-      externalReference: `${PREFIXO}${dados.tenantId}`,
+      externalReference: referencia,
       split: fatias.map((f) => ({
         walletId: f.carteira,
         fixedValue: f.centavos / 100,
