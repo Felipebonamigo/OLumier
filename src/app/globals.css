@@ -257,3 +257,34 @@ html[data-js] .revelar[data-visivel] {
    junto com o redesign da home — eram o dialeto genérico que a página deixou
    de falar. Se alguma página nova precisar de textura, o caminho é o .feixe,
    que é da marca; grade de pontos não volta. */
+
+/* ── A ESTEIRA DE FOTOS (home, 27/08/2026) ──────────────────────────────────
+   Fotografia de verdade rolando devagar, como a mesa de seleção de um estúdio.
+   O conteúdo é DUPLICADO no markup e a animação anda -50%: quando a primeira
+   metade sai, a segunda está exatamente onde ela começou — laço sem emenda.
+   Pausa no hover (quem parou para olhar uma foto não deve persegui-la), e o
+   bloco de reduced-motion lá em cima já congela isto junto com todo o resto. */
+.esteira {
+  animation: esteira-anda 55s linear infinite;
+}
+.esteira:hover {
+  animation-play-state: paused;
+}
+@keyframes esteira-anda {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* O vidro dos cartões e do cabeçalho: fundo do tema com transparência e
+   desfoque. Vive aqui, e não em classes utilitárias soltas, para o desfoque
+   ter UM valor na página inteira — vidro de espessura variada parece defeito. */
+.vidro {
+  background: color-mix(in srgb, var(--carbon) 72%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--linha);
+}

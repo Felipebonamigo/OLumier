@@ -1,3 +1,6 @@
+/* eslint-disable @next/next/no-img-element -- página institucional: as fotos
+ * são estáticas de /public, servidas como estão; o pipeline do next/image
+ * adicionaria processamento e config para zero ganho aqui. */
 import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
@@ -7,7 +10,6 @@ import { SeletorTema } from "@/components/seletor-tema";
 import { TEMAS } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
 import { ESPACOS, formatarGb } from "@/config/planos";
-import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 
 export const metadata: Metadata = {
@@ -16,33 +18,30 @@ export const metadata: Metadata = {
 
 /*
  * A página conta uma história em cinco atos: a promessa (hero, escuro), o
- * caminho (três gestos, escuro), o resultado na mão do casal (creme — a única
- * seção clara, de propósito: é o momento em que a luz chega), a ferramenta do
- * estúdio e o preço.
+ * caminho (três gestos), o resultado na mão do casal (a seção clara — a luz
+ * chega), a ferramenta do estúdio e o preço.
  *
- * ── A LINGUAGEM VISUAL: IMPRESSO DE ESTÚDIO (26/08/2026) ──────────────────
+ * ── A LINGUAGEM VISUAL: CINEMATOGRÁFICA (27/08/2026) ──────────────────────
  *
- * A versão anterior falava o dialeto padrão de página de SaaS: cartões
- * arredondados em bento, um rótulo monoespaçado maiúsculo repetido em cada
- * seção, botões-pílula com brilho, mockups desenhados com barras cinzas. Nada
- * disso era ERRADO — era genérico, e genérico numa página de fotógrafo é o
- * pior lugar possível, porque o leitor vive de olhar.
+ * Quarta linguagem, e desta vez a decisão veio do dono: "site para fotógrafos,
+ * eles contam muito com a beleza do sistema". As três anteriores tentaram
+ * contar fotografia SEM fotografia — bento de cartões, tipografia austera,
+ * objetos desenhados em CSS — e todas esbarraram no mesmo teto: numa página
+ * para quem vive de olhar, gradiente fingindo ser foto é a primeira coisa que
+ * o olho denuncia.
  *
- * O que entrou no lugar vem do mundo de quem a página quer convencer:
+ * O que vale agora:
  *
- *   · a TIRA DE FILME no hero, com furos de arrasto, marcação de borda âmbar
- *     (como a gravação lateral de um filme de verdade) e a moldura escolhida
- *     circulada a lápis de cera — que é como se marcava a foto do álbum numa
- *     prova de contato;
- *   · a FICHA TÉCNICA em grade de fios finos, como especificação de câmera;
- *   · o ÍNDICE DE CATÁLOGO na seção da ferramenta: linhas pautadas, sem
- *     cartão, como o índice de um catálogo de exposição;
- *   · MARCADOR DE SEÇÃO numerado (número de série + fio + rótulo), porque a
- *     página é de fato uma sequência — e numeração só quando há ordem real.
- *
- * Objetos desenhados (a tira de filme, o telefone) usam cor FIXA de propósito:
- * filme é escuro e papel é claro nos dois temas, como no mundo físico. O resto
- * da página troca de tema pelos tokens.
+ *   · FOTOGRAFIA DE VERDADE carrega a página. Oito fotos de casamento
+ *     (Unsplash, licença livre para uso comercial, em /public/home) — o hero
+ *     em contraluz dourada foi escolhido porque a luz da foto é da mesma
+ *     família do âmbar da marca: a página abre literalmente com "sua luz".
+ *   · VIDRO E LUZ por cima: cabeçalho e cartões em .vidro (desfoque real de
+ *     navegador, não simulado), overlays de gradiente sobre as fotos.
+ *   · BOTÃO É PÍLULA. O retângulo seco morreu por veredito do dono ("botões
+ *     quadrados"). O CTA âmbar ganha sombra da própria cor — luz, não borda.
+ *   · A ESTEIRA: uma banda de fotos rolando devagar sob o hero, como a mesa
+ *     de seleção de um estúdio. Pausa no hover, congela em reduced-motion.
  *
  * O que NÃO existe aqui, por honestidade: barra de logos de clientes e
  * depoimentos. O produto tem zero estúdios pagantes hoje — logo inventado e
@@ -165,9 +164,8 @@ const PERGUNTAS = [
   },
 ];
 
-/* A ficha técnica do hero: o produto em seis células, como especificação de
- * câmera. Os números saem da grade real (`ESPACOS`) — se ela mudar, a ficha
- * acompanha sozinha. */
+/* A ficha técnica do hero: o produto em seis células. Os números saem da grade
+ * real (`ESPACOS`) — se ela mudar, a ficha acompanha sozinha. */
 const FICHA: [string, string][] = [
   ["mídia", "foto e filme 4K"],
   ["espaço", `${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)}`],
@@ -178,12 +176,31 @@ const FICHA: [string, string][] = [
 ];
 
 /*
- * O marcador de seção: número de série + fio + rótulo, como folio de catálogo.
- * Um dispositivo só, repetido — é ele que dá unidade à página no lugar do
- * rótulo monoespaçado de antes. O número existe porque a página É uma
- * sequência; seção sem posição na história (o comparativo, a FAQ) usa a
- * variante sem número.
+ * A esteira de fotos, com o nome do arquivo dizendo o CONTEÚDO conferido a
+ * olho (o nome de download nem sempre dizia): cada uma foi aberta e olhada
+ * antes de entrar. Proporções misturadas de propósito — é o que faz ler como
+ * mesa de seleção e não como grade de miniaturas.
  */
+const ESTEIRA: { src: string; alta?: boolean }[] = [
+  { src: "/home/noivos-beijo.jpg", alta: true },
+  { src: "/home/maos-alianca.jpg" },
+  { src: "/home/noiva-retrato.jpg", alta: true },
+  { src: "/home/festa-mesa.jpg" },
+  { src: "/home/vestido.jpg", alta: true },
+  { src: "/home/madrinhas.jpg" },
+  { src: "/home/cerimonia-arco.jpg" },
+];
+
+/* O botão de ação: pílula âmbar com sombra da própria cor — luz, não borda.
+ * O retângulo seco da versão anterior saiu por veredito do dono. */
+const CTA =
+  "inline-block rounded-full bg-acento px-8 py-3.5 font-semibold text-void shadow-[0_10px_36px_-8px_var(--acento)] transition hover:-translate-y-0.5 hover:bg-acento-alto";
+const CTA_FANTASMA =
+  "inline-block rounded-full border border-linha-forte px-8 py-3.5 font-medium text-texto transition hover:border-texto-faint hover:bg-carbon/60";
+
+/* O marcador de seção: número de série + fio + rótulo. O número existe porque
+ * a página é uma sequência; seção sem posição na história usa a variante sem
+ * número. */
 function Marcador({ n, rotulo, claro = false }: { n?: string; rotulo: string; claro?: boolean }) {
   return (
     <p
@@ -206,239 +223,156 @@ function Marcador({ n, rotulo, claro = false }: { n?: string; rotulo: string; cl
   );
 }
 
-/*
- * A tira de filme do hero — o produto contado no objeto que o fotógrafo
- * conhece de cor. Três molduras; a do meio é a escolhida, circulada a lápis
- * de cera vermelho, como numa prova de contato. A marcação de borda é âmbar
- * porque a gravação lateral de filme de verdade é âmbar — e é a mesma família
- * do acento da marca, de propósito.
- *
- * Cores fixas, não tokens: filme é escuro nos dois temas, como no físico.
- */
-const FOTOS_FILME = fotosDeDemonstracao("claro").slice(0, 3);
-const FOTOS_TELEFONE = fotosDeDemonstracao("creme").slice(0, 4);
-
-function TiraDeFilme() {
-  const furos = (lado: "left-2" | "right-2") => (
-    <div className={`absolute inset-y-3 ${lado} flex w-2 flex-col justify-between`} aria-hidden>
-      {Array.from({ length: 14 }, (_, i) => (
-        <span key={i} className="h-2 w-2 rounded-[2px] bg-[#f4f6fa]/70" />
-      ))}
-    </div>
-  );
-  /*
-   * Cada moldura carrega uma foto de demonstração do produto (tema noite) com
-   * um banho quente por cima — `mix-blend` de âmbar sobre a imagem fria lê
-   * como filme revelado, não como retângulo pintado. A textura interna vem da
-   * foto (o vinco, o ponto de luz); o calor vem do banho. Era um gradiente
-   * chapado antes, e chapado lia como caixa vazia.
-   */
-  const moldura = (i: number, filhos?: React.ReactNode) => (
-    <div className="relative mt-1 aspect-[3/2] overflow-hidden bg-[#12100c]">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={FOTOS_FILME[i].url} alt="" className="h-full w-full object-cover" />
-      <div
-        className="absolute inset-0 bg-gradient-to-br from-[#d9a441]/85 via-[#8a5e2a]/85 to-[#3a2c16]/90"
-        style={{ mixBlendMode: "multiply" }}
-      />
-      {filhos}
-    </div>
-  );
-  return (
-    <div className="relative hidden justify-self-center lg:block" aria-hidden>
-      {/* o brilho da mesa de luz atrás da tira — âmbar bem baixo, só atmosfera */}
-      <div
-        className="absolute -inset-10 rounded-full bg-acento/10 blur-3xl"
-        aria-hidden
-      />
-      <div className="relative w-60 rotate-2 bg-[#0d0c0a] px-7 py-5 shadow-[0_44px_90px_-28px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
-        {furos("left-2")}
-        {furos("right-2")}
-
-        <p className="font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
-          GA·400&nbsp;&nbsp;13
-        </p>
-        {moldura(0)}
-
-        <p className="mt-2 font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
-          GA·400&nbsp;&nbsp;14
-        </p>
-        {moldura(
-          1,
-          <>
-            <span className="absolute inset-0 grid place-items-center font-script text-2xl text-[#f2c877] drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">
-              Ana &amp; Pedro
-            </span>
-            {/* o lápis de cera: elipse aberta, torta de propósito — mão, não máquina */}
-            <svg
-              viewBox="0 0 100 62"
-              className="absolute inset-0 h-full w-full text-[#e0705f]"
-              fill="none"
-            >
-              <ellipse
-                cx="50"
-                cy="31"
-                rx="45"
-                ry="25"
-                stroke="currentColor"
-                strokeWidth="2.6"
-                strokeLinecap="round"
-                strokeDasharray="176 22"
-                transform="rotate(-5 50 31)"
-                opacity="0.9"
-              />
-            </svg>
-          </>,
-        )}
-
-        <p className="mt-2 font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
-          GA·400&nbsp;&nbsp;15
-        </p>
-        {moldura(2)}
-      </div>
-
-      {/* a anotação de quem escolheu */}
-      <p className="mt-5 -rotate-1 text-center font-script text-xl text-acento-alto">
-        essa vai pro álbum
-      </p>
-    </div>
-  );
-}
-
-/* O botão de ação: retângulo seco. A página inteira é feita de fio e papel;
- * o único brilho que ela se permite é o feixe do projetor no hero. */
-const CTA = "inline-block bg-acento px-7 py-3.5 font-semibold text-void transition-colors hover:bg-acento-alto";
-
 export default function Home() {
   return (
     <main className="overflow-x-clip">
-      {/* ── cabeçalho ─────────────────────────────────────────────────── */}
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-7">
-        {/* A home monta a marca à mão (serifada e maior que o lockup padrão),
-            então o selo entra aqui também — não sai de graça pelo MarcaLockup. */}
-        <span className="flex items-center gap-3">
-          <MarcaTile tamanho={38} />
-          <span className="font-serif text-xl font-bold tracking-tight">{marca.nome}</span>
-          <SeloBeta />
-        </span>
-        <nav className="flex items-center gap-4 text-sm sm:gap-5">
-          {/* Antes do login, e antes de qualquer conta: quem chegou decide como
-              quer ler. Sem escolha, a página já abre no tema do sistema. */}
-          <SeletorTema />
-          <Link href="/entrar" className="text-texto-soft transition hover:text-texto">
-            Entrar
-          </Link>
-          <Link
-            href="/cadastrar"
-            className="bg-acento px-4 py-2 font-medium text-void transition-colors hover:bg-acento-alto"
-          >
-            Criar conta
-          </Link>
-        </nav>
+      {/* ── cabeçalho: flutua sobre a foto do hero, e SÓ sobre ela ────────
+          Fixo foi tentado e descartado: ao rolar, o vidro escuro virava uma
+          barra opaca tapando a seção clara. O overlay do topo do hero já dá
+          o contraste que os links precisam. */}
+      <header className="absolute inset-x-0 top-0 z-40">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <span className="flex items-center gap-3">
+            <MarcaTile tamanho={34} />
+            <span className="font-serif text-xl font-bold tracking-tight">{marca.nome}</span>
+            <SeloBeta />
+          </span>
+          <nav className="flex items-center gap-4 text-sm sm:gap-5">
+            <SeletorTema />
+            <Link href="/entrar" className="text-texto-soft transition hover:text-texto">
+              Entrar
+            </Link>
+            <Link
+              href="/cadastrar"
+              className="rounded-full bg-acento px-5 py-2 font-medium text-void shadow-[0_6px_24px_-6px_var(--acento)] transition hover:-translate-y-0.5 hover:bg-acento-alto"
+            >
+              Criar conta
+            </Link>
+          </nav>
+        </div>
       </header>
 
-      {/* ── ato 1: a promessa ─────────────────────────────────────────── */}
-      <section className="relative mx-auto max-w-6xl px-6 pb-24 pt-16 sm:pt-24">
-        <div className="feixe" aria-hidden />
+      {/* ── ato 1: a promessa — a foto É o hero ──────────────────────────
+          Contraluz dourada de fim de tarde: a luz da foto é da mesma família
+          do âmbar da marca, então a página abre com "sua luz" duas vezes — no
+          título e na imagem. O overlay escurece de baixo para cima para o
+          texto assentar sem roubar a foto. */}
+      <section className="relative isolate flex min-h-[100svh] items-end">
+        <img
+          src="/home/hero-casamento.jpg"
+          alt="Casal em contraluz dourada segurando o buquê"
+          className="absolute inset-0 -z-20 h-full w-full object-cover"
+          fetchPriority="high"
+        />
+        <div
+          className="absolute inset-0 -z-10 bg-[linear-gradient(to_top,var(--void)_4%,color-mix(in_srgb,var(--void)_62%,transparent)_38%,color-mix(in_srgb,var(--void)_18%,transparent)_70%,color-mix(in_srgb,var(--void)_40%,transparent)_100%)]"
+          aria-hidden
+        />
 
-        <div className="relative grid items-center gap-16 lg:grid-cols-[7fr_5fr]">
-          <div>
-            <p className="text-[13px] tracking-wide text-texto-faint">
-              Galerias de entrega para fotógrafos e filmakers
-            </p>
-            <h1 className="mt-6 font-serif text-5xl font-bold leading-[1.04] tracking-tight sm:text-7xl">
-              Sua luz,
-              <br />
-              <span className="text-acento-alto">entregue.</span>
-            </h1>
-            <p className="mt-7 max-w-[44ch] text-lg leading-relaxed text-texto-soft">
-              O dia passa, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal: com a
-              sua marca, no seu endereço, direto na galeria do celular deles.
-            </p>
-            <div className="mt-10 flex flex-wrap items-center gap-6">
-              <Link href="/cadastrar" className={CTA}>
-                Começar grátis
-              </Link>
-              <Link
-                href="#planos"
-                className="text-sm text-texto-soft underline underline-offset-4 transition hover:text-texto"
-              >
-                Ver planos
-              </Link>
-            </div>
-
-            {/* A ficha técnica: o que é isto, em seis células de fio fino —
-                especificação de câmera, não lista de balinhas. `gap-px` sobre
-                fundo `linha` é o que desenha os fios. */}
-            <dl className="mt-12 grid max-w-xl grid-cols-2 gap-px border border-linha bg-linha sm:grid-cols-3">
-              {FICHA.map(([rotulo, valor]) => (
-                <div key={rotulo} className="bg-void px-4 py-3">
-                  <dt className="text-[11px] tracking-wide text-texto-faint">{rotulo}</dt>
-                  <dd className="mt-0.5 text-sm text-texto">{valor}</dd>
-                </div>
-              ))}
-            </dl>
+        <div className="mx-auto w-full max-w-6xl px-6 pb-16 pt-40">
+          <p className="text-[13px] tracking-[0.22em] text-texto-soft uppercase">
+            Galerias de entrega para fotógrafos e filmakers
+          </p>
+          <h1 className="mt-5 font-serif text-6xl font-bold leading-[0.98] tracking-tight sm:text-8xl">
+            Sua luz,
+            <br />
+            <span className="text-acento-alto">entregue.</span>
+          </h1>
+          <p className="mt-7 max-w-[46ch] text-lg leading-relaxed text-texto sm:text-xl">
+            O dia passa, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal: com a
+            sua marca, no seu endereço, direto na galeria do celular deles.
+          </p>
+          <div className="mt-10 flex flex-wrap items-center gap-4">
+            <Link href="/cadastrar" className={CTA}>
+              Começar grátis
+            </Link>
+            <Link href="#planos" className={CTA_FANTASMA}>
+              Ver planos
+            </Link>
           </div>
 
-          <TiraDeFilme />
+          {/* A ficha técnica em vidro, flutuando sobre o pé da foto. */}
+          <dl className="vidro mt-14 grid max-w-4xl grid-cols-2 gap-px overflow-hidden rounded-2xl sm:grid-cols-3 lg:grid-cols-6">
+            {FICHA.map(([rotulo, valor]) => (
+              <div key={rotulo} className="px-4 py-3">
+                <dt className="text-[11px] tracking-wide text-texto-faint">{rotulo}</dt>
+                <dd className="mt-0.5 text-sm text-texto">{valor}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      {/* ── a esteira: a mesa de seleção do estúdio ──────────────────────
+          Fotos de verdade passando devagar. `aria-hidden` porque é atmosfera:
+          quem navega por leitor de tela não perde conteúdo nenhum aqui. */}
+      <section className="overflow-hidden border-y border-linha bg-carbon/40 py-6" aria-hidden>
+        <div className="esteira flex w-max gap-4">
+          {[...ESTEIRA, ...ESTEIRA].map((f, i) => (
+            <img
+              key={i}
+              src={f.src}
+              alt=""
+              loading="lazy"
+              className={`${f.alta ? "aspect-[3/4]" : "aspect-[3/2]"} h-44 rounded-xl object-cover sm:h-56`}
+            />
+          ))}
         </div>
       </section>
 
       {/* ── ato 2: o caminho — coluna fixa à esquerda, gestos à direita ── */}
-      <section className="border-y border-linha bg-carbon/40">
-        <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[2fr_3fr]">
-          <div className="lg:sticky lg:top-24 lg:self-start">
-            <Marcador n="01" rotulo="Da pasta ao link" />
-            <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
-              Três gestos.
-              <br />
-              Nenhum deles é &ldquo;exportar de novo&rdquo;.
-            </h2>
-            <p className="mt-5 max-w-[36ch] text-texto-soft">
-              Entregar não deveria ser a parte difícil do trabalho. Aqui ela cabe entre um café e o
-              próximo ensaio.
-            </p>
-          </div>
-
-          <ol>
-            {[
-              {
-                n: "1",
-                titulo: "Arraste a pasta do casamento",
-                texto:
-                  "Centenas de fotos sobem em paralelo, direto do navegador — e as subpastas viram capítulos sozinhas: Making Of, Cerimônia, Festa, na ordem do dia. A conexão caiu? O envio retoma de onde parou, inclusive o filme de 30 GB.",
-              },
-              {
-                n: "2",
-                titulo: "Escolha a cara da entrega",
-                texto:
-                  "Quatro estilos prontos ou a sua combinação: capa, cores, grade, espaçamento e nove fontes de título — cada uma mostrada nela mesma. A prévia já abre com fotos, para você decidir vendo, e a sua logo assina o topo.",
-              },
-              {
-                n: "3",
-                titulo: "Mande um link",
-                texto: `seuestudio.${marca.dominio}/ana-pedro. Um endereço seu, não um link genérico de nuvem. Com senha, se você quiser; com prazo, se você definir.`,
-              },
-            ].map((g, i) => (
-              <Revelar key={g.n} atraso={i * 90}>
-                <li className="grid grid-cols-[3rem_1fr] border-t border-linha py-9 first:border-t-0">
-                  <span className="font-serif text-base font-semibold tabular-nums text-acento">
-                    {g.n}.
-                  </span>
-                  <div>
-                    <h3 className="font-serif text-2xl font-semibold tracking-tight">{g.titulo}</h3>
-                    <p className="mt-3 max-w-[54ch] leading-relaxed text-texto-soft">{g.texto}</p>
-                  </div>
-                </li>
-              </Revelar>
-            ))}
-          </ol>
+      <section className="mx-auto grid max-w-6xl gap-12 px-6 py-28 lg:grid-cols-[2fr_3fr]">
+        <div className="lg:sticky lg:top-28 lg:self-start">
+          <Marcador n="01" rotulo="Da pasta ao link" />
+          <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+            Três gestos.
+            <br />
+            Nenhum deles é &ldquo;exportar de novo&rdquo;.
+          </h2>
+          <p className="mt-5 max-w-[36ch] text-texto-soft">
+            Entregar não deveria ser a parte difícil do trabalho. Aqui ela cabe entre um café e o
+            próximo ensaio.
+          </p>
         </div>
+
+        <ol>
+          {[
+            {
+              n: "1",
+              titulo: "Arraste a pasta do casamento",
+              texto:
+                "Centenas de fotos sobem em paralelo, direto do navegador — e as subpastas viram capítulos sozinhas: Making Of, Cerimônia, Festa, na ordem do dia. A conexão caiu? O envio retoma de onde parou, inclusive o filme de 30 GB.",
+            },
+            {
+              n: "2",
+              titulo: "Escolha a cara da entrega",
+              texto:
+                "Quatro estilos prontos ou a sua combinação: capa, cores, grade, espaçamento e nove fontes de título — cada uma mostrada nela mesma. A prévia já abre com fotos, para você decidir vendo, e a sua logo assina o topo.",
+            },
+            {
+              n: "3",
+              titulo: "Mande um link",
+              texto: `seuestudio.${marca.dominio}/ana-pedro. Um endereço seu, não um link genérico de nuvem. Com senha, se você quiser; com prazo, se você definir.`,
+            },
+          ].map((g, i) => (
+            <Revelar key={g.n} atraso={i * 90}>
+              <li className="grid grid-cols-[3rem_1fr] border-t border-linha py-9 first:border-t-0">
+                <span className="font-serif text-2xl font-semibold tabular-nums text-acento">
+                  {g.n}.
+                </span>
+                <div>
+                  <h3 className="font-serif text-2xl font-semibold tracking-tight">{g.titulo}</h3>
+                  <p className="mt-3 max-w-[54ch] leading-relaxed text-texto-soft">{g.texto}</p>
+                </div>
+              </li>
+            </Revelar>
+          ))}
+        </ol>
       </section>
 
       {/* ── ato 3: a luz chega — a ÚNICA seção clara da página ─────────── */}
       <section className="bg-marfim text-tinta">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+        <div className="mx-auto max-w-6xl px-6 py-28">
           <div className="grid items-center gap-14 lg:grid-cols-[6fr_5fr]">
             <Revelar>
               <Marcador n="02" rotulo="Do outro lado do link" claro />
@@ -446,8 +380,6 @@ export default function Home() {
                 O casal abre no celular.
                 <br />E fica tudo bem.
               </h2>
-              {/* Lista pautada, não balinhas: o termo à esquerda como verbete,
-                  o fio como pauta — mesmo desenho do índice da ferramenta. */}
               <dl className="mt-9 divide-y divide-tinta/15 border-y border-tinta/15">
                 {[
                   [
@@ -475,18 +407,14 @@ export default function Home() {
               </dl>
             </Revelar>
 
-            {/* O telefone, com a galeria que o PRODUTO renderiza: as fotos de
-                demonstração do tema creme, nas proporções reais de câmera, em
-                duas colunas como a grade da galeria de verdade. Papel é claro
-                nos dois temas — cor fixa, como a tira de filme do hero. Os
-                quadradinhos coloridos de antes liam como caixa; foto de
-                verdade (do gerador do produto) lê como entrega. */}
+            {/* O telefone, com fotos DE VERDADE dentro — a galeria como o casal
+                vê. Papel é claro nos dois temas: cor fixa, como no físico. */}
             <Revelar atraso={120} className="justify-self-center">
               <div
-                className="w-72 rounded-[2.2rem] border border-marfim-2 bg-white p-3 shadow-[0_36px_80px_-24px_rgba(42,35,24,0.35)]"
+                className="w-72 rounded-[2.4rem] border border-marfim-2 bg-white p-3 shadow-[0_44px_90px_-28px_rgba(42,35,24,0.45)]"
                 aria-hidden
               >
-                <div className="rounded-[1.6rem] bg-marfim px-4 pb-4 pt-5">
+                <div className="rounded-[1.8rem] bg-marfim px-4 pb-4 pt-5">
                   <p className="text-center font-script text-3xl text-tinta">Ana &amp; Pedro</p>
                   <p className="mt-1 text-center text-[8px] uppercase tracking-[0.22em] text-tinta-faint">
                     21 de março · Serra Gaúcha
@@ -494,18 +422,36 @@ export default function Home() {
                   <div className="mt-4 grid grid-cols-2 items-start gap-2">
                     <div className="grid gap-2">
                       <div className="relative">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={FOTOS_TELEFONE[0].url} alt="" className="w-full rounded-sm" />
-                        <span className="absolute right-1.5 top-1.5 text-xs text-erro">♥</span>
+                        <img
+                          src="/home/noivos-beijo.jpg"
+                          alt=""
+                          loading="lazy"
+                          className="w-full rounded-lg"
+                        />
+                        <span className="absolute right-1.5 top-1.5 text-xs text-erro drop-shadow">
+                          ♥
+                        </span>
                       </div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={FOTOS_TELEFONE[1].url} alt="" className="w-full rounded-sm" />
+                      <img
+                        src="/home/maos-alianca.jpg"
+                        alt=""
+                        loading="lazy"
+                        className="w-full rounded-lg"
+                      />
                     </div>
                     <div className="grid gap-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={FOTOS_TELEFONE[2].url} alt="" className="w-full rounded-sm" />
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={FOTOS_TELEFONE[3].url} alt="" className="w-full rounded-sm" />
+                      <img
+                        src="/home/noiva-retrato.jpg"
+                        alt=""
+                        loading="lazy"
+                        className="w-full rounded-lg"
+                      />
+                      <img
+                        src="/home/madrinhas.jpg"
+                        alt=""
+                        loading="lazy"
+                        className="w-full rounded-lg"
+                      />
                     </div>
                   </div>
                   <div className="mt-4 flex items-center justify-between text-[10px] font-medium text-tinta-suave">
@@ -521,24 +467,17 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── ato 3½: da escolha ao álbum ─────────────────────────────────
-          Seção própria porque é um FLUXO, não um recurso: começa no contrato
-          ("40 fotos inclusas"), passa pelo casal e termina no Lightroom. É
-          também a resposta ao concorrente que vende "seleção" — só que aqui
-          ela termina onde o trabalho de verdade continua: na sua mesa.
-
-          Três colunas separadas por fio, como colunas de jornal — a ordem
-          importa e a numeração fica no verbete, não num numeral gigante. */}
-      <section className="border-y border-linha bg-carbon/40">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+      {/* ── ato 3½: da escolha ao álbum — três cartões de vidro ─────────── */}
+      <section className="border-b border-linha bg-carbon/40">
+        <div className="mx-auto max-w-6xl px-6 py-28">
           <Revelar>
             <Marcador n="03" rotulo="Da escolha ao álbum" />
-            <h2 className="mt-5 max-w-[26ch] font-serif text-4xl font-bold tracking-tight">
+            <h2 className="mt-5 max-w-[26ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
               O álbum se escolhe na galeria. A lista chega pronta no Lightroom.
             </h2>
           </Revelar>
 
-          <div className="mt-12 grid border-y border-linha lg:grid-cols-3 lg:divide-x lg:divide-linha max-lg:divide-y max-lg:divide-linha">
+          <div className="mt-12 grid gap-5 lg:grid-cols-3">
             {[
               {
                 n: "1",
@@ -559,18 +498,12 @@ export default function Home() {
                   "Um botão copia os nomes dos arquivos, na ordem da galeria, prontos para colar no filtro do Lightroom. Sem planilha, sem print de WhatsApp, sem conferir foto por foto.",
               },
             ].map((p, i) => (
-              /* O recuo mora no PRÓPRIO Revelar, que é quem participa da grade.
-                 No div interno, `first:` sempre casava — ele é o único filho do
-                 embrulho — e o pl-0 valia para as TRÊS colunas: o texto
-                 encostava no fio divisor. Visto no tema claro, 27/08/2026. */
-              <Revelar
-                key={p.n}
-                atraso={i * 90}
-                className="h-full py-8 lg:px-8 lg:first:pl-0 lg:last:pr-0"
-              >
-                <div>
-                  <h3 className="font-serif text-2xl font-semibold tracking-tight">
-                    <span className="mr-3 text-base text-acento">{p.n}.</span>
+              <Revelar key={p.n} atraso={i * 90} className="h-full">
+                <div className="vidro h-full rounded-2xl p-7">
+                  <span className="font-serif text-3xl font-semibold tabular-nums text-acento">
+                    {p.n}.
+                  </span>
+                  <h3 className="mt-3 font-serif text-2xl font-semibold tracking-tight">
                     {p.titulo}
                   </h3>
                   <p className="mt-3 text-sm leading-relaxed text-texto-soft">{p.texto}</p>
@@ -582,18 +515,14 @@ export default function Home() {
       </section>
 
       {/* ── ato 4: a ferramenta — índice de catálogo, linha a linha ────── */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
+      <section className="mx-auto max-w-6xl px-6 py-28">
         <Revelar>
           <Marcador n="04" rotulo="Do seu lado do balcão" />
-          <h2 className="mt-5 max-w-[24ch] font-serif text-4xl font-bold tracking-tight">
+          <h2 className="mt-5 max-w-[24ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
             O estúdio continua seu. Só o trabalho pesado muda de dono.
           </h2>
         </Revelar>
 
-        {/* Sem cartão nenhum: verbete à esquerda, descrição à direita, um fio
-            entre cada linha — o índice de um catálogo de exposição. O desenho
-            do cofre e as amostras de tema moram DENTRO da própria linha, como
-            figura de verbete. */}
         <div className="mt-12 border-t border-linha">
           {/* Cofre — o verbete com figura: a linha do tempo da entrega */}
           <Revelar>
@@ -620,8 +549,7 @@ export default function Home() {
             </div>
           </Revelar>
 
-          {/* Endereço — ganhou o domínio próprio, que entrou no ar em 26/08:
-              a home vendia só o subdomínio e o produto já entrega mais. */}
+          {/* Endereço — o domínio próprio entrou no ar em 26/08 */}
           <Revelar>
             <div className="grid gap-x-10 gap-y-2 border-b border-linha py-8 md:grid-cols-[15rem_1fr]">
               <h3 className="font-serif text-xl font-semibold tracking-tight">
@@ -634,10 +562,10 @@ export default function Home() {
                   certificado sai sozinho.
                 </p>
                 <p className="mt-4 flex flex-wrap gap-2 font-mono text-xs" aria-hidden>
-                  <code className="border border-linha bg-void px-3 py-2 text-acento-alto">
+                  <code className="rounded-full border border-linha bg-void px-4 py-2 text-acento-alto">
                     seuestudio.{marca.dominio}
                   </code>
-                  <code className="border border-linha bg-void px-3 py-2 text-texto-soft">
+                  <code className="rounded-full border border-linha bg-void px-4 py-2 text-texto-soft">
                     www.seuestudio.com.br
                   </code>
                 </p>
@@ -646,7 +574,7 @@ export default function Home() {
           </Revelar>
 
           {/* Aparência — as amostras saem de TEMAS, os temas de galeria de
-              verdade, não de tokens da interface: mostram o que o CASAL vê. */}
+              verdade: mostram o que o CASAL vê. */}
           <Revelar>
             <div className="grid gap-x-10 gap-y-2 border-b border-linha py-8 md:grid-cols-[15rem_1fr]">
               <h3 className="font-serif text-xl font-semibold tracking-tight">
@@ -661,12 +589,12 @@ export default function Home() {
                   {(["noite", "claro", "creme"] as const).map((t) => (
                     <span
                       key={t}
-                      className="h-8 w-8 ring-1 ring-linha-forte"
+                      className="h-8 w-8 rounded-full ring-1 ring-linha-forte"
                       style={{ background: TEMAS[t]["--g-fundo"] }}
                     />
                   ))}
                   <span
-                    className="h-8 w-8 ring-1 ring-linha-forte"
+                    className="h-8 w-8 rounded-full ring-1 ring-linha-forte"
                     style={{
                       background: `linear-gradient(135deg, ${TEMAS.noite["--g-destaque"]}, ${TEMAS.creme["--g-fundo"]})`,
                     }}
@@ -681,8 +609,7 @@ export default function Home() {
             {[
               {
                 titulo: "Prova de entrega",
-                texto:
-                  "Aberturas e downloads contados. “Não recebi” deixa de ser conversa.",
+                texto: "Aberturas e downloads contados. “Não recebi” deixa de ser conversa.",
               },
               {
                 titulo: `Lixeira de ${PRAZO_LIXEIRA_DIAS} dias`,
@@ -729,13 +656,33 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── interlúdio cinematográfico: a foto respira entre ferramenta e
+          preço. `bg-fixed` fica de fora de propósito — quebra no iOS; o
+          parallax aqui é só a foto maior que a janela, presa pelo overflow. */}
+      <section className="relative isolate overflow-hidden">
+        <img
+          src="/home/festa-mesa.jpg"
+          alt=""
+          className="absolute inset-0 -z-20 h-full w-full object-cover"
+        />
+        <div
+          className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,var(--void)_0%,color-mix(in_srgb,var(--void)_55%,transparent)_45%,var(--void)_100%)]"
+          aria-hidden
+        />
+        <div className="mx-auto max-w-6xl px-6 py-36 text-center">
+          <p className="mx-auto max-w-[24ch] text-balance font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+            O dia acontece uma vez. A entrega fica para sempre.
+          </p>
+        </div>
+      </section>
+
       {/* ── ato 5: preço ───────────────────────────────────────────────── */}
       <section id="planos" className="scroll-mt-8 border-t border-linha bg-carbon/40">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+        <div className="mx-auto max-w-6xl px-6 py-28">
           <Revelar>
             <div className="max-w-2xl">
               <Marcador n="05" rotulo="Planos" />
-              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
                 Um número só: quanto espaço você quer
               </h2>
               <p className="mt-4 text-texto-soft">
@@ -751,28 +698,11 @@ export default function Home() {
             </div>
           </Revelar>
 
-          {/* ── a objeção, respondida onde ela nasce ────────────────────────
-              Vem DEPOIS do montador de propósito: a pergunta "por que não é
-              mais barato?" só existe depois de o preço aparecer.
-
-              Três decisões que valem mais que a diagramação:
-
-              1. Ninguém é citado pelo nome. Pacote fechado de concorrente muda
-                 de teto sem avisar, e uma tabela com o número deles envelhece
-                 em silêncio — vira mentira nossa por descuido alheio. Citar
-                 também dá palco de graça a quem ainda não tem o nosso.
-
-              2. Toda linha da coluna "aqui" é sobre NÓS, e cada uma é presa por
-                 teste: o espaço sai de `ESPACOS`, o filme por preço é
-                 `testar-planos`, o link assinado é `testar-galeria-publica`.
-                 Marketing que a suíte não alcança é onde a mentira mora.
-
-              3. A pergunta é feita "a qualquer galeria, a nossa inclusive". Não
-                 é falsa modéstia: é o que torna a seção verificável em dez
-                 segundos por quem está lendo, e o que a mantém honesta quando
-                 alguém empatar conosco.
-
-              `scripts/testar-comparativo.mjs` prende os três pontos. */}
+          {/* A objeção, respondida onde ela nasce — depois do preço. Ninguém é
+              citado pelo nome: pacote de concorrente muda sem avisar, e a
+              tabela envelheceria em silêncio. Toda linha da coluna "aqui" é
+              sobre NÓS e presa por teste; a pergunta vale para qualquer
+              galeria, a nossa inclusive. `testar-comparativo.mjs` prende. */}
           <Revelar>
             <div id="comparativo" className="mt-24 max-w-2xl scroll-mt-8">
               <Marcador rotulo="Antes de escolher" />
@@ -793,7 +723,7 @@ export default function Home() {
                   <div className="flex gap-4">
                     <span
                       aria-hidden
-                      className="mt-1.5 font-serif text-base font-semibold tabular-nums text-acento"
+                      className="mt-1 font-serif text-xl font-semibold tabular-nums text-acento"
                     >
                       {i + 1}.
                     </span>
@@ -803,9 +733,6 @@ export default function Home() {
                   </div>
 
                   <div>
-                    {/* Rótulo em bloco, não colado no texto: como <span> inline
-                        o leitor de tela emenda "AquiDe 100 GB" numa palavra só,
-                        e o espaço só existia como margem visual. */}
                     <p className="text-[13px] tracking-wide text-acento-alto">Aqui —</p>
                     <p className="mt-1.5 max-w-[46ch] leading-relaxed text-texto">{p.aqui}</p>
                     <p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-texto-soft">
@@ -821,7 +748,7 @@ export default function Home() {
 
       {/* ── perguntas frequentes ───────────────────────────────────────── */}
       <section id="perguntas" className="scroll-mt-8 border-t border-linha">
-        <div className="mx-auto max-w-3xl px-6 py-24">
+        <div className="mx-auto max-w-3xl px-6 py-28">
           <Revelar>
             <div className="max-w-2xl">
               <Marcador rotulo="Antes de decidir" />
@@ -834,7 +761,6 @@ export default function Home() {
           <div className="mt-10 border-t border-linha">
             {FAQ.map((p, i) => (
               <Revelar key={p.pergunta} atraso={Math.min(i, 4) * 60}>
-                {/* `group` + `open:` deixam a seta girar sem uma linha de JS. */}
                 <details className="group border-b border-linha">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-5 text-left font-medium transition hover:text-acento-alto">
                     {p.pergunta}
@@ -863,11 +789,20 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── fecho ──────────────────────────────────────────────────────── */}
-      <section className="border-t border-linha">
-        <div className="mx-auto max-w-6xl px-6 py-24">
+      {/* ── fecho: a última foto e o convite ───────────────────────────── */}
+      <section className="relative isolate overflow-hidden border-t border-linha">
+        <img
+          src="/home/cerimonia-arco.jpg"
+          alt=""
+          className="absolute inset-0 -z-20 h-full w-full object-cover"
+        />
+        <div
+          className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,var(--void)_0%,color-mix(in_srgb,var(--void)_72%,transparent)_55%,var(--void)_100%)]"
+          aria-hidden
+        />
+        <div className="mx-auto max-w-6xl px-6 py-32">
           <Revelar>
-            <h2 className="max-w-[22ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+            <h2 className="max-w-[22ch] font-serif text-4xl font-bold tracking-tight sm:text-6xl">
               A próxima entrega já podia ser{" "}
               <span className="text-acento-alto">assim</span>.
             </h2>
@@ -875,7 +810,7 @@ export default function Home() {
               <Link href="/cadastrar" className={CTA}>
                 Criar conta grátis
               </Link>
-              <p className="text-sm text-texto-faint">14 dias grátis · sem cartão</p>
+              <p className="text-sm text-texto-soft">14 dias grátis · sem cartão</p>
             </div>
           </Revelar>
         </div>
