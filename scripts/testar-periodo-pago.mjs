@@ -169,6 +169,30 @@ await etapa("o UPDATE do cancelamento não escreve em pago_ate", () => {
   return "o período sobrevive ao cancelamento";
 });
 
+await etapa("o webhook conta o período pelo CICLO do estúdio, não por um literal", () => {
+  /*
+   * `fimDoPeriodoPago` sabe que anual são doze meses, e a etapa acima prende
+   * isso. Só que saber não adianta se quem chama passar outra coisa: trocar
+   * `tenant.ciclo_cobranca` por "mensal" — ou tirar a coluna do `select` — daria
+   * UM mês a quem pagou DOZE, e a diferença só apareceria onze meses depois, num
+   * estúdio em dia sendo tratado como vencido.
+   *
+   * Provado contra o sandbox em 27/08/2026 que o Asaas aceita `cycle: "YEARLY"`
+   * e devolve vencimento um ano à frente; o que falta é justamente esta ponta.
+   */
+  const fonte = readFileSync(
+    new URL("../src/app/api/asaas/webhook/route.ts", import.meta.url),
+    "utf8",
+  );
+  if (!/select[^"]*ciclo_cobranca[^"]*from tenants/.test(fonte)) {
+    throw new Error("o webhook não busca mais ciclo_cobranca — o anual vira mensal em silêncio");
+  }
+  if (!/fimDoPeriodoPago\(\s*tenant\.ciclo_cobranca/.test(fonte)) {
+    throw new Error("o período não é mais contado pelo ciclo do estúdio");
+  }
+  return "anual compra doze meses de ponta a ponta";
+});
+
 /*
  * O placar. Sem estas duas linhas o arquivo terminava depois da última etapa e
  * saía com 0 SEMPRE — `testar-tudo.mjs` julga pelo código de saída, então esta
