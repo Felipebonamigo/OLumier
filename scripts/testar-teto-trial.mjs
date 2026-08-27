@@ -17,13 +17,14 @@
  * no dia em que o pagamento confirmar (`status = 'ativo'`) o teto some
  * sozinho, sem webhook precisar reescrever quota.
  *
- * 25 GB de teto porque cabe um casamento inteiro de FOTOS para testar de
- * verdade (o produto se prova), e limita o pior caso a ~R$ 1,15/mês por trial.
+ * 10 GB de teto porque ainda cabe um casamento inteiro de FOTOS (4 a 6 GB numa
+ * cobertura típica), então o produto se prova no uso real, e limita o pior caso
+ * a ~R$ 0,46/mês por trial abandonado. Era 25 GB até 27/08/2026.
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
-import { quotaEfetivaBytes, TETO_TRIAL_BYTES } from "../src/config/trial.ts";
+import { quotaEfetivaBytes, TETO_TRIAL_BYTES, TETO_TRIAL_GB } from "../src/config/trial.ts";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -51,6 +52,13 @@ console.log("O teto do trial:\n");
 
 /* ── a regra, sozinha ────────────────────────────────────────────────────── */
 
+await etapa("o teto vale 10 GB", () => {
+  /* O número É a política, não detalhe de implementação: prendê-lo obriga quem
+   * for mudar a olhar o custo e o recado da tela junto. Era 25 GB até
+   * 27/08/2026. */
+  if (TETO_TRIAL_GB !== 10) throw new Error(`o teto está em ${TETO_TRIAL_GB} GB`);
+});
+
 await etapa("trial com plano de 10 TB fica com o teto", () => {
   const q = quotaEfetivaBytes({ status: "trial", quota_bytes: String(10240n * GB) });
   if (q !== TETO_TRIAL_BYTES) throw new Error(`veio ${q}, esperava o teto ${TETO_TRIAL_BYTES}`);
@@ -65,10 +73,10 @@ await etapa("ativo com o mesmo plano usa a quota inteira", () => {
 });
 
 await etapa("teto é TETO, não piso: plano menor que ele fica como está", () => {
-  const pequena = 10n * GB;
+  const pequena = 5n * GB;
   const q = quotaEfetivaBytes({ status: "trial", quota_bytes: String(pequena) });
-  if (q !== pequena) throw new Error(`plano de 10 GB virou ${q} no trial`);
-  return "10 GB continua 10 GB";
+  if (q !== pequena) throw new Error(`plano de 5 GB virou ${q} no trial`);
+  return "5 GB continua 5 GB";
 });
 
 await etapa("status desconhecido NÃO ganha o teto", () => {
@@ -131,8 +139,8 @@ try {
     return "1 TB de plano, status trial";
   });
 
-  await etapa("trial declarando 26 GB é recusado com o motivo certo", async () => {
-    const r = await declarar(26n * GB);
+  await etapa("trial declarando 11 GB é recusado com o motivo certo", async () => {
+    const r = await declarar(11n * GB);
     if (r.status !== 507) throw new Error(`esperava 507, veio ${r.status}`);
     const corpo = await r.json().catch(() => ({}));
     const texto = JSON.stringify(corpo);
@@ -145,9 +153,9 @@ try {
     return "HTTP 507, citando o período de teste";
   });
 
-  await etapa("o mesmo estúdio, DEPOIS de pagar, envia os 26 GB", async () => {
+  await etapa("o mesmo estúdio, DEPOIS de pagar, envia os 11 GB", async () => {
     await db.query(`update tenants set status = 'ativo' where id = $1`, [estudio.id]);
-    const r = await declarar(26n * GB);
+    const r = await declarar(11n * GB);
     if (!r.ok) throw new Error(`pagou e continuou preso no teto: HTTP ${r.status}`);
     return "mesma declaração passa";
   });

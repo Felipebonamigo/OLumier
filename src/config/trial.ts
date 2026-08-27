@@ -12,9 +12,10 @@
  * pagamento confirmar (`status = 'ativo'`), o teto some sozinho — sem webhook
  * reescrevendo quota, sem migração, sem estado para dessincronizar.
  *
- * 25 GB porque cabe um casamento inteiro de FOTOS para testar de verdade — o
- * produto se prova no uso real — e limita o pior caso a ~R$ 1,15/mês por
- * trial abandonado.
+ * 10 GB porque ainda cabe um casamento inteiro de FOTOS — uma cobertura típica
+ * dá 500 a 800 arquivos de ~8 MB, algo entre 4 e 6 GB — então o produto se prova
+ * no uso real, e o pior caso por trial abandonado cai para ~R$ 0,46/mês
+ * (10 GB × R$ 0,0459). Era 25 GB até 27/08/2026.
  *
  * Mora em `config/` (e não em `lib/tenants`, que é server-only) porque a tela
  * da conta também precisa MOSTRAR o número certo: dizer "10 TB" e travar em
@@ -26,7 +27,7 @@
 
 const GB = BigInt(1024) ** BigInt(3);
 
-export const TETO_TRIAL_GB = 25;
+export const TETO_TRIAL_GB = 10;
 export const TETO_TRIAL_BYTES = BigInt(TETO_TRIAL_GB) * GB;
 
 /**
