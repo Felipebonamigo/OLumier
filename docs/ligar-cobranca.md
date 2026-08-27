@@ -92,8 +92,11 @@ Adicionar uma URL **nova** (sem mexer na que o Atomatiza já usa):
 A conta do Asaas é **compartilhada com o Atomatiza**, que está em produção com
 clientes reais pagando. Duas proteções já estão no código:
 
-1. Toda cobrança daqui leva `externalReference` com prefixo `fotonio:`, e o
-   webhook **ignora** o que não tiver esse prefixo.
+1. Toda cobrança daqui leva `externalReference` com prefixo `olumier:`, e o
+   webhook **ignora** o que não tiver esse prefixo. O prefixo é o da segunda
+   marca, não o da atual: mudá-lo hoje deixaria órfã toda assinatura já criada,
+   porque o valor fica gravado na assinatura lá no Asaas. Ver `PREFIXO` em
+   `src/lib/asaas.ts`.
 2. O webhook responde **200 mesmo ao ignorar**. Erro faria o Asaas reenviar em
    looping e, após muitas falhas, **suspender a fila da conta inteira** — o que
    derrubaria a cobrança do Atomatiza junto.

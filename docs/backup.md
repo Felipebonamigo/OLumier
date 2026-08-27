@@ -19,7 +19,7 @@ não disputarem disco e rede).
    `galerias` e `medias` presentes. Um dump que "deu certo" mas veio vazio é
    pior que backup nenhum: dá a sensação de estar protegido.
 3. Cópia local em `/opt/fotonio-backups` (7 diários + 4 semanais)
-4. **Cópia FORA do servidor**, criptografada, no Backblaze B2 (`cofre-b2:fotonio/banco`)
+4. **Cópia FORA do servidor**, criptografada, no Backblaze B2 (`cofre-olumier:banco`)
 5. Confere que o arquivo chegou lá — código de saída do rclone não basta
 6. Falhou? Sai com erro e manda e-mail (chave do Resend, reaproveitada do Atomatiza)
 
@@ -44,7 +44,16 @@ trigger `trg_uso` e os 16 índices.
 
 ```bash
 # 1. Baixar do cofre (descriptografa sozinho)
-rclone copy cofre-b2:fotonio/banco /tmp/restaurar --include 'fotonio-*.sql.gz'
+#    ATENÇÃO ao nome do remote: `cofre-olumier:`, NÃO `cofre-b2:`. Os dois
+#    existem no servidor, e o `cofre-b2:` é o do Padelizou — era onde este
+#    backup morava até 25/08/2026.
+#
+#    O remote velho não foi esvaziado: ele ainda responde, com os dumps
+#    parados em 22/08/2026. Restaurar de lá NÃO dá erro — sai com código 0 e
+#    devolve um banco de dias atrás. Uma restauração que falha alto se conserta
+#    na hora; uma que devolve dado velho em silêncio vira perda de dado
+#    descoberta depois, e o dia da restauração é o pior para descobrir.
+rclone copy cofre-olumier:banco /tmp/restaurar --include 'fotonio-*.sql.gz'
 
 # 2. Restaurar num banco NOVO — nunca por cima do de produção
 sudo -u postgres psql -tAc 'create database fotonio_restaurado;'
