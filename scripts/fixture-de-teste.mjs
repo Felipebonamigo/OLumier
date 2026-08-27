@@ -82,8 +82,13 @@ export async function estudioDaRodada(db, opcoes = {}) {
    * obrigaria a mexer aqui a cada teste novo, e o esquecimento apareceria como
    * `undefined` no teste — erro que custa a achar. */
   const { rows } = await db.query(
-    `insert into tenants (slug, nome_estudio, email, senha_hash, quota_bytes)
-     values ($1, $2, $3, 'x', $4)
+    /* status 'ativo' EXPLICITO: o default do banco e 'trial', e desde
+     * 27/08/2026 o trial tem teto de quota (config/trial.ts). A bancada
+     * representa o estudio PAGANTE — o caso comum dos testes — senao toda
+     * declaracao acima do teto reprovaria testes que nao falam de trial.
+     * Teste que quer o trial poe o status na mao (testar-teto-trial.mjs). */
+    `insert into tenants (slug, nome_estudio, email, senha_hash, quota_bytes, status)
+     values ($1, $2, $3, 'x', $4, 'ativo')
      returning *`,
     [
       `estudio-${MARCA}`,

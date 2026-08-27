@@ -1,3 +1,4 @@
+import { quotaEfetivaBytes } from "@/config/trial";
 import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
 import { tenantDaRequisicao } from "@/lib/auth-api";
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
 
     const outros = await bytesUsados(tenantId, mediaId);
-    if (outros + BigInt(bytes) > BigInt(tenant.quota_bytes)) {
+    if (outros + BigInt(bytes) > quotaEfetivaBytes(tenant)) {
       // Recusar e limpar: deixar o objeto no bucket seria pagar por um arquivo
       // que o dono não pode usar.
       await apagarMedia(mediaId, tenantId);

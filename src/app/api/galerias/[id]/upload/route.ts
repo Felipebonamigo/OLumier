@@ -1,3 +1,4 @@
+import { quotaEfetivaBytes, TETO_TRIAL_GB } from "@/config/trial";
 import { NextResponse, type NextRequest } from "next/server";
 import { tenantDaRequisicao } from "@/lib/auth-api";
 import { consultarUm } from "@/lib/db";
@@ -120,10 +121,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const comprometido = await bytesUsados(tenantId);
-  const quota = BigInt(tenant.quota_bytes);
+  /* Quota EFETIVA, nunca a coluna crua: no trial ela e rebaixada ao teto —
+   * ver config/trial.ts, que explica o buraco de dinheiro que isso fecha. */
+  const quota = quotaEfetivaBytes(tenant);
   if (comprometido + BigInt(bytes) > quota) {
+    /* Dois recados, porque sao dois problemas: "espaco cheio" com 1 TB
+     * contratado leria como defeito — o dono precisa saber que e a regra do
+     * periodo de teste, e que pagar a remove. */
+    const noTeto = tenant.status === "trial" && BigInt(tenant.quota_bytes) > quota;
     return NextResponse.json(
-      { erro: "Espaço insuficiente no plano. Libere espaço ou aumente o plano." },
+      {
+        erro: noTeto
+          ? `No período de teste o espaço é de ${TETO_TRIAL_GB} GB. Assine para liberar o espaço completo do seu plano.`
+          : "Espaço insuficiente no plano. Libere espaço ou aumente o plano.",
+      },
       { status: 507 },
     );
   }

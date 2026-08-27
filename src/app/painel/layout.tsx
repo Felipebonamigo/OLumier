@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
+import { quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoDoEstudio } from "@/lib/medias";
 import { MarcaLockup } from "@/components/marca-tile";
@@ -25,7 +26,7 @@ export default async function PainelLayout({ children }: { children: React.React
    */
   const { noAr } = await usoDoEstudio(tenantId);
   const usado = Number(noAr);
-  const quota = Number(tenant.quota_bytes);
+  const quota = Number(quotaEfetivaBytes(tenant));
   const proporcao = quota > 0 ? Math.min(usado / quota, 1) : 0;
   const perto = proporcao >= 0.8;
 

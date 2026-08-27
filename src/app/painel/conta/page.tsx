@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
+import { quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais } from "@/config/planos";
@@ -178,7 +179,7 @@ export default async function ContaPage() {
           <Balde
             rotulo="Espaço do estúdio"
             usado={uso.noAr + uso.noCofre}
-            limite={BigInt(tenant.quota_bytes)}
+            limite={quotaEfetivaBytes(tenant)}
             nota="Galerias no ar e entregas guardadas usam o mesmo espaço."
           />
           <p className="mt-3 font-mono text-[11px] tabular-nums text-texto-faint">

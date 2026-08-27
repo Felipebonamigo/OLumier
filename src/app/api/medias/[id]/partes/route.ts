@@ -1,3 +1,4 @@
+import { quotaEfetivaBytes } from "@/config/trial";
 import { NextResponse, type NextRequest } from "next/server";
 import { tenantDaRequisicao } from "@/lib/auth-api";
 import { consultarUm } from "@/lib/db";
@@ -121,7 +122,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
 
     const outros = await bytesUsados(tenantId, id);
-    if (outros + BigInt(bytes) > BigInt(tenant.quota_bytes)) {
+    if (outros + BigInt(bytes) > quotaEfetivaBytes(tenant)) {
       await apagarMedia(id, tenantId);
       await Promise.all(
         [dados.media.chave, dados.media.chave_thumb, dados.media.chave_preview]
