@@ -41,8 +41,18 @@ export function Revelar({
           io.disconnect();
         }
       },
-      // Dispara um pouco antes de entrar por inteiro: ninguém deve ver a página "vazia".
-      { threshold: 0.12, rootMargin: "0px 0px -8% 0px" },
+      /*
+       * `threshold: 0` — e já foi 0.12, que era um defeito disfarçado de
+       * capricho. Threshold é fração DO ELEMENTO: num elemento mais alto que a
+       * janela (a seção de planos inteira, por exemplo), 12% dele pode nunca
+       * caber na tela de uma vez, o limiar nunca dispara e o conteúdo fica em
+       * opacity 0 PARA SEMPRE. Medido em 27/08/2026 numa janela de 713px: doze
+       * dos trinta e três blocos da home invisíveis com a página parada no pé.
+       *
+       * Quem garante o "só revela quando está de fato entrando" é o rootMargin
+       * negativo, que é fração da JANELA e não sofre do mesmo mal.
+       */
+      { threshold: 0, rootMargin: "0px 0px -8% 0px" },
     );
     io.observe(el);
     return () => io.disconnect();
