@@ -82,5 +82,28 @@ await etapa("a imagem do Open Graph é absoluta e responde", async () => {
   return `${url.pathname} (${tipo})`;
 });
 
+await etapa("a FAQ da home existe como dado estruturado, e diz a verdade", async () => {
+  /*
+   * FAQPage em JSON-LD é o que candidata a home a resultado expandido no
+   * Google. A regra (skill fixing-metadata) é uma só: JSON-LD descreve o que a
+   * página REALMENTE mostra — por isso a etapa confere que cada pergunta do
+   * bloco estruturado também está no HTML visível. Schema que promete o que a
+   * página não tem é a receita da penalidade manual.
+   */
+  const r = await pegar("/");
+  const m = r.corpo.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+  if (!m) throw new Error("sem bloco ld+json — a FAQ não vira resultado expandido");
+  const dados = JSON.parse(m[1]);
+  if (dados["@type"] !== "FAQPage") throw new Error(`@type é ${dados["@type"]}, não FAQPage`);
+  const perguntas = dados.mainEntity ?? [];
+  if (perguntas.length < 4) throw new Error(`só ${perguntas.length} perguntas no bloco`);
+  for (const p of perguntas) {
+    if (!r.corpo.includes(p.name)) {
+      throw new Error(`o bloco estruturado promete "${p.name}" e a página visível não mostra`);
+    }
+  }
+  return `FAQPage com ${perguntas.length} perguntas, todas visíveis na página`;
+});
+
 console.log(falhou ? "\n✗ o robô encontra menos do que devia" : "\n✓ seo ok");
 process.exitCode = falhou ? 1 : 0;

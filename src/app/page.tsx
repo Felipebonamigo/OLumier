@@ -143,6 +143,36 @@ const FAQ: { pergunta: string; resposta: React.ReactNode }[] = [
   },
 ];
 
+/*
+ * O texto puro de um nó JSX — para o dado estruturado da FAQ.
+ *
+ * As respostas são JSX (negrito, link), e o FAQPage do Google quer texto. A
+ * saída errada seria uma segunda lista de respostas em string: duas fontes, e
+ * a cópia envelhece em silêncio a cada edição. Esta função anda pelo JSX que a
+ * página REALMENTE renderiza, então o bloco estruturado não tem como divergir
+ * do visível — que é exatamente o que o Google pune quando diverge.
+ */
+function textoDe(no: React.ReactNode): string {
+  if (no == null || typeof no === "boolean") return "";
+  if (typeof no === "string" || typeof no === "number") return String(no);
+  if (Array.isArray(no)) return no.map(textoDe).join("");
+  if (typeof no === "object" && "props" in no) {
+    return textoDe((no.props as { children?: React.ReactNode }).children);
+  }
+  return "";
+}
+
+/* O bloco FAQPage, derivado do MESMO `FAQ` que a página renderiza. */
+const FAQ_LD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQ.map((p) => ({
+    "@type": "Question",
+    name: p.pergunta,
+    acceptedAnswer: { "@type": "Answer", text: textoDe(p.resposta).replace(/\s+/g, " ").trim() },
+  })),
+};
+
 const PERGUNTAS = [
   {
     pergunta: "Quanto cabe, no total?",
@@ -757,6 +787,16 @@ export default function Home() {
               </h2>
             </div>
           </Revelar>
+
+          {/* O `<` no lugar de `<`: um `</script>` dentro de uma resposta
+              fecharia a tag e o resto viraria HTML. Conteúdo é nosso e estático,
+              mas a blindagem custa um replace. */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify(FAQ_LD).replace(/</g, "\\u003c"),
+            }}
+          />
 
           <div className="mt-10 border-t border-linha">
             {FAQ.map((p, i) => (
