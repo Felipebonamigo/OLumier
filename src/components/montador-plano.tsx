@@ -65,7 +65,7 @@ const PASSO = "font-mono text-[11px] uppercase tracking-[0.28em] text-texto-fain
 
 function Numero({ n }: { n: number }) {
   return (
-    <span className="grid size-6 shrink-0 place-items-center rounded-md border border-linha-forte font-mono text-[11px] text-acento">
+    <span className="grid size-6 shrink-0 place-items-center rounded-full border border-linha-forte font-mono text-[11px] text-acento">
       {n}
     </span>
   );
@@ -89,9 +89,9 @@ function Peca({
       type="button"
       onClick={onClick}
       aria-pressed={ativo}
-      className={`flex flex-col items-start gap-0.5 rounded-lg border px-4 py-3 text-left transition ${
+      className={`flex flex-col items-start gap-0.5 rounded-2xl border px-4 py-3 text-left transition ${
         ativo
-          ? "border-acento bg-acento/10 text-texto"
+          ? "border-acento bg-acento/10 text-texto shadow-[0_0_24px_-8px_var(--acento)]"
           : "border-linha bg-carbon text-texto-soft hover:border-linha-forte hover:text-texto"
       }`}
     >
@@ -121,7 +121,7 @@ export function MontadorPlano({
   const plano = montar({ segmento, espacoGb });
 
   return (
-    <div className="rounded-2xl border border-linha bg-carbon/60 p-6 sm:p-8">
+    <div className="vidro rounded-3xl p-6 sm:p-8">
       {/* ── peça 1 ─────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-3">
         <Numero n={1} />
@@ -157,7 +157,7 @@ export function MontadorPlano({
        * descobre sozinho que ela existe — por isso a explicação vive aqui, ao
        * lado do preço, e não numa página de ajuda que ninguém abre.
        */}
-      <div className="mt-3 rounded-lg border border-linha bg-void p-4 text-sm text-texto-soft">
+      <div className="mt-3 rounded-2xl border border-linha bg-void/60 p-4 text-sm text-texto-soft">
         <p>
           Toda galeria tem um prazo no ar (você escolhe: 6 meses, 1 ano, 2 anos ou sem prazo).
           Quando o prazo acaba, o link sai do ar e{" "}
@@ -224,7 +224,7 @@ export function MontadorPlano({
       </div>
 
       {/* ── tudo que entrega ───────────────────────────────────────────── */}
-      <div className="mt-8 rounded-lg border border-linha bg-void p-5">
+      <div className="mt-8 rounded-2xl border border-linha bg-void/60 p-5">
         <p className={PASSO}>Incluso em qualquer tamanho</p>
         <ul className="mt-4 grid gap-x-8 gap-y-2.5 text-sm text-texto-soft sm:grid-cols-2">
           {INCLUSO.map((item) => (
