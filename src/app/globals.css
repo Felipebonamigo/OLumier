@@ -253,26 +253,7 @@ html[data-js] .revelar[data-visivel] {
   }
 }
 
-/* Trama de pontos quase invisível — dá textura ao vazio sem competir com foto. */
-.trama {
-  background-image: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--texto-faint) 26%, transparent) 1px,
-    transparent 1px
-  );
-  background-size: 26px 26px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 35%, black 30%, transparent 75%);
-}
-
-/* CTA principal: brilho suave que responde ao hover sem gritar. */
-.cta-luz {
-  box-shadow: 0 0 0 0 color-mix(in srgb, var(--acento) 34%, transparent);
-  transition:
-    box-shadow 0.45s ease,
-    transform 0.45s ease,
-    background-color 0.3s ease;
-}
-.cta-luz:hover {
-  box-shadow: 0 0 42px 4px color-mix(in srgb, var(--acento) 26%, transparent);
-  transform: translateY(-1px);
-}
+/* A trama de pontos e o brilho de CTA (.trama, .cta-luz) saíram em 26/08/2026
+   junto com o redesign da home — eram o dialeto genérico que a página deixou
+   de falar. Se alguma página nova precisar de textura, o caminho é o .feixe,
+   que é da marca; grade de pontos não volta. */

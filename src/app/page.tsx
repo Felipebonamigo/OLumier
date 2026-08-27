@@ -17,8 +17,31 @@ export const metadata: Metadata = {
  * A página conta uma história em cinco atos: a promessa (hero, escuro), o
  * caminho (três gestos, escuro), o resultado na mão do casal (creme — a única
  * seção clara, de propósito: é o momento em que a luz chega), a ferramenta do
- * estúdio (bento escuro) e o preço. Cada seção tem composição própria; nada de
- * repetir a mesma grade de cards seis vezes.
+ * estúdio e o preço.
+ *
+ * ── A LINGUAGEM VISUAL: IMPRESSO DE ESTÚDIO (26/08/2026) ──────────────────
+ *
+ * A versão anterior falava o dialeto padrão de página de SaaS: cartões
+ * arredondados em bento, um rótulo monoespaçado maiúsculo repetido em cada
+ * seção, botões-pílula com brilho, mockups desenhados com barras cinzas. Nada
+ * disso era ERRADO — era genérico, e genérico numa página de fotógrafo é o
+ * pior lugar possível, porque o leitor vive de olhar.
+ *
+ * O que entrou no lugar vem do mundo de quem a página quer convencer:
+ *
+ *   · a TIRA DE FILME no hero, com furos de arrasto, marcação de borda âmbar
+ *     (como a gravação lateral de um filme de verdade) e a moldura escolhida
+ *     circulada a lápis de cera — que é como se marcava a foto do álbum numa
+ *     prova de contato;
+ *   · a FICHA TÉCNICA em grade de fios finos, como especificação de câmera;
+ *   · o ÍNDICE DE CATÁLOGO na seção da ferramenta: linhas pautadas, sem
+ *     cartão, como o índice de um catálogo de exposição;
+ *   · MARCADOR DE SEÇÃO numerado (número de série + fio + rótulo), porque a
+ *     página é de fato uma sequência — e numeração só quando há ordem real.
+ *
+ * Objetos desenhados (a tira de filme, o telefone) usam cor FIXA de propósito:
+ * filme é escuro e papel é claro nos dois temas, como no mundo físico. O resto
+ * da página troca de tema pelos tokens.
  *
  * O que NÃO existe aqui, por honestidade: barra de logos de clientes e
  * depoimentos. O produto tem zero estúdios pagantes hoje — logo inventado e
@@ -141,6 +164,119 @@ const PERGUNTAS = [
   },
 ];
 
+/* A ficha técnica do hero: o produto em seis células, como especificação de
+ * câmera. Os números saem da grade real (`ESPACOS`) — se ela mudar, a ficha
+ * acompanha sozinha. */
+const FICHA: [string, string][] = [
+  ["mídia", "foto e filme 4K"],
+  ["espaço", `${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)}`],
+  ["downloads", "sem limite"],
+  ["álbum", "escolha com trava"],
+  ["endereço", "seu, com sua marca"],
+  ["teste", "14 dias, sem cartão"],
+];
+
+/*
+ * O marcador de seção: número de série + fio + rótulo, como folio de catálogo.
+ * Um dispositivo só, repetido — é ele que dá unidade à página no lugar do
+ * rótulo monoespaçado de antes. O número existe porque a página É uma
+ * sequência; seção sem posição na história (o comparativo, a FAQ) usa a
+ * variante sem número.
+ */
+function Marcador({ n, rotulo, claro = false }: { n?: string; rotulo: string; claro?: boolean }) {
+  return (
+    <p
+      className={`flex items-center gap-4 text-[13px] tracking-wide ${
+        claro ? "text-tinta-faint" : "text-texto-faint"
+      }`}
+    >
+      {n && (
+        <span
+          className={`font-serif text-base font-semibold tabular-nums ${
+            claro ? "text-ouro-tinta" : "text-acento"
+          }`}
+        >
+          {n}
+        </span>
+      )}
+      <span className={`h-px w-10 ${claro ? "bg-tinta/25" : "bg-linha-forte"}`} aria-hidden />
+      {rotulo}
+    </p>
+  );
+}
+
+/*
+ * A tira de filme do hero — o produto contado no objeto que o fotógrafo
+ * conhece de cor. Três molduras; a do meio é a escolhida, circulada a lápis
+ * de cera vermelho, como numa prova de contato. A marcação de borda é âmbar
+ * porque a gravação lateral de filme de verdade é âmbar — e é a mesma família
+ * do acento da marca, de propósito.
+ *
+ * Cores fixas, não tokens: filme é escuro nos dois temas, como no físico.
+ */
+function TiraDeFilme() {
+  const furos = (lado: "left-2" | "right-2") => (
+    <div className={`absolute inset-y-3 ${lado} flex w-2 flex-col justify-between`} aria-hidden>
+      {Array.from({ length: 14 }, (_, i) => (
+        <span key={i} className="h-2 w-2 rounded-[2px] bg-[#f4f6fa]/70" />
+      ))}
+    </div>
+  );
+  return (
+    <div className="relative hidden justify-self-center lg:block" aria-hidden>
+      <div className="relative w-60 rotate-2 bg-[#0d0c0a] px-7 py-5 shadow-[0_36px_70px_-24px_rgba(0,0,0,0.75)]">
+        {furos("left-2")}
+        {furos("right-2")}
+
+        <p className="font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
+          GA·400&nbsp;&nbsp;13
+        </p>
+        <div className="mt-1 aspect-[3/2] bg-gradient-to-br from-[#3d3427] via-[#191713] to-[#0d0c0a]" />
+
+        <p className="mt-2 font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
+          GA·400&nbsp;&nbsp;14
+        </p>
+        <div className="relative mt-1 grid aspect-[3/2] place-items-center bg-gradient-to-br from-[#5a4a2f] via-[#2b241a] to-[#12100c]">
+          <span className="font-script text-2xl text-[#f2c877]">Ana &amp; Pedro</span>
+          {/* o lápis de cera: elipse aberta, torta de propósito — mão, não máquina */}
+          <svg
+            viewBox="0 0 100 62"
+            className="absolute inset-0 h-full w-full text-[#e0705f]"
+            fill="none"
+          >
+            <ellipse
+              cx="50"
+              cy="31"
+              rx="45"
+              ry="25"
+              stroke="currentColor"
+              strokeWidth="2.6"
+              strokeLinecap="round"
+              strokeDasharray="176 22"
+              transform="rotate(-5 50 31)"
+              opacity="0.9"
+            />
+          </svg>
+        </div>
+
+        <p className="mt-2 font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
+          GA·400&nbsp;&nbsp;15
+        </p>
+        <div className="mt-1 aspect-[3/2] bg-gradient-to-br from-[#23282f] via-[#15171b] to-[#0d0c0a]" />
+      </div>
+
+      {/* a anotação de quem escolheu */}
+      <p className="mt-5 -rotate-1 text-center font-script text-xl text-acento-alto">
+        essa vai pro álbum
+      </p>
+    </div>
+  );
+}
+
+/* O botão de ação: retângulo seco. A página inteira é feita de fio e papel;
+ * o único brilho que ela se permite é o feixe do projetor no hero. */
+const CTA = "inline-block bg-acento px-7 py-3.5 font-semibold text-void transition-colors hover:bg-acento-alto";
+
 export default function Home() {
   return (
     <main className="overflow-x-clip">
@@ -162,7 +298,7 @@ export default function Home() {
           </Link>
           <Link
             href="/cadastrar"
-            className="cta-luz rounded-full bg-acento px-4 py-2 font-medium text-void"
+            className="bg-acento px-4 py-2 font-medium text-void transition-colors hover:bg-acento-alto"
           >
             Criar conta
           </Link>
@@ -170,29 +306,25 @@ export default function Home() {
       </header>
 
       {/* ── ato 1: a promessa ─────────────────────────────────────────── */}
-      <section className="relative mx-auto max-w-6xl px-6 pb-28 pt-16 sm:pt-24">
+      <section className="relative mx-auto max-w-6xl px-6 pb-24 pt-16 sm:pt-24">
         <div className="feixe" aria-hidden />
-        <div className="trama absolute inset-0 -z-10" aria-hidden />
 
         <div className="relative grid items-center gap-16 lg:grid-cols-[7fr_5fr]">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
+            <p className="text-[13px] tracking-wide text-texto-faint">
               Galerias de entrega para fotógrafos e filmakers
             </p>
             <h1 className="mt-6 font-serif text-5xl font-bold leading-[1.04] tracking-tight sm:text-7xl">
               Sua luz,
               <br />
-              <em className="text-acento-alto">entregue.</em>
+              <span className="text-acento-alto">entregue.</span>
             </h1>
             <p className="mt-7 max-w-[44ch] text-lg leading-relaxed text-texto-soft">
-              O dia passa, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal:
-              com a sua marca, no seu endereço, direto na galeria do celular deles.
+              O dia passa, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal: com a
+              sua marca, no seu endereço, direto na galeria do celular deles.
             </p>
-            <div className="mt-10 flex flex-wrap items-center gap-5">
-              <Link
-                href="/cadastrar"
-                className="cta-luz rounded-full bg-acento px-7 py-3.5 font-semibold text-void"
-              >
+            <div className="mt-10 flex flex-wrap items-center gap-6">
+              <Link href="/cadastrar" className={CTA}>
                 Começar grátis
               </Link>
               <Link
@@ -202,53 +334,21 @@ export default function Home() {
                 Ver planos
               </Link>
             </div>
-            <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-texto-faint">
-              14 dias grátis · sem cartão
-            </p>
 
-            {/* A faixa de fatos: o que é isto, em três segundos. Números da
-                grade real (ESPACOS) — se ela mudar, isto acompanha. */}
-            <ul className="mt-10 flex flex-wrap gap-x-7 gap-y-2 border-t border-linha pt-6 font-mono text-[11px] uppercase tracking-[0.14em] text-texto-soft">
-              {[
-                "foto e filme 4K",
-                `de ${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)}`,
-                "downloads sem limite",
-                "escolha do álbum",
-                "sua marca, seu endereço",
-              ].map((f) => (
-                <li key={f} className="flex items-center gap-2">
-                  <span aria-hidden className="text-acento">
-                    ·
-                  </span>
-                  {f}
-                </li>
+            {/* A ficha técnica: o que é isto, em seis células de fio fino —
+                especificação de câmera, não lista de balinhas. `gap-px` sobre
+                fundo `linha` é o que desenha os fios. */}
+            <dl className="mt-12 grid max-w-xl grid-cols-2 gap-px border border-linha bg-linha sm:grid-cols-3">
+              {FICHA.map(([rotulo, valor]) => (
+                <div key={rotulo} className="bg-void px-4 py-3">
+                  <dt className="text-[11px] tracking-wide text-texto-faint">{rotulo}</dt>
+                  <dd className="mt-0.5 text-sm text-texto">{valor}</dd>
+                </div>
               ))}
-            </ul>
+            </dl>
           </div>
 
-          {/* Duas "galerias" sobrepostas, desenhadas em CSS — o produto antes
-              de existir foto de divulgação. A de trás espia por baixo. */}
-          <div className="relative hidden h-[420px] lg:block" aria-hidden>
-            <div className="absolute right-6 top-10 w-64 -rotate-6 rounded-xl border border-linha bg-carbon-2 p-3 opacity-60 shadow-2xl">
-              <div className="h-32 rounded-lg bg-gradient-to-br from-texto-faint/30 to-void" />
-              <div className="mt-3 h-2.5 w-24 rounded bg-texto-faint/40" />
-              <div className="mt-2 h-2 w-16 rounded bg-texto-faint/25" />
-            </div>
-            <div className="absolute right-20 top-24 w-72 rotate-3 rounded-xl border border-linha-forte bg-carbon p-3 shadow-2xl">
-              <div className="grid h-40 place-items-center rounded-lg bg-gradient-to-br from-luz/25 via-carbon-2 to-void">
-                <span className="font-script text-3xl text-acento-alto">Ana &amp; Pedro</span>
-              </div>
-              <div className="mt-3 flex items-center justify-between">
-                <div>
-                  <div className="h-2.5 w-28 rounded bg-texto-soft/50" />
-                  <div className="mt-2 h-2 w-20 rounded bg-texto-faint/30" />
-                </div>
-                <div className="grid h-8 w-8 place-items-center rounded-full bg-acento text-sm text-void">
-                  ↓
-                </div>
-              </div>
-            </div>
-          </div>
+          <TiraDeFilme />
         </div>
       </section>
 
@@ -256,49 +356,46 @@ export default function Home() {
       <section className="border-y border-linha bg-carbon/40">
         <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[2fr_3fr]">
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
-              Da pasta ao link
-            </p>
-            <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+            <Marcador n="01" rotulo="Da pasta ao link" />
+            <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
               Três gestos.
               <br />
               Nenhum deles é &ldquo;exportar de novo&rdquo;.
             </h2>
             <p className="mt-5 max-w-[36ch] text-texto-soft">
-              Entregar não deveria ser a parte difícil do trabalho. Aqui ela cabe entre um café e
-              o próximo ensaio.
+              Entregar não deveria ser a parte difícil do trabalho. Aqui ela cabe entre um café e o
+              próximo ensaio.
             </p>
           </div>
 
-          <ol className="space-y-14">
+          <ol>
             {[
               {
-                n: "01",
+                n: "1",
                 titulo: "Arraste a pasta do casamento",
                 texto:
                   "Centenas de fotos sobem em paralelo, direto do navegador — e as subpastas viram capítulos sozinhas: Making Of, Cerimônia, Festa, na ordem do dia. A conexão caiu? O envio retoma de onde parou, inclusive o filme de 30 GB.",
               },
               {
-                n: "02",
+                n: "2",
                 titulo: "Escolha a cara da entrega",
                 texto:
                   "Quatro estilos prontos ou a sua combinação: capa, cores, grade, espaçamento e nove fontes de título — cada uma mostrada nela mesma. A prévia já abre com fotos, para você decidir vendo, e a sua logo assina o topo.",
               },
               {
-                n: "03",
+                n: "3",
                 titulo: "Mande um link",
-                texto:
-                  `seuestudio.${marca.dominio}/ana-pedro. Um endereço seu, não um link genérico de nuvem. Com senha, se você quiser; com prazo, se você definir.`,
+                texto: `seuestudio.${marca.dominio}/ana-pedro. Um endereço seu, não um link genérico de nuvem. Com senha, se você quiser; com prazo, se você definir.`,
               },
             ].map((g, i) => (
               <Revelar key={g.n} atraso={i * 90}>
-                <li className="grid grid-cols-[auto_1fr] gap-6">
-                  <span className="select-none font-serif text-6xl font-bold leading-none text-acento/25">
-                    {g.n}
+                <li className="grid grid-cols-[3rem_1fr] border-t border-linha py-9 first:border-t-0">
+                  <span className="font-serif text-base font-semibold tabular-nums text-acento">
+                    {g.n}.
                   </span>
-                  <div className="pt-2">
-                    <h3 className="text-lg font-semibold">{g.titulo}</h3>
-                    <p className="mt-2 max-w-[52ch] leading-relaxed text-texto-soft">{g.texto}</p>
+                  <div>
+                    <h3 className="font-serif text-2xl font-semibold tracking-tight">{g.titulo}</h3>
+                    <p className="mt-3 max-w-[54ch] leading-relaxed text-texto-soft">{g.texto}</p>
                   </div>
                 </li>
               </Revelar>
@@ -310,17 +407,16 @@ export default function Home() {
       {/* ── ato 3: a luz chega — a ÚNICA seção clara da página ─────────── */}
       <section className="bg-marfim text-tinta">
         <div className="mx-auto max-w-6xl px-6 py-24">
-          <div className="grid items-center gap-14 lg:grid-cols-[5fr_6fr]">
+          <div className="grid items-center gap-14 lg:grid-cols-[6fr_5fr]">
             <Revelar>
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-tinta-faint">
-                Do outro lado do link
-              </p>
-              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+              <Marcador n="02" rotulo="Do outro lado do link" claro />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
                 O casal abre no celular.
-                <br />
-                <em>E fica tudo bem.</em>
+                <br />E fica tudo bem.
               </h2>
-              <ul className="mt-8 space-y-5 text-tinta-suave">
+              {/* Lista pautada, não balinhas: o termo à esquerda como verbete,
+                  o fio como pauta — mesmo desenho do índice da ferramenta. */}
+              <dl className="mt-9 divide-y divide-tinta/15 border-y border-tinta/15">
                 {[
                   [
                     "Salvar de verdade",
@@ -339,17 +435,17 @@ export default function Home() {
                     "a galeria é deles. Baixam tudo, quantas vezes quiserem, na melhor resolução — sem custo extra pra você.",
                   ],
                 ].map(([t, d]) => (
-                  <li key={t} className="grid grid-cols-[auto_1fr] items-baseline gap-3">
-                    <span className="text-ouro-tinta">✦</span>
-                    <p>
-                      <strong className="font-semibold text-tinta">{t}</strong> — {d}
-                    </p>
-                  </li>
+                  <div key={t} className="grid gap-1 py-4 sm:grid-cols-[11rem_1fr] sm:gap-6">
+                    <dt className="font-semibold text-tinta">{t}</dt>
+                    <dd className="text-tinta-suave">{d}</dd>
+                  </div>
                 ))}
-              </ul>
+              </dl>
             </Revelar>
 
-            {/* Telefone desenhado em CSS: a grade da galeria com uma favorita marcada. */}
+            {/* Telefone desenhado em CSS: a grade da galeria com uma favorita
+                marcada. Papel é claro nos dois temas — cores fixas, como a tira
+                de filme do hero. */}
             <Revelar atraso={120} className="justify-self-center">
               <div
                 className="w-64 rounded-[2rem] border border-marfim-2 bg-white p-3 shadow-[0_30px_60px_-20px_rgba(42,35,24,0.25)]"
@@ -379,9 +475,7 @@ export default function Home() {
                         }`}
                       >
                         {i === 3 && (
-                          <span className="absolute right-1 top-1 text-[10px] text-erro">
-                            ♥
-                          </span>
+                          <span className="absolute right-1 top-1 text-[10px] text-erro">♥</span>
                         )}
                       </div>
                     ))}
@@ -402,46 +496,45 @@ export default function Home() {
           também a resposta ao concorrente que vende "seleção" — só que aqui
           ela termina onde o trabalho de verdade continua: na sua mesa.
 
-          Numerada porque É uma sequência real, com ordem que importa. */}
+          Três colunas separadas por fio, como colunas de jornal — a ordem
+          importa e a numeração fica no verbete, não num numeral gigante. */}
       <section className="border-y border-linha bg-carbon/40">
         <div className="mx-auto max-w-6xl px-6 py-24">
           <Revelar>
-            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
-              Da escolha ao álbum
-            </p>
-            <h2 className="mt-4 max-w-[26ch] font-serif text-4xl font-bold tracking-tight">
+            <Marcador n="03" rotulo="Da escolha ao álbum" />
+            <h2 className="mt-5 max-w-[26ch] font-serif text-4xl font-bold tracking-tight">
               O álbum se escolhe na galeria. A lista chega pronta no Lightroom.
             </h2>
           </Revelar>
 
-          <div className="mt-12 grid gap-4 lg:grid-cols-3">
+          <div className="mt-12 grid border-y border-linha lg:grid-cols-3 lg:divide-x lg:divide-linha max-lg:divide-y max-lg:divide-linha">
             {[
               {
-                n: "01",
+                n: "1",
                 titulo: "Você define o combinado",
                 texto:
                   "O contrato diz 40 fotos? A galeria conta — “12 de 40” — e trava no teto: a 41ª pede para desmarcar uma. Com prazo, se você quiser: passou a data, a escolha fecha sozinha.",
               },
               {
-                n: "02",
+                n: "2",
                 titulo: "O casal fecha junto",
                 texto:
                   "A lista é uma só: a noiva no celular e o noivo no notebook veem a mesma escolha. Quando terminam, eles encerram — e a lista trava, para o álbum não mudar depois de diagramado. Mudaram de ideia? Você reabre em um clique.",
               },
               {
-                n: "03",
+                n: "3",
                 titulo: "Os nomes caem no Lightroom",
                 texto:
                   "Um botão copia os nomes dos arquivos, na ordem da galeria, prontos para colar no filtro do Lightroom. Sem planilha, sem print de WhatsApp, sem conferir foto por foto.",
               },
             ].map((p, i) => (
               <Revelar key={p.n} atraso={i * 90}>
-                <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-                  <span className="select-none font-serif text-5xl font-bold leading-none text-acento/25">
-                    {p.n}
-                  </span>
-                  <h3 className="mt-4 text-lg font-semibold">{p.titulo}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-texto-soft">{p.texto}</p>
+                <div className="h-full py-8 lg:px-8 lg:first:pl-0 lg:last:pr-0">
+                  <h3 className="font-serif text-2xl font-semibold tracking-tight">
+                    <span className="mr-3 text-base text-acento">{p.n}.</span>
+                    {p.titulo}
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-texto-soft">{p.texto}</p>
                 </div>
               </Revelar>
             ))}
@@ -449,133 +542,148 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── ato 4: a ferramenta — bento assimétrico, célula a célula ───── */}
+      {/* ── ato 4: a ferramenta — índice de catálogo, linha a linha ────── */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <Revelar>
-          <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
-            Do seu lado do balcão
-          </p>
-          <h2 className="mt-4 max-w-[24ch] font-serif text-4xl font-bold tracking-tight">
+          <Marcador n="04" rotulo="Do seu lado do balcão" />
+          <h2 className="mt-5 max-w-[24ch] font-serif text-4xl font-bold tracking-tight">
             O estúdio continua seu. Só o trabalho pesado muda de dono.
           </h2>
         </Revelar>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Cofre — a célula larga, com a linha do tempo desenhada */}
-          <Revelar className="sm:col-span-2 lg:col-span-2">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">Cofre automático</h3>
-              <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-texto-soft">
-                No prazo que você definir, a galeria sai do ar sozinha: o link fecha para o cliente
-                e <strong className="text-texto">nada é apagado</strong>. Fica guardada no seu
-                espaço, sem custar a mais, e reativar é um clique.
-              </p>
-              <div className="mt-6" aria-hidden>
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-acento" />
-                  <span className="h-px flex-1 bg-gradient-to-r from-luz/60 to-linha" />
-                  <span className="h-2 w-2 rounded-full border border-linha-forte" />
-                </div>
-                <div className="mt-2 flex justify-between font-mono text-[10px] uppercase tracking-widest text-texto-faint">
-                  <span>no ar · 12 meses</span>
-                  <span>guardado · pra sempre</span>
+        {/* Sem cartão nenhum: verbete à esquerda, descrição à direita, um fio
+            entre cada linha — o índice de um catálogo de exposição. O desenho
+            do cofre e as amostras de tema moram DENTRO da própria linha, como
+            figura de verbete. */}
+        <div className="mt-12 border-t border-linha">
+          {/* Cofre — o verbete com figura: a linha do tempo da entrega */}
+          <Revelar>
+            <div className="grid gap-x-10 gap-y-2 border-b border-linha py-8 md:grid-cols-[15rem_1fr]">
+              <h3 className="font-serif text-xl font-semibold tracking-tight">Cofre automático</h3>
+              <div>
+                <p className="max-w-[54ch] leading-relaxed text-texto-soft">
+                  No prazo que você definir, a galeria sai do ar sozinha: o link fecha para o
+                  cliente e <strong className="text-texto">nada é apagado</strong>. Fica guardada no
+                  seu espaço, sem custar a mais, e reativar é um clique.
+                </p>
+                <div className="mt-5 max-w-sm" aria-hidden>
+                  <div className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-acento" />
+                    <span className="h-px flex-1 bg-gradient-to-r from-luz/60 to-linha" />
+                    <span className="h-2 w-2 rounded-full border border-linha-forte" />
+                  </div>
+                  <div className="mt-2 flex justify-between font-mono text-[10px] uppercase tracking-widest text-texto-faint">
+                    <span>no ar · 12 meses</span>
+                    <span>guardado · pra sempre</span>
+                  </div>
                 </div>
               </div>
             </div>
           </Revelar>
 
-          {/* Endereço próprio */}
-          <Revelar atraso={80} className="lg:col-span-2">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">Seu endereço, sua marca</h3>
-              <p className="mt-2 text-sm leading-relaxed text-texto-soft">
-                Cada estúdio ganha um subdomínio próprio e cada galeria carrega a sua logo.
-              </p>
-              <code className="mt-5 block w-fit rounded-lg border border-linha bg-void px-3 py-2 font-mono text-xs text-acento-alto">
-                seuestudio.{marca.dominio}
-              </code>
+          {/* Endereço — ganhou o domínio próprio, que entrou no ar em 26/08:
+              a home vendia só o subdomínio e o produto já entrega mais. */}
+          <Revelar>
+            <div className="grid gap-x-10 gap-y-2 border-b border-linha py-8 md:grid-cols-[15rem_1fr]">
+              <h3 className="font-serif text-xl font-semibold tracking-tight">
+                Seu endereço, sua marca
+              </h3>
+              <div>
+                <p className="max-w-[54ch] leading-relaxed text-texto-soft">
+                  Cada estúdio ganha um subdomínio próprio e cada galeria carrega a sua logo. E se
+                  você já tem um domínio, aponte e use o seu: a prova de posse é por DNS e o
+                  certificado sai sozinho.
+                </p>
+                <p className="mt-4 flex flex-wrap gap-2 font-mono text-xs" aria-hidden>
+                  <code className="border border-linha bg-void px-3 py-2 text-acento-alto">
+                    seuestudio.{marca.dominio}
+                  </code>
+                  <code className="border border-linha bg-void px-3 py-2 text-texto-soft">
+                    www.seuestudio.com.br
+                  </code>
+                </p>
+              </div>
             </div>
           </Revelar>
 
-          {/* Aparência — os 4 presets como amostras */}
-          <Revelar className="lg:col-span-1">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">Quatro estilos, nove fontes</h3>
-              <p className="mt-2 text-sm text-texto-soft">Ou a sua combinação: capa, cores, grade e espaçamento.</p>
-              {/* As cores saem de TEMAS, os temas de galeria de verdade — não de
-                  tokens da interface. Estas amostras mostram o que o CASAL vai
-                  ver; se usassem os tokens do painel, virariam de lado junto com
-                  o tema do fotógrafo e passariam a mostrar outra coisa. */}
-              <div className="mt-4 flex gap-2" aria-hidden>
-                {(["noite", "claro", "creme"] as const).map((t) => (
+          {/* Aparência — as amostras saem de TEMAS, os temas de galeria de
+              verdade, não de tokens da interface: mostram o que o CASAL vê. */}
+          <Revelar>
+            <div className="grid gap-x-10 gap-y-2 border-b border-linha py-8 md:grid-cols-[15rem_1fr]">
+              <h3 className="font-serif text-xl font-semibold tracking-tight">
+                Quatro estilos, nove fontes
+              </h3>
+              <div>
+                <p className="max-w-[54ch] leading-relaxed text-texto-soft">
+                  Ou a sua combinação: capa, cores, grade e espaçamento — com a prévia abrindo já
+                  com fotos, para decidir vendo.
+                </p>
+                <div className="mt-4 flex gap-2" aria-hidden>
+                  {(["noite", "claro", "creme"] as const).map((t) => (
+                    <span
+                      key={t}
+                      className="h-8 w-8 ring-1 ring-linha-forte"
+                      style={{ background: TEMAS[t]["--g-fundo"] }}
+                    />
+                  ))}
                   <span
-                    key={t}
-                    className="h-8 w-8 rounded-md ring-1 ring-linha-forte"
-                    style={{ background: TEMAS[t]["--g-fundo"] }}
+                    className="h-8 w-8 ring-1 ring-linha-forte"
+                    style={{
+                      background: `linear-gradient(135deg, ${TEMAS.noite["--g-destaque"]}, ${TEMAS.creme["--g-fundo"]})`,
+                    }}
                   />
-                ))}
-                <span
-                  className="h-8 w-8 rounded-md ring-1 ring-linha-forte"
-                  style={{
-                    background: `linear-gradient(135deg, ${TEMAS.noite["--g-destaque"]}, ${TEMAS.creme["--g-fundo"]})`,
-                  }}
-                />
+                </div>
               </div>
             </div>
           </Revelar>
 
-          {/* Prova de entrega */}
-          <Revelar atraso={60} className="lg:col-span-1">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">Prova de entrega</h3>
-              <p className="mt-2 text-sm text-texto-soft">
-                Aberturas e downloads contados. &ldquo;Não recebi&rdquo; deixa de ser conversa.
-              </p>
-            </div>
-          </Revelar>
+          {/* Os verbetes curtos: dois por linha em tela larga, com o mesmo fio */}
+          <div className="grid md:grid-cols-2 md:gap-x-14">
+            {[
+              {
+                titulo: "Prova de entrega",
+                texto:
+                  "Aberturas e downloads contados. “Não recebi” deixa de ser conversa.",
+              },
+              {
+                titulo: `Lixeira de ${PRAZO_LIXEIRA_DIAS} dias`,
+                texto:
+                  "Apagou sem querer? Restaurar traz tudo de volta — fotos, filme, capítulos e a escolha do casal.",
+              },
+              {
+                titulo: "API para o seu fluxo",
+                texto:
+                  "Crie galerias e envie arquivos por API, com chaves que nascem e morrem no seu painel.",
+              },
+              {
+                titulo: "A vitrine do estúdio",
+                texto:
+                  "O mesmo endereço das entregas é o seu cartão de visita: capa, sobre, depoimentos e botão de WhatsApp — pronto para a bio, sem montar site em outro lugar.",
+              },
+            ].map((v) => (
+              <Revelar key={v.titulo}>
+                <div className="grid gap-x-6 gap-y-1 border-b border-linha py-7 sm:grid-cols-[11rem_1fr]">
+                  <h3 className="font-semibold">{v.titulo}</h3>
+                  <p className="text-sm leading-relaxed text-texto-soft">{v.texto}</p>
+                </div>
+              </Revelar>
+            ))}
+          </div>
 
-          {/* Lixeira — o seguro contra a mão errada, que é o acidente mais comum */}
-          <Revelar className="lg:col-span-1">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">Lixeira de {PRAZO_LIXEIRA_DIAS} dias</h3>
-              <p className="mt-2 text-sm text-texto-soft">
-                Apagou sem querer? Restaurar traz tudo de volta — fotos, filme, capítulos e a
-                escolha do casal.
-              </p>
-            </div>
-          </Revelar>
-
-          {/* Chave de API — nicho, mas é diferencial de quem automatiza */}
-          <Revelar atraso={60} className="lg:col-span-1">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">API para o seu fluxo</h3>
-              <p className="mt-2 text-sm text-texto-soft">
-                Crie galerias e envie arquivos por API, com chaves que nascem e morrem no seu
-                painel.
-              </p>
-            </div>
-          </Revelar>
-
-          {/* Vitrine — o endereço que vai na bio, não só o das entregas */}
-          <Revelar className="sm:col-span-2 lg:col-span-2">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">A vitrine do estúdio</h3>
-              <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-texto-soft">
-                O mesmo endereço das entregas também é o seu cartão de visita: capa, sobre,
-                depoimentos e contato com botão de WhatsApp — pronto para pôr na bio, sem montar
-                site em outro lugar.
-              </p>
-            </div>
-          </Revelar>
-
-          {/* Segurança */}
-          <Revelar atraso={120} className="sm:col-span-2 lg:col-span-2">
-            <div className="h-full rounded-2xl border border-linha bg-carbon p-7">
-              <h3 className="font-semibold">Guardado como coisa séria</h3>
-              <p className="mt-2 max-w-[52ch] text-sm leading-relaxed text-texto-soft">
+          {/* Segurança — fecha o índice apontando para a página que assina */}
+          <Revelar>
+            <div className="grid gap-x-10 gap-y-2 border-b border-linha py-8 md:grid-cols-[15rem_1fr]">
+              <h3 className="font-serif text-xl font-semibold tracking-tight">
+                Guardado como coisa séria
+              </h3>
+              <p className="max-w-[54ch] leading-relaxed text-texto-soft">
                 Senha por galeria, links assinados que expiram, backup diário com cópia fora do
                 servidor — e restauração ensaiada, não prometida. Está tudo escrito, sem letra
-                miúda, na <Link href="/seguranca" className="text-acento underline underline-offset-4">página de segurança</Link>.
+                miúda, na{" "}
+                <Link href="/seguranca" className="text-acento underline underline-offset-4">
+                  página de segurança
+                </Link>
+                .
               </p>
             </div>
           </Revelar>
@@ -587,10 +695,8 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-24">
           <Revelar>
             <div className="max-w-2xl">
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
-                Planos
-              </p>
-              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+              <Marcador n="05" rotulo="Planos" />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
                 Um número só: quanto espaço você quer
               </h2>
               <p className="mt-4 text-texto-soft">
@@ -630,10 +736,8 @@ export default function Home() {
               `scripts/testar-comparativo.mjs` prende os três pontos. */}
           <Revelar>
             <div id="comparativo" className="mt-24 max-w-2xl scroll-mt-8">
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
-                Antes de escolher
-              </p>
-              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+              <Marcador rotulo="Antes de escolher" />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
                 Três perguntas para fazer a qualquer galeria — a nossa inclusive
               </h2>
               <p className="mt-4 text-texto-soft">
@@ -650,9 +754,9 @@ export default function Home() {
                   <div className="flex gap-4">
                     <span
                       aria-hidden
-                      className="mt-1 font-mono text-[11px] tabular-nums text-texto-faint"
+                      className="mt-1.5 font-serif text-base font-semibold tabular-nums text-acento"
                     >
-                      0{i + 1}
+                      {i + 1}.
                     </span>
                     <h3 className="font-serif text-2xl font-semibold tracking-tight">
                       {p.pergunta}
@@ -663,9 +767,7 @@ export default function Home() {
                     {/* Rótulo em bloco, não colado no texto: como <span> inline
                         o leitor de tela emenda "AquiDe 100 GB" numa palavra só,
                         e o espaço só existia como margem visual. */}
-                    <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-acento-alto">
-                      Aqui
-                    </p>
+                    <p className="text-[13px] tracking-wide text-acento-alto">Aqui —</p>
                     <p className="mt-1.5 max-w-[46ch] leading-relaxed text-texto">{p.aqui}</p>
                     <p className="mt-3 max-w-[46ch] text-sm leading-relaxed text-texto-soft">
                       {p.olhar}
@@ -683,10 +785,8 @@ export default function Home() {
         <div className="mx-auto max-w-3xl px-6 py-24">
           <Revelar>
             <div className="max-w-2xl">
-              <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-texto-faint">
-                Antes de decidir
-              </p>
-              <h2 className="mt-4 font-serif text-4xl font-bold tracking-tight">
+              <Marcador rotulo="Antes de decidir" />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
                 Perguntas frequentes
               </h2>
             </div>
@@ -725,22 +825,21 @@ export default function Home() {
       </section>
 
       {/* ── fecho ──────────────────────────────────────────────────────── */}
-      <section className="relative mx-auto max-w-4xl px-6 py-28 text-center">
-        <div className="trama absolute inset-0 -z-10" aria-hidden />
-        <Revelar>
-          <h2 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl">
-            A próxima entrega já podia ser <em className="text-acento-alto">assim</em>.
-          </h2>
-          <Link
-            href="/cadastrar"
-            className="cta-luz mt-9 inline-block rounded-full bg-acento px-8 py-4 font-semibold text-void"
-          >
-            Criar conta grátis
-          </Link>
-          <p className="mt-4 font-mono text-[11px] uppercase tracking-[0.18em] text-texto-faint">
-            14 dias grátis · sem cartão
-          </p>
-        </Revelar>
+      <section className="border-t border-linha">
+        <div className="mx-auto max-w-6xl px-6 py-24">
+          <Revelar>
+            <h2 className="max-w-[22ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+              A próxima entrega já podia ser{" "}
+              <span className="text-acento-alto">assim</span>.
+            </h2>
+            <div className="mt-9 flex flex-wrap items-center gap-6">
+              <Link href="/cadastrar" className={CTA}>
+                Criar conta grátis
+              </Link>
+              <p className="text-sm text-texto-faint">14 dias grátis · sem cartão</p>
+            </div>
+          </Revelar>
+        </div>
       </section>
 
       <footer className="border-t border-linha">
@@ -774,4 +873,3 @@ export default function Home() {
     </main>
   );
 }
-
