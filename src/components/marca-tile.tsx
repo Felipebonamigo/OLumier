@@ -21,25 +21,33 @@ import { marca } from "@/config/marca";
 /** As três órbitas. Mesma elipse, três giros — 60° entre elas é o que fecha a simetria. */
 const ORBITAS = [30, 90, 150];
 
-/** Um elétron na ponta de cada órbita. Coordenadas calculadas, não estimadas. */
+/*
+ * Os elétrons ANDAM (27/08/2026, pedido do dono: "igual do atomatiza").
+ *
+ * O mecanismo é o mesmo da marca do Atomatiza, medido lá: cada elétron percorre
+ * a própria elipse com <animateMotion>, dentro do <g> que gira a órbita — então
+ * o caminho é UM só, e a rotação do grupo faz as três órbitas. As durações são
+ * primas entre si e as largadas defasadas, para os três nunca se alinharem em
+ * ciclo curto — alinhados, o átomo "pisca" em vez de girar.
+ *
+ * SMIL e não CSS porque CSS não anda sobre elipse sem truque de dupla rotação;
+ * e SMIL ignora prefers-reduced-motion, então o <style> dentro do SVG esconde
+ * os que andam e mostra os parados quando a pessoa pediu menos movimento — os
+ * dois conjuntos existem no DOM, só um aparece.
+ */
+const CAMINHO_ORBITA = "M8.6,24 a15.4,6 0 1,0 30.8,0 a15.4,6 0 1,0 -30.8,0";
+const RITMOS: { dur: string; begin: string }[] = [
+  { dur: "1.8s", begin: "0s" },
+  { dur: "2.3s", begin: "-0.7s" },
+  { dur: "2.8s", begin: "-1.4s" },
+];
+
+/** Um elétron parado na ponta de cada órbita — o conjunto do reduced-motion. */
 const ELETRONS = [
   [37.34, 31.7],
   [24, 8.6],
   [10.66, 31.7],
 ] as const;
-
-/**
- * As seis lâminas do diafragma. Cada uma sai da borda e entra girando 52° — é o
- * giro que faz ler como lâmina em vez de raio de roda.
- */
-const LAMINAS =
-  "M 24 16.5 L 26.6 21.97 M 30.5 20.25 L 27.06 25.24 M 30.5 27.75 L 24.46 27.27 " +
-  "M 24 31.5 L 21.4 26.03 M 17.5 27.75 L 20.94 22.76 M 17.5 20.25 L 23.54 20.73";
-
-/** A faísca de quatro pontas no núcleo — o gesto que o Movimento Átomo repete. */
-const FAISCA =
-  "M 24 20.4 L 24.81 23.19 L 27.6 24 L 24.81 24.81 L 24 27.6 " +
-  "L 23.19 24.81 L 20.4 24 L 23.19 23.19 Z";
 
 export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
   /*
@@ -63,30 +71,60 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
       aria-hidden
       className="shrink-0"
     >
-      {/* as órbitas — o átomo, e a família */}
-      {(miudo ? [30, 150] : ORBITAS).map((giro) => (
-        <ellipse
-          key={giro}
-          cx="24"
-          cy="24"
-          rx="15.4"
-          ry="6"
-          transform={`rotate(${giro} 24 24)`}
-          stroke="var(--marca-traco)"
-          strokeWidth={miudo ? 1.9 : 1.5}
-          opacity={giro === 90 ? 0.85 : 1}
-        />
+      <style>{`
+        @media (prefers-reduced-motion: reduce) {
+          .eletron-anda { display: none; }
+          .eletron-parado { display: inline; }
+        }
+      `}</style>
+
+      {/* as órbitas — o átomo, e a família — com o elétron andando em cada uma */}
+      {(miudo ? [30, 150] : ORBITAS).map((giro, i) => (
+        <g key={giro} transform={`rotate(${giro} 24 24)`}>
+          <ellipse
+            cx="24"
+            cy="24"
+            rx="15.4"
+            ry="6"
+            stroke="var(--marca-traco)"
+            strokeWidth={miudo ? 1.9 : 1.5}
+            opacity={giro === 90 ? 0.85 : 1}
+          />
+          {!miudo && (
+            <circle className="eletron-anda" r="1.5" fill="var(--marca-traco)">
+              <animateMotion
+                dur={RITMOS[i].dur}
+                begin={RITMOS[i].begin}
+                repeatCount="indefinite"
+                path={CAMINHO_ORBITA}
+              />
+            </circle>
+          )}
+        </g>
       ))}
 
       {!miudo &&
         ELETRONS.map(([x, y]) => (
-          <circle key={`${x}-${y}`} cx={x} cy={y} r="1.5" fill="var(--marca-traco)" />
+          <circle
+            key={`${x}-${y}`}
+            className="eletron-parado"
+            style={{ display: "none" }}
+            cx={x}
+            cy={y}
+            r="1.5"
+            fill="var(--marca-traco)"
+          />
         ))}
 
       {/*
-        O diafragma no núcleo é o que diz GALERIA. Sem ele o símbolo falaria só
-        da família e não do que o produto faz — e foi por isso que ele venceu as
-        três propostas anteriores.
+        A CÂMERA no núcleo é o que diz FOTOGRAFIA (27/08/2026, pedido do dono:
+        "botar uma pequena câmera fotográfica no meio"). Substitui o diafragma
+        de lâminas + faísca — o diafragma dizia "lente" para quem é do ofício;
+        a câmera diz para qualquer um.
+
+        A regra do âmbar continua a mesma da paleta inteira: ele é reservado à
+        LUZ. Aqui, é o vidro da lente — a luz entra pela lente, que é a própria
+        operação do produto.
       */}
       <circle
         cx="24"
@@ -96,15 +134,40 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
         stroke="var(--marca-traco)"
         strokeWidth={miudo ? 2.1 : 1.8}
       />
-      {!miudo && (
-        <path d={LAMINAS} stroke="var(--marca-traco)" strokeWidth="1" opacity="0.55" />
-      )}
-
-      {/* o único âmbar: a luz, no centro do diafragma */}
       {miudo ? (
+        /* Abaixo de 28px a câmera viraria borrão; fica o ponto de luz. */
         <circle cx="24" cy="24" r="3.1" fill="var(--acento)" />
       ) : (
-        <path d={FAISCA} fill="var(--acento)" />
+        <>
+          {/* o corpo, com o visor saltando do topo */}
+          <rect
+            x="19.6"
+            y="21.7"
+            width="8.8"
+            height="5.6"
+            rx="1.1"
+            fill="none"
+            stroke="var(--marca-traco)"
+            strokeWidth="1.25"
+          />
+          <path
+            d="M 22.4 21.7 L 23.1 20.4 L 24.9 20.4 L 25.6 21.7"
+            fill="none"
+            stroke="var(--marca-traco)"
+            strokeWidth="1.1"
+            strokeLinejoin="round"
+          />
+          {/* a lente — e o único âmbar: a luz mora no vidro */}
+          <circle
+            cx="24"
+            cy="24.5"
+            r="1.95"
+            fill="none"
+            stroke="var(--marca-traco)"
+            strokeWidth="1.1"
+          />
+          <circle cx="24" cy="24.5" r="0.95" fill="var(--acento)" />
+        </>
       )}
     </svg>
   );
