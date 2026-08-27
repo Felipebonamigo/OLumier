@@ -192,28 +192,28 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         ))}
       </dl>
 
-      <PublicarGaleria
+      {/*
+        O ENVIO VEM PRIMEIRO, e a ordem desta página é a decisão.
+
+        Até 27/08/2026 vinham antes dele o publicar, o prazo e a APARÊNCIA — o
+        fotógrafo escolhia capa, tipografia e grade olhando fotos de exemplo, e
+        só via o resultado de verdade depois de subir o casamento inteiro. A
+        ordem da tela é o roteiro que ela sugere, e o roteiro estava invertido.
+
+        Agora ela segue o trabalho: manda as fotos, vê o que chegou, organiza em
+        capítulos, escolhe o visual JÁ VENDO as fotos, define as regras do álbum
+        e só então entrega. `testar-upload.mjs` prende esta ordem.
+      */}
+      <EnviarArquivos
         galeriaId={galeria.id}
-        caminho={`/g/${galeria.estudio_slug}/${galeria.slug}`}
-        estudioSlug={galeria.estudio_slug}
-        galeriaSlug={galeria.slug}
-        publicada={galeria.publicada}
-        temSenha={Boolean(galeria.senha_hash)}
-        permiteDownload={galeria.permite_download}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
       />
 
-      <PrazoCofre
+      <GradeMedias
+        medias={exibidas}
         galeriaId={galeria.id}
-        arquivada={galeria.estado === "arquivada"}
-        mesesAtual={mesesEquivalentes(galeria.expira_em)}
-        diasRestantes={diasAteArquivar(galeria.expira_em)}
-        arquivadaEm={galeria.arquivada_em ? String(galeria.arquivada_em) : null}
-      />
-
-      <EditorAparencia
-        galeriaId={galeria.id}
-        caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
-        inicial={lerAparencia(galeria.aparencia)}
+        capaId={galeria.capa_media_id}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
       />
 
       <EditorSecoes
@@ -222,10 +222,12 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         semCapitulo={medias.filter((m) => !m.secao_id).length}
       />
 
-      <EnviarArquivos
+      <EditorAparencia
         galeriaId={galeria.id}
-        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
+        caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
+        inicial={lerAparencia(galeria.aparencia)}
       />
+
       {/*
         A escolha do álbum. Aparece sempre, e não só depois da primeira marcação
         como a caixa antiga: as REGRAS (quantas fotos, até quando) precisam ser
@@ -243,11 +245,22 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         lista={listaSelecao.map((l) => ({ nome: l.nome, capitulo: l.capitulo }))}
       />
 
-      <GradeMedias
-        medias={exibidas}
+      <PublicarGaleria
         galeriaId={galeria.id}
-        capaId={galeria.capa_media_id}
-        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
+        caminho={`/g/${galeria.estudio_slug}/${galeria.slug}`}
+        estudioSlug={galeria.estudio_slug}
+        galeriaSlug={galeria.slug}
+        publicada={galeria.publicada}
+        temSenha={Boolean(galeria.senha_hash)}
+        permiteDownload={galeria.permite_download}
+      />
+
+      <PrazoCofre
+        galeriaId={galeria.id}
+        arquivada={galeria.estado === "arquivada"}
+        mesesAtual={mesesEquivalentes(galeria.expira_em)}
+        diasRestantes={diasAteArquivar(galeria.expira_em)}
+        arquivadaEm={galeria.arquivada_em ? String(galeria.arquivada_em) : null}
       />
 
       <section className="mt-12 border-t border-linha pt-6">

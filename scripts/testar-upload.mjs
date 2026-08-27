@@ -135,6 +135,54 @@ await etapa("remove o arquivo de teste", async () => {
 await limparRodada(db);
 await db.end();
 
+/*
+ * ── A ORDEM DA TELA ───────────────────────────────────────────────────────
+ *
+ * Pedido do Felipe em 27/08/2026: "o envio das fotos tem que ser o começo, para
+ * depois a montagem da galeria ser já vista na prévia".
+ *
+ * Até então a página oferecia publicar, prazo e APARÊNCIA antes de existir foto
+ * — o fotógrafo escolhia capa, tipografia e grade olhando fotos de exemplo, e
+ * só via o resultado de verdade depois de subir o casamento. A ordem da tela é
+ * o roteiro que ela sugere, e o roteiro estava invertido.
+ *
+ * Ordem não é estilo: prender aqui evita que uma seção nova entre no meio e
+ * desfaça a decisão sem ninguém notar — o tipo de coisa que nenhum outro teste
+ * pega, porque a página continua funcionando perfeitamente na ordem errada.
+ */
+await etapa("a tela da galeria segue a ordem do trabalho", async () => {
+  const { readFileSync } = await import("node:fs");
+  const fonte = readFileSync(
+    new URL("../src/app/painel/galerias/[id]/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  const ordem = [
+    "EditorGaleria", // quem é a galeria
+    "EnviarArquivos", // manda as fotos — o começo
+    "GradeMedias", // vê o que chegou
+    "EditorSecoes", // organiza em capítulos
+    "EditorAparencia", // escolhe o visual JÁ VENDO as fotos
+    "PainelSelecao", // define as regras do álbum
+    "PublicarGaleria", // entrega, quando está pronta
+    "PrazoCofre", // por quanto tempo fica no ar
+  ];
+
+  const posicoes = ordem.map((c) => ({ c, at: fonte.indexOf(`<${c}`) }));
+  const sumido = posicoes.find((p) => p.at < 0);
+  if (sumido) throw new Error(`<${sumido.c}> não está mais na página`);
+
+  for (let i = 1; i < posicoes.length; i++) {
+    if (posicoes[i].at < posicoes[i - 1].at) {
+      throw new Error(
+        `<${posicoes[i].c}> aparece ANTES de <${posicoes[i - 1].c}> — ` +
+          `a tela voltou a pedir decisão antes de haver foto`,
+      );
+    }
+  }
+  return "envio primeiro, aparência depois das fotos";
+});
+
 if (falhou) {
   console.error("\n✗ o fluxo de upload tem problema");
   process.exit(1);
