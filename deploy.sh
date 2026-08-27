@@ -63,6 +63,24 @@ fi
 SHA=$(git rev-parse --short HEAD)
 CARIMBO="$(date +%Y%m%d-%H%M%S)-$SHA"
 
+# ── Uma publicacao por vez ──────────────────────────────────────────────────
+#
+# A trava mora NO SERVIDOR (ver scripts/trava-publicacao.sh): o conflito nao e
+# nesta maquina, e no `ln -sfn` de la. Duas maquinas diferentes passariam por
+# todos os portoes locais e colidiriam mesmo assim.
+#
+# Aqui em cima, antes do portao de qualidade, porque descobrir que a pista esta
+# ocupada depois de sete minutos de suite e desperdicio -- e porque a corrida
+# que isto impede aconteceu justamente com duas publicacoes sobrepostas.
+echo "→ pegando a trava de publicação"
+bash scripts/trava-publicacao.sh pegar "$CARIMBO"
+
+# Solta em QUALQUER saida: portao vermelho, Ctrl+C, erro de rede. Sem isto, uma
+# reprovacao deixaria a publicacao presa para todo mundo ate alguem limpar a
+# mao -- remedio pior que a doenca.
+soltar_trava() { bash scripts/trava-publicacao.sh soltar >/dev/null 2>&1 || true; }
+trap soltar_trava EXIT
+
 # ── O portão de migração ─────────────────────────────────────────────────────
 #
 # Publicar código que depende de uma coluna que ninguém criou quebra para o
@@ -203,7 +221,17 @@ derrubar_portao() {
 }
 # `trap` na saida: sem ele, o `exit 1` de uma suite reprovada deixa um `next dev`
 # orfao comendo memoria -- e mais um a cada tentativa de publicacao.
-trap derrubar_portao EXIT
+#
+# AS DUAS LIMPEZAS NUM TRAP SO. `trap ... EXIT` SUBSTITUI o anterior, nao soma:
+# um segundo `trap` aqui apagaria em silencio o `soltar_trava` registrado la em
+# cima, e a trava de publicacao ficaria presa para todo mundo depois de qualquer
+# reprovacao. Descoberto ao escrever a trava, antes de custar caro.
+# `scripts/testar-deploy.mjs` confere que os dois nomes aparecem juntos.
+limpar_saida() {
+	derrubar_portao
+	soltar_trava
+}
+trap limpar_saida EXIT
 
 BASE_PORTAO="http://localhost:$PORTA_PORTAO"
 for _ in $(seq 1 60); do

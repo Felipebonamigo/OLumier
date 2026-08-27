@@ -219,5 +219,77 @@ etapa("o servidor do portão é derrubado ao fim, mesmo se a suíte reprovar", (
   return "trap na saída";
 });
 
+/*
+ * ── A TRAVA DE PUBLICAÇÃO ─────────────────────────────────────────────────
+ *
+ * A quarta corrida, e a que sobrou depois das outras três.
+ *
+ * Em 27/08/2026 uma sessão publicou a release `113102-aaaaded` no meio da vez
+ * de outra, que tinha reclamado a pista por mensagem. Não houve estrago por
+ * SORTE de topologia — o commit em voo era filho direto do que subiu, então
+ * nada se perdeu. Divergentes, seriam duas trocas de symlink brigando por
+ * `/opt/fotonio` com cliente dentro.
+ *
+ * As três corridas anteriores (árvore suja, HEAD andando, servidor alheio)
+ * foram fechadas por worktree fixado e servidor próprio do portão. Nenhuma
+ * delas cobre esta: o conflito não é na máquina de quem publica, é no SERVIDOR.
+ * Duas máquinas diferentes publicando ao mesmo tempo passariam por todos os
+ * portões locais e colidiriam no `ln -sfn` mesmo assim.
+ *
+ * Por isso a trava mora NO SERVIDOR e não num arquivo do repositório: quem
+ * publica pode nem estar nesta máquina. E por isso ela não substitui a fila por
+ * mensagens — ela existe justamente para quem NÃO leu o canal.
+ */
+etapa("existe trava de publicação, e ela mora no servidor", () => {
+  const p = path.join(RAIZ, "scripts/trava-publicacao.sh");
+  if (!existsSync(p)) throw new Error("scripts/trava-publicacao.sh não existe");
+  const trava = readFileSync(p, "utf8");
+  if (!/ssh/.test(trava)) {
+    throw new Error(
+      "a trava não fala com o servidor — trava local não impede outra MÁQUINA de publicar",
+    );
+  }
+  return "scripts/trava-publicacao.sh";
+});
+
+etapa("o deploy.sh pega a trava antes de empacotar", () => {
+  const i = roteiro.indexOf("trava-publicacao.sh");
+  if (i < 0) throw new Error("o deploy não chama a trava — ela não protege nada");
+  if (i > onde("empacotamento")) throw new Error("pega a trava depois de empacotar — tarde demais");
+  return "pega antes";
+});
+
+etapa("a trava é solta ao fim, mesmo se o portão reprovar", () => {
+  /* Sem soltar, um portão vermelho deixa a publicação travada para todo mundo
+   * até alguém descobrir e limpar à mão — remédio pior que a doença. */
+  /* Procura a SOLTURA da trava, não um `trap` qualquer: o deploy já tem um
+   * trap para derrubar o servidor do portão, e um regex frouxo casava com ele
+   * e dava verde sem a trava existir. Teste que passa por engano é pior que
+   * teste nenhum — este aqui passou assim antes de ser apertado. */
+  if (!/trava-publicacao\.sh['" ]*soltar|soltar_trava/.test(roteiro)) {
+    throw new Error("nada solta a trava: portão vermelho a deixaria presa para todos");
+  }
+  /*
+   * E as duas limpezas têm de sair pelo MESMO trap. `trap ... EXIT` SUBSTITUI o
+   * anterior em vez de somar — dois `trap` separados fazem o segundo apagar o
+   * primeiro em silêncio, e aí ou a trava fica presa, ou o servidor do portão
+   * fica órfão, dependendo da ordem. O último `trap` do arquivo precisa chamar
+   * os dois.
+   */
+  const ultimoTrap = roteiro.lastIndexOf("trap ");
+  const fim = roteiro.slice(ultimoTrap, ultimoTrap + 60);
+  const nome = fim.match(/trap ([a-z_]+) EXIT/)?.[1];
+  if (!nome) throw new Error("não achei o último trap EXIT");
+  const corpo = roteiro.match(new RegExp(`${nome}\\(\\)\\s*\\{([\\s\\S]*?)\\n\\}`))?.[1] ?? "";
+  const cobre = corpo.includes("soltar_trava") && corpo.includes("derrubar_portao");
+  if (!cobre && nome !== "soltar_trava") {
+    throw new Error(
+      `o último trap chama "${nome}", que não cobre as duas limpezas — ` +
+        `trap EXIT substitui o anterior, então uma das duas fica sem sair`,
+    );
+  }
+  return `soltura no trap "${nome}"`;
+});
+
 console.log(falhou ? "\n✗ a ordem do deploy tem problema" : "\n✓ ordem do deploy ok");
 process.exitCode = falhou ? 1 : 0;
