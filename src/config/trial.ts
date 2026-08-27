@@ -28,6 +28,23 @@
 const GB = BigInt(1024) ** BigInt(3);
 
 export const TETO_TRIAL_GB = 10;
+
+/**
+ * Quantos dias a entrega continua no ar depois que o teste vence.
+ *
+ * O teto acima limita QUANTO cada trial abandonado custa; ele não limita POR
+ * QUANTO TEMPO, e até 27/08/2026 a resposta era "para sempre" — galeria
+ * publicada de um teste de 14 dias seguia servida indefinidamente.
+ *
+ * 15 dias porque o casal do fotógrafo não tem culpa da decisão dele: quem já
+ * recebeu o link precisa de uma janela real para baixar as fotos depois que o
+ * estúdio some. Menos que isso pune o convidado; muito mais devolve o "para
+ * sempre" com outro nome.
+ *
+ * NADA é apagado quando o prazo acaba — a galeria só deixa de abrir. Pagar
+ * devolve na hora. Ver `galeriasNoAr` em `lib/assinatura.ts`.
+ */
+export const CARENCIA_POS_TRIAL_DIAS = 15;
 export const TETO_TRIAL_BYTES = BigInt(TETO_TRIAL_GB) * GB;
 
 /**

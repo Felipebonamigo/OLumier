@@ -26,6 +26,9 @@ export interface GaleriaPublica {
   estudio_slug: string;
   estudio_logo: string | null;
   estudio_cor: string;
+  /** Para `galeriasNoAr` — a carência do trial abandonado. */
+  estudio_status: string;
+  estudio_trial_ate: Date | null;
 }
 
 /**
@@ -46,7 +49,11 @@ export async function buscarGaleriaPublica(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
             g.permite_download, g.expira_em, g.aparencia, g.capa_media_id,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug,
-            t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor
+            t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
+            -- Para galeriasNoAr: o trial abandonado deixa de servir a galeria
+            -- 15 dias depois de vencer. Sem estas duas colunas a regra recebe
+            -- undefined e libera todo mundo — falha que nenhuma tela denuncia.
+            t.status as estudio_status, t.trial_ate as estudio_trial_ate
        from galerias g
        join tenants t on t.id = g.tenant_id
       where t.slug = $1 and g.slug = $2

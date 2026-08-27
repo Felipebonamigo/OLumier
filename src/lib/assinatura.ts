@@ -12,15 +12,21 @@
  *    adormecido, ninguém tem como pagar — travar a conta seria punir a pessoa
  *    por uma porta que nós não abrimos.
  *
- * 2. Bloqueia ADICIONAR, nunca tira do ar o que já foi entregue. O casal que
- *    recebeu a galeria não deve nada a ninguém, e derrubar as fotos do casamento
- *    dele para cobrar o fotógrafo seria pegar o refém errado. A pressão certa é
- *    o fotógrafo não conseguir entregar o PRÓXIMO trabalho.
+ * 2. Bloqueia ADICIONAR, quase nunca tira do ar o que já foi entregue. O casal
+ *    que recebeu a galeria não deve nada a ninguém, e derrubar as fotos do
+ *    casamento dele para cobrar o fotógrafo seria pegar o refém errado. A
+ *    pressão certa é o fotógrafo não conseguir entregar o PRÓXIMO trabalho.
+ *
+ *    A única exceção é o trial abandonado, e ela mora em `galeriasNoAr`, não
+ *    aqui: quem testou 14 dias e sumiu ocuparia disco para sempre. O casal
+ *    ainda ganha 15 dias de janela, e nada é apagado.
  *
  * 3. Cancelar para a RENOVAÇÃO, não o acesso. Ver `pago_ate` mais abaixo.
  *
  * O trial só vale enquanto não venceu; depois disso é preciso assinar.
  */
+
+import { CARENCIA_POS_TRIAL_DIAS } from "@/config/trial";
 
 export type MotivoBloqueio = "trial_vencido" | "inadimplente" | "cancelado";
 
@@ -41,7 +47,8 @@ export interface Situacao {
 
 const RECADOS: Record<MotivoBloqueio, string> = {
   trial_vencido:
-    "Seu teste grátis terminou. Ative a assinatura em Conta para voltar a enviar arquivos — as galerias já publicadas continuam no ar.",
+    "Seu teste grátis terminou. Ative a assinatura em Conta para voltar a enviar arquivos. " +
+    "As galerias já publicadas ficam no ar por mais 15 dias — depois disso saem do ar, mas nada é apagado e assinar devolve tudo.",
   inadimplente:
     "Há uma cobrança em aberto. Assim que o pagamento for confirmado, o envio volta automaticamente — as galerias já publicadas continuam no ar.",
   cancelado:
@@ -119,6 +126,39 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
   // Status desconhecido: liberar. Um bug de digitação numa coluna de texto não
   // pode virar bloqueio silencioso de quem está pagando em dia.
   return { podeEnviar: true };
+}
+
+/**
+ * A entrega ainda abre para o visitante?
+ *
+ * Separada de `situacaoDoTenant` de propósito: aquela responde "o FOTÓGRAFO
+ * pode enviar", esta responde "o CLIENTE DELE ainda vê". São perguntas
+ * diferentes e a resposta certa é diferente na maior parte dos estados — quem
+ * cancelou não envia mais e continua entregando o que já publicou.
+ *
+ * Só o trial vencido há mais de `CARENCIA_POS_TRIAL_DIAS` fecha a porta.
+ * `cancelado` e `inadimplente` ficam de fora porque os recados desses dois
+ * estados prometem, por escrito, que as galerias publicadas continuam no ar.
+ *
+ * Nada é apagado: a galeria deixa de abrir e volta no dia em que o pagamento
+ * confirmar, porque a regra é lida na hora e não gravada em lugar nenhum.
+ *
+ * Falha para o lado de MOSTRAR: sem data, com status desconhecido ou com
+ * qualquer coisa fora do previsto, a galeria fica no ar. Derrubar a entrega do
+ * casal por um estado que ninguém previu é pior do que servir um trial vencido
+ * por mais um tempo.
+ */
+export function galeriasNoAr(tenant: {
+  status: string;
+  trial_ate: Date | string | null;
+}): boolean {
+  if (tenant.status !== "trial") return true;
+
+  const fim = comoData(tenant.trial_ate);
+  if (!fim) return true;
+
+  const limite = fim.getTime() + CARENCIA_POS_TRIAL_DIAS * 24 * 60 * 60 * 1000;
+  return Date.now() <= limite;
 }
 
 // --- período pago ---------------------------------------------------------

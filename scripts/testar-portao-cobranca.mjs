@@ -94,10 +94,17 @@ await etapa("trial VENCIDO não envia mais", () => {
   const s = situacaoDoTenant({ status: "trial", trial_ate: ONTEM }, LIGADA);
   igual(s.podeEnviar, false, "trial vencido");
   igual(s.motivo, "trial_vencido", "motivo");
-  // O recado precisa dizer que a entrega do casal não sai do ar — é a diferença
-  // entre cobrar o fotógrafo e pegar o refém errado.
-  if (!s.recado?.includes("já publicadas continuam no ar")) {
-    throw new Error("o recado não deixa claro que a galeria do cliente continua no ar");
+  /*
+   * O recado precisa dizer o PRAZO e que nada é apagado.
+   *
+   * Até 27/08/2026 ele prometia que as galerias publicadas continuavam no ar, e
+   * esta etapa prendia essa promessa. A carência de 15 dias
+   * (`CARENCIA_POS_TRIAL_DIAS`) transformou a promessa em mentira com data, e
+   * uma tela que esconde o prazo é pior que a política: o fotógrafo descobriria
+   * no dia em que o cliente dele ligasse dizendo que o link parou.
+   */
+  if (!/15 dias/.test(s.recado ?? "") || !/nada é apagado/i.test(s.recado ?? "")) {
+    throw new Error("o recado não diz o prazo da carência e que nada é apagado");
   }
   return "e promete que a galeria do cliente fica no ar";
 });

@@ -6,6 +6,7 @@ import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
 import { estadoSelecao, minhasFavoritas } from "@/lib/favoritas";
+import { galeriasNoAr } from "@/lib/assinatura";
 import {
   buscarGaleriaPublica,
   listarMediasPublicas,
@@ -63,6 +64,28 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
   const galeria = ehDono ? rascunho : await buscarGaleriaPublica(estudio, galeriaSlug);
   if (!galeria) notFound();
+
+  /*
+   * O estúdio testou, sumiu, e a carência acabou.
+   *
+   * Vem ANTES do arquivamento e da senha de propósito: o portão da senha
+   * pediria a chave para abrir uma porta que não abre mais, e o visitante
+   * concluiria que errou a senha.
+   *
+   * O dono continua vendo — é a tela onde ele descobre por que a galeria dele
+   * sumiu, e de onde ele sai para assinar.
+   */
+  if (!ehDono && !galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate })) {
+    return (
+      <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 text-center">
+        <h1 className="font-serif text-2xl font-bold">{galeria.titulo}</h1>
+        <p className="mt-3 text-sm text-texto-soft">
+          Esta galeria está fora do ar no momento. Fale com {galeria.estudio_nome} para reabri-la —
+          nada foi perdido.
+        </p>
+      </main>
+    );
+  }
 
   if (galeria.estado === "arquivada") {
     return (
