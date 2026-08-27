@@ -45,7 +45,7 @@ const roteiro = readFileSync(path.join(RAIZ, "deploy.sh"), "utf8")
 /** Marcadores da EXECUÇÃO, não da menção. O `ssh -n` é o que separa as duas. */
 const MARCOS = {
   tipos: "if ! npx tsc --noEmit; then",
-  suite: "if ! npm test -- --exigir-tudo; then",
+  suite: "npm test -- --exigir-tudo; then",
   dump: 'ssh -n "$VPS" "/opt/fotonio-backup.sh"',
   migracao: 'scripts/migrar.mjs --aplicar"',
   empacotamento: "git archive --format=tar.gz",
@@ -163,6 +163,60 @@ etapa("o portão do origin roda antes do empacotamento", () => {
     throw new Error("conferir o origin depois de empacotar não impede nada");
   }
   return "confere antes";
+});
+
+/*
+ * ── O SERVIDOR DO PORTÃO ──────────────────────────────────────────────────
+ *
+ * A suíte fala HTTP. Até 27/08/2026 ela falava com o servidor de
+ * desenvolvimento na 3040 — compartilhado, e servindo a ÁRVORE DE TRABALHO, que
+ * nesta máquina é a mesma pasta para todas as sessões.
+ *
+ * Duas consequências, e as duas aconteceram no mesmo dia:
+ *
+ *   · o servidor caiu no meio de uma publicação e nove suítes reprovaram com
+ *     `fetch failed`, sem defeito nenhum no commit;
+ *   · outra sessão editava a home enquanto o portão rodava, e o portão teria
+ *     julgado uma página pela metade que não estava no pacote.
+ *
+ * O worktree fixado NÃO resolve isto. Ele isola a árvore e o HEAD; o servidor é
+ * de quem está editando. Era a única das três corridas que nada acusava.
+ *
+ * A saída é o portão subir o SEU servidor, do próprio diretório, numa porta
+ * livre — aí a suíte mede exatamente o que vai ser empacotado.
+ */
+etapa("o portão sobe o próprio servidor", () => {
+  if (!roteiro.includes("PORTA_PORTAO")) {
+    throw new Error(
+      "o portão não levanta servidor próprio — a suíte julga a árvore de quem estiver " +
+        "editando, e não o que vai no pacote",
+    );
+  }
+  return "servidor do portão";
+});
+
+etapa("o servidor do portão sobe ANTES da suíte", () => {
+  const i = roteiro.indexOf("PORTA_PORTAO");
+  if (i < 0 || i > onde("suite")) throw new Error("sobe depois da suíte — não serve a ninguém");
+  return "sobe antes";
+});
+
+etapa("a suíte é apontada para o servidor do portão", () => {
+  /* Levantar e não apontar seria o pior dos mundos: um servidor a mais consumindo
+   * memória e a suíte continuando a medir o da 3040. */
+  if (!/BASE_URL="\$BASE_PORTAO"\s+npm test/.test(roteiro)) {
+    throw new Error("subiu servidor próprio e não passou BASE_URL para a suíte");
+  }
+  return "BASE_URL aponta para ele";
+});
+
+etapa("o servidor do portão é derrubado ao fim, mesmo se a suíte reprovar", () => {
+  /* Sem `trap`, o `exit 1` da suíte reprovada deixa um `next dev` órfão comendo
+   * memória — e a cada tentativa de publicação, mais um. */
+  if (!/trap .*EXIT/.test(roteiro)) {
+    throw new Error("sem trap: portão vermelho deixaria servidor órfão");
+  }
+  return "trap na saída";
 });
 
 console.log(falhou ? "\n✗ a ordem do deploy tem problema" : "\n✓ ordem do deploy ok");

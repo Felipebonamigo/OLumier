@@ -146,10 +146,72 @@ if ! npx tsc --noEmit; then
 fi
 echo "  tipos ok"
 
-if ! npm test -- --exigir-tudo; then
+# ── O servidor do portao ────────────────────────────────────────────────────
+#
+# A suite fala HTTP. Ate 27/08/2026 ela falava com o servidor de desenvolvimento
+# da 3040 -- compartilhado, e servindo a ARVORE DE TRABALHO, que nesta maquina e
+# a mesma pasta para todas as sessoes. Duas consequencias, ambas vistas no mesmo
+# dia: o servidor caiu no meio de uma publicacao e nove suites reprovaram com
+# `fetch failed`; e outra sessao editava a home enquanto o portao rodava, e o
+# portao teria julgado uma pagina pela metade que nao estava no pacote.
+#
+# O worktree fixado NAO resolvia isso. Ele isola a arvore e o HEAD; o servidor e
+# de quem esta editando. Era a unica das tres corridas que nada acusava.
+#
+# Agora o portao sobe o SEU servidor, deste diretorio, numa porta sorteada livre.
+#
+# O NEXT RECUSA UM SEGUNDO SERVIDOR PARA O MESMO DIRETORIO -- ele detecta o que
+# ja existe e sai. Isso e bom aqui: se estamos no worktree (o caso normal), a
+# porta sobe limpa; se estamos na arvore principal com um `npm run dev` aberto,
+# aquele servidor JA serve exatamente este diretorio, entao reusar esta certo.
+# O `if` abaixo cobre os dois sem adivinhar.
+PORTA_PORTAO=$(node -e "const n=require('net');const s=n.createServer();s.listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})")
+LOG_PORTAO="/tmp/portao-servidor-$$.log"
+echo "  → subindo servidor do portão na porta $PORTA_PORTAO"
+node node_modules/next/dist/bin/next dev --port "$PORTA_PORTAO" > "$LOG_PORTAO" 2>&1 &
+
+# Derruba PELA PORTA e nunca por nome: a porta foi sorteada livre e e so deste
+# processo, entao nao ha como acertar o servidor de outra sessao por engano.
+# O `$!` do git-bash NAO e o PID do Windows -- taskkill com ele diz "processo nao
+# encontrado" e o servidor fica de pe. Custou um teste para descobrir.
+derrubar_portao() {
+	[ -n "${PORTA_PORTAO:-}" ] || return 0
+	local pid
+	pid=$(powershell -NoProfile -Command "(Get-NetTCPConnection -LocalPort $PORTA_PORTAO -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess" 2>/dev/null | tr -d '\r')
+	[ -n "$pid" ] && taskkill //T //F //PID "$pid" >/dev/null 2>&1
+	rm -f "$LOG_PORTAO"
+}
+# `trap` na saida: sem ele, o `exit 1` de uma suite reprovada deixa um `next dev`
+# orfao comendo memoria -- e mais um a cada tentativa de publicacao.
+trap derrubar_portao EXIT
+
+BASE_PORTAO="http://localhost:$PORTA_PORTAO"
+for _ in $(seq 1 60); do
+	c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$BASE_PORTAO/api/healthz" 2>/dev/null || true)
+	[ "$c" = "200" ] && break
+	# A primeira requisicao compila a rota, entao "Ready in 600ms" no log nao
+	# significa que healthz responde. Esperar pelo healthz, e nao pelo log.
+	if grep -q "Another next dev server is already running" "$LOG_PORTAO" 2>/dev/null; then
+		BASE_PORTAO=$(grep -oE "http://localhost:[0-9]+" "$LOG_PORTAO" | tail -1)
+		echo "  (já havia servidor para ESTE diretório — usando $BASE_PORTAO)"
+		PORTA_PORTAO=""   # nao e nosso: nao derrubar
+		break
+	fi
+	sleep 2
+done
+
+if [ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$BASE_PORTAO/api/healthz" 2>/dev/null || true)" != "200" ]; then
+	echo "✗ o servidor do portão não subiu — nada foi publicado."
+	tail -15 "$LOG_PORTAO" 2>/dev/null | sed 's/^/    /'
+	exit 1
+fi
+echo "  servidor do portão no ar"
+
+if ! BASE_URL="$BASE_PORTAO" npm test -- --exigir-tudo; then
   echo
   echo "✗ suíte reprovada ou incompleta — nada foi publicado."
-  echo "  Se o motivo foi 'cobertura parcial', suba o servidor (npm run dev) e rode de novo."
+  echo "  A suíte falou com o servidor DESTE commit ($BASE_PORTAO), não com o da 3040."
+  echo "  Então 'cobertura parcial' aqui é defeito de verdade, não servidor fora."
   exit 1
 fi
 
