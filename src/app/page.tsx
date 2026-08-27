@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 /*
  * A página conta uma história em cinco atos: a promessa (hero, escuro), o
- * caminho (três gestos), o resultado na mão do casal (a seção clara — a luz
+ * caminho (três gestos), o resultado na mão do cliente (a seção clara — a luz
  * chega), a ferramenta do estúdio e o preço.
  *
  * ── A LINGUAGEM VISUAL: CINEMATOGRÁFICA (27/08/2026) ──────────────────────
@@ -304,13 +304,13 @@ export default function Home() {
             Galerias de entrega para fotógrafos e filmakers
           </p>
           <h1 className="mt-5 font-serif text-6xl font-bold leading-[0.98] tracking-tight sm:text-8xl">
-            Sua luz,
+            O dia passa.
             <br />
-            <span className="text-acento-alto">entregue.</span>
+            <span className="text-acento-alto">As fotos ficam.</span>
           </h1>
           <p className="mt-7 max-w-[46ch] text-lg leading-relaxed text-texto sm:text-xl">
-            O dia passa, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal: com a
-            sua marca, no seu endereço, direto na galeria do celular deles.
+            {marca.nome} é o lugar onde o seu trabalho chega ao seu cliente: com a sua marca,
+            no seu endereço, direto na galeria do celular dele.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link href="/cadastrar" className={CTA}>
@@ -355,9 +355,9 @@ export default function Home() {
         <div className="lg:sticky lg:top-28 lg:self-start">
           <Marcador n="01" rotulo="Da pasta ao link" />
           <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
-            Três gestos.
+            Três gestos:
             <br />
-            Nenhum deles é &ldquo;exportar de novo&rdquo;.
+            arrastar, ajustar, enviar.
           </h2>
           <p className="mt-5 max-w-[36ch] text-texto-soft">
             Entregar não deveria ser a parte difícil do trabalho. Aqui ela cabe entre um café e o
@@ -407,7 +407,7 @@ export default function Home() {
             <Revelar>
               <Marcador n="02" rotulo="Do outro lado do link" claro />
               <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
-                O casal abre no celular.
+                Seu cliente abre no celular.
                 <br />E fica tudo bem.
               </h2>
               <dl className="mt-9 divide-y divide-tinta/15 border-y border-tinta/15">
@@ -418,7 +418,7 @@ export default function Home() {
                   ],
                   [
                     "O filme junto das fotos",
-                    "o casal assiste em 4K na própria galeria, com os capítulos do lado — sem link de nuvem perdido no e-mail.",
+                    "o filme roda em 4K na própria galeria, com os capítulos do lado — sem link de nuvem perdido no e-mail.",
                   ],
                   [
                     "A escolha do álbum",
@@ -517,7 +517,7 @@ export default function Home() {
               },
               {
                 n: "2",
-                titulo: "O casal fecha junto",
+                titulo: "Eles fecham juntos",
                 texto:
                   "A lista é uma só: a noiva no celular e o noivo no notebook veem a mesma escolha. Quando terminam, eles encerram — e a lista trava, para o álbum não mudar depois de diagramado. Mudaram de ideia? Você reabre em um clique.",
               },
@@ -644,7 +644,7 @@ export default function Home() {
               {
                 titulo: `Lixeira de ${PRAZO_LIXEIRA_DIAS} dias`,
                 texto:
-                  "Apagou sem querer? Restaurar traz tudo de volta — fotos, filme, capítulos e a escolha do casal.",
+                  "Apagou sem querer? Restaurar traz tudo de volta — fotos, filme, capítulos e a escolha do cliente.",
               },
               {
                 titulo: "API para o seu fluxo",
