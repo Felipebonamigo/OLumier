@@ -28,7 +28,42 @@ export default function CadastrarPage() {
         </p>
       )}
 
+      {/*
+        FORA do `if (beta)`, e é o ponto.
+
+        Esta frase era a segunda metade do texto do beta. Desligar o beta um dia
+        — uma linha em config/marca.ts — apagaria junto o aviso mais importante
+        do produto, sem ninguém decidir isso. Ele não tem nada a ver com beta:
+        vale enquanto o produto existir.
+      */}
+      <p className="mt-3 rounded-lg border border-linha bg-carbon px-4 py-3 text-sm leading-relaxed text-texto-soft">
+        {marca.entregaNaoBackup}
+      </p>
+
       <FormCadastrar minimo={MINIMO_SENHA} />
+
+      {/*
+        O ACEITE. Os Termos e a Privacidade existiam desde cedo e ninguém nunca
+        os aceitou: só apareciam no rodapé das páginas institucionais, longe do
+        momento em que alguém se compromete. Termo que a pessoa não viu na hora
+        de decidir vale muito menos que um que ela viu, e a diferença entre os
+        dois é esta frase.
+
+        Sem caixinha de marcar, de propósito: uma caixa obrigatória que todo
+        mundo marca sem ler não prova consentimento nenhum — só acrescenta um
+        clique. A frase acima do botão, com os dois links abertos, informa mais.
+      */}
+      <p className="mt-4 text-xs leading-relaxed text-texto-faint">
+        Ao criar a conta, você aceita os{" "}
+        <Link href="/termos" className="text-texto-soft underline underline-offset-4">
+          Termos de Uso
+        </Link>{" "}
+        e a{" "}
+        <Link href="/privacidade" className="text-texto-soft underline underline-offset-4">
+          Política de Privacidade
+        </Link>
+        .
+      </p>
 
       <p className="mt-8 text-sm text-texto-soft">
         Já tem conta?{" "}

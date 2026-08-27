@@ -36,8 +36,14 @@
  * contra o find-replace cego antes de existir.
  */
 
+/* O nome sai daqui e entra no objeto abaixo. Existe porque propriedade de
+ * objeto não enxerga irmã, e a alternativa seria escrever "Galeria Átomo" duas
+ * vezes — numa marca que já mudou duas vezes (Fotônio → Olumier → Galeria
+ * Átomo), a segunda cópia é a que fica para trás. */
+const NOME = "Galeria Átomo";
+
 export const marca = {
-  nome: "Galeria Átomo",
+  nome: NOME,
   nomeSimples: "galeria-atomo",
   simbolo: "GA",
   tagline: "O dia passa. As fotos ficam.",
@@ -65,8 +71,26 @@ export const marca = {
    */
   beta: true,
   betaExplicacao:
-    "Estamos em beta: o produto está no ar e funcionando, mas você está entre os primeiros a usar. " +
-    "Como em qualquer serviço, guarde os seus originais — os seus arquivos aqui são a entrega, não o seu backup.",
+    "Estamos em beta: o produto está no ar e funcionando, mas você está entre os primeiros a usar.",
+
+  /*
+   * ENTREGA, NÃO BACKUP — e por que isto NÃO mora no texto do beta.
+   *
+   * Até 27/08/2026 esta frase era a segunda metade do `betaExplicacao`. Ou seja:
+   * no dia em que o beta acabasse, o aviso mais importante do produto sumiria
+   * junto, em silêncio, por causa de uma linha trocada em outro lugar — e sem
+   * ninguém decidir isso.
+   *
+   * Ele não tem nada a ver com beta. Vale enquanto o produto existir: o arquivo
+   * aqui é a cópia que o CLIENTE recebe, não a cópia que salva o fotógrafo. A
+   * expectativa errada sobre isso é a única que custa um casamento inteiro.
+   */
+  entregaNaoBackup:
+    "O " +
+    NOME +
+    " é uma ferramenta de entrega, não de backup: o arquivo aqui é a cópia que o seu cliente " +
+    "recebe. Guarde os seus originais onde você já guarda — nenhum serviço deveria ser a sua " +
+    "única cópia, e o nosso também não.",
 } as const;
 
 /** Paleta — a sala de projeção: preto quente, dourado-champanhe, marfim. Espelha globals.css. */
