@@ -39,13 +39,29 @@ export async function GET(request: NextRequest) {
   /* Só caminho interno. `proximo` vem da URL, e devolver a pessoa para
    * "https://sitequalquer.com" a partir de um endereço nosso é phishing com o
    * nosso domínio no meio. */
-  const destino = new URL("/entrar", request.url);
+  const busca = new URLSearchParams({ sessao: "expirada" });
   if (proximo && proximo.startsWith("/") && !proximo.startsWith("//")) {
-    destino.searchParams.set("proximo", proximo);
+    busca.set("proximo", proximo);
   }
-  destino.searchParams.set("sessao", "expirada");
 
-  const r = NextResponse.redirect(destino);
+  /*
+   * Caminho RELATIVO, e isto não é preferência de estilo.
+   *
+   * O app roda atrás do Caddy, escutando em localhost:3300 — então `request.url`
+   * aqui dentro É "http://localhost:3300/…". `NextResponse.redirect(new
+   * URL("/entrar", request.url))` monta a partir dele e devolve
+   * `Location: https://localhost:3300/entrar`: um endereço que só existe dentro
+   * do servidor, e que o navegador da pessoa não alcança.
+   *
+   * Publicado assim em 27/08/2026, e trocou o loop por um redirecionamento
+   * morto. Em desenvolvimento nunca aparece: lá o app é o próprio endereço
+   * público, e o absoluto acerta por coincidência. Relativo o navegador resolve
+   * contra a origem de onde veio, seja ela qual for.
+   */
+  const r = new NextResponse(null, {
+    status: 307,
+    headers: { location: `/entrar?${busca}` },
+  });
   r.cookies.delete(NOME_COOKIE);
   return r;
 }

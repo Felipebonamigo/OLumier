@@ -122,6 +122,33 @@ await etapa("o cookie podre é JOGADO FORA no caminho", async () => {
   return "o navegador sai sem ele";
 });
 
+await etapa("a saída redireciona por caminho RELATIVO, nunca absoluto", async () => {
+  /*
+   * O app roda atrás do Caddy, escutando em localhost:3300. `request.url`, ali
+   * dentro, É "http://localhost:3300/…" — então montar o destino a partir dele
+   * produz `Location: https://localhost:3300/entrar`, um endereço que só existe
+   * DENTRO do servidor. O navegador da pessoa não alcança.
+   *
+   * Foi publicado assim em 27/08/2026 e trocou um loop por um redirecionamento
+   * morto. Em desenvolvimento não aparece: lá o app é o próprio endereço
+   * público, e o absoluto acerta por coincidência.
+   *
+   * Caminho relativo não tem esse problema: o navegador resolve contra a origem
+   * de onde veio, seja ela qual for.
+   */
+  const r = await fetch(new URL("/api/sessao/expirada?proximo=%2Fpainel", BASE), {
+    headers: { cookie: PODRE },
+    redirect: "manual",
+  });
+  const destino = r.headers.get("location") ?? "";
+  if (/^https?:\/\//i.test(destino)) {
+    throw new Error(`Location absoluto (${destino}) — atrás do proxy isso vira localhost:3300`);
+  }
+  if (!destino.startsWith("/entrar")) throw new Error(`destino inesperado: ${destino}`);
+  if (!destino.includes("proximo")) throw new Error("perdeu o destino guardado");
+  return destino;
+});
+
 await etapa("/entrar com cookie inválido abre normalmente", async () => {
   /* O caminho direto: a pessoa desiste do painel e vai para a tela de entrar.
    * Se o proxy a chutar para o painel, ela não tem como sair do buraco. */
