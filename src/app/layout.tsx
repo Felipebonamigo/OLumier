@@ -112,11 +112,39 @@ const FONTES = [
   .join(" ");
 
 export const metadata: Metadata = {
+  /*
+   * `metadataBase` é o que torna ABSOLUTA toda URL de metadado — e absoluta não
+   * é detalhe: WhatsApp e afins não resolvem caminho relativo em og:image, então
+   * sem isto a tag existe e a prévia continua sem imagem, que é o pior estado
+   * possível, porque parece feito. O domínio sai de `marca.dominio`: na próxima
+   * troca de marca, tudo aqui acompanha sozinho.
+   */
+  metadataBase: new URL(`https://${marca.dominio}`),
   title: {
     default: `${marca.nome} — ${marca.tagline}`,
     template: `%s · ${marca.nome}`,
   },
   description: marca.descricao,
+  /*
+   * Open Graph no LAYOUT, de propósito: fotógrafo compartilha link por
+   * WhatsApp, e qualquer página desta casa que circular — home, segurança,
+   * termos — precisa desdobrar com imagem e título em vez de aparecer pelada.
+   * A imagem vem da convenção `opengraph-image.tsx` ao lado; o Next monta a
+   * tag sozinho, então aqui só entra o que a imagem não carrega.
+   */
+  openGraph: {
+    type: "website",
+    siteName: marca.nome,
+    locale: "pt_BR",
+    url: "/",
+    title: `${marca.nome} — ${marca.tagline}`,
+    description: marca.descricao,
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${marca.nome} — ${marca.tagline}`,
+    description: marca.descricao,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
