@@ -9,13 +9,24 @@ import { ehAdmin } from "@/config/admin";
 import { sairAction } from "../(auth)/actions";
 
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
-  // Validação de verdade: o proxy só olhou se o cookie existe. Aqui conferimos a
-  // assinatura e se o tenant ainda existe no banco — cookie forjado morre neste ponto.
+  /*
+   * Validação de verdade: o proxy só olhou se o cookie EXISTE. Aqui conferimos a
+   * assinatura e se o estúdio ainda está no banco — cookie forjado morre aqui.
+   *
+   * A recusa passa por `/api/sessao/expirada` e não vai direto para `/entrar`,
+   * e isso não é rodeio: mandar para `/entrar` com o cookie ainda no navegador
+   * fecha uma armadilha — o proxy vê o cookie, devolve para `/painel`, o layout
+   * recusa de novo, e a pessoa toma ERR_TOO_MANY_REDIRECTS sem conseguir chegar
+   * na tela de entrar. Aconteceu em produção em 27/08/2026.
+   *
+   * Componente de servidor não pode mexer em cookie; a rota pode, e é só isso
+   * que ela faz antes de mandar para `/entrar`.
+   */
   const tenantId = await sessaoAtual();
-  if (!tenantId) redirect("/entrar");
+  if (!tenantId) redirect("/api/sessao/expirada");
 
   const tenant = await buscarTenantPorId(tenantId);
-  if (!tenant) redirect("/entrar");
+  if (!tenant) redirect("/api/sessao/expirada");
 
   /*
    * A barra do topo mostra só o espaço NO AR, que é o que a quota do plano
