@@ -32,6 +32,14 @@ if [ -n "$(git status --porcelain)" ]; then
   [[ "$r" =~ ^[sS]$ ]] || exit 1
 fi
 
+# O portao do origin vem ANTES de tudo que custa tempo: conferir e um fetch, e
+# recusar aqui poupa os sete minutos do portao de qualidade. A regra e o porque
+# estao em scripts/portao-origin.sh -- resumo: `git archive HEAD` empacota a
+# arvore LOCAL, entao publicar de uma copia atrasada tira de producao o trabalho
+# de quem empurrou, com o hash carimbado batendo certinho.
+echo "→ conferindo o origin"
+bash scripts/portao-origin.sh master origin
+
 SHA=$(git rev-parse --short HEAD)
 CARIMBO="$(date +%Y%m%d-%H%M%S)-$SHA"
 
@@ -90,20 +98,24 @@ if [ -n "$PENDENTES" ]; then
     exit 1
   fi
 
-  # Dump ANTES de mexer na estrutura. Sem rede, sem publicação.
-  echo "  → dump de segurança"
-  ssh -n "$VPS" "/opt/fotonio-backup.sh" | sed 's/^/    /'
-
-  # Os arquivos precisam estar no servidor para o migrar.mjs enxergá-los. Vão
-  # para o release ATUAL; o registro fica no banco, que sobrevive à troca.
-  echo "  → enviando migração(ões)"
-  while read -r m; do
-    [ -n "$m" ] && scp -q "db/migracoes/$m" "$VPS:$ATUAL/db/migracoes/$m"
-  done <<< "$PENDENTES"
-
-  echo "  → aplicando"
-  ssh -n "$VPS" "cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar" | sed 's/^/    /'
+  # AUTORIZADA, E AINDA NAO APLICADA. O bloco que aplica de verdade esta depois
+  # do portao de qualidade -- procure por "aplicando migracao" mais abaixo.
+  #
+  # Ate 27/08/2026 a aplicacao acontecia AQUI, e portao vermelho depois dela
+  # deixava o banco de producao com estrutura nova e o codigo velho no ar. Nao
+  # ha desfazer automatico: `migrar.mjs` registra o que aplicou, e voltar exige
+  # SQL a mao com o dump ao lado.
+  #
+  # Aconteceu em 26/08/2026 com a `023-dominio-proprio.sql`. Deu certo por sorte,
+  # porque a coluna nova era so ignorada pelo codigo velho. Com um `not null`
+  # sem valor padrao, teria sido escrita quebrada em producao.
+  #
+  # A PERGUNTA continua aqui de proposito. Perguntar cedo deixa voce recusar sem
+  # gastar os sete minutos do portao; so a ACAO e que espera.
+  APLICAR_MIGRACAO=1
+  echo "  autorizada — será aplicada DEPOIS do portão de qualidade"
 else
+  APLICAR_MIGRACAO=0
   [ "$TEM_TABELA" = "t" ] && echo "  banco em dia"
 fi
 
@@ -153,6 +165,37 @@ if [ "${LINT:-0}" != "0" ]; then
   [[ "$r" =~ ^[sS]$ ]] || exit 1
 else
   echo "  lint ok"
+fi
+
+# ── A migracao, agora que o codigo passou ───────────────────────────────────
+#
+# Esta e a posicao certa e ela custou um susto para ser descoberta: aqui o
+# codigo JA provou que compila e que a suite inteira passa. Se o portao acima
+# tivesse reprovado, o script ja teria saido e o banco continuaria intacto.
+#
+# Ainda ha uma janela, e vale nomear em vez de fingir que nao existe: entre
+# aplicar a migracao e o symlink trocar, a producao roda codigo velho com
+# esquema novo por alguns segundos. Isso e inerente a publicar sem parar o site,
+# e e o motivo de toda migracao daqui precisar ser compativel para tras --
+# coluna nova entra opcional, coluna velha sai numa publicacao DEPOIS de o
+# codigo parar de usa-la. A janela de segundos e aceitavel; a de sete minutos,
+# que era o que existia antes, nao era.
+if [ "${APLICAR_MIGRACAO:-0}" = "1" ]; then
+	echo "→ aplicando migração(ões) — o código já passou pelo portão"
+
+	# Dump ANTES de mexer na estrutura. Sem rede, sem publicação.
+	echo "  → dump de segurança"
+	ssh -n "$VPS" "/opt/fotonio-backup.sh" | sed 's/^/    /'
+
+	# Os arquivos precisam estar no servidor para o migrar.mjs enxergá-los. Vão
+	# para o release ATUAL; o registro fica no banco, que sobrevive à troca.
+	echo "  → enviando migração(ões)"
+	while read -r m; do
+		[ -n "$m" ] && scp -q "db/migracoes/$m" "$VPS:$ATUAL/db/migracoes/$m"
+	done <<< "$PENDENTES"
+
+	echo "  → aplicando"
+	ssh -n "$VPS" "cd $ATUAL && /usr/local/bin/node --env-file=.env.production scripts/migrar.mjs --aplicar" | sed 's/^/    /'
 fi
 
 echo "→ empacotando $SHA"
