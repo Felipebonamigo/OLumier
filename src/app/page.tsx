@@ -20,30 +20,29 @@ export const metadata: Metadata = {
  * seção clara, de propósito: é o momento em que a luz chega), a ferramenta do
  * estúdio e o preço.
  *
- * ── A LINGUAGEM VISUAL: EDITORIAL DE ESTÚDIO (27/08/2026) ─────────────────
+ * ── A LINGUAGEM VISUAL: IMPRESSO DE ESTÚDIO (26/08/2026) ──────────────────
  *
- * Terceira linguagem em dois dias, e desta vez o critério veio de fora: a
- * lista de padrões do impeccable.style — o catálogo do que toda página gerada
- * por IA faz — batida contra a versão anterior. Ela reprovava em quatro:
+ * A versão anterior falava o dialeto padrão de página de SaaS: cartões
+ * arredondados em bento, um rótulo monoespaçado maiúsculo repetido em cada
+ * seção, botões-pílula com brilho, mockups desenhados com barras cinzas. Nada
+ * disso era ERRADO — era genérico, e genérico numa página de fotógrafo é o
+ * pior lugar possível, porque o leitor vive de olhar.
  *
- *   · o MARCADOR numerado de seção ("tiny numbered section labels");
- *   · o rótulo pequeno em cima do título do hero ("kicker/eyebrow label");
- *   · a tira de filme com fotos de GRADIENTE e o telefone de quadradinhos
- *     coloridos ("shape-assembled illustration") — página de fotógrafo com
- *     foto de mentira desenhada em CSS;
- *   · números de seção em âmbar, violando a regra da própria marca de que o
- *     âmbar é reservado a AÇÃO.
+ * O que entrou no lugar vem do mundo de quem a página quer convencer:
  *
- * O que vale agora: TIPOGRAFIA CARREGA TUDO. Cormorant em escala de display de
- * verdade (o salto entre título e corpo é a hierarquia — título tímido é o
- * defeito "flat type hierarchy"), espaço generoso, fio fino como única
- * estrutura, e o âmbar de volta ao posto: botão, link, foto marcada, uma
- * palavra por tela.
+ *   · a TIRA DE FILME no hero, com furos de arrasto, marcação de borda âmbar
+ *     (como a gravação lateral de um filme de verdade) e a moldura escolhida
+ *     circulada a lápis de cera — que é como se marcava a foto do álbum numa
+ *     prova de contato;
+ *   · a FICHA TÉCNICA em grade de fios finos, como especificação de câmera;
+ *   · o ÍNDICE DE CATÁLOGO na seção da ferramenta: linhas pautadas, sem
+ *     cartão, como o índice de um catálogo de exposição;
+ *   · MARCADOR DE SEÇÃO numerado (número de série + fio + rótulo), porque a
+ *     página é de fato uma sequência — e numeração só quando há ordem real.
  *
- * A única imagem da página é a galeria que o PRODUTO mesmo renderiza: as fotos
- * de demonstração de `fotosDeDemonstracao` (proporções reais de câmera, tons
- * do tema creme), no telefone da seção clara. Não é mockup inventado — é o que
- * a prévia do fotógrafo mostra, com o mesmo código.
+ * Objetos desenhados (a tira de filme, o telefone) usam cor FIXA de propósito:
+ * filme é escuro e papel é claro nos dois temas, como no mundo físico. O resto
+ * da página troca de tema pelos tokens.
  *
  * O que NÃO existe aqui, por honestidade: barra de logos de clientes e
  * depoimentos. O produto tem zero estúdios pagantes hoje — logo inventado e
@@ -179,12 +178,132 @@ const FICHA: [string, string][] = [
 ];
 
 /*
- * A galeria de demonstração, no tema creme — a MESMA função que alimenta a
- * prévia do fotógrafo. É a única imagem da página, e é honesta duas vezes: as
- * proporções são de câmera de verdade, e o código que a desenha é o código do
- * produto. Quatro molduras bastam para ler "galeria"; oito virariam catálogo.
+ * O marcador de seção: número de série + fio + rótulo, como folio de catálogo.
+ * Um dispositivo só, repetido — é ele que dá unidade à página no lugar do
+ * rótulo monoespaçado de antes. O número existe porque a página É uma
+ * sequência; seção sem posição na história (o comparativo, a FAQ) usa a
+ * variante sem número.
  */
-const FOTOS_DEMO = fotosDeDemonstracao("creme").slice(0, 4);
+function Marcador({ n, rotulo, claro = false }: { n?: string; rotulo: string; claro?: boolean }) {
+  return (
+    <p
+      className={`flex items-center gap-4 text-[13px] tracking-wide ${
+        claro ? "text-tinta-faint" : "text-texto-faint"
+      }`}
+    >
+      {n && (
+        <span
+          className={`font-serif text-base font-semibold tabular-nums ${
+            claro ? "text-ouro-tinta" : "text-acento"
+          }`}
+        >
+          {n}
+        </span>
+      )}
+      <span className={`h-px w-10 ${claro ? "bg-tinta/25" : "bg-linha-forte"}`} aria-hidden />
+      {rotulo}
+    </p>
+  );
+}
+
+/*
+ * A tira de filme do hero — o produto contado no objeto que o fotógrafo
+ * conhece de cor. Três molduras; a do meio é a escolhida, circulada a lápis
+ * de cera vermelho, como numa prova de contato. A marcação de borda é âmbar
+ * porque a gravação lateral de filme de verdade é âmbar — e é a mesma família
+ * do acento da marca, de propósito.
+ *
+ * Cores fixas, não tokens: filme é escuro nos dois temas, como no físico.
+ */
+const FOTOS_FILME = fotosDeDemonstracao("claro").slice(0, 3);
+const FOTOS_TELEFONE = fotosDeDemonstracao("creme").slice(0, 4);
+
+function TiraDeFilme() {
+  const furos = (lado: "left-2" | "right-2") => (
+    <div className={`absolute inset-y-3 ${lado} flex w-2 flex-col justify-between`} aria-hidden>
+      {Array.from({ length: 14 }, (_, i) => (
+        <span key={i} className="h-2 w-2 rounded-[2px] bg-[#f4f6fa]/70" />
+      ))}
+    </div>
+  );
+  /*
+   * Cada moldura carrega uma foto de demonstração do produto (tema noite) com
+   * um banho quente por cima — `mix-blend` de âmbar sobre a imagem fria lê
+   * como filme revelado, não como retângulo pintado. A textura interna vem da
+   * foto (o vinco, o ponto de luz); o calor vem do banho. Era um gradiente
+   * chapado antes, e chapado lia como caixa vazia.
+   */
+  const moldura = (i: number, filhos?: React.ReactNode) => (
+    <div className="relative mt-1 aspect-[3/2] overflow-hidden bg-[#12100c]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={FOTOS_FILME[i].url} alt="" className="h-full w-full object-cover" />
+      <div
+        className="absolute inset-0 bg-gradient-to-br from-[#d9a441]/85 via-[#8a5e2a]/85 to-[#3a2c16]/90"
+        style={{ mixBlendMode: "multiply" }}
+      />
+      {filhos}
+    </div>
+  );
+  return (
+    <div className="relative hidden justify-self-center lg:block" aria-hidden>
+      {/* o brilho da mesa de luz atrás da tira — âmbar bem baixo, só atmosfera */}
+      <div
+        className="absolute -inset-10 rounded-full bg-acento/10 blur-3xl"
+        aria-hidden
+      />
+      <div className="relative w-60 rotate-2 bg-[#0d0c0a] px-7 py-5 shadow-[0_44px_90px_-28px_rgba(0,0,0,0.85)] ring-1 ring-white/5">
+        {furos("left-2")}
+        {furos("right-2")}
+
+        <p className="font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
+          GA·400&nbsp;&nbsp;13
+        </p>
+        {moldura(0)}
+
+        <p className="mt-2 font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
+          GA·400&nbsp;&nbsp;14
+        </p>
+        {moldura(
+          1,
+          <>
+            <span className="absolute inset-0 grid place-items-center font-script text-2xl text-[#f2c877] drop-shadow-[0_1px_6px_rgba(0,0,0,0.8)]">
+              Ana &amp; Pedro
+            </span>
+            {/* o lápis de cera: elipse aberta, torta de propósito — mão, não máquina */}
+            <svg
+              viewBox="0 0 100 62"
+              className="absolute inset-0 h-full w-full text-[#e0705f]"
+              fill="none"
+            >
+              <ellipse
+                cx="50"
+                cy="31"
+                rx="45"
+                ry="25"
+                stroke="currentColor"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeDasharray="176 22"
+                transform="rotate(-5 50 31)"
+                opacity="0.9"
+              />
+            </svg>
+          </>,
+        )}
+
+        <p className="mt-2 font-mono text-[9px] tracking-[0.32em] text-[#d9a441]/80">
+          GA·400&nbsp;&nbsp;15
+        </p>
+        {moldura(2)}
+      </div>
+
+      {/* a anotação de quem escolheu */}
+      <p className="mt-5 -rotate-1 text-center font-script text-xl text-acento-alto">
+        essa vai pro álbum
+      </p>
+    </div>
+  );
+}
 
 /* O botão de ação: retângulo seco. A página inteira é feita de fio e papel;
  * o único brilho que ela se permite é o feixe do projetor no hero. */
@@ -218,26 +337,25 @@ export default function Home() {
         </nav>
       </header>
 
-      {/* ── ato 1: a promessa ─────────────────────────────────────────────
-          Só tipografia. O título em escala de display é a imagem do hero — numa
-          página para quem vive de olhar, a coragem tipográfica É o portfólio.
-          A descrição funcional fica ABAIXO do título (em cima seria o
-          "eyebrow" de toda landing gerada), e o âmbar aparece uma vez. */}
-      <section className="relative mx-auto max-w-6xl px-6 pb-20 pt-20 sm:pt-28 lg:pt-36">
+      {/* ── ato 1: a promessa ─────────────────────────────────────────── */}
+      <section className="relative mx-auto max-w-6xl px-6 pb-24 pt-16 sm:pt-24">
         <div className="feixe" aria-hidden />
 
-        <div className="relative">
-          <h1 className="max-w-[10ch] text-balance font-serif text-[17vw] font-semibold leading-[0.94] tracking-[-0.015em] sm:text-8xl lg:text-[9rem]">
-            Sua luz, <span className="text-acento-alto">entregue.</span>
-          </h1>
-
-          <div className="mt-12 grid gap-10 lg:mt-16 lg:grid-cols-[1fr_auto] lg:items-end">
-            <p className="max-w-[46ch] text-lg leading-relaxed text-texto-soft sm:text-xl">
-              Galerias de entrega para fotógrafos e filmakers. O dia passa, as fotos ficam —{" "}
-              {marca.nome} é o lugar onde elas chegam ao casal: com a sua marca, no seu endereço,
-              direto na galeria do celular deles.
+        <div className="relative grid items-center gap-16 lg:grid-cols-[7fr_5fr]">
+          <div>
+            <p className="text-[13px] tracking-wide text-texto-faint">
+              Galerias de entrega para fotógrafos e filmakers
             </p>
-            <div className="flex flex-wrap items-center gap-6 lg:pb-1">
+            <h1 className="mt-6 font-serif text-5xl font-bold leading-[1.04] tracking-tight sm:text-7xl">
+              Sua luz,
+              <br />
+              <span className="text-acento-alto">entregue.</span>
+            </h1>
+            <p className="mt-7 max-w-[44ch] text-lg leading-relaxed text-texto-soft">
+              O dia passa, as fotos ficam. {marca.nome} é o lugar onde elas chegam ao casal: com a
+              sua marca, no seu endereço, direto na galeria do celular deles.
+            </p>
+            <div className="mt-10 flex flex-wrap items-center gap-6">
               <Link href="/cadastrar" className={CTA}>
                 Começar grátis
               </Link>
@@ -248,29 +366,30 @@ export default function Home() {
                 Ver planos
               </Link>
             </div>
-          </div>
-        </div>
-      </section>
 
-      {/* A ficha técnica: uma RÉGUA de fio fino atravessando a página, como a
-          linha de especificação de um catálogo — não uma caixa de métricas.
-          Seis células, fio vertical entre elas, nada de moldura. */}
-      <section className="border-y border-linha">
-        <dl className="mx-auto grid max-w-6xl grid-cols-2 px-6 sm:grid-cols-3 lg:grid-cols-6 lg:divide-x lg:divide-linha">
-          {FICHA.map(([rotulo, valor]) => (
-            <div key={rotulo} className="py-5 lg:px-5 lg:first:pl-0 lg:last:pr-0">
-              <dt className="text-[11px] tracking-wide text-texto-faint">{rotulo}</dt>
-              <dd className="mt-1 text-sm text-texto">{valor}</dd>
-            </div>
-          ))}
-        </dl>
+            {/* A ficha técnica: o que é isto, em seis células de fio fino —
+                especificação de câmera, não lista de balinhas. `gap-px` sobre
+                fundo `linha` é o que desenha os fios. */}
+            <dl className="mt-12 grid max-w-xl grid-cols-2 gap-px border border-linha bg-linha sm:grid-cols-3">
+              {FICHA.map(([rotulo, valor]) => (
+                <div key={rotulo} className="bg-void px-4 py-3">
+                  <dt className="text-[11px] tracking-wide text-texto-faint">{rotulo}</dt>
+                  <dd className="mt-0.5 text-sm text-texto">{valor}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+
+          <TiraDeFilme />
+        </div>
       </section>
 
       {/* ── ato 2: o caminho — coluna fixa à esquerda, gestos à direita ── */}
       <section className="border-y border-linha bg-carbon/40">
         <div className="mx-auto grid max-w-6xl gap-12 px-6 py-24 lg:grid-cols-[2fr_3fr]">
           <div className="lg:sticky lg:top-24 lg:self-start">
-            <h2 className="font-serif text-5xl font-semibold tracking-tight sm:text-6xl">
+            <Marcador n="01" rotulo="Da pasta ao link" />
+            <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
               Três gestos.
               <br />
               Nenhum deles é &ldquo;exportar de novo&rdquo;.
@@ -303,7 +422,7 @@ export default function Home() {
             ].map((g, i) => (
               <Revelar key={g.n} atraso={i * 90}>
                 <li className="grid grid-cols-[3rem_1fr] border-t border-linha py-9 first:border-t-0">
-                  <span className="font-serif text-2xl font-semibold tabular-nums text-texto-faint">
+                  <span className="font-serif text-base font-semibold tabular-nums text-acento">
                     {g.n}.
                   </span>
                   <div>
@@ -322,7 +441,8 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-24">
           <div className="grid items-center gap-14 lg:grid-cols-[6fr_5fr]">
             <Revelar>
-              <h2 className="font-serif text-5xl font-semibold tracking-tight sm:text-6xl">
+              <Marcador n="02" rotulo="Do outro lado do link" claro />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
                 O casal abre no celular.
                 <br />E fica tudo bem.
               </h2>
@@ -358,11 +478,12 @@ export default function Home() {
             {/* O telefone, com a galeria que o PRODUTO renderiza: as fotos de
                 demonstração do tema creme, nas proporções reais de câmera, em
                 duas colunas como a grade da galeria de verdade. Papel é claro
-                nos dois temas — cor fixa, como no mundo físico. A favorita
-                marcada e o contador são o produto falando: escolha com trava. */}
+                nos dois temas — cor fixa, como a tira de filme do hero. Os
+                quadradinhos coloridos de antes liam como caixa; foto de
+                verdade (do gerador do produto) lê como entrega. */}
             <Revelar atraso={120} className="justify-self-center">
               <div
-                className="w-72 rounded-[2.2rem] border border-marfim-2 bg-white p-3 shadow-[0_30px_60px_-20px_rgba(42,35,24,0.25)]"
+                className="w-72 rounded-[2.2rem] border border-marfim-2 bg-white p-3 shadow-[0_36px_80px_-24px_rgba(42,35,24,0.35)]"
                 aria-hidden
               >
                 <div className="rounded-[1.6rem] bg-marfim px-4 pb-4 pt-5">
@@ -374,17 +495,17 @@ export default function Home() {
                     <div className="grid gap-2">
                       <div className="relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={FOTOS_DEMO[0].url} alt="" className="w-full rounded-sm" />
+                        <img src={FOTOS_TELEFONE[0].url} alt="" className="w-full rounded-sm" />
                         <span className="absolute right-1.5 top-1.5 text-xs text-erro">♥</span>
                       </div>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={FOTOS_DEMO[1].url} alt="" className="w-full rounded-sm" />
+                      <img src={FOTOS_TELEFONE[1].url} alt="" className="w-full rounded-sm" />
                     </div>
                     <div className="grid gap-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={FOTOS_DEMO[2].url} alt="" className="w-full rounded-sm" />
+                      <img src={FOTOS_TELEFONE[2].url} alt="" className="w-full rounded-sm" />
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={FOTOS_DEMO[3].url} alt="" className="w-full rounded-sm" />
+                      <img src={FOTOS_TELEFONE[3].url} alt="" className="w-full rounded-sm" />
                     </div>
                   </div>
                   <div className="mt-4 flex items-center justify-between text-[10px] font-medium text-tinta-suave">
@@ -411,7 +532,8 @@ export default function Home() {
       <section className="border-y border-linha bg-carbon/40">
         <div className="mx-auto max-w-6xl px-6 py-24">
           <Revelar>
-            <h2 className="max-w-[22ch] font-serif text-5xl font-semibold tracking-tight sm:text-6xl">
+            <Marcador n="03" rotulo="Da escolha ao álbum" />
+            <h2 className="mt-5 max-w-[26ch] font-serif text-4xl font-bold tracking-tight">
               O álbum se escolhe na galeria. A lista chega pronta no Lightroom.
             </h2>
           </Revelar>
@@ -448,7 +570,7 @@ export default function Home() {
               >
                 <div>
                   <h3 className="font-serif text-2xl font-semibold tracking-tight">
-                    <span className="mr-3 text-lg text-texto-faint">{p.n}.</span>
+                    <span className="mr-3 text-base text-acento">{p.n}.</span>
                     {p.titulo}
                   </h3>
                   <p className="mt-3 text-sm leading-relaxed text-texto-soft">{p.texto}</p>
@@ -462,7 +584,8 @@ export default function Home() {
       {/* ── ato 4: a ferramenta — índice de catálogo, linha a linha ────── */}
       <section className="mx-auto max-w-6xl px-6 py-24">
         <Revelar>
-          <h2 className="max-w-[20ch] font-serif text-5xl font-semibold tracking-tight sm:text-6xl">
+          <Marcador n="04" rotulo="Do seu lado do balcão" />
+          <h2 className="mt-5 max-w-[24ch] font-serif text-4xl font-bold tracking-tight">
             O estúdio continua seu. Só o trabalho pesado muda de dono.
           </h2>
         </Revelar>
@@ -611,7 +734,8 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-24">
           <Revelar>
             <div className="max-w-2xl">
-              <h2 className="font-serif text-5xl font-semibold tracking-tight sm:text-6xl">
+              <Marcador n="05" rotulo="Planos" />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
                 Um número só: quanto espaço você quer
               </h2>
               <p className="mt-4 text-texto-soft">
@@ -651,7 +775,8 @@ export default function Home() {
               `scripts/testar-comparativo.mjs` prende os três pontos. */}
           <Revelar>
             <div id="comparativo" className="mt-24 max-w-2xl scroll-mt-8">
-              <h2 className="font-serif text-5xl font-semibold tracking-tight sm:text-6xl">
+              <Marcador rotulo="Antes de escolher" />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
                 Três perguntas para fazer a qualquer galeria — a nossa inclusive
               </h2>
               <p className="mt-4 text-texto-soft">
@@ -668,7 +793,7 @@ export default function Home() {
                   <div className="flex gap-4">
                     <span
                       aria-hidden
-                      className="mt-1 font-serif text-xl font-semibold tabular-nums text-texto-faint"
+                      className="mt-1.5 font-serif text-base font-semibold tabular-nums text-acento"
                     >
                       {i + 1}.
                     </span>
@@ -699,7 +824,8 @@ export default function Home() {
         <div className="mx-auto max-w-3xl px-6 py-24">
           <Revelar>
             <div className="max-w-2xl">
-              <h2 className="font-serif text-5xl font-semibold tracking-tight sm:text-6xl">
+              <Marcador rotulo="Antes de decidir" />
+              <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight">
                 Perguntas frequentes
               </h2>
             </div>
@@ -741,7 +867,7 @@ export default function Home() {
       <section className="border-t border-linha">
         <div className="mx-auto max-w-6xl px-6 py-24">
           <Revelar>
-            <h2 className="max-w-[16ch] text-balance font-serif text-6xl font-semibold leading-[1.02] tracking-tight sm:text-7xl">
+            <h2 className="max-w-[22ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
               A próxima entrega já podia ser{" "}
               <span className="text-acento-alto">assim</span>.
             </h2>
