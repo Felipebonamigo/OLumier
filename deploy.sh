@@ -40,6 +40,26 @@ fi
 echo "→ conferindo o origin"
 bash scripts/portao-origin.sh master origin
 
+# O `node_modules` precisa ser DIRETORIO DE VERDADE, e a checagem e aqui em cima
+# porque falhar depois custa o portao inteiro.
+#
+# Publicar de um worktree pede node_modules, e a tentacao e economizar com uma
+# juncao (`mklink /J`) apontando para o da arvore principal: instantanea, sem
+# copia, e funciona para `tsc` e para `npm test`. Nao funciona para o `next dev`
+# que o portao levanta -- o turbopack recusa com "Symlink [project]/node_modules
+# is invalid, it points out of the filesystem root" e o servidor nao sobe.
+#
+# Descoberto em 27/08/2026, na primeira publicacao com o servidor do portao.
+# O `npm ci --prefer-offline` no worktree leva 26 segundos com o cache local, o
+# que torna a juncao uma economia que nao vale o risco.
+if [ -L node_modules ]; then
+	echo "✗ node_modules e um link/juncao — o servidor do portao nao sobe assim."
+	echo "  No worktree, troque por instalacao de verdade:"
+	echo "    cmd //c rmdir \"\$(cygpath -w \"\$PWD/node_modules\")\""
+	echo "    npm ci --prefer-offline --no-audit --no-fund"
+	exit 1
+fi
+
 SHA=$(git rev-parse --short HEAD)
 CARIMBO="$(date +%Y%m%d-%H%M%S)-$SHA"
 
