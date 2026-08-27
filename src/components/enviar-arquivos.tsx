@@ -91,7 +91,11 @@ export function EnviarArquivos({
   const [rodando, setRodando] = useState(false);
   const [destino, setDestino] = useState("");
   const [inicio, setInicio] = useState<number | null>(null);
-  const [agora, setAgora] = useState(Date.now());
+  /* Começa em 0, não em Date.now(): ler o relógio durante a renderização é
+   * impuro (o servidor e o cliente leem instantes diferentes) e o valor era
+   * lixo de qualquer forma — só serve depois que a fila começa, e é lá que ele
+   * é acertado, junto com `inicio`. */
+  const [agora, setAgora] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const pastaRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
@@ -158,6 +162,7 @@ export function EnviarArquivos({
       setFila((f) => [...f, ...novos]);
       setRodando(true);
       setInicio((atual) => atual ?? Date.now());
+      setAgora(Date.now()); // sem isto, o primeiro segundo mostraria tempo negativo
 
       const soltar = await manterAcordado();
 

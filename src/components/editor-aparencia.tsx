@@ -18,6 +18,114 @@ import { salvarAparenciaAction } from "@/app/painel/actions";
  * vê aqui é literalmente o que o cliente vai receber, e nenhuma variante pode
  * "parecer certa no editor e sair errada no link".
  */
+/**
+ * As peças do editor moram FORA do componente de propósito.
+ *
+ * Definidas dentro dele, eram recriadas a cada renderização: o React via um tipo
+ * de componente NOVO toda vez, desmontava a árvore e montava outra. Perde foco,
+ * perde estado interno e refaz trabalho à toa — é o que a regra
+ * `react-hooks/static-components` acusava, e ela estava certa.
+ *
+ * O preço é passar `ap` e `mudar` por prop, o que de quebra deixa a dependência
+ * visível em vez de escondida no fechamento.
+ */
+interface PecaProps {
+  ap: Aparencia;
+  mudar: (novo: Aparencia) => void;
+}
+
+/**
+ * O seletor de fonte.
+ *
+ * Não usa o `Eixo` genérico por dois motivos, e os dois são sobre a decisão
+ * que o fotógrafo está tomando:
+ *
+ *   1. Cada nome é DESENHADO NA PRÓPRIA FONTE. "Playfair" escrito em
+ *      Montserrat não ajuda ninguém a escolher Playfair — a amostra é a
+ *      informação, o nome é só a etiqueta.
+ *
+ *   2. Agrupado por família. Nove pastilhas soltas viram uma parede; com
+ *      Serifadas, Sem serifa e Manuscritas separadas, quem já sabe o clima
+ *      que quer olha só um terço da lista.
+ *
+ * O texto de amostra é o nome da fonte e não "Aa": num alfabeto de duas
+ * letras, manuscrita e serifada se parecem demais.
+ */
+function SeletorDeFonte({ ap, mudar }: PecaProps) {
+  const familias = [...new Set(OPCOES.tipografia.map((o) => o.familia))];
+  return (
+    <div className="sm:col-span-2">
+      <span className="block text-xs font-medium text-texto-soft">Fonte do título</span>
+      <div className="mt-2 flex flex-col gap-3">
+        {familias.map((familia) => (
+          <div key={familia}>
+            <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-texto-faint">
+              {familia}
+            </span>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {OPCOES.tipografia
+                .filter((o) => o.familia === familia)
+                .map((op) => {
+                  const ativo = ap.tipografia === op.id;
+                  return (
+                    <button
+                      key={op.id}
+                      type="button"
+                      title={op.desc}
+                      aria-pressed={ativo}
+                      onClick={() => mudar({ ...ap, tipografia: op.id })}
+                      style={{ fontFamily: FONTES_TITULO[op.id] }}
+                      className={`rounded-lg border px-3.5 py-2 text-base leading-none transition ${
+                        ativo
+                          ? "border-acento bg-acento/10 text-acento-alto"
+                          : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+                      }`}
+                    >
+                      {op.nome}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Eixo<K extends keyof Aparencia>({
+eixo,
+titulo,
+ap,
+mudar,
+}: PecaProps & { eixo: K; titulo: string }) {
+return (
+  <div>
+    <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {OPCOES[eixo].map((op) => {
+        const ativo = ap[eixo] === op.id;
+        return (
+          <button
+            key={op.id}
+            type="button"
+            title={op.desc}
+            onClick={() => mudar({ ...ap, [eixo]: op.id } as Aparencia)}
+            className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+              ativo
+                ? "border-acento bg-acento/10 text-acento-alto"
+                : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+            }`}
+          >
+            {op.nome}
+          </button>
+        );
+      })}
+    </div>
+  </div>
+);
+}
+
 export function EditorAparencia({
   galeriaId,
   caminhoPublico,
@@ -51,97 +159,6 @@ export function EditorAparencia({
       router.refresh();
     });
   }
-
-  /**
-   * O seletor de fonte.
-   *
-   * Não usa o `Eixo` genérico por dois motivos, e os dois são sobre a decisão
-   * que o fotógrafo está tomando:
-   *
-   *   1. Cada nome é DESENHADO NA PRÓPRIA FONTE. "Playfair" escrito em
-   *      Montserrat não ajuda ninguém a escolher Playfair — a amostra é a
-   *      informação, o nome é só a etiqueta.
-   *
-   *   2. Agrupado por família. Nove pastilhas soltas viram uma parede; com
-   *      Serifadas, Sem serifa e Manuscritas separadas, quem já sabe o clima
-   *      que quer olha só um terço da lista.
-   *
-   * O texto de amostra é o nome da fonte e não "Aa": num alfabeto de duas
-   * letras, manuscrita e serifada se parecem demais.
-   */
-  const SeletorDeFonte = () => {
-    const familias = [...new Set(OPCOES.tipografia.map((o) => o.familia))];
-    return (
-      <div className="sm:col-span-2">
-        <span className="block text-xs font-medium text-texto-soft">Fonte do título</span>
-        <div className="mt-2 flex flex-col gap-3">
-          {familias.map((familia) => (
-            <div key={familia}>
-              <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-texto-faint">
-                {familia}
-              </span>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {OPCOES.tipografia
-                  .filter((o) => o.familia === familia)
-                  .map((op) => {
-                    const ativo = ap.tipografia === op.id;
-                    return (
-                      <button
-                        key={op.id}
-                        type="button"
-                        title={op.desc}
-                        aria-pressed={ativo}
-                        onClick={() => mudar({ ...ap, tipografia: op.id })}
-                        style={{ fontFamily: FONTES_TITULO[op.id] }}
-                        className={`rounded-lg border px-3.5 py-2 text-base leading-none transition ${
-                          ativo
-                            ? "border-acento bg-acento/10 text-acento-alto"
-                            : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
-                        }`}
-                      >
-                        {op.nome}
-                      </button>
-                    );
-                  })}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  const Eixo = <K extends keyof Aparencia>({
-    eixo,
-    titulo,
-  }: {
-    eixo: K;
-    titulo: string;
-  }) => (
-    <div>
-      <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {OPCOES[eixo].map((op) => {
-          const ativo = ap[eixo] === op.id;
-          return (
-            <button
-              key={op.id}
-              type="button"
-              title={op.desc}
-              onClick={() => mudar({ ...ap, [eixo]: op.id } as Aparencia)}
-              className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-                ativo
-                  ? "border-acento bg-acento/10 text-acento-alto"
-                  : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
-              }`}
-            >
-              {op.nome}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   return (
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
@@ -195,11 +212,11 @@ export function EditorAparencia({
           Ajustar em detalhe {presetAtivo ? "" : "· personalizado"}
         </summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Eixo eixo="capa" titulo="Capa" />
-          <Eixo eixo="tema" titulo="Cores" />
-          <SeletorDeFonte />
-          <Eixo eixo="grade" titulo="Grade das fotos" />
-          <Eixo eixo="densidade" titulo="Espaçamento" />
+          <Eixo eixo="capa" titulo="Capa" ap={ap} mudar={mudar} />
+          <Eixo eixo="tema" titulo="Cores" ap={ap} mudar={mudar} />
+          <SeletorDeFonte ap={ap} mudar={mudar} />
+          <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
+          <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
         </div>
       </details>
 

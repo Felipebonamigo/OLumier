@@ -46,6 +46,11 @@ export default async function ContaPage() {
     tenant.status === "trial" && tenant.trial_ate
       ? Math.max(
           0,
+  /* Componente de SERVIDOR: renderiza uma vez por requisição, e "quantos dias
+   * faltam" só existe em relação ao instante do pedido. A regra de pureza mira
+   * o cliente, onde uma segunda renderização daria outro número — aqui não há
+   * segunda. Guardar a data em estado seria inventar estado para calar o lint. */
+  // eslint-disable-next-line react-hooks/purity
           Math.ceil((new Date(tenant.trial_ate).getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
         )
       : null;

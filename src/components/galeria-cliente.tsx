@@ -9,7 +9,7 @@ import {
   deveOferecerSalvar,
   salvarNoCelular,
 } from "@/lib/salvar-client";
-import { usarSwipe } from "@/lib/usar-swipe";
+import { useSwipe } from "@/lib/usar-swipe";
 
 export interface ItemGaleria {
   id: string;
@@ -77,6 +77,11 @@ export function GaleriaCliente({
      montar, a detecção de recurso (canShare) corrige o palpite. Sem o chute, o
      celular mostraria "Baixar" por um instante antes de virar "Salvar". */
   const [modoSalvar, setModoSalvar] = useState(celularProvavel);
+  /* eslint-disable-next-line react-hooks/set-state-in-effect --
+     A cascata é o objetivo, não efeito colateral: a detecção depende de API do
+     navegador que não existe no servidor. Sem o palpite do user-agent na
+     primeira pintura, o botão sairia errado por um instante; sem a correção ao
+     montar, o palpite errado ficaria. Uma renderização extra, uma vez, ao abrir. */
   useEffect(() => setModoSalvar(deveOferecerSalvar()), []);
 
   const [favoritas, setFavoritas] = useState<Set<string>>(() => new Set(favoritasIniciais));
@@ -340,7 +345,7 @@ export function GaleriaCliente({
   }
 
   // Arrastar para o lado troca de foto — o gesto que todo app de fotos tem.
-  const swipe = usarSwipe(proximo, anterior);
+  const swipe = useSwipe(proximo, anterior);
 
   const item = aberto === null ? null : itens[aberto];
 

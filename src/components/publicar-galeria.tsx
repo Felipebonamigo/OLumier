@@ -41,7 +41,11 @@ export function PublicarGaleria({
    */
   const [origem, setOrigem] = useState("");
   const [endereco, setEndereco] = useState("");
+  /* Mesmo caso do modo salvar em `galeria-cliente`, e o comentário acima explica
+     por quê: o endereço só existe no navegador, e a alternativa seria o servidor
+     adivinhar o domínio — que é exatamente o que quebrava a hidratação antes. */
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     setOrigem(window.location.origin);
     setEndereco(window.location.hostname);
   }, []);

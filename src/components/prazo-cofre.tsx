@@ -12,6 +12,26 @@ import { definirPrazoAction, arquivarAgoraAction, reativarAction } from "@/app/p
  * palavra "arquivar" assusta, e a dúvida ("vou perder as fotos?") aparece
  * exatamente na hora de escolher o prazo.
  */
+/**
+ * O recado de erro mora FORA do componente.
+ *
+ * Definido dentro, era um tipo de componente novo a cada renderização: o React
+ * desmontava e remontava o `<p role="alert">` toda vez, e leitor de tela relê
+ * um alerta que "acabou de aparecer" mesmo quando o texto é o mesmo. É o que a
+ * regra `react-hooks/static-components` acusava.
+ */
+function Aviso({ erro }: { erro: string | null }) {
+  if (!erro) return null;
+  return (
+    <p
+      role="alert"
+      className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta"
+    >
+      {erro}
+    </p>
+  );
+}
+
 export function PrazoCofre({
   galeriaId,
   arquivada,
@@ -50,13 +70,6 @@ export function PrazoCofre({
       router.refresh();
     });
 
-  const Aviso = () =>
-    erro ? (
-      <p role="alert" className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta">
-        {erro}
-      </p>
-    ) : null;
-
   if (arquivada) {
     return (
       <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
@@ -79,7 +92,7 @@ export function PrazoCofre({
         <p className="mt-2 text-[11px] text-texto-faint">
           Volta com mais 12 meses no ar, contados de hoje.
         </p>
-        <Aviso />
+        <Aviso erro={erro} />
       </section>
     );
   }
@@ -138,7 +151,7 @@ export function PrazoCofre({
       >
         Guardar no cofre agora
       </button>
-      <Aviso />
+      <Aviso erro={erro} />
     </section>
   );
 }

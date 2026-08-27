@@ -61,6 +61,11 @@ export default async function AdminPage() {
     .reduce((s, e) => s + (planoPorId(e.plano_id)?.precoCentavos ?? 0), 0);
 
   const dias = (d: Date | null) =>
+  /* Componente de SERVIDOR: renderiza uma vez por requisição, e "quantos dias
+   * faltam" só existe em relação ao instante do pedido. A regra de pureza mira
+   * o cliente, onde uma segunda renderização daria outro número — aqui não há
+   * segunda. Guardar a data em estado seria inventar estado para calar o lint. */
+  // eslint-disable-next-line react-hooks/purity
     d ? Math.ceil((new Date(d).getTime() - Date.now()) / 86_400_000) : null;
 
   return (

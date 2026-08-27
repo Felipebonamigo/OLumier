@@ -8,8 +8,13 @@ import { useRef, type TouchEvent } from "react";
  * Sem isso, o convidado tenta arrastar (o gesto que ele usa em qualquer app de
  * fotos), nada acontece, e ele conclui que a galeria travou. As setinhas na tela
  * continuam existindo — o swipe é adicional, não substituto.
+ *
+ * O nome começa com `use` sozinho no meio de um código em português porque o
+ * prefixo é CONTRATO do React, não estilo: é por ele que o lint sabe que aqui
+ * dentro pode haver hook e confere as regras. Chamado `usarSwipe`, o
+ * `react-hooks/rules-of-hooks` desligava a conferência do arquivo inteiro.
  */
-export function usarSwipe(aoEsquerda: () => void, aoDireita: () => void) {
+export function useSwipe(aoEsquerda: () => void, aoDireita: () => void) {
   const inicio = useRef<{ x: number; y: number } | null>(null);
 
   return {

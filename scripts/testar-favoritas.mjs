@@ -13,7 +13,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
-import { galeriaDaRodada, limparRodada, marcaDaRodada } from "./fixture-de-teste.mjs";
+import { galeriaDaRodada, marcaDaRodada } from "./fixture-de-teste.mjs";
 import { alternar, resumoDaGaleria } from "../src/lib/favoritas.ts";
 
 await exigirBancoDeTeste();
@@ -41,7 +41,6 @@ const igual = (a, b, o) => {
  * favoritas de quem estivesse rodando junto — ver fixture-de-teste.mjs. */
 const bancada = await galeriaDaRodada(db, { nome: "favoritas", medias: 2 });
 const galeriaId = bancada.id;
-const tenantId = bancada.estudio.id;
 
 const foto = bancada.midias[0].id;
 const outraFoto = bancada.midias[1]?.id ?? bancada.midias[0].id;

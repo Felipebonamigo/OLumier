@@ -41,6 +41,11 @@ export default function Erro({
         >
           Tentar de novo
         </button>
+        {/* <a> e não <Link> DE PROPÓSITO: esta tela existe porque alguma coisa
+            quebrou no cliente. Navegação do Next reaproveita o mesmo runtime de
+            React que acabou de estourar, e a pessoa cairia na mesma tela de erro.
+            O <a> força recarga inteira, que é a única saída confiável daqui. */}
+        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
         <a href="/" className="text-sm text-texto-soft underline underline-offset-4 hover:text-texto">
           Ir para o início
         </a>

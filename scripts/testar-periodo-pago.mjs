@@ -18,7 +18,6 @@
  * A segunda metade é a que some de vista: é fácil escrever "cancelamento não
  * apaga o período" e deixar o estorno cair no mesmo caminho por descuido.
  */
-import pg from "pg";
 import { readFileSync } from "node:fs";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { situacaoDoTenant, fimDoPeriodoPago, efeitoDoEvento } from "../src/lib/assinatura.ts";
@@ -170,4 +169,12 @@ await etapa("o UPDATE do cancelamento não escreve em pago_ate", () => {
   return "o período sobrevive ao cancelamento";
 });
 
-
+/*
+ * O placar. Sem estas duas linhas o arquivo terminava depois da última etapa e
+ * saía com 0 SEMPRE — `testar-tudo.mjs` julga pelo código de saída, então esta
+ * suíte entrava verde na bateria mesmo com etapa vermelha. Ficou assim desde que
+ * foi escrita; o aviso de "`falhou` atribuído e nunca lido" era o lint dizendo
+ * exatamente isso, e ninguém tinha lido o aviso.
+ */
+console.log(falhou ? "\n✗ o período pago tem problema" : "\n✓ período pago ok");
+process.exitCode = falhou ? 1 : 0;
