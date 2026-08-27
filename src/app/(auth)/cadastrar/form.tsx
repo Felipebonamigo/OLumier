@@ -4,13 +4,14 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { cadastrarAction, type EstadoForm } from "../actions";
 import { Campo, Erro, BotaoEnviar } from "@/components/form-ui";
+import { CampoSenha } from "@/components/campo-senha";
 
 function Botao() {
   const { pending } = useFormStatus();
   return <BotaoEnviar carregando={pending}>Criar conta</BotaoEnviar>;
 }
 
-export function FormCadastrar() {
+export function FormCadastrar({ minimo }: { minimo: number }) {
   const [estado, action] = useActionState<EstadoForm, FormData>(cadastrarAction, {});
 
   return (
@@ -31,14 +32,25 @@ export function FormCadastrar() {
         autoComplete="email"
         placeholder="voce@estudio.com.br"
       />
-      <Campo
+      <CampoSenha
         label="Senha"
         name="senha"
-        type="password"
         required
         autoComplete="new-password"
-        minLength={8}
-        placeholder="mínimo 8 caracteres"
+        minLength={minimo}
+        placeholder={`mínimo ${minimo} caracteres`}
+      />
+      {/* A confirmação é conferida de novo no servidor (`conferirSenhaNova`).
+          Este campo existe para a pessoa descobrir o erro de digitação AGORA, e
+          não na hora de entrar — quando ela ainda não sabe que existe "esqueci
+          minha senha" e conclui que o sistema quebrou. */}
+      <CampoSenha
+        label="Repita a senha"
+        name="senha_confirmacao"
+        required
+        autoComplete="new-password"
+        minLength={minimo}
+        placeholder="a mesma de cima"
       />
 
       {/* Sem escolha de plano aqui, de propósito: ver a tabela de preços antes

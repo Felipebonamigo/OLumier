@@ -6,6 +6,7 @@ import { autenticar, buscarTenantPorEmail, criarTenant, emailJaUsado } from "@/l
 import { planoPorId, PLANO_INICIAL } from "@/config/planos";
 import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 import { emailConfigurado } from "@/lib/email";
+import { conferirSenhaNova } from "@/lib/senha";
 import { marca } from "@/config/marca";
 import {
   MINIMO_SENHA,
@@ -15,6 +16,16 @@ import {
   enviarEmailDeRecuperacao,
 } from "@/lib/recuperacao";
 import { headers } from "next/headers";
+
+/**
+ * O recado de cada recusa de senha. Fica junto porque as três telas que definem
+ * senha dizem a MESMA coisa — cadastro, recuperação e troca —, e três frases
+ * escritas em três lugares viram três frases diferentes na primeira revisão.
+ */
+const RECADO_SENHA: Record<"curta" | "diferentes", string> = {
+  curta: `A senha precisa de pelo menos ${MINIMO_SENHA} caracteres.`,
+  diferentes: "As duas senhas não são iguais. Confira a digitação.",
+};
 
 export interface EstadoForm {
   erro?: string;
@@ -58,6 +69,7 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
   const nomeEstudio = String(form.get("nome_estudio") ?? "").trim();
   const email = String(form.get("email") ?? "").trim();
   const senha = String(form.get("senha") ?? "");
+  const senhaConfirmacao = String(form.get("senha_confirmacao") ?? "");
   /*
    * O formulário não manda mais plano — a conta nasce no plano inicial e a
    * pessoa escolhe na Conta. O campo continua sendo aceito e validado porque
@@ -68,7 +80,11 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
 
   if (!nomeEstudio) return { erro: "Diga o nome do seu estúdio." };
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return { erro: "E-mail inválido." };
-  if (senha.length < 8) return { erro: "A senha precisa de pelo menos 8 caracteres." };
+  /* A confirmação é conferida AQUI, não só no navegador. O campo a mais na
+   * tela evita o erro de digitação; esta linha evita o formulário montado à
+   * mão — e é a fronteira de confiança, que não recebe atalho. */
+  const problemaSenha = conferirSenhaNova(senha, senhaConfirmacao);
+  if (problemaSenha) return { erro: RECADO_SENHA[problemaSenha] };
   if (!planoPorId(planoId)) return { erro: "Plano inválido." };
   if (await emailJaUsado(email)) return { erro: "Já existe uma conta com esse e-mail." };
 
@@ -172,10 +188,8 @@ export async function definirSenhaNovaAction(
   const senha = String(form.get("senha") ?? "");
   const repetida = String(form.get("senha_repetida") ?? "");
 
-  if (senha.length < MINIMO_SENHA) {
-    return { erro: `A senha precisa de pelo menos ${MINIMO_SENHA} caracteres.` };
-  }
-  if (senha !== repetida) return { erro: "As duas senhas não são iguais." };
+  const problema = conferirSenhaNova(senha, repetida);
+  if (problema) return { erro: RECADO_SENHA[problema] };
 
   const conferido = await conferirToken(token);
   if (!conferido.ok) {

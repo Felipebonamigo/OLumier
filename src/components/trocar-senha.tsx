@@ -3,7 +3,8 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { trocarSenhaAction, type EstadoSenha } from "@/app/painel/actions";
-import { Campo, Erro, BotaoEnviar } from "@/components/form-ui";
+import { Erro, BotaoEnviar } from "@/components/form-ui";
+import { CampoSenha } from "@/components/campo-senha";
 
 function Botao() {
   const { pending } = useFormStatus();
@@ -60,27 +61,27 @@ export function TrocarSenha({ minimo }: { minimo: number }) {
         </p>
       ) : (
         <form action={action} className="mt-4 flex flex-col gap-4">
-          <Campo
+          <CampoSenha
             label="Senha atual"
             name="senha_atual"
-            type="password"
+            
             autoComplete="current-password"
             required
             dica="Pedimos mesmo com você já logado — é o que separa você de quem pegou seu computador aberto."
           />
-          <Campo
+          <CampoSenha
             label="Senha nova"
             name="senha_nova"
-            type="password"
+            
             autoComplete="new-password"
             required
             minLength={minimo}
             dica={`Pelo menos ${minimo} caracteres.`}
           />
-          <Campo
+          <CampoSenha
             label="Repita a senha nova"
             name="senha_repetida"
-            type="password"
+            
             autoComplete="new-password"
             required
             minLength={minimo}

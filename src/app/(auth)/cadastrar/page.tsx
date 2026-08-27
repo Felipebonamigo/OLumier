@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MINIMO_SENHA } from "@/lib/senha";
 import Link from "next/link";
 import { MarcaLockup } from "@/components/marca-tile";
 import { marca } from "@/config/marca";
@@ -27,7 +28,7 @@ export default function CadastrarPage() {
         </p>
       )}
 
-      <FormCadastrar />
+      <FormCadastrar minimo={MINIMO_SENHA} />
 
       <p className="mt-8 text-sm text-texto-soft">
         Já tem conta?{" "}

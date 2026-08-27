@@ -13,7 +13,33 @@ import { conferirSenha, gerarHashSenha } from "./auth";
 /** Mínimo da senha. Vale para cadastro, recuperação e troca — um número só. */
 export const MINIMO_SENHA = 8;
 
-export type FalhaTroca = "curta" | "diferentes" | "igual-a-atual" | "atual-errada" | "sem-conta";
+export type FalhaSenhaNova = "curta" | "diferentes";
+export type FalhaTroca = FalhaSenhaNova | "igual-a-atual" | "atual-errada" | "sem-conta";
+
+/**
+ * A senha nova serve? Vale para as TRÊS telas que definem senha: cadastro,
+ * recuperação e troca.
+ *
+ * Existia só aqui dentro, embutida em `trocarSenha`. O cadastro tinha um `8`
+ * cravado à mão e nenhuma confirmação; a recuperação tinha o mínimo e nenhuma
+ * confirmação. Ou seja: digitar errado no cadastro custava a conta recém criada,
+ * e a pessoa descobria na hora de entrar — quando ainda não sabe que existe
+ * "esqueci minha senha", acabou de conhecer o produto, e conclui que quebrou.
+ *
+ * A ordem das conferências é regra, não detalhe: o tamanho vem antes da
+ * diferença. Duas senhas curtas e diferentes têm dois problemas, e dizer "não
+ * conferem" primeiro faria a pessoa corrigir a digitação para tomar outro erro
+ * logo em seguida.
+ *
+ * Nada é aparado. Espaço é caractere válido de senha, e aparar mudaria a senha
+ * que a pessoa escolheu — se ela pôs espaço num campo e não no outro, são
+ * senhas diferentes de verdade, e é melhor descobrir agora que amanhã.
+ */
+export function conferirSenhaNova(nova: string, repetida: string): FalhaSenhaNova | null {
+  if (nova.length < MINIMO_SENHA) return "curta";
+  if (nova !== repetida) return "diferentes";
+  return null;
+}
 
 /**
  * Troca a senha conferindo a atual.
@@ -28,8 +54,8 @@ export async function trocarSenha(
   nova: string,
   repetida: string,
 ): Promise<{ ok: true } | { ok: false; motivo: FalhaTroca }> {
-  if (nova.length < MINIMO_SENHA) return { ok: false, motivo: "curta" };
-  if (nova !== repetida) return { ok: false, motivo: "diferentes" };
+  const problema = conferirSenhaNova(nova, repetida);
+  if (problema) return { ok: false, motivo: problema };
   if (nova === atual) return { ok: false, motivo: "igual-a-atual" };
 
   const t = await consultarUm<{ senha_hash: string }>(

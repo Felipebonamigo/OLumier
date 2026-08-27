@@ -3,7 +3,8 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { definirSenhaNovaAction, type EstadoNovaSenha } from "../../actions";
-import { Campo, Erro, BotaoEnviar } from "@/components/form-ui";
+import { Erro, BotaoEnviar } from "@/components/form-ui";
+import { CampoSenha } from "@/components/campo-senha";
 
 function Botao() {
   const { pending } = useFormStatus();
@@ -19,20 +20,20 @@ export function FormNovaSenha({ token, minimo }: { token: string; minimo: number
           histórico do navegador nem em log de servidor com query string. */}
       <input type="hidden" name="token" value={token} />
 
-      <Campo
+      <CampoSenha
         label="Senha nova"
         name="senha"
-        type="password"
+        
         autoComplete="new-password"
         required
         minLength={minimo}
         placeholder="••••••••"
         dica={`Pelo menos ${minimo} caracteres.`}
       />
-      <Campo
+      <CampoSenha
         label="Repita a senha"
         name="senha_repetida"
-        type="password"
+        
         autoComplete="new-password"
         required
         minLength={minimo}
