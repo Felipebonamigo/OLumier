@@ -260,7 +260,7 @@ export default function Home() {
           Fixo foi tentado e descartado: ao rolar, o vidro escuro virava uma
           barra opaca tapando a seção clara. O overlay do topo do hero já dá
           o contraste que os links precisam. */}
-      <header className="absolute inset-x-0 top-0 z-40">
+      <header className="sobre-foto absolute inset-x-0 top-0 z-40">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <span className="flex items-center gap-3">
             <MarcaTile tamanho={34} />
@@ -287,7 +287,7 @@ export default function Home() {
           do âmbar da marca, então a página abre com "sua luz" duas vezes — no
           título e na imagem. O overlay escurece de baixo para cima para o
           texto assentar sem roubar a foto. */}
-      <section className="relative isolate flex min-h-[100svh] items-end">
+      <section className="sobre-foto relative isolate flex min-h-[100svh] items-end">
         <img
           src="/home/hero-casamento.jpg"
           alt="Casal em contraluz dourada segurando o buquê"
@@ -689,7 +689,7 @@ export default function Home() {
       {/* ── interlúdio cinematográfico: a foto respira entre ferramenta e
           preço. `bg-fixed` fica de fora de propósito — quebra no iOS; o
           parallax aqui é só a foto maior que a janela, presa pelo overflow. */}
-      <section className="relative isolate overflow-hidden">
+      <section className="sobre-foto relative isolate overflow-hidden">
         <img
           src="/home/festa-mesa.jpg"
           alt=""
@@ -830,7 +830,7 @@ export default function Home() {
       </section>
 
       {/* ── fecho: a última foto e o convite ───────────────────────────── */}
-      <section className="relative isolate overflow-hidden border-t border-linha">
+      <section className="sobre-foto relative isolate overflow-hidden border-t border-linha">
         <img
           src="/home/cerimonia-arco.jpg"
           alt=""

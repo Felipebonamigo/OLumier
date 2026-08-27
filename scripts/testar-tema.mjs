@@ -229,5 +229,118 @@ try {
   console.log(`  ✗ não consegui conferir — ${e.message}`);
 }
 
+/*
+ * ── SOBRE FOTOGRAFIA, O TEMA NÃO VALE ────────────────────────────────────
+ *
+ * A home apoia texto direto em cima de foto de casamento em três seções, mais
+ * o cabeçalho que flutua sobre o hero. Foto não é superfície do tema: ela tem a
+ * luz que tem, e no tema claro o texto secundário (`--texto-soft`, um cinza
+ * médio) aparecia lavado sobre o contraluz dourado do hero — foi assim que o
+ * defeito chegou, por print do dono em 27/08/2026.
+ *
+ * A correção é fixar os tokens dentro de `.sobre-foto`: ali a página é sempre
+ * escura, nos dois temas, porque o contraste vem do véu sobre a foto e não da
+ * preferência de quem abriu. O piso de contraste medido aqui é o que impede a
+ * regressão — sem ele, a próxima mexida na paleta lava o texto de novo e só um
+ * print acusaria.
+ */
+console.log("\nsobre fotografia");
+
+const FIXOS = (() => {
+  const m = /\.sobre-foto\s*\{([^}]*)\}/s.exec(CSS);
+  if (!m) return null;
+  const tokens = new Map();
+  for (const [, token, valor] of m[1].matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+    tokens.set(token, valor.trim());
+  }
+  return tokens;
+})();
+
+etapa("existe uma classe `.sobre-foto`", () => {
+  if (!FIXOS) throw new Error("não achei `.sobre-foto` em globals.css");
+  return `${FIXOS.size} tokens fixados`;
+});
+
+for (const token of ["--texto", "--texto-soft", "--texto-faint", "--void", "--acento"]) {
+  etapa(`${token} é fixo dentro de .sobre-foto`, () => {
+    const v = FIXOS?.get(token);
+    if (!v) throw new Error("não é redefinido — segue o tema, e lava no claro");
+    if (v.includes("light-dark")) throw new Error(`ainda troca com o tema: ${v}`);
+    if (!normalizarCor(v)) throw new Error(`não é hex: ${v}`);
+    return v;
+  });
+}
+
+for (const [frente, piso, descricao] of [
+  ["--texto", 4.5, "título sobre a foto"],
+  ["--texto-soft", 4.5, "linha de apoio sobre a foto"],
+  ["--texto-faint", 3, "rótulo pequeno sobre a foto"],
+  ["--acento", 4.5, "âmbar sobre a foto"],
+]) {
+  etapa(`${descricao} (${frente})`, () => {
+    const a = FIXOS?.get(frente);
+    const b = FIXOS?.get("--void");
+    if (!a || !b) throw new Error("token ausente em .sobre-foto");
+    const r = contraste(a, b);
+    if (r < piso) throw new Error(`${r.toFixed(2)}:1, piso é ${piso}:1`);
+    return `${r.toFixed(1)}:1`;
+  });
+}
+
+/*
+ * A classe só serve se estiver PLANTADA. Toda seção com foto de fundo — o
+ * marcador é a imagem em `-z-20`, que é como as três são escritas — precisa
+ * carregá-la, e o cabeçalho junto, porque ele flutua sobre o hero.
+ */
+etapa("toda seção com foto de fundo carrega .sobre-foto", () => {
+  const HOME = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8");
+  const secoes = HOME.split(/(?=<section)/).filter((t) => t.startsWith("<section"));
+  const comFoto = secoes.filter((t) => t.includes("-z-20"));
+  if (comFoto.length === 0) throw new Error("nenhuma seção com foto de fundo — o marcador mudou?");
+  const nuas = comFoto.filter((t) => !/<section[^>]*sobre-foto/.test(t));
+  if (nuas.length) {
+    throw new Error(
+      `${nuas.length} de ${comFoto.length} seção(ões) com foto sem a classe — ` +
+        `no tema claro o texto delas fica lavado`,
+    );
+  }
+  return `${comFoto.length} seções`;
+});
+
+etapa("o cabeçalho que flutua sobre o hero carrega .sobre-foto", () => {
+  const HOME = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8");
+  const cabecalho = /<header[^>]*>/.exec(HOME)?.[0] ?? "";
+  if (!cabecalho) throw new Error("não achei o <header> da home");
+  if (!cabecalho.includes("sobre-foto")) {
+    throw new Error("o <header> segue o tema — sobre o hero escuro ele some no claro");
+  }
+});
+
+/*
+ * A MARCA NÃO TEM FUNDO.
+ *
+ * O núcleo do símbolo era pintado com `--marca-fundo` para tapar as órbitas que
+ * passam atrás dele. Funciona sobre a página; sobre FOTO vira um disco branco
+ * (tema claro) ou preto (tema escuro) grudado na logo — que foi exatamente o
+ * que o dono viu. O recorte passa a ser feito por máscara, que esconde sem
+ * pintar.
+ */
+etapa("o símbolo da marca não pinta fundo nenhum", () => {
+  const TILE = readFileSync(path.join(RAIZ, "src/components/marca-tile.tsx"), "utf8");
+  /* O que é proibido é PINTAR, não citar: o comentário do arquivo explica por
+   * que o disco saiu, e uma busca solta por "--marca-fundo" reprovaria a
+   * própria explicação. Só o atributo `fill` conta. */
+  const pintado = /fill\s*=\s*["{]?["']?var\(--[a-z-]*fundo\)/.exec(TILE);
+  if (pintado) {
+    throw new Error(`ainda pinta fundo (${pintado[0]}) — sobre foto isso é um disco opaco na logo`);
+  }
+  if (!/fill="none"/.test(TILE)) {
+    throw new Error("o núcleo precisa ser `fill=\"none\"` para a foto aparecer por dentro dele");
+  }
+  if (!/<mask/.test(TILE)) {
+    throw new Error("sem máscara: sem ela as órbitas cruzam por dentro da câmera");
+  }
+});
+
 console.log(falhou ? "\n✗ tema com problema" : "\n✓ tema ok");
 process.exitCode = falhou ? 1 : 0;

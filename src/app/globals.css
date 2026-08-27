@@ -46,7 +46,6 @@
   --luz: #cfd9ea;
   --luz-alta: #ffffff;
   --marca-traco: #cfd9ea;
-  --marca-fundo: #07080b;
   --acento: #d9a441;
   --acento-alto: #f2c877;
   --marfim: #f4f6fa;
@@ -99,14 +98,6 @@
      * pode ser sutil; a marca, não.
      */
     --marca-traco: light-dark(#2b3542, #cfd9ea);
-
-    /*
-     * O FUNDO DO DIAFRAGMA. O núcleo da marca tapa as órbitas que passam atrás
-     * dele — sem isso as elipses cruzam por dentro do diafragma e o centro vira
-     * um emaranhado. Acompanha o fundo da página nos dois temas, senão o
-     * recorte aparece como mancha.
-     */
-    --marca-fundo: light-dark(#f4f6fa, #07080b);
 
     /*
      * O ÂMBAR DO PROJETOR: só AÇÃO. Botão, link, foto marcada.
@@ -287,4 +278,42 @@ html[data-js] .revelar[data-visivel] {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--linha);
+}
+
+/*
+ * SOBRE FOTOGRAFIA, O TEMA NÃO VALE.
+ *
+ * A home apoia texto direto em cima de foto de casamento — o hero, o
+ * interlúdio, o fecho — e o cabeçalho flutua sobre o hero. Foto não é
+ * superfície do tema: ela tem a luz que tem. No tema claro, `--texto-soft`
+ * (cinza médio, feito para papel) caía em cima do contraluz dourado do hero e
+ * sumia; o título, tinta quase preta, brigava com a parte clara da imagem.
+ *
+ * Aqui os tokens deixam de trocar de lado: dentro de `.sobre-foto` a página é
+ * SEMPRE escura, nos dois temas, porque o contraste vem do véu sobre a foto e
+ * não da preferência de quem abriu. O véu é desenhado com `--void`, que também
+ * é fixado — sem isso, no tema claro ele clarearia a foto em vez de escurecer,
+ * e o texto claro ficaria sobre fundo claro.
+ *
+ * Redefinir TOKEN, e não escrever cor nas classes, é o que faz as utilitárias
+ * que já existem (`text-texto-soft`, `border-linha`, `.vidro`) continuarem
+ * valendo dentro da foto sem nenhuma exceção espalhada pela marcação.
+ *
+ * Os tons são os do tema escuro, com o secundário e o terciário puxados para
+ * cima: em cima de imagem o texto disputa com detalhe e ruído, e o que basta
+ * sobre preto chapado não basta sobre uma foto. `scripts/testar-tema.mjs` mede
+ * o piso e planta a classe nas três seções.
+ */
+.sobre-foto {
+  --void: #07080b;
+  --carbon: #101319;
+  --texto: #ffffff;
+  --texto-soft: #d3dae5;
+  --texto-faint: #aab3c0;
+  --acento: #e3b464;
+  --acento-alto: #f2c877;
+  --linha: rgba(190, 205, 230, 0.16);
+  --linha-forte: rgba(190, 205, 230, 0.3);
+  --marca-traco: #e6ecf6;
+  color: var(--texto);
 }

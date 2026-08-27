@@ -62,6 +62,29 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
    */
   const miudo = tamanho < 28;
 
+  /*
+   * ── O FURO NO LUGAR DO DISCO ──────────────────────────────────────────
+   * As órbitas passam POR DENTRO da câmera (a elipse tem ry=6, e a câmera tem
+   * raio 7,5), então sem recorte o centro vira um emaranhado. Isso era
+   * resolvido pintando um disco com `--marca-fundo`, a cor da página — e
+   * funcionava enquanto o fundo fosse a página. Sobre FOTO virava um disco
+   * branco (tema claro) ou preto (escuro) grudado na logo, que foi o que o
+   * dono viu no print de 27/08/2026.
+   *
+   * A máscara esconde sem pintar: o furo é buraco de verdade, e a logo passa a
+   * funcionar sobre qualquer fundo — página, foto, os dois temas.
+   *
+   * O raio do furo tem de cobrir a linha da câmera INTEIRA (raio + metade do
+   * traço), senão sobra um fio de órbita rente à borda.
+   *
+   * O id leva o tamanho porque a marca aparece mais de uma vez na mesma página
+   * (cabeçalho e rodapé). Dois símbolos do mesmo tamanho geram o mesmo id, e
+   * isso é inofensivo de propósito: as máscaras são idênticas, então tanto faz
+   * qual o navegador resolve.
+   */
+  const idFuro = `marca-furo-${tamanho}`;
+  const raioFuro = miudo ? 8.6 : 8.4;
+
   return (
     <svg
       width={tamanho}
@@ -78,43 +101,54 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
         }
       `}</style>
 
-      {/* as órbitas — o átomo, e a família — com o elétron andando em cada uma */}
-      {(miudo ? [30, 150] : ORBITAS).map((giro, i) => (
-        <g key={giro} transform={`rotate(${giro} 24 24)`}>
-          <ellipse
-            cx="24"
-            cy="24"
-            rx="15.4"
-            ry="6"
-            stroke="var(--marca-traco)"
-            strokeWidth={miudo ? 1.9 : 1.5}
-            opacity={giro === 90 ? 0.85 : 1}
-          />
-          {!miudo && (
-            <circle className="eletron-anda" r="1.5" fill="var(--marca-traco)">
-              <animateMotion
-                dur={RITMOS[i].dur}
-                begin={RITMOS[i].begin}
-                repeatCount="indefinite"
-                path={CAMINHO_ORBITA}
-              />
-            </circle>
-          )}
-        </g>
-      ))}
+      <defs>
+        <mask id={idFuro} maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+          <rect x="0" y="0" width="48" height="48" fill="#fff" />
+          <circle cx="24" cy="24" r={raioFuro} fill="#000" />
+        </mask>
+      </defs>
 
-      {!miudo &&
-        ELETRONS.map(([x, y]) => (
-          <circle
-            key={`${x}-${y}`}
-            className="eletron-parado"
-            style={{ display: "none" }}
-            cx={x}
-            cy={y}
-            r="1.5"
-            fill="var(--marca-traco)"
-          />
+      {/* as órbitas — o átomo, e a família — com o elétron andando em cada uma.
+          Sob a máscara: o que passa atrás da câmera desaparece, inclusive o
+          elétron na volta, que é o que se espera de quem passa por trás. */}
+      <g mask={`url(#${idFuro})`}>
+        {(miudo ? [30, 150] : ORBITAS).map((giro, i) => (
+          <g key={giro} transform={`rotate(${giro} 24 24)`}>
+            <ellipse
+              cx="24"
+              cy="24"
+              rx="15.4"
+              ry="6"
+              stroke="var(--marca-traco)"
+              strokeWidth={miudo ? 1.9 : 1.5}
+              opacity={giro === 90 ? 0.85 : 1}
+            />
+            {!miudo && (
+              <circle className="eletron-anda" r="1.5" fill="var(--marca-traco)">
+                <animateMotion
+                  dur={RITMOS[i].dur}
+                  begin={RITMOS[i].begin}
+                  repeatCount="indefinite"
+                  path={CAMINHO_ORBITA}
+                />
+              </circle>
+            )}
+          </g>
         ))}
+
+        {!miudo &&
+          ELETRONS.map(([x, y]) => (
+            <circle
+              key={`${x}-${y}`}
+              className="eletron-parado"
+              style={{ display: "none" }}
+              cx={x}
+              cy={y}
+              r="1.5"
+              fill="var(--marca-traco)"
+            />
+          ))}
+      </g>
 
       {/*
         A CÂMERA no núcleo é o que diz FOTOGRAFIA (27/08/2026, pedido do dono:
@@ -130,7 +164,7 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
         cx="24"
         cy="24"
         r="7.5"
-        fill="var(--marca-fundo)"
+        fill="none"
         stroke="var(--marca-traco)"
         strokeWidth={miudo ? 2.1 : 1.8}
       />
