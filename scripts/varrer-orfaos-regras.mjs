@@ -39,6 +39,44 @@
  *
  * `scripts/testar-limpeza.mjs` prende cada um desses casos.
  */
+/**
+ * O estúdio dono de uma chave — o primeiro pedaço do caminho.
+ *
+ * TODA chave do bucket começa com o id do estúdio: mídia em
+ * `<tenant>/<galeria>/<uuid>.ext` e logo em `<tenant>/marca/<uuid>.png`.
+ * Devolve `null` para chave sem barra, que não tem dono declarado.
+ */
+export function donoDaChave(chave) {
+  const corte = String(chave ?? "").indexOf("/");
+  return corte > 0 ? chave.slice(0, corte) : null;
+}
+
+/**
+ * A chave pertence a OUTRO ambiente?
+ *
+ * O guarda mais abaixo recusa a varredura inteira quando banco e bucket não
+ * combinam. É grosso de propósito, e tem um custo: do dev a varredura nunca
+ * roda, órfão nenhum aparece, e alguém acaba contornando o guarda.
+ *
+ * Esta é a régua fina, e ela vale mesmo com o bucket compartilhado: chave cujo
+ * dono não é estúdio DESTE banco não é conhecida nem órfã — é de outra gente. A
+ * varredura passa longe em vez de classificar foto de cliente como lixo.
+ *
+ * Falha para o lado de NÃO apagar em todos os casos duvidosos: chave sem dono,
+ * dono desconhecido, e conjunto de donos vazio (banco novo, ou consulta que não
+ * trouxe nada). Se vazio significasse "tudo é nosso", o pior caso seria apagar
+ * o bucket inteiro.
+ *
+ * O preço: objeto de estúdio APAGADO daqui vira invisível para a varredura, em
+ * vez de virar órfão. É custo de armazenamento contra risco de destruir foto de
+ * casamento — e por isso `varrer-orfaos.mjs` os RELATA à parte, para não somem
+ * do mapa em silêncio.
+ */
+export function deOutroAmbiente(chave, donos) {
+  const dono = donoDaChave(chave);
+  return dono === null || !donos.has(dono);
+}
+
 export async function chavesConhecidas(db) {
   const { rows: midias } = await db.query(
     "select chave, chave_thumb, chave_preview, armazem from medias",
@@ -46,9 +84,13 @@ export async function chavesConhecidas(db) {
   const { rows: marcas } = await db.query(
     "select logo_chave from tenants where logo_chave is not null",
   );
+  /* Os donos vêm de `tenants`, não das chaves: um estúdio recém-criado, ainda
+   * sem foto nenhuma, precisa ser reconhecido como daqui. */
+  const { rows: donosRows } = await db.query("select id from tenants");
 
   const r2 = new Set();
   const b2 = new Set();
+  const donos = new Set(donosRows.map((t) => t.id));
 
   for (const m of midias) {
     /* O original segue a coluna; as derivadas, nunca. */
@@ -58,7 +100,7 @@ export async function chavesConhecidas(db) {
   }
   for (const t of marcas) if (t.logo_chave) r2.add(t.logo_chave);
 
-  return { r2, b2 };
+  return { r2, b2, donos };
 }
 
 /*

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Aplica a política de CORS do bucket. Uso:
+ * Aplica a política de CORS dos DOIS buckets — o R2 (derivadas, de onde o
+ * cliente BAIXA) e o dos originais no B2 (para onde o fotógrafo ENVIA). Uso:
  *   node --env-file=.env.local --experimental-strip-types \
  *     --import ./scripts/registrar-ts.mjs scripts/configurar-cors.mjs
  *   ... scripts/configurar-cors.mjs --conferir   # só lê, não grava
@@ -9,8 +10,16 @@
  * `src/config/dominios.ts` — a mesma que o proxy e o porteiro do certificado
  * usam. Uma cópia à mão aqui ficava para trás em toda troca de domínio.
  *
- * Para conferir o CORS do jeito que o navegador vê (sem precisar de token de
- * admin), use `scripts/testar-cors.mjs` — esse roda junto com `npm test`.
+ * Para conferir do jeito que o navegador vê (sem token de admin), use
+ * `scripts/testar-cors.mjs` (R2) e `scripts/testar-cors-arquivos.mjs` (originais).
+ *
+ * ── POR QUE OS DOIS JUNTOS ────────────────────────────────────────────────
+ * Até 27/08/2026 este script cuidava só do R2, e o bucket dos originais não
+ * tinha CORS NENHUM. O R2 passava em todas as etapas do teste, o download
+ * funcionava, e NENHUMA FOTO CONSEGUIA SUBIR: o navegador recusava o PUT antes
+ * de mandar um byte, e o servidor não via erro porque o arquivo nunca passa por
+ * ele. Cobrir um bucket e não o outro dá a sensação de cobertura sem a
+ * cobertura — por isso a política agora é uma só, aplicada nos dois.
  *
  * ── PRECISA DE UM TOKEN DE ADMIN ──────────────────────────────────────────────
  * A chave do dia a dia é de OBJETO (ler/gravar arquivo) e não enxerga a
@@ -104,32 +113,70 @@ if (conferirApenas) {
   process.exit((await mostrarAtual()) ? 0 : 1);
 }
 
-try {
-  await s3.send(
-    new PutBucketCorsCommand({
-      Bucket: R2_BUCKET,
-      CORSConfiguration: {
-        CORSRules: [
-          {
-            AllowedOrigins: ORIGENS,
-            AllowedMethods: ["GET", "PUT", "HEAD"],
-            AllowedHeaders: ["*"],
-            ExposeHeaders: ["ETag"], // o envio em partes (>5 GB) lê o ETag de cada pedaço
-            MaxAgeSeconds: 3600,
-          },
-        ],
-      },
-    }),
-  );
-} catch (e) {
-  console.error(`✗ falhou: ${e.name}: ${e.message}`);
-  if (e.name === "AccessDenied") {
-    console.error("  Crie um token 'Admin Read & Write' — veja o cabeçalho deste arquivo.");
+/*
+ * A MESMA política nos dois buckets.
+ *
+ * POST está aqui por causa do envio EM PARTES: é ele que abre e fecha o envio de
+ * arquivo grande, que é como todo filme e toda foto pesada sobem. Sem POST,
+ * arquivo pequeno funciona e grande falha — o pior tipo de defeito, porque
+ * qualquer teste rápido passa.
+ */
+const POLITICA = {
+  CORSRules: [
+    {
+      AllowedOrigins: ORIGENS,
+      AllowedMethods: ["GET", "PUT", "POST", "HEAD"],
+      AllowedHeaders: ["*"],
+      ExposeHeaders: ["ETag"], // o envio em partes lê o ETag de cada pedaço
+      MaxAgeSeconds: 3600,
+    },
+  ],
+};
+
+async function aplicar(cliente, bucket, apelido) {
+  try {
+    await cliente.send(new PutBucketCorsCommand({ Bucket: bucket, CORSConfiguration: POLITICA }));
+    console.log(`✓ CORS gravado em "${bucket}" (${apelido})`);
+    return true;
+  } catch (e) {
+    console.error(`✗ "${bucket}" falhou: ${e.name}: ${e.message}`);
+    if (e.name === "AccessDenied") {
+      console.error("  A chave em uso não enxerga a configuração do bucket — veja o cabeçalho.");
+    }
+    return false;
   }
-  process.exit(1);
 }
 
-console.log(`✓ CORS gravado no bucket "${R2_BUCKET}"`);
+let tudoOk = await aplicar(s3, R2_BUCKET, "derivadas, o que o cliente baixa");
+
+/*
+ * O bucket dos originais só existe onde o B2 está configurado — em dev ele
+ * costuma faltar, e aí não há o que aplicar. Silêncio aqui seria ruim: quem
+ * rodasse o script no ambiente errado acharia que cobriu os dois.
+ */
+const {
+  ARQUIVOS_ENDPOINT,
+  ARQUIVOS_ACCESS_KEY_ID,
+  ARQUIVOS_SECRET_ACCESS_KEY,
+  ARQUIVOS_BUCKET,
+  ARQUIVOS_REGIAO,
+} = process.env;
+
+if (ARQUIVOS_ENDPOINT && ARQUIVOS_ACCESS_KEY_ID && ARQUIVOS_BUCKET) {
+  const arquivos = new S3Client({
+    region: ARQUIVOS_REGIAO ?? "us-east-005",
+    endpoint: ARQUIVOS_ENDPOINT,
+    credentials: {
+      accessKeyId: ARQUIVOS_ACCESS_KEY_ID,
+      secretAccessKey: ARQUIVOS_SECRET_ACCESS_KEY,
+    },
+  });
+  tudoOk = (await aplicar(arquivos, ARQUIVOS_BUCKET, "originais, para onde o fotógrafo envia")) && tudoOk;
+} else {
+  console.log("– originais: não configurados neste ambiente, nada a aplicar");
+}
+
+process.exit(tudoOk ? 0 : 1);
 await mostrarAtual();
 
 /*

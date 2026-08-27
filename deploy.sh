@@ -364,5 +364,23 @@ ssh -n "$VPS" "
   echo \"  /api/healthz -> HTTP \$c \$corpo\"
   [ \"\$c\" = 200 ] || { echo '  ! o app subiu mas alguma dependencia esta fora'; exit 1; }
   echo \"  release no ar: \$(readlink -f $ATUAL | xargs basename)\"
+
+  # O CORS do bucket dos ORIGINAIS so pode ser conferido daqui: em dev o B2 nao
+  # esta configurado e a suite se pula sozinha. Foi assim que, ate 27/08/2026, o
+  # bucket ficou SEM CORS NENHUM com a bateria inteira verde -- o navegador
+  # recusava o envio antes de mandar um byte, e nenhuma foto subia.
+  #
+  # Nao derruba a publicacao: o app funciona, e o que quebra e o envio. Mas sai
+  # alto, porque descobrir isso pelo fotografo custou um dia.
+  cd $ATUAL
+  if node --env-file=.env.production --experimental-strip-types \\
+       --import ./scripts/registrar-ts.mjs scripts/testar-cors-arquivos.mjs >/tmp/cors.txt 2>&1; then
+    echo '  cors dos originais: ok'
+  else
+    echo '  ! CORS DOS ORIGINAIS COM PROBLEMA — a foto nao sobe:'
+    grep '✗' /tmp/cors.txt | sed 's/^/    /'
+    echo '    conserto: node --env-file=.env.production ... scripts/configurar-cors.mjs'
+  fi
+  rm -f /tmp/cors.txt
 "
 echo "✓ publicado"

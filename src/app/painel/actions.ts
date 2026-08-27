@@ -114,29 +114,45 @@ export async function salvarPublicacaoAction(form: FormData) {
 }
 
 /** Salva a aparência. Valida antes de gravar — o JSON vem do navegador. */
-export async function salvarAparenciaAction(form: FormData) {
+/**
+ * Grava a aparência. Devolve `{ erro }` em vez de nada.
+ *
+ * Enquanto havia botão "Salvar", devolver void bastava: quem apertava via o
+ * botão voltar de "Salvando…" e conferia na prévia. Com o salvamento automático
+ * ninguém aperta nada — e uma falha em silêncio vira o fotógrafo escolhendo a
+ * aparência, saindo da tela e descobrindo dias depois que o cliente viu outra
+ * coisa. Quem não avisa não pode salvar sozinho.
+ */
+export async function salvarAparenciaAction(form: FormData): Promise<{ erro?: string }> {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");
-  if (!galeriaId) return;
+  if (!galeriaId) return { erro: "Galeria não identificada." };
 
   let bruto: unknown;
   try {
     bruto = JSON.parse(String(form.get("aparencia") ?? "{}"));
   } catch {
-    return;
+    return { erro: "Não consegui ler a aparência escolhida." };
   }
 
   // lerAparencia descarta qualquer chave desconhecida ou valor inválido:
   // o que é gravado é sempre um objeto que o renderizador sabe desenhar.
   const limpa = lerAparencia(bruto);
 
-  await consultar(
+  /* O `returning` existe para saber se ESCREVEU. `consultar` devolve só as
+   * linhas, e um update sem returning devolve lista vazia tanto quando gravou
+   * quanto quando não achou nada — a tela diria "salvo" para uma gravação que
+   * não aconteceu (galeria de outro estúdio, ou apagada em outra aba). */
+  const gravadas = await consultar(
     `update galerias set aparencia = $1, atualizado_em = now()
-      where id = $2 and tenant_id = $3`,
+      where id = $2 and tenant_id = $3
+      returning id`,
     [JSON.stringify(limpa), galeriaId, tenantId],
   );
+  if (gravadas.length === 0) return { erro: "Esta galeria não é sua, ou não existe mais." };
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
+  return {};
 }
 
 /** Define qual foto abre a galeria. */

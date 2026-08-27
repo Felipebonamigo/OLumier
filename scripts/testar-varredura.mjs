@@ -30,7 +30,7 @@
  * em que isso acontecer, este guarda deixa de disparar sozinho, sem ninguém
  * precisar lembrar de removê-lo.
  */
-import { podeApagar } from "./varrer-orfaos-regras.mjs";
+import { podeApagar, donoDaChave, deOutroAmbiente } from "./varrer-orfaos-regras.mjs";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -124,6 +124,64 @@ etapa("o guarda é conferido ANTES de listar o bucket", () => {
     throw new Error("o guarda é conferido DEPOIS do apagamento — não guarda nada");
   }
   return "guarda vem antes";
+});
+
+/* ── o escopo por dono ────────────────────────────────────────────────────
+ *
+ * O guarda acima recusa a varredura inteira quando banco e bucket são de
+ * ambientes diferentes. É grosso de propósito, e tem um custo: do dev a
+ * varredura NUNCA roda, órfão nenhum aparece, e alguém acaba contornando.
+ *
+ * O escopo é a régua fina. Toda chave começa com o id do estúdio dono —
+ * inclusive a logo, em `<tenant>/marca/`. Chave cujo prefixo não é estúdio
+ * DESTE banco não é conhecida nem órfã: é de outra gente.
+ *
+ * Provado em 27/08/2026, quando a primeira foto de verdade subiu em produção e
+ * as derivadas dela apareceram como "órfãs" para o banco de dev.
+ */
+console.log("\nO escopo por dono — bucket compartilhado:\n");
+
+const DONO = "88151718-1d69-4bb5-83e1-ffc30650584b";
+const OUTRO = "50216ea0-e0b5-43ff-97a8-400a01b61ec6";
+const meus = new Set([DONO]);
+
+etapa("o dono sai do começo da chave", () => {
+  const c = `${DONO}/6e4f9fef/abc.jpeg`;
+  if (donoDaChave(c) !== DONO) throw new Error(`veio ${donoDaChave(c)}`);
+});
+
+etapa("a logo também tem dono no começo", () => {
+  if (donoDaChave(`${DONO}/marca/logo.png`) !== DONO) {
+    throw new Error("a logo ficaria fora do escopo e viraria órfã de todo mundo");
+  }
+});
+
+etapa("chave de estúdio DESTE banco é nossa", () => {
+  if (deOutroAmbiente(`${DONO}/g/x.jpeg`, meus)) {
+    throw new Error("classificou como de fora um estúdio que é daqui");
+  }
+});
+
+etapa("chave de estúdio que este banco não conhece é de FORA", () => {
+  if (!deOutroAmbiente(`${OUTRO}/g/x.jpeg`, meus)) {
+    throw new Error(
+      "trataria como órfã a foto de um cliente do outro ambiente — é o apagão que a guarda evita",
+    );
+  }
+});
+
+etapa("chave sem barra nenhuma é de fora", () => {
+  /* Não dá para saber de quem é, e no bucket compartilhado "não sei" cai para o
+   * lado de não apagar. */
+  if (!deOutroAmbiente("solta.png", meus)) throw new Error("chave sem dono passaria por nossa");
+});
+
+etapa("sem donos conhecidos, NADA é considerado nosso", () => {
+  /* Banco novo, ou consulta que não trouxe nada, devolve conjunto vazio. Se isso
+   * significasse "tudo é nosso", o pior caso seria apagar o bucket inteiro. */
+  if (!deOutroAmbiente(`${DONO}/g/x.jpeg`, new Set())) {
+    throw new Error("conjunto vazio de donos liberou a chave — falha para o lado destrutivo");
+  }
 });
 
 console.log(falhou ? "\n✗ o guarda da varredura tem problema" : "\n✓ guarda da varredura ok");

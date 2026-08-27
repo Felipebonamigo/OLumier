@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   OPCOES,
@@ -94,36 +94,36 @@ function SeletorDeFonte({ ap, mudar }: PecaProps) {
 }
 
 function Eixo<K extends keyof Aparencia>({
-eixo,
-titulo,
-ap,
-mudar,
+  eixo,
+  titulo,
+  ap,
+  mudar,
 }: PecaProps & { eixo: K; titulo: string }) {
-return (
-  <div>
-    <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
-    <div className="mt-2 flex flex-wrap gap-1.5">
-      {OPCOES[eixo].map((op) => {
-        const ativo = ap[eixo] === op.id;
-        return (
-          <button
-            key={op.id}
-            type="button"
-            title={op.desc}
-            onClick={() => mudar({ ...ap, [eixo]: op.id } as Aparencia)}
-            className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-              ativo
-                ? "border-acento bg-acento/10 text-acento-alto"
-                : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
-            }`}
-          >
-            {op.nome}
-          </button>
-        );
-      })}
+  return (
+    <div>
+      <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {OPCOES[eixo].map((op) => {
+          const ativo = ap[eixo] === op.id;
+          return (
+            <button
+              key={op.id}
+              type="button"
+              title={op.desc}
+              onClick={() => mudar({ ...ap, [eixo]: op.id } as Aparencia)}
+              className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                ativo
+                  ? "border-acento bg-acento/10 text-acento-alto"
+                  : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+              }`}
+            >
+              {op.nome}
+            </button>
+          );
+        })}
+      </div>
     </div>
-  </div>
-);
+  );
 }
 
 export function EditorAparencia({
@@ -136,29 +136,76 @@ export function EditorAparencia({
   inicial: Aparencia;
 }) {
   const [ap, setAp] = useState<Aparencia>(inicial);
-  const [salvo, setSalvo] = useState(true);
   const [versaoPreview, setVersaoPreview] = useState(0);
   const [salvando, iniciar] = useTransition();
+  const [erro, setErro] = useState<string | null>(null);
   const router = useRouter();
+  const agendado = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /* A escolha que ainda não foi gravada. Existe para a saída da tela poder
+   * disparar a última — o `ap` do estado não serve, porque o fechamento do
+   * efeito de desmontagem congela o valor da primeira renderização. */
+  const pendente = useRef<Aparencia | null>(null);
 
   const presetAtivo = presetEquivalente(ap);
 
+  /*
+   * Cada clique grava. Não há mais botão "Salvar".
+   *
+   * Escolher aparência é decisão que se toma OLHANDO — clica, vê, clica de novo.
+   * Um botão no meio disso pede que a pessoa confirme uma escolha que ela ainda
+   * está tomando, e o preço de esquecer de apertar era a prévia mentindo e o
+   * trabalho perdido ao sair da tela.
+   *
+   * A espera de meio segundo não é enfeite: sem ela, passar por quatro presets
+   * dispara quatro gravações e quatro recarregamentos do iframe, e a prévia
+   * pisca mais do que informa. Cada clique novo cancela o anterior, então vale
+   * sempre a ÚLTIMA escolha — que é a que a pessoa quis.
+   */
   function mudar(novo: Aparencia) {
     setAp(novo);
-    setSalvo(false);
+    setErro(null);
+    pendente.current = novo;
+    if (agendado.current) clearTimeout(agendado.current);
+    agendado.current = setTimeout(() => gravar(novo), 500);
   }
 
-  function salvar() {
+  function corpo(valor: Aparencia) {
+    const f = new FormData();
+    f.set("galeria_id", galeriaId);
+    f.set("aparencia", JSON.stringify(valor));
+    return f;
+  }
+
+  function gravar(valor: Aparencia) {
+    pendente.current = null;
     iniciar(async () => {
-      const f = new FormData();
-      f.set("galeria_id", galeriaId);
-      f.set("aparencia", JSON.stringify(ap));
-      await salvarAparenciaAction(f);
-      setSalvo(true);
+      const r = await salvarAparenciaAction(corpo(valor));
+      if (r?.erro) {
+        setErro(r.erro);
+        return;
+      }
       setVersaoPreview((v) => v + 1); // recarrega o iframe com o que foi salvo
       router.refresh();
     });
   }
+
+  /*
+   * Sair da tela com gravação agendada DISPARA, não cancela.
+   *
+   * Cancelar é o reflexo — evita atualizar estado de componente desmontado. Aqui
+   * ele custaria exatamente a última escolha, a que a pessoa acabou de fazer
+   * antes de mudar de página. Por isso a chamada sai crua, fora da transição: o
+   * pedido já saiu do navegador quando o componente some, e ninguém precisa
+   * estar vivo para receber a resposta.
+   */
+  useEffect(
+    () => () => {
+      if (agendado.current) clearTimeout(agendado.current);
+      if (pendente.current) void salvarAparenciaAction(corpo(pendente.current));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- roda só na saída
+    [],
+  );
 
   return (
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
@@ -169,14 +216,16 @@ export function EditorAparencia({
             Escolha um estilo pronto ou ajuste cada detalhe. A prévia é a galeria de verdade.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={salvar}
-          disabled={salvo || salvando}
-          className="rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:opacity-40"
+        {/* No lugar do botão, o estado. Não há o que apertar: a escolha já foi
+            gravada, e a única coisa que a pessoa ainda precisa saber é se deu
+            certo. Erro fica em vermelho e não some sozinho. */}
+        <span
+          role="status"
+          aria-live="polite"
+          className={`text-xs ${erro ? "text-alerta" : "text-texto-faint"}`}
         >
-          {salvando ? "Salvando…" : salvo ? "Salvo ✓" : "Salvar aparência"}
-        </button>
+          {erro ?? (salvando ? "salvando…" : "salvo automaticamente")}
+        </span>
       </div>
 
       {/* Presets */}
@@ -224,11 +273,7 @@ export function EditorAparencia({
       <div className="mt-5 border-t border-linha pt-4">
         <div className="flex items-baseline justify-between">
           <span className="text-xs font-medium text-texto-soft">Prévia</span>
-          {!salvo && (
-            <span className="text-[11px] text-alerta">
-              salve para ver as mudanças aqui
-            </span>
-          )}
+          {salvando && <span className="text-[11px] text-texto-faint">atualizando…</span>}
         </div>
         <div className="mt-2 overflow-hidden rounded-lg border border-linha bg-void">
           <iframe

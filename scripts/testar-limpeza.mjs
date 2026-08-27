@@ -21,7 +21,7 @@ import { apagarObjetos, listarChaves, objetoExiste, BUCKET } from "../src/lib/r2
  * era classificada como órfã. Testar por imitação é pior que não testar: dá o
  * verde enquanto o código de verdade apagaria a marca de todos os clientes.
  */
-import { chavesConhecidas } from "./varrer-orfaos-regras.mjs";
+import { chavesConhecidas, deOutroAmbiente } from "./varrer-orfaos-regras.mjs";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
@@ -241,10 +241,21 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
 await etapa("o bucket está sem órfãos agora", async () => {
   const doBucket = await listarChaves();
   const conhecidas = await chavesConhecidas(db);
-  // `doBucket` veio da listagem do R2, então compara contra o conjunto do R2.
-  const orfaos = doBucket.filter((c) => !conhecidas.r2.has(c));
+  /*
+   * O bucket é compartilhado com produção, então o que é de estúdio que ESTE
+   * banco não conhece fica fora da conta — é o mesmo escopo que a varredura de
+   * verdade usa (`deOutroAmbiente`), e não uma imitação dele.
+   *
+   * Sem isso, esta etapa passou a falhar em 27/08/2026, no minuto em que a
+   * primeira foto de verdade subiu em produção: as derivadas dela apareceram
+   * como "órfãs" para o banco de dev. O teste estaria certo em reclamar se o
+   * bucket fosse só nosso — e a varredura, sem o escopo, teria APAGADO.
+   */
+  const nossos = doBucket.filter((c) => !deOutroAmbiente(c, conhecidas.donos));
+  const orfaos = nossos.filter((c) => !conhecidas.r2.has(c));
   if (orfaos.length) throw new Error(`${orfaos.length} órfão(s): ${orfaos[0]}`);
-  return `${doBucket.length} objetos, todos referenciados`;
+  const deFora = doBucket.length - nossos.length;
+  return `${nossos.length} objetos nossos, todos referenciados${deFora ? ` (${deFora} de outro ambiente, fora do escopo)` : ""}`;
 });
 
 console.log("\nDois armazéns — o original pode estar no B2, a derivada nunca:\n");

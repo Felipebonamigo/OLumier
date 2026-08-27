@@ -19,7 +19,7 @@
 import pg from "pg";
 import { listarObjetos, apagarObjetos, BUCKET } from "../src/lib/r2.ts";
 import { listarArquivos, apagarArquivo, ARQUIVOS_BUCKET, arquivosConfigurado } from "../src/lib/b2.ts";
-import { chavesConhecidas, podeApagar } from "./varrer-orfaos-regras.mjs";
+import { chavesConhecidas, podeApagar, deOutroAmbiente } from "./varrer-orfaos-regras.mjs";
 
 const APAGAR = process.argv.includes("--apagar");
 
@@ -101,7 +101,26 @@ for (const a of armazens) {
   console.log(`  objetos no bucket: ${doBucket.length}`);
   console.log(`  chaves conhecidas pelo banco: ${a.conhecidas.size}`);
 
-  const candidatos = doBucket.filter((o) => !a.conhecidas.has(o.chave));
+  /*
+   * O que é de OUTRO ambiente sai da conta antes de tudo.
+   *
+   * O bucket é dividido entre dev e produção, e chave cujo estúdio dono não
+   * existe neste banco não é órfã — é de outra gente. Sem este corte, a
+   * varredura rodada do dev classificaria como lixo a foto de casamento que um
+   * cliente acabou de receber.
+   *
+   * Sai RELATADO, e não em silêncio: um número que ninguém vê é a mesma armadilha
+   * de "0 órfãos por não ter olhado". Aqui entra também o objeto de estúdio já
+   * apagado deste banco — ele deixa de ser varrido, e é custo de armazenamento
+   * pago para não arriscar destruir foto de cliente.
+   */
+  const deFora = doBucket.filter((o) => deOutroAmbiente(o.chave, conhecidas.donos));
+  if (deFora.length > 0) {
+    console.log(`  de estúdio que este banco não conhece: ${deFora.length} — fora do escopo`);
+  }
+
+  const nossos = doBucket.filter((o) => !deOutroAmbiente(o.chave, conhecidas.donos));
+  const candidatos = nossos.filter((o) => !a.conhecidas.has(o.chave));
 
   // Sem data conhecida, trata como recente: na dúvida, não apaga.
   const novosDemais = candidatos.filter((o) => !o.modificadoEm || o.modificadoEm.getTime() > corte);
