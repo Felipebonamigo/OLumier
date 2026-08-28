@@ -41,6 +41,20 @@
 set -euo pipefail
 
 RAMO="${1:-master}"
+# ── QUAL REPOSITORIO E O `origin` (27/08/2026) ──────────────────────────────
+#
+# `origin` = github.com/Felipebonamigo/GaleriaAtomo — o repositorio da marca
+# atual. Ate 27/08/2026 ele apontava para OLumier, e por isso um dia inteiro de
+# trabalho (18 commits) foi parar so no repositorio antigo enquanto o novo, ja
+# criado, ficava parado.
+#
+# O antigo continua como ESPELHO, de dois jeitos:
+#   - o remoto `olumier`, para buscar dele se precisar;
+#   - uma segunda URL de push no proprio `origin`, para que UM
+#     `git push origin master` escreva nos dois sem ninguem precisar lembrar.
+#
+# Conferir com `git remote -v`: `origin` tem uma linha (fetch) e DUAS (push).
+# Se um dia sobrar so uma de push, o espelho parou de receber em silencio.
 REMOTO="${2:-origin}"
 ALVO="$REMOTO/$RAMO"
 
