@@ -246,45 +246,101 @@ try {
  */
 console.log("\nsobre fotografia");
 
-const FIXOS = (() => {
-  const m = /\.sobre-foto\s*\{([^}]*)\}/s.exec(CSS);
-  if (!m) return null;
+/*
+ * São DUAS cópias de `.sobre-foto`, como no `:root`: a de compatibilidade em
+ * CSS comum e a que troca com o tema, dentro do `@supports`. A segunda mora ali
+ * por obrigação — fora do `@supports`, o Lightning CSS traduz `light-dark()`
+ * para variáveis que ele amarra ao primeiro `color-scheme` do arquivo (`dark`),
+ * e a regra volta a ser escura nos dois temas sem reclamar de nada.
+ */
+const BLOCOS_FOTO = [...CSS.matchAll(/\.sobre-foto\s*\{([^}]*)\}/gs)].map((m) => {
   const tokens = new Map();
   for (const [, token, valor] of m[1].matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
     tokens.set(token, valor.trim());
   }
   return tokens;
-})();
+});
+const FIXOS = BLOCOS_FOTO.find((t) => [...t.values()].some((v) => v.includes("light-dark"))) ?? null;
+const FOTO_LEGADO = BLOCOS_FOTO.find((t) => t !== FIXOS) ?? null;
 
-etapa("existe uma classe `.sobre-foto`", () => {
-  if (!FIXOS) throw new Error("não achei `.sobre-foto` em globals.css");
-  return `${FIXOS.size} tokens fixados`;
+etapa("existe uma classe `.sobre-foto` que troca com o tema", () => {
+  if (BLOCOS_FOTO.length === 0) throw new Error("não achei `.sobre-foto` em globals.css");
+  if (!FIXOS) throw new Error("nenhuma cópia usa light-dark() — a foto não acompanha o tema");
+  return `${FIXOS.size} tokens`;
 });
 
-for (const token of ["--texto", "--texto-soft", "--texto-faint", "--void", "--acento"]) {
-  etapa(`${token} é fixo dentro de .sobre-foto`, () => {
-    const v = FIXOS?.get(token);
-    if (!v) throw new Error("não é redefinido — segue o tema, e lava no claro");
-    if (v.includes("light-dark")) throw new Error(`ainda troca com o tema: ${v}`);
-    if (!normalizarCor(v)) throw new Error(`não é hex: ${v}`);
-    return v;
+etapa("a cópia de compatibilidade de .sobre-foto fica dentro do @supports", () => {
+  const guarda = /@supports \(color: light-dark\([^)]*\)\) \{/g;
+  const posSupports = [...CSS.matchAll(guarda)].map((m) => m.index);
+  const posFoto = [...CSS.matchAll(/\.sobre-foto\s*\{/g)].map((m) => m.index);
+  const comLightDark = posFoto.find((p) => /light-dark/.test(CSS.slice(p, CSS.indexOf("}", p))));
+  if (comLightDark === undefined) throw new Error("não achei a cópia com light-dark()");
+  if (!posSupports.some((p) => p < comLightDark)) {
+    throw new Error("a cópia com light-dark() está fora do @supports — o compilador a trava no escuro");
+  }
+});
+
+etapa("a cópia de compatibilidade de .sobre-foto repete a metade escura", () => {
+  if (!FOTO_LEGADO) throw new Error("some a cópia sem light-dark() — navegador antigo fica sem paleta");
+  for (const [token, valor] of FIXOS) {
+    const m = /^light-dark\((.*)\)$/s.exec(valor);
+    if (!m) continue;
+    const escuro = dividirNoTopo(m[1])[1];
+    const legado = FOTO_LEGADO.get(token);
+    if (!legado) throw new Error(`${token} não está na cópia de compatibilidade`);
+    if (normalizarCor(legado) !== normalizarCor(escuro)) {
+      throw new Error(`${token}: compatibilidade diz ${legado}, o escuro é ${escuro}`);
+    }
+  }
+  return `${FOTO_LEGADO.size} tokens conferidos`;
+});
+
+/** Abre `light-dark(a, b)` em { claro, escuro } — ou explode dizendo o porquê. */
+function doisLados(token, valor) {
+  if (!valor) {
+    throw new Error("não é redefinido — herda a paleta da página, que não foi medida sobre foto");
+  }
+  const m = /^light-dark\((.*)\)$/s.exec(valor);
+  if (!m) throw new Error(`não acompanha o tema: ${valor}`);
+  const args = dividirNoTopo(m[1]);
+  if (args.length !== 2) throw new Error(`light-dark() precisa de 2 valores, veio ${args.length}`);
+  for (const cor of args) {
+    if (!normalizarCor(cor)) throw new Error(`${token}: "${cor}" não é uma cor que eu saiba medir`);
+  }
+  return { claro: args[0], escuro: args[1] };
+}
+
+const SOBRE_FOTO = ["--texto", "--texto-soft", "--texto-faint", "--void", "--acento"];
+
+for (const token of SOBRE_FOTO) {
+  etapa(`${token} acompanha o tema dentro de .sobre-foto`, () => {
+    const { claro, escuro } = doisLados(token, FIXOS?.get(token));
+    if (normalizarCor(claro) === normalizarCor(escuro)) {
+      throw new Error(`os dois lados são a mesma cor (${claro}) — o botão de tema não muda nada`);
+    }
+    return `${claro} / ${escuro}`;
   });
 }
 
+/*
+ * O piso vale nos DOIS lados, e é o mesmo piso: o véu clareia ou escurece a
+ * foto, mas em qualquer um dos dois o texto tem de sobreviver a ela.
+ */
 for (const [frente, piso, descricao] of [
   ["--texto", 4.5, "título sobre a foto"],
   ["--texto-soft", 4.5, "linha de apoio sobre a foto"],
   ["--texto-faint", 3, "rótulo pequeno sobre a foto"],
   ["--acento", 4.5, "âmbar sobre a foto"],
 ]) {
-  etapa(`${descricao} (${frente})`, () => {
-    const a = FIXOS?.get(frente);
-    const b = FIXOS?.get("--void");
-    if (!a || !b) throw new Error("token ausente em .sobre-foto");
-    const r = contraste(a, b);
-    if (r < piso) throw new Error(`${r.toFixed(2)}:1, piso é ${piso}:1`);
-    return `${r.toFixed(1)}:1`;
-  });
+  for (const lado of ["claro", "escuro"]) {
+    etapa(`${descricao} no tema ${lado} (${frente})`, () => {
+      const a = doisLados(frente, FIXOS?.get(frente))[lado];
+      const b = doisLados("--void", FIXOS?.get("--void"))[lado];
+      const r = contraste(a, b);
+      if (r < piso) throw new Error(`${r.toFixed(2)}:1, piso é ${piso}:1`);
+      return `${r.toFixed(1)}:1`;
+    });
+  }
 }
 
 /*
