@@ -194,6 +194,59 @@ pareamento (o slug pode mudar — migração 025; o id não).
 
 Prova em `scripts/testar-conexao-atomatiza.mjs`.
 
+### Camada 4 — o canal de avisos (a galeria falando primeiro)
+
+As três rotas acima são de PUXAR: o outro lado pergunta, a gente responde. Fica
+um buraco, e ele é o do dia a dia — o fotógrafo publica a galeria aqui e o
+contrato lá continua dizendo "fora do ar" até alguém lembrar de clicar em
+conferir.
+
+| Rota | Para quê | Escopo |
+|---|---|---|
+| `POST /api/avisos` | registra PARA ONDE avisar e com que segredo | `envio` |
+| `GET /api/avisos` | o estado do canal (endereço e última tentativa) — o segredo nunca volta | `leitura` |
+| `DELETE /api/avisos` | desfaz o canal | `envio` |
+
+**Quem inventa o segredo é quem RECEBE**, e registra aqui — o desenho do
+webhook do Asaas. Assim o outro lado gira o segredo quando quiser sem pedir
+nada a ninguém. Ele fica cifrado (`src/lib/cripto.ts`, `AVISOS_ENC_KEY`, próprio
+deste canal — nunca o `SESSION_SECRET`).
+
+`POST` exige escopo **envio**, e não leitura: registrar um canal é dizer para
+onde os eventos deste estúdio saem. "Quem lê" e "quem redireciona" não podem ser
+o mesmo poder. O endereço precisa ser **https** — é o nosso servidor fazendo
+requisição para um endereço que outra pessoa escolheu, e em `http` o segredo
+viajaria em claro.
+
+**O que sai no aviso** (`src/lib/avisos.ts`), e o que não sai:
+
+```json
+{ "evento": "entrega.mudou", "ocorridoEm": "…", "galeriaId": "…",
+  "referenciaExterna": "…", "noAr": true, "totalMedias": 230 }
+```
+
+Sem título, sem endereço, sem nada do casal. Em especial **sem a URL**: quem
+recebe já a tem, do pareamento — aceitar endereço por aviso deixaria um aviso
+forjado apontar o casal para outro lugar, e é justamente esse o dado que vai
+parar num grupo de WhatsApp.
+
+Quatro regras sustentam o canal, e cada uma tem passo em
+`scripts/testar-conexao-atomatiza.mjs`:
+
+1. **Avisar nunca derruba o que o disparou.** Mesmo `catch` vazio de
+   `registrarEvento`, e pelo mesmo motivo: o outro sistema fora do ar não pode
+   impedir o fotógrafo de publicar aqui.
+2. **O `noAr` é calculado**, pela mesma régua da página pública — trial
+   abandonado incluído. Aviso dizendo "no ar" sobre galeria que não abre é pior
+   que aviso nenhum: o outro lado escreve isso na tela de quem vende.
+3. **`ocorridoEm` vai junto**, e é por ele que o outro lado ordena. Rede
+   reordena; sem a hora do fato, o último a chegar venceria.
+4. **A assinatura é HMAC-SHA256 sobre o corpo cru**, com o `tenant_id` em claro
+   no cabeçalho dizendo qual segredo usar.
+
+Só galeria com procedência gera aviso: a criada no painel não representa
+registro nenhum lá.
+
 ### Limite de uso — NÃO construído, e de propósito
 
 O desenho pedia reaproveitar `src/lib/tentativas.ts` com este argumento: *"sem freio,

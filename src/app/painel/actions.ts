@@ -7,6 +7,10 @@ import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
 import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
+/* O aviso ao outro lado. `avisarEntrega` NUNCA lança — ver lib/avisos.ts —, e é
+ * por isso que ele pode ser chamado assim, solto, no fim de cada ação: nenhuma
+ * delas passa a depender de o Atomatiza estar de pé. */
+import { avisarEntrega } from "@/lib/avisos";
 import { lerAparencia } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
@@ -109,6 +113,12 @@ export async function salvarPublicacaoAction(form: FormData) {
       where id = $${valores.length - 1} and tenant_id = $${valores.length}`,
     valores,
   );
+
+  /* Publicar e despublicar são o evento que este canal existe para contar: é o
+   * momento em que o link do casal começa (ou deixa) de abrir. Vai depois da
+   * gravação, sempre — avisar sobre o que ainda não está no banco é prometer o
+   * que pode não acontecer. */
+  if (publicada !== null) await avisarEntrega(galeriaId);
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
 }
@@ -564,6 +574,8 @@ export async function arquivarAgoraAction(form: FormData): Promise<{ erro?: stri
   const r = await arquivarAgora(galeriaId, tenantId);
   if (!r.ok) return { erro: r.erro };
 
+  // O cofre tira a galeria do ar sem ninguém ter despublicado nada.
+  await avisarEntrega(galeriaId);
   revalidatePath(`/painel/galerias/${galeriaId}`);
   revalidatePath("/painel");
 }
@@ -576,6 +588,7 @@ export async function reativarAction(form: FormData): Promise<{ erro?: string } 
   const r = await reativar(galeriaId, tenantId);
   if (!r.ok) return { erro: r.erro };
 
+  await avisarEntrega(galeriaId);
   revalidatePath(`/painel/galerias/${galeriaId}`);
   revalidatePath("/painel");
 }
@@ -874,6 +887,10 @@ export async function apagarGaleriaAction(form: FormData) {
   // Vai para a LIXEIRA, não some: o arquivo continua no bucket por 30 dias.
   // O apagarGaleria filtra por tenant_id também — id adivinhado não alcança galeria alheia.
   await apagarGaleria(tenantId, galeriaId);
+  /* Vai para a lixeira: para o casal ela já não existe. Este é o aviso mais
+   * importante de todos — sem ele o contrato lá continuaria mostrando "no ar"
+   * com um link que devolve 404. */
+  await avisarEntrega(galeriaId);
   revalidatePath("/painel");
   revalidatePath("/painel/conta");
 
@@ -943,6 +960,11 @@ export async function restaurarGaleriaAction(form: FormData) {
   if (!galeriaId) return;
 
   await restaurarGaleria(tenantId, galeriaId);
+  /* Depois de restaurar, e não antes: `restaurarGaleria` pode LARGAR o vínculo
+   * quando a referência já tem dona nova (ver lib/tenants.ts). Avisando depois,
+   * a galeria sem vínculo simplesmente não gera aviso — que é o certo, porque
+   * ela não representa mais aquele contrato. */
+  await avisarEntrega(galeriaId);
   revalidatePath("/painel");
 }
 

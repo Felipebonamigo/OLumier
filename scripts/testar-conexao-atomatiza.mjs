@@ -27,6 +27,7 @@ import { gerarChave } from "../src/lib/chaves-api.ts";
 import { restaurarGaleria } from "../src/lib/tenants.ts";
 import { marca, enderecoDaGaleria } from "../src/config/marca.ts";
 import { CARENCIA_POS_TRIAL_DIAS } from "../src/config/trial.ts";
+import { createHmac } from "node:crypto";
 
 await exigirBancoDeTeste();
 
@@ -317,6 +318,158 @@ await etapa("restaurar a antiga não briga com a recriada", async () => {
   igual(rows.length, 1, "uma dona só para a referência");
 });
 
+// ---------------------------------------------------- o canal de avisos (camada 4)
+
+await etapa("chave de LEITURA não registra canal de avisos", async () => {
+  /* Registrar canal é dizer PARA ONDE os eventos deste estúdio saem. Uma chave
+   * que só lê, vazada, não pode redirecionar fluxo. */
+  const r = await chamar("/api/avisos", {
+    metodo: "POST", chave: deLeitura,
+    corpo: { url: "https://exemplo.invalido/aviso", segredo: "x".repeat(40) },
+  });
+  igual(r.status, 401, "status");
+});
+
+await etapa("canal em http é recusado — o segredo viajaria em claro", async () => {
+  const r = await chamar("/api/avisos", {
+    metodo: "POST", chave: deEnvio,
+    corpo: { url: "http://exemplo.invalido/aviso", segredo: "x".repeat(40) },
+  });
+  igual(r.status, 400, "status");
+});
+
+await etapa("segredo curto é recusado — segredo curto não é segredo", async () => {
+  const r = await chamar("/api/avisos", {
+    metodo: "POST", chave: deEnvio,
+    corpo: { url: "https://exemplo.invalido/aviso", segredo: "curto" },
+  });
+  igual(r.status, 400, "status");
+});
+
+/*
+ * O RECEPTOR DE MENTIRA.
+ *
+ * Um servidor local que só guarda o que chegou. É a única forma honesta de
+ * provar o que importa deste lado: que o aviso sai assinado com o segredo que
+ * o outro registrou, e que NÃO leva endereço nem nada do casal dentro.
+ */
+const http = await import("node:http");
+const recebidos = [];
+const SEGREDO_DO_CANAL = "segredo-que-o-atomatiza-registrou-aqui-2026";
+const receptor = http.createServer((req, res) => {
+  let corpo = "";
+  req.on("data", (p) => { corpo += p; });
+  req.on("end", () => {
+    recebidos.push({ corpo, cabecalhos: req.headers });
+    res.writeHead(200, { "content-type": "application/json" }).end('{"ok":true}');
+  });
+});
+await new Promise((r) => receptor.listen(3099, "127.0.0.1", r));
+
+await etapa("o canal é registrado e o endereço volta normalizado", async () => {
+  /* A rota exige https. Em teste não existe https local, então o registro é
+   * feito direto pela biblioteca — é ela que o resto do sistema usa, e é o
+   * comportamento DELA (assinar, montar, não vazar) que este teste prende. */
+  const { registrarCanal } = await import("../src/lib/avisos.ts");
+  await registrarCanal(estudio.id, "http://127.0.0.1:3099/aviso", SEGREDO_DO_CANAL);
+  const r = await chamar("/api/avisos", { chave: deLeitura });
+  const j = await r.json();
+  igual(j.registrado, true, "registrado");
+  igual(j.url, "http://127.0.0.1:3099/aviso", "url");
+  if (JSON.stringify(j).includes(SEGREDO_DO_CANAL)) throw new Error("o segredo voltou na resposta");
+  return "e o segredo nunca volta";
+});
+
+/*
+ * Uma galeria PRÓPRIA para o canal, com vínculo intacto.
+ *
+ * A `galeria` de cima passou pela lixeira e pelo restauro, e o restauro LARGA o
+ * vínculo quando a referência já tem dona nova (é o desenho, ver lib/tenants).
+ * Reaproveitá-la aqui testaria o caminho "sem procedência" sem querer — que é
+ * justo o passo seguinte, e ele precisa de uma galeria que de fato não tenha
+ * vínculo para provar alguma coisa.
+ */
+const refAviso = `${contrato}-aviso`;
+const { rows: [galeriaAviso] } = await db.query(
+  `insert into galerias (tenant_id, slug, titulo, estado, publicada, origem, origem_ref)
+        values ($1, $2, 'Entrega com aviso', 'online', true, 'atomatiza', $3)
+     returning id`,
+  [estudio.id, `entrega-com-aviso-${carimbo}`, refAviso],
+);
+criadas.galerias.push(galeriaAviso.id);
+
+await etapa("publicar dispara o aviso, assinado com o segredo do outro lado", async () => {
+  const { avisarEntrega } = await import("../src/lib/avisos.ts");
+  recebidos.length = 0;
+  await avisarEntrega(galeriaAviso.id);
+
+  igual(recebidos.length, 1, "avisos recebidos");
+  const { corpo, cabecalhos } = recebidos[0];
+  igual(cabecalhos["x-atomo-estudio"], estudio.id, "o estúdio vai no cabeçalho");
+  const esperada = createHmac("sha256", SEGREDO_DO_CANAL).update(corpo).digest("hex");
+  igual(cabecalhos["x-atomo-assinatura"], esperada, "assinatura sobre o corpo CRU");
+
+  const aviso = JSON.parse(corpo);
+  igual(aviso.evento, "entrega.mudou", "evento");
+  igual(aviso.referenciaExterna, refAviso, "a referência que o outro lado mandou");
+  igual(aviso.noAr, true, "noAr calculado");
+  if (!aviso.ocorridoEm) throw new Error("sem ocorridoEm — o outro lado não teria como ordenar");
+  return `noAr=${aviso.noAr}, ${aviso.totalMedias} arquivo(s)`;
+});
+
+await etapa("o aviso NÃO leva endereço, título nem nada do casal", async () => {
+  const aviso = JSON.parse(recebidos[0].corpo);
+  const chaves = Object.keys(aviso).sort().join(",");
+  igual(chaves, "evento,galeriaId,noAr,ocorridoEm,referenciaExterna,totalMedias", "campos do aviso");
+  const texto = recebidos[0].corpo;
+  for (const proibido of ["http", "galeriaatomo", "Entrega com aviso", "senha"]) {
+    if (texto.includes(proibido)) throw new Error(`vazou "${proibido}" no corpo do aviso`);
+  }
+  return "só id, referência, estado e contagem";
+});
+
+await etapa("o trial abandonado também chega como fora do ar", async () => {
+  /* O mesmo cuidado do noAr da rota: um aviso dizendo "no ar" sobre uma
+   * galeria que não abre é pior que aviso nenhum — o outro lado vai escrever
+   * isso na tela de quem vende. */
+  const { avisarEntrega } = await import("../src/lib/avisos.ts");
+  const { rows: [antes] } = await db.query("select status, trial_ate from tenants where id = $1", [estudio.id]);
+  await db.query(
+    `update tenants set status = 'trial', trial_ate = now() - interval '${CARENCIA_POS_TRIAL_DIAS + 5} days' where id = $1`,
+    [estudio.id]);
+  recebidos.length = 0;
+  await avisarEntrega(galeriaAviso.id);
+  const aviso = JSON.parse(recebidos[0].corpo);
+  igual(aviso.noAr, false, "noAr com trial abandonado");
+  await db.query("update tenants set status = $2, trial_ate = $3 where id = $1",
+    [estudio.id, antes.status, antes.trial_ate]);
+});
+
+await etapa("galeria sem procedência não gera aviso nenhum", async () => {
+  const { avisarEntrega } = await import("../src/lib/avisos.ts");
+  const { rows: [solta] } = await db.query(
+    `insert into galerias (tenant_id, slug, titulo, estado, publicada)
+          values ($1, $2, 'Sem contrato', 'online', true) returning id`,
+    [estudio.id, `solta-${carimbo}`]);
+  criadas.galerias.push(solta.id);
+  recebidos.length = 0;
+  await avisarEntrega(solta.id);
+  igual(recebidos.length, 0, "avisos");
+  return "avisar sobre ela seria mandar evento que o outro lado não encaixa";
+});
+
+await etapa("receptor fora do ar não derruba nada, e o erro fica registrado", async () => {
+  const { avisarEntrega } = await import("../src/lib/avisos.ts");
+  await new Promise((r) => receptor.close(r));
+  // Não pode lançar: quem chama está publicando uma galeria.
+  await avisarEntrega(galeriaAviso.id);
+  const { rows: [linha] } = await db.query(
+    "select ultimo_erro, ultimo_envio_em from avisos where tenant_id = $1", [estudio.id]);
+  if (!linha?.ultimo_erro) throw new Error("a falha sumiu sem deixar rastro");
+  if (!linha.ultimo_envio_em) throw new Error("sem data da tentativa");
+  return `guardado: ${String(linha.ultimo_erro).slice(0, 40)}`;
+});
+
 /*
  * Limpeza: só o que este teste criou. Eventos ficam — a tabela recusa delete
  * por gatilho, de propósito (ver src/lib/eventos.ts), e evento órfão de teste
@@ -329,6 +482,7 @@ await db.query("delete from galerias where tenant_id = any($1::uuid[])", [criada
 if (criadas.chaves.length > 0) {
   await db.query("delete from chaves_api where id = any($1::uuid[])", [criadas.chaves]);
 }
+await db.query("delete from avisos where tenant_id = any($1::uuid[])", [criadas.tenants]);
 await db.query("delete from tenants where id = any($1::uuid[])", [criadas.tenants]);
 await db.end();
 
