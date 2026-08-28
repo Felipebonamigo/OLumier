@@ -150,6 +150,72 @@
   }
 }
 
+/*
+ * ── O TERCEIRO TEMA: MOVIMENTO ÁTOMO ──────────────────────────────────────
+ *
+ * Claro e escuro são o MESMO desenho com a luz trocada — daí caberem numa
+ * função só. Este não é: é a identidade de outra marca, o marrom e o caramelo
+ * do Movimento Átomo, e por isso vem cor por cor. As três cores de origem são
+ * as da marca (o marrom #602e17, o caramelo #8e6339, o traço #301911); o resto
+ * da paleta é derivado delas, e não emprestado do tema escuro.
+ *
+ * FORA DO @supports, de propósito. O bloco não usa `light-dark()`, então não
+ * precisa da guarda — e ficando fora ele vale também no navegador que não
+ * conhece a função, que é o único lugar onde a guarda muda alguma coisa.
+ * `:root[data-tema="atomo"]` tem especificidade maior que `:root`, então ganha
+ * das duas cópias acima sem depender da ordem.
+ *
+ * A PALETA INTEIRA está aqui, e nenhum token de fora. Bloco de override erra em
+ * silêncio: o token esquecido não fica sem cor — herda o azul do tema escuro, e
+ * um cinza-azulado no meio do marrom passa por descuido de designer em vez de
+ * defeito. `testar-tema.mjs` recusa qualquer um que falte, e mede o mesmo piso
+ * de contraste dos outros dois temas.
+ *
+ * As cores de estado descem de saturação junto: no meio de um marrom quente, o
+ * verde-menta e o vermelho-frio do tema escuro pareceriam colados de outro
+ * sistema. Mesma decisão que o Atomatiza tomou no tema dele.
+ */
+:root[data-tema="atomo"] {
+  /* Escolha da pessoa, e o sistema deixa de opinar. Nunca é o padrão: ninguém
+     tem "Movimento Átomo" como preferência de sistema operacional. */
+  color-scheme: only dark;
+
+  --void: #1b0e08;
+  --carbon: #271510;
+  --carbon-2: #331d15;
+
+  --texto: #f6ede4;
+  --texto-soft: #c9ae97;
+  --texto-faint: #a4876f;
+  --exemplo: #6b5344;
+  --linha: rgba(246, 237, 228, 0.14);
+  --linha-forte: rgba(246, 237, 228, 0.28);
+
+  /* O feixe do projetor, aqui em luz de tungstênio: prata no meio do marrom
+     seria o mesmo erro do azul. */
+  --luz: #e0c3a4;
+  --luz-alta: #f6ede4;
+  --marca-traco: #e8cdb0;
+
+  /* O caramelo da marca é o acento — mesmo papel do âmbar nos outros temas:
+     só AÇÃO (botão, link, foto marcada). */
+  --acento: #d9a373;
+  --acento-alto: #f0c79b;
+
+  /* A folha clara continua sendo papel — papel de fotografia analógica, com o
+     creme que o marrom pede em volta. */
+  --marfim: #f4ece2;
+  --marfim-2: #e4d5c4;
+  --tinta: #241812;
+  --tinta-suave: #574337;
+  --tinta-faint: #8a7264;
+  --ouro-tinta: #8a5a24;
+
+  --ok: #86c98a;
+  --alerta: #e5b35c;
+  --erro: #ef8a76;
+}
+
 @theme inline {
   --color-void: var(--void);
   --color-carbon: var(--carbon);
@@ -365,5 +431,63 @@ html[data-js] .revelar[data-visivel] {
     --linha: light-dark(rgba(16, 19, 25, 0.16), rgba(190, 205, 230, 0.16));
     --linha-forte: light-dark(rgba(16, 19, 25, 0.3), rgba(190, 205, 230, 0.3));
     --marca-traco: light-dark(#1c2430, #e6ecf6);
+  }
+}
+
+/*
+ * O véu no Movimento Átomo.
+ *
+ * Sem este bloco a home ficaria marrom com o hero azul-preto — o único pedaço
+ * da página que não recebeu o recado, e justamente o primeiro que se vê. O véu
+ * escurece com o marrom do tema, e o texto sobe para o creme; mesma lógica dos
+ * outros dois, na luz desta marca.
+ */
+:root[data-tema="atomo"] .sobre-foto {
+  --void: #1b0e08;
+  --carbon: #271510;
+  --texto: #ffffff;
+  --texto-soft: #e6d5c4;
+  --texto-faint: #c2a891;
+  --acento: #eab887;
+  --acento-alto: #f6d3aa;
+  --linha: rgba(246, 237, 228, 0.18);
+  --linha-forte: rgba(246, 237, 228, 0.32);
+  --marca-traco: #f4e5d3;
+}
+
+/*
+ * ── O BOTÃO DO TEMA EM USO, SEM UMA LINHA DE JAVASCRIPT ───────────────────
+ *
+ * Com dois temas o botão podia ser cego — alternava, e a tela inteira dizia
+ * para onde. Com três, cego vira adivinhação: não dá para saber em que ponto do
+ * ciclo se está sem experimentar.
+ *
+ * Marcar o ativo em estado do React devolveria o piscar que o script do <head>
+ * existe para evitar: o servidor não sabe (nem pode saber) o tema de quem abriu,
+ * então a primeira pintura marcaria o botão errado metade das vezes. Quem sabe é
+ * o <html>, e é de lá que o CSS lê.
+ *
+ * A segunda e a terceira regras cobrem quem nunca escolheu: aí não há
+ * `data-tema` nenhum, e quem manda é o sistema. `atomo` não aparece nelas de
+ * propósito — ele nunca é o tema implícito.
+ */
+:root[data-tema="claro"] [data-tema-opcao="claro"],
+:root[data-tema="escuro"] [data-tema-opcao="escuro"],
+:root[data-tema="atomo"] [data-tema-opcao="atomo"] {
+  background: var(--carbon-2);
+  color: var(--texto);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema]) [data-tema-opcao="escuro"] {
+    background: var(--carbon-2);
+    color: var(--texto);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-tema]) [data-tema-opcao="claro"] {
+    background: var(--carbon-2);
+    color: var(--texto);
   }
 }

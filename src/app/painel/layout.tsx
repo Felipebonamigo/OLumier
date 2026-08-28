@@ -5,6 +5,7 @@ import { quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoDoEstudio } from "@/lib/medias";
 import { MarcaLockup } from "@/components/marca-tile";
+import { SeletorTema } from "@/components/seletor-tema";
 import { ehAdmin } from "@/config/admin";
 import { sairAction } from "../(auth)/actions";
 
@@ -86,6 +87,11 @@ export default async function PainelLayout({ children }: { children: React.React
                 Sair
               </button>
             </form>
+            {/* O tema era escolha da home, e a home é a página que o fotógrafo
+                vê uma vez. Quem passa a tarde subindo 200 fotos vive aqui — e
+                aqui não havia como trocar. Fica por último na barra porque é
+                ajuste, não navegação. */}
+            <SeletorTema className="ml-1" />
           </nav>
         </div>
 

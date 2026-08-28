@@ -64,13 +64,23 @@ function dividirNoTopo(texto) {
 const legado = new Map(); // token -> valor do bloco de compatibilidade
 const pares = new Map(); // token -> { claro, escuro }
 
+/*
+ * O bloco de compatibilidade é `:root { … }` — o PRIMEIRO, e só ele.
+ *
+ * Ler "toda declaração sem light-dark() no trecho" parecia a mesma coisa e não
+ * era: no dia em que entrou um tema escolhido a dedo (`:root[data-tema="atomo"]`),
+ * as cores dele passaram por compatibilidade e o teste acusou o marrom de
+ * discordar do escuro. `:root\s*\{` não casa com `:root[`, então a distinção
+ * é exatamente a que interessa.
+ */
+const COMPAT = /:root\s*\{([^}]*)\}/s.exec(CSS)?.[1] ?? "";
+for (const [, token, bruto] of COMPAT.matchAll(/^\s*(--[a-z0-9-]+)\s*:\s*([^;]+);/gm)) {
+  legado.set(token, bruto.trim());
+}
+
 for (const [, token, bruto] of BLOCO.matchAll(/^\s*(--[a-z0-9-]+)\s*:\s*([^;]+);/gm)) {
-  const valor = bruto.trim();
-  const m = /^light-dark\((.*)\)$/s.exec(valor);
-  if (!m) {
-    legado.set(token, valor);
-    continue;
-  }
+  const m = /^light-dark\((.*)\)$/s.exec(bruto.trim());
+  if (!m) continue;
   const args = dividirNoTopo(m[1]);
   if (args.length !== 2) throw new Error(`${token}: light-dark() precisa de 2 valores, veio ${args.length}`);
   pares.set(token, { claro: args[0], escuro: args[1] });
@@ -102,11 +112,29 @@ etapa("o navegador é quem decide o tema quando ninguém escolheu", () => {
   if (!/color-scheme:\s*light dark/.test(CSS)) {
     throw new Error("falta `color-scheme: light dark` — sem isso light-dark() não segue o sistema");
   }
-  for (const escolha of ["claro", "escuro"]) {
+  for (const escolha of ["claro", "escuro", "atomo"]) {
     if (!CSS.includes(`[data-tema="${escolha}"]`)) {
       throw new Error(`falta a regra de quem escolheu "${escolha}" na mão`);
     }
   }
+});
+
+/*
+ * A lista de temas mora em `src/config/tema.ts`, e é a mesma para o script do
+ * <head>, para o botão e para o CSS. O teste prende as três pontas: tema que o
+ * CSS pinta e a lista não oferece é um tema que ninguém alcança; tema na lista
+ * sem regra no CSS é um botão que não faz nada.
+ */
+const CONFIG_TEMA = readFileSync(path.join(RAIZ, "src/config/tema.ts"), "utf8");
+
+etapa("a lista de temas escolhíveis tem os três", () => {
+  const m = /TEMAS_ESCOLHIVEIS\s*=\s*\[([^\]]*)\]/s.exec(CONFIG_TEMA);
+  if (!m) throw new Error("não achei TEMAS_ESCOLHIVEIS em src/config/tema.ts");
+  const listados = [...m[1].matchAll(/"([a-z-]+)"/g)].map((x) => x[1]);
+  for (const t of ["claro", "escuro", "atomo"]) {
+    if (!listados.includes(t)) throw new Error(`"${t}" tem regra no CSS mas não está na lista`);
+  }
+  return listados.join(", ");
 });
 
 etapa("a metade escura é a de hoje", () => {
@@ -162,6 +190,71 @@ for (const tema of ["claro", "escuro"]) {
       return `${r.toFixed(1)}:1`;
     });
   }
+}
+
+/*
+ * ── O TERCEIRO TEMA: MOVIMENTO ÁTOMO ─────────────────────────────────────
+ *
+ * Os outros dois são o MESMO desenho com a luz trocada, e por isso cabem numa
+ * função só (`light-dark()`). Este não é: é a identidade de outra marca — o
+ * marrom e o caramelo do Movimento Átomo — e mora num bloco próprio, escolhido
+ * a dedo, do jeito que o Atomatiza já faz com o dele.
+ *
+ * Por ser bloco de override, ele tem um modo silencioso de errar: o token que
+ * alguém esquecer de listar não fica sem cor — ele HERDA o azul do tema escuro,
+ * e um cinza-azulado no meio do marrom passa por descuido de designer, não por
+ * defeito. Daí a exigência de listar a paleta inteira.
+ */
+console.log("\ntema Movimento Átomo");
+
+function tokensDoBloco(seletor) {
+  const m = new RegExp(`${seletor}\\s*\\{([^}]*)\\}`, "s").exec(CSS);
+  if (!m) return null;
+  const tokens = new Map();
+  for (const [, token, valor] of m[1].matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
+    tokens.set(token, valor.trim());
+  }
+  return tokens;
+}
+
+const ATOMO = tokensDoBloco(':root\\[data-tema="atomo"\\]');
+const ATOMO_FOTO = tokensDoBloco(':root\\[data-tema="atomo"\\] \\.sobre-foto');
+
+etapa("existe o tema Movimento Átomo", () => {
+  if (!ATOMO) throw new Error('não achei `:root[data-tema="atomo"]` em globals.css');
+  return `${ATOMO.size} tokens`;
+});
+
+etapa("o Movimento Átomo é escuro para o navegador", () => {
+  const m = /:root\[data-tema="atomo"\]\s*\{([^}]*)\}/s.exec(CSS);
+  if (!m) throw new Error("bloco ausente");
+  if (!/color-scheme:\s*(only\s+)?dark/.test(m[1])) {
+    throw new Error("sem `color-scheme: only dark` — barra de rolagem e campos saem do tema errado");
+  }
+});
+
+etapa("o Movimento Átomo redefine a paleta inteira", () => {
+  if (!ATOMO) throw new Error("bloco ausente");
+  const faltando = [...pares.keys()].filter((t) => !ATOMO.has(t));
+  if (faltando.length) {
+    throw new Error(`herda do escuro (azul no meio do marrom): ${faltando.join(", ")}`);
+  }
+  return `${pares.size} tokens conferidos`;
+});
+
+console.log("\ncontraste no tema Movimento Átomo");
+for (const [frente, fundo, piso, descricao] of PISOS) {
+  etapa(`${descricao} (${frente} sobre ${fundo})`, () => {
+    const a = ATOMO?.get(frente);
+    const b = ATOMO?.get(fundo);
+    if (!a) throw new Error(`${frente} não existe no tema`);
+    if (!b) throw new Error(`${fundo} não existe no tema`);
+    if (!normalizarCor(a)) throw new Error(`${frente} não é hex: ${a}`);
+    if (!normalizarCor(b)) throw new Error(`${fundo} não é hex: ${b}`);
+    const r = contraste(a, b);
+    if (r < piso) throw new Error(`${r.toFixed(2)}:1, piso é ${piso}:1`);
+    return `${r.toFixed(1)}:1`;
+  });
 }
 
 /*
@@ -371,6 +464,52 @@ etapa("o cabeçalho que flutua sobre o hero carrega .sobre-foto", () => {
     throw new Error("o <header> segue o tema — sobre o hero escuro ele some no claro");
   }
 });
+
+/*
+ * O véu sobre a foto tem paleta própria, então o terceiro tema precisa da dele:
+ * sem isto, quem escolhe Movimento Átomo vê a home inteira em marrom e o hero
+ * em azul-preto — o único pedaço da página que não recebeu o recado.
+ */
+etapa("o Movimento Átomo tem véu próprio sobre a foto", () => {
+  if (!ATOMO_FOTO) throw new Error('falta `:root[data-tema="atomo"] .sobre-foto` — o hero fica azul');
+  return `${ATOMO_FOTO.size} tokens`;
+});
+
+for (const [frente, piso, descricao] of [
+  ["--texto", 4.5, "título sobre a foto"],
+  ["--texto-soft", 4.5, "linha de apoio sobre a foto"],
+  ["--texto-faint", 3, "rótulo pequeno sobre a foto"],
+  ["--acento", 4.5, "âmbar sobre a foto"],
+]) {
+  etapa(`${descricao} no Movimento Átomo (${frente})`, () => {
+    const a = ATOMO_FOTO?.get(frente);
+    const b = ATOMO_FOTO?.get("--void");
+    if (!a || !b) throw new Error("token ausente no véu do Movimento Átomo");
+    const r = contraste(a, b);
+    if (r < piso) throw new Error(`${r.toFixed(2)}:1, piso é ${piso}:1`);
+    return `${r.toFixed(1)}:1`;
+  });
+}
+
+/*
+ * ── O SELETOR PRECISA ESTAR ONDE SE TRABALHA ─────────────────────────────
+ *
+ * Ele nasceu só na home, e a home é a página que o fotógrafo vê uma vez. Quem
+ * passa a tarde subindo 200 fotos vive dentro de `/painel`, e lá não havia como
+ * trocar — o tema virava uma decisão tomada antes de entrar e irrevogável
+ * depois. Aqui prendemos os dois lugares.
+ */
+for (const [arquivo, onde] of [
+  ["src/app/page.tsx", "a home"],
+  ["src/app/painel/layout.tsx", "o painel"],
+]) {
+  etapa(`${onde} oferece a troca de tema`, () => {
+    const fonte = readFileSync(path.join(RAIZ, arquivo), "utf8");
+    if (!/<SeletorTema[\s/>]/.test(fonte)) {
+      throw new Error(`${arquivo} não usa <SeletorTema> — não dá para trocar de tema ali`);
+    }
+  });
+}
 
 /*
  * A MARCA NÃO TEM FUNDO.
