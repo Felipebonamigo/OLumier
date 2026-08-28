@@ -12,7 +12,13 @@ import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { ehAdmin, administradores } from "../src/config/admin.ts";
-import { panoramaDosEstudios } from "../src/lib/admin.ts";
+import {
+  panoramaDosEstudios,
+  fichaDoEstudio,
+  crescimentoMensal,
+  entregaRecente,
+  eventosRecentes,
+} from "../src/lib/admin.ts";
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
 
 await exigirBancoDeTeste();
@@ -120,6 +126,90 @@ try {
     igual(e.bytes_no_cofre, rows[0].cofre, "bytes no cofre");
   });
 
+  /*
+   * A tela do painel lê vinte campos desta consulta. Um `select` que esquece um
+   * deles não quebra nada: o React recebe `undefined`, renderiza vazio, e a
+   * coluna some sem erro nenhum — que é o pior jeito de perder um número de
+   * dinheiro. Esta etapa é a lista de presença.
+   */
+  await etapa("traz todos os campos que a tela lê", async () => {
+    const linhas = await panoramaDosEstudios();
+    if (linhas.length === 0) return "banco sem estúdios";
+    const e = linhas[0];
+    const obrigatorios = [
+      "ciclo_cobranca", "cpf_cnpj", "dominio_proprio", "asaas_cliente_id",
+      "asaas_assinatura_id", "assinatura_criada_em", "ultimo_pagamento_em",
+      "pago_ate", "senha_alterada_em", "quota_bytes", "galerias", "publicadas",
+      "na_lixeira", "medias", "fotos", "videos", "acessos_30d", "favoritas",
+      "ultimo_acesso", "ultimo_envio",
+    ];
+    for (const campo of obrigatorios) {
+      if (!(campo in e)) throw new Error(`falta o campo ${campo}`);
+    }
+    return `${obrigatorios.length} campos`;
+  });
+
+  await etapa("foto mais vídeo fecha com o total de arquivos", async () => {
+    for (const e of await panoramaDosEstudios()) {
+      if (e.fotos + e.videos !== e.medias) {
+        throw new Error(`${e.slug}: ${e.fotos}+${e.videos} ≠ ${e.medias}`);
+      }
+    }
+  });
+
+  console.log("\na ficha de um estúdio");
+
+  /*
+   * O id vem da URL, e qualquer pessoa pode digitar o que quiser lá. Sem esta
+   * guarda o Postgres recusa o texto como uuid e a página devolve erro 500 —
+   * que, além de feio, confirma que a rota existe.
+   */
+  await etapa("id que não é uuid vira ficha vazia, não erro do banco", async () => {
+    for (const lixo of ["nao-e-uuid", "'; drop table tenants; --", ""]) {
+      igual(await fichaDoEstudio(lixo), null, `deveria recusar ${JSON.stringify(lixo)}`);
+    }
+  });
+
+  await etapa("uuid válido que não existe também vira ficha vazia", async () => {
+    igual(await fichaDoEstudio("00000000-0000-0000-0000-000000000000"), null, "inexistente");
+  });
+
+  await etapa("a ficha traz conta, galerias e histórico", async () => {
+    const estudio = await estudioDaRodada(db);
+    const ficha = await fichaDoEstudio(estudio.id);
+    if (!ficha) throw new Error("não achou o estúdio da rodada");
+    igual(ficha.estudio.id, estudio.id, "id");
+    if (!Array.isArray(ficha.galerias)) throw new Error("galerias não é lista");
+    if (!Array.isArray(ficha.eventos)) throw new Error("eventos não é lista");
+  });
+
+  console.log("\nas séries do painel");
+
+  await etapa("o crescimento devolve um mês por mês pedido, sem buraco", async () => {
+    const meses = await crescimentoMensal(12);
+    igual(meses.length, 12, "quantidade de meses");
+    for (const m of meses) {
+      if (!/^\d{4}-\d{2}$/.test(m.mes)) throw new Error(`mês fora do formato: ${m.mes}`);
+      // Mês sem cadastro e sem envio precisa vir zerado, não ausente: buraco na
+      // série vira barra faltando no gráfico, que se lê como mês que não houve.
+      if (typeof m.cadastros !== "number") throw new Error(`${m.mes} sem cadastros`);
+      if (typeof m.bytes_enviados !== "string") throw new Error(`${m.mes} sem bytes em texto`);
+    }
+    return meses.map((m) => m.mes).join(" ");
+  });
+
+  await etapa("a entrega separa as quatro ações", async () => {
+    const e = await entregaRecente(30);
+    for (const acao of ["abriu", "baixou", "baixou_tudo", "assistiu"]) {
+      if (typeof e[acao] !== "number") throw new Error(`falta ${acao}`);
+    }
+  });
+
+  await etapa("os eventos recentes respeitam o limite", async () => {
+    const evs = await eventosRecentes(5);
+    if (evs.length > 5) throw new Error(`veio ${evs.length}, pedi 5`);
+  });
+
   // --- o portão, pela rota ---------------------------------------------------
 
   let servidor = false;
@@ -161,6 +251,46 @@ try {
         if (/negado|permissão|autoriza/i.test(corpo)) {
           throw new Error("a resposta confirma que a página existe");
         }
+      });
+
+      /*
+       * A FICHA É A SEGUNDA PÁGINA DA ÁREA, e é por onde o portão se perde.
+       *
+       * A primeira nasceu com a checagem escrita à mão dentro dela. Copiar
+       * aquelas seis linhas para cada página nova é o caminho conhecido para a
+       * terceira nascer sem elas — e página desprotegida não avisa: ela
+       * responde 200 com o e-mail, o CPF e o histórico de um cliente para
+       * qualquer conta logada. Por isso o portão virou `lib/portao-admin.ts`, e
+       * por isso esta etapa existe apontando para a rota, não para a função.
+       */
+      await etapa("a ficha de um estúdio também recusa quem não é admin", async () => {
+        const r = await fetch(`${BASE}/painel/admin/estudios/${estudio.id}`, {
+          headers: { cookie },
+        });
+        igual(r.status, 404, "status");
+        const corpo = await r.text();
+        if (corpo.includes(estudio.email)) throw new Error("vazou o e-mail do estúdio");
+        if (/negado|permissão|autoriza/i.test(corpo)) {
+          throw new Error("a resposta confirma que a página existe");
+        }
+      });
+
+      /* Terceira página da área. Mesma regra, mesma etapa: o portão é
+         compartilhado justamente para que acrescentar página não exija lembrar
+         de nada — e esta etapa é o que prova que não exigiu. */
+      await etapa("o histórico também recusa quem não é admin", async () => {
+        const r = await fetch(`${BASE}/painel/admin/eventos`, { headers: { cookie } });
+        igual(r.status, 404, "status");
+        const corpo = await r.text();
+        if (/hist[óo]rico|auditoria/i.test(corpo)) throw new Error("vazou conteúdo da página");
+      });
+
+      await etapa("sem sessão a ficha também não existe", async () => {
+        const r = await fetch(`${BASE}/painel/admin/estudios/${estudio.id}`, {
+          redirect: "manual",
+        });
+        if (r.status === 200) throw new Error("respondeu 200 sem sessão");
+        return `HTTP ${r.status}`;
       });
     }
   }

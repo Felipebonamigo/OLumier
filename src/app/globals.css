@@ -150,6 +150,72 @@
   }
 }
 
+/*
+ * ── O TERCEIRO TEMA: MOVIMENTO ÁTOMO ──────────────────────────────────────
+ *
+ * Claro e escuro são o MESMO desenho com a luz trocada — daí caberem numa
+ * função só. Este não é: é a identidade de outra marca, o marrom e o caramelo
+ * do Movimento Átomo, e por isso vem cor por cor. As três cores de origem são
+ * as da marca (o marrom #602e17, o caramelo #8e6339, o traço #301911); o resto
+ * da paleta é derivado delas, e não emprestado do tema escuro.
+ *
+ * FORA DO @supports, de propósito. O bloco não usa `light-dark()`, então não
+ * precisa da guarda — e ficando fora ele vale também no navegador que não
+ * conhece a função, que é o único lugar onde a guarda muda alguma coisa.
+ * `:root[data-tema="atomo"]` tem especificidade maior que `:root`, então ganha
+ * das duas cópias acima sem depender da ordem.
+ *
+ * A PALETA INTEIRA está aqui, e nenhum token de fora. Bloco de override erra em
+ * silêncio: o token esquecido não fica sem cor — herda o azul do tema escuro, e
+ * um cinza-azulado no meio do marrom passa por descuido de designer em vez de
+ * defeito. `testar-tema.mjs` recusa qualquer um que falte, e mede o mesmo piso
+ * de contraste dos outros dois temas.
+ *
+ * As cores de estado descem de saturação junto: no meio de um marrom quente, o
+ * verde-menta e o vermelho-frio do tema escuro pareceriam colados de outro
+ * sistema. Mesma decisão que o Atomatiza tomou no tema dele.
+ */
+:root[data-tema="atomo"] {
+  /* Escolha da pessoa, e o sistema deixa de opinar. Nunca é o padrão: ninguém
+     tem "Movimento Átomo" como preferência de sistema operacional. */
+  color-scheme: only dark;
+
+  --void: #1b0e08;
+  --carbon: #271510;
+  --carbon-2: #331d15;
+
+  --texto: #f6ede4;
+  --texto-soft: #c9ae97;
+  --texto-faint: #a4876f;
+  --exemplo: #6b5344;
+  --linha: rgba(246, 237, 228, 0.14);
+  --linha-forte: rgba(246, 237, 228, 0.28);
+
+  /* O feixe do projetor, aqui em luz de tungstênio: prata no meio do marrom
+     seria o mesmo erro do azul. */
+  --luz: #e0c3a4;
+  --luz-alta: #f6ede4;
+  --marca-traco: #e8cdb0;
+
+  /* O caramelo da marca é o acento — mesmo papel do âmbar nos outros temas:
+     só AÇÃO (botão, link, foto marcada). */
+  --acento: #d9a373;
+  --acento-alto: #f0c79b;
+
+  /* A folha clara continua sendo papel — papel de fotografia analógica, com o
+     creme que o marrom pede em volta. */
+  --marfim: #f4ece2;
+  --marfim-2: #e4d5c4;
+  --tinta: #241812;
+  --tinta-suave: #574337;
+  --tinta-faint: #8a7264;
+  --ouro-tinta: #8a5a24;
+
+  --ok: #86c98a;
+  --alerta: #e5b35c;
+  --erro: #ef8a76;
+}
+
 @theme inline {
   --color-void: var(--void);
   --color-carbon: var(--carbon);
@@ -298,28 +364,46 @@ html[data-js] .revelar[data-visivel] {
 }
 
 /*
- * SOBRE FOTOGRAFIA, O TEMA NÃO VALE.
+ * SOBRE FOTOGRAFIA, O VÉU É QUEM DÁ O CONTRASTE.
  *
  * A home apoia texto direto em cima de foto de casamento — o hero, o
  * interlúdio, o fecho — e o cabeçalho flutua sobre o hero. Foto não é
- * superfície do tema: ela tem a luz que tem. No tema claro, `--texto-soft`
- * (cinza médio, feito para papel) caía em cima do contraluz dourado do hero e
- * sumia; o título, tinta quase preta, brigava com a parte clara da imagem.
+ * superfície do tema: ela tem a luz que tem. A paleta da página não serve aqui
+ * sem ajuste, e foi assim que o defeito chegou em 27/08/2026: no tema claro,
+ * `--texto-soft` (cinza médio, feito para papel) caía em cima do contraluz
+ * dourado do hero e sumia.
  *
- * Aqui os tokens deixam de trocar de lado: dentro de `.sobre-foto` a página é
- * SEMPRE escura, nos dois temas, porque o contraste vem do véu sobre a foto e
- * não da preferência de quem abriu. O véu é desenhado com `--void`, que também
- * é fixado — sem isso, no tema claro ele clarearia a foto em vez de escurecer,
- * e o texto claro ficaria sobre fundo claro.
+ * A primeira correção travou estas seções no ESCURO nos dois temas. Resolveu o
+ * lavado e criou outro defeito, que o dono viu no dia seguinte: a primeira
+ * dobra da home é INTEIRA sobre foto, então o botão de tema não mudava nada
+ * visível — botão morto na primeira tela, e no claro o pé preto do hero ainda
+ * batia de encontro à página de papel logo abaixo.
+ *
+ * Agora a paleta daqui é PRÓPRIA, mas acompanha o tema. Quem dá o contraste
+ * continua sendo o véu sobre a foto — a novidade é que existe véu dos dois
+ * lados: no escuro ele escurece a foto e o texto vai para o branco; no claro
+ * ele a clareia e o texto vai para a tinta. O véu é desenhado com `--void`, e é
+ * por isso que ele troca de lado junto: fosse fixo, um dos dois temas teria
+ * texto e fundo do mesmo lado da luz.
  *
  * Redefinir TOKEN, e não escrever cor nas classes, é o que faz as utilitárias
  * que já existem (`text-texto-soft`, `border-linha`, `.vidro`) continuarem
  * valendo dentro da foto sem nenhuma exceção espalhada pela marcação.
  *
- * Os tons são os do tema escuro, com o secundário e o terciário puxados para
- * cima: em cima de imagem o texto disputa com detalhe e ruído, e o que basta
- * sobre preto chapado não basta sobre uma foto. `scripts/testar-tema.mjs` mede
- * o piso e planta a classe nas três seções.
+ * Os tons não são os da página: o secundário e o terciário são puxados para
+ * longe do véu dos dois lados, porque em cima de imagem o texto disputa com
+ * detalhe e ruído, e o que basta sobre fundo chapado não basta sobre uma foto.
+ * `scripts/testar-tema.mjs` mede o piso NAS DUAS metades e planta a classe nas
+ * três seções.
+ *
+ * DUAS CÓPIAS, PELO MESMO MOTIVO DO :root — e por um segundo, específico daqui.
+ * A primeira é a metade escura em CSS comum, para o navegador que não conhece
+ * `light-dark()`: ele fica no escuro, que é onde a foto sempre soube viver. O
+ * segundo motivo é o compilador: fora do `@supports`, o Lightning CSS troca
+ * `light-dark()` por um par de variáveis que ele só define junto do primeiro
+ * `color-scheme` do arquivo — e ali o valor é `dark`. Resultado: a regra
+ * compilava para escuro nos dois temas, sem erro nenhum, exatamente o defeito
+ * que ela vinha corrigir. Dentro do `@supports` ele deixa a função em paz.
  */
 .sobre-foto {
   --void: #07080b;
@@ -333,4 +417,77 @@ html[data-js] .revelar[data-visivel] {
   --linha-forte: rgba(190, 205, 230, 0.3);
   --marca-traco: #e6ecf6;
   color: var(--texto);
+}
+
+@supports (color: light-dark(#000, #fff)) {
+  .sobre-foto {
+    --void: light-dark(#f4f6fa, #07080b);
+    --carbon: light-dark(#ffffff, #101319);
+    --texto: light-dark(#0b0e13, #ffffff);
+    --texto-soft: light-dark(#333b47, #d3dae5);
+    --texto-faint: light-dark(#566070, #aab3c0);
+    --acento: light-dark(#85590f, #e3b464);
+    --acento-alto: light-dark(#6f4b11, #f2c877);
+    --linha: light-dark(rgba(16, 19, 25, 0.16), rgba(190, 205, 230, 0.16));
+    --linha-forte: light-dark(rgba(16, 19, 25, 0.3), rgba(190, 205, 230, 0.3));
+    --marca-traco: light-dark(#1c2430, #e6ecf6);
+  }
+}
+
+/*
+ * O véu no Movimento Átomo.
+ *
+ * Sem este bloco a home ficaria marrom com o hero azul-preto — o único pedaço
+ * da página que não recebeu o recado, e justamente o primeiro que se vê. O véu
+ * escurece com o marrom do tema, e o texto sobe para o creme; mesma lógica dos
+ * outros dois, na luz desta marca.
+ */
+:root[data-tema="atomo"] .sobre-foto {
+  --void: #1b0e08;
+  --carbon: #271510;
+  --texto: #ffffff;
+  --texto-soft: #e6d5c4;
+  --texto-faint: #c2a891;
+  --acento: #eab887;
+  --acento-alto: #f6d3aa;
+  --linha: rgba(246, 237, 228, 0.18);
+  --linha-forte: rgba(246, 237, 228, 0.32);
+  --marca-traco: #f4e5d3;
+}
+
+/*
+ * ── O BOTÃO DO TEMA EM USO, SEM UMA LINHA DE JAVASCRIPT ───────────────────
+ *
+ * Com dois temas o botão podia ser cego — alternava, e a tela inteira dizia
+ * para onde. Com três, cego vira adivinhação: não dá para saber em que ponto do
+ * ciclo se está sem experimentar.
+ *
+ * Marcar o ativo em estado do React devolveria o piscar que o script do <head>
+ * existe para evitar: o servidor não sabe (nem pode saber) o tema de quem abriu,
+ * então a primeira pintura marcaria o botão errado metade das vezes. Quem sabe é
+ * o <html>, e é de lá que o CSS lê.
+ *
+ * A segunda e a terceira regras cobrem quem nunca escolheu: aí não há
+ * `data-tema` nenhum, e quem manda é o sistema. `atomo` não aparece nelas de
+ * propósito — ele nunca é o tema implícito.
+ */
+:root[data-tema="claro"] [data-tema-opcao="claro"],
+:root[data-tema="escuro"] [data-tema-opcao="escuro"],
+:root[data-tema="atomo"] [data-tema-opcao="atomo"] {
+  background: var(--carbon-2);
+  color: var(--texto);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema]) [data-tema-opcao="escuro"] {
+    background: var(--carbon-2);
+    color: var(--texto);
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-tema]) [data-tema-opcao="claro"] {
+    background: var(--carbon-2);
+    color: var(--texto);
+  }
 }
