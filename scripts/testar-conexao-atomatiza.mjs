@@ -103,6 +103,9 @@ await etapa("/api/conta diz de quem é a chave", async () => {
   igual(conta.slug, estudio.slug, "slug");
   igual(conta.nomeEstudio, estudio.nome_estudio, "nomeEstudio");
   igual(conta.dominio, marca.dominio, "dominio");
+  igual(conta.escopo, "leitura", "escopo da chave de leitura");
+  const deEnvioConta = await (await chamar("/api/conta", { chave: deEnvio })).json();
+  igual(deEnvioConta.escopo, "envio", "escopo da chave de envio");
   return `${conta.nomeEstudio} · ${conta.slug}.${conta.dominio}`;
 });
 

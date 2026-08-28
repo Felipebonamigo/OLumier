@@ -177,7 +177,7 @@ Três coisas entraram para isso, todas dentro do desenho que já existia:
 
 | Rota | Para quê | Escopo |
 |---|---|---|
-| `GET /api/conta` | o aperto de mão: a quem esta chave pertence (`tenantId`, `slug`, `nomeEstudio`, `dominio`) — é o que o outro lado mostra na tela antes de gravar a conexão | `leitura` |
+| `GET /api/conta` | o aperto de mão: a quem esta chave pertence (`tenantId`, `slug`, `nomeEstudio`, `dominio`, `escopo`) — é o que o outro lado mostra na tela antes de gravar a conexão, e o `escopo` deixa recusar chave de leitura na hora | `leitura` |
 | `GET /api/galerias/:id` | como está a entrega: estado, contagem, endereço canônico e o `noAr` **calculado** (a régua da página pública, nunca a coluna `publicada` crua) | `leitura` |
 | `POST /api/galerias` + `referenciaExterna` | criar a galeria de um contrato, com **idempotência**: a mesma referência devolve a mesma galeria (200), nunca uma `ana-pedro-2` | `envio` |
 

@@ -30,10 +30,23 @@ export async function GET(request: NextRequest) {
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
 
+  /*
+   * O escopo vai junto para a tela de conexão do outro lado recusar uma chave
+   * de leitura NA HORA, com a instrução certa ("crie uma chave de envio") — em
+   * vez de deixar o primeiro "criar galeria" morrer num 401 confuso.
+   *
+   * `envio` implica `leitura` (ver auth-api.ts), então o mesmo cabeçalho
+   * respondendo aos dois pedidos revela qual escopo a chave tem. O painel
+   * (cookie, sem escopo) responde aos dois e sai como envio — correto: quem
+   * está logado pode tudo isso.
+   */
+  const escopo = (await tenantDaRequisicao(request, "envio")) ? "envio" : "leitura";
+
   return NextResponse.json({
     tenantId: tenant.id,
     slug: tenant.slug,
     nomeEstudio: tenant.nome_estudio,
     dominio: marca.dominio,
+    escopo,
   });
 }
