@@ -57,7 +57,14 @@ export default async function AdminPage() {
     panoramaDosEstudios(),
     crescimentoMensal(12),
     entregaRecente(30),
-    eventosRecentes(40),
+    /*
+     * OITO, e não quarenta. Uma limpeza de galeria despeja trinta
+     * `media.apagada` no mesmo minuto: com quarenta linhas, o painel terminava
+     * com meia tela da mesma frase repetida, e o evento que importava ficava
+     * fora dela. O que sai daqui não some — está em /painel/admin/eventos, com
+     * filtro por ação, estúdio e período.
+     */
+    eventosRecentes(8),
   ]);
 
   const agora = new Date();
@@ -464,14 +471,14 @@ export default async function AdminPage() {
       {/* ── 8. AUDITORIA ──────────────────────────────────────────────── */}
       <Bloco
         titulo="Últimos eventos"
-        explicacao="O log de auditoria da plataforma. Não se apaga nem se reescreve — o banco recusa."
+        explicacao="Os oito mais recentes. O log inteiro, com filtro por ação, estúdio e período, fica no histórico."
       >
         {eventos.length === 0 ? (
           <p className="text-sm text-texto-faint">Nada registrado ainda.</p>
         ) : (
           <ul className="divide-y divide-linha rounded-xl border border-linha bg-carbon">
             {eventos.map((ev) => (
-              <li key={String(ev.id)} className="flex flex-wrap gap-x-3 px-4 py-2 text-xs">
+              <li key={String(ev.id)} className="flex flex-wrap gap-x-3 px-4 py-1.5 text-xs">
                 <span className="font-mono tabular-nums text-texto-faint">
                   {dataHora(ev.criado_em)}
                 </span>
@@ -482,6 +489,12 @@ export default async function AdminPage() {
             ))}
           </ul>
         )}
+        <Link
+          href="/painel/admin/eventos"
+          className="mt-3 inline-block text-xs text-acento underline underline-offset-4"
+        >
+          pesquisar o histórico →
+        </Link>
       </Bloco>
     </main>
   );

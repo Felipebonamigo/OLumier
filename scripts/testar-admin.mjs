@@ -275,6 +275,16 @@ try {
         }
       });
 
+      /* Terceira página da área. Mesma regra, mesma etapa: o portão é
+         compartilhado justamente para que acrescentar página não exija lembrar
+         de nada — e esta etapa é o que prova que não exigiu. */
+      await etapa("o histórico também recusa quem não é admin", async () => {
+        const r = await fetch(`${BASE}/painel/admin/eventos`, { headers: { cookie } });
+        igual(r.status, 404, "status");
+        const corpo = await r.text();
+        if (/hist[óo]rico|auditoria/i.test(corpo)) throw new Error("vazou conteúdo da página");
+      });
+
       await etapa("sem sessão a ficha também não existe", async () => {
         const r = await fetch(`${BASE}/painel/admin/estudios/${estudio.id}`, {
           redirect: "manual",

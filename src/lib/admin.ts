@@ -205,6 +205,142 @@ export async function eventosRecentes(limite = 60): Promise<Evento[]> {
 }
 
 // ---------------------------------------------------------------------------
+// PESQUISA DO LOG
+// ---------------------------------------------------------------------------
+
+/**
+ * ── POR QUE O LOG VIROU PESQUISA ──────────────────────────────────────────
+ *
+ * O painel mostrava os 40 eventos mais recentes numa lista corrida. Uma
+ * limpeza de galeria despeja trinta `media.apagada` no mesmo minuto, e a lista
+ * inteira virava a mesma linha repetida — a rolagem custava meia tela e o
+ * evento que importava ficava fora dela.
+ *
+ * Mostrar menos não resolve sozinho: o que sai da lista precisa continuar
+ * alcançável, senão a tela deixa de responder "o que aconteceu no dia 3", que
+ * é a pergunta pela qual esta tabela existe. Daí a divisão: o painel mostra
+ * poucos e recentes, e a pesquisa alcança o resto.
+ */
+
+/** Teto de linhas por página. `?porPagina=999999` não despeja a tabela. */
+export const POR_PAGINA_MAX = 100;
+export const POR_PAGINA_PADRAO = 50;
+
+export interface FiltroEventos {
+  acao?: string;
+  tenantId?: string;
+  /** Texto livre: casa nome do estúdio, ação ou id do alvo. */
+  busca?: string;
+  /** YYYY-MM-DD, inclusive nas duas pontas. */
+  desde?: string;
+  ate?: string;
+  pagina?: number;
+  porPagina?: number;
+}
+
+export interface PaginaDeEventos {
+  eventos: Evento[];
+  /** Quantos o FILTRO encontrou — não quantos couberam na página. */
+  total: number;
+  pagina: number;
+  porPagina: number;
+  paginas: number;
+}
+
+/**
+ * Prepara o texto para o `like`.
+ *
+ * `%` e `_` são curingas: sem escapar, quem digitasse "100%" (ou só "%")
+ * receberia todos os eventos de todos os estúdios — e uma busca que devolve
+ * tudo se lê como "achei tudo isso", não como "seu filtro foi ignorado".
+ */
+function paraLike(texto: string): string {
+  return `%${texto.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+}
+
+const comoUuid = (v: string | undefined) =>
+  v && /^[0-9a-f-]{36}$/i.test(v) ? v : null;
+const comoData = (v: string | undefined) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+const limpo = (v: string | undefined) => {
+  const t = v?.trim();
+  return t ? t : null;
+};
+
+export async function procurarEventos(f: FiltroEventos = {}): Promise<PaginaDeEventos> {
+  const porPagina = Math.min(
+    POR_PAGINA_MAX,
+    Math.max(1, Math.floor(Number(f.porPagina) || POR_PAGINA_PADRAO)),
+  );
+  const pedida = Math.floor(Number(f.pagina));
+  const pagina = Number.isFinite(pedida) && pedida > 0 ? pedida : 1;
+
+  const busca = limpo(f.busca);
+  const valores = [
+    limpo(f.acao),
+    comoUuid(f.tenantId),
+    busca ? paraLike(busca) : null,
+    comoData(f.desde),
+    comoData(f.ate),
+  ];
+
+  /*
+   * Um `where` só, montado com `is null or ...` em vez de concatenar pedaços de
+   * SQL conforme os filtros preenchidos. Concatenar é o caminho curto para o
+   * dia em que um dos pedaços leva texto de usuário junto — e aqui TODO filtro
+   * vem da URL. Assim o texto nunca sai de um parâmetro.
+   */
+  const onde = `
+    where ($1::text is null or e.acao = $1)
+      and ($2::uuid is null or e.tenant_id = $2)
+      and ($3::text is null or (
+            e.estudio ilike $3 escape '\\'
+         or e.acao    ilike $3 escape '\\'
+         or e.alvo_id ilike $3 escape '\\'))
+      and ($4::date is null or e.criado_em >= $4::date)
+      and ($5::date is null or e.criado_em < $5::date + 1)`;
+
+  /*
+   * Contagem e página em duas consultas, e não num `count(*) over ()`: a janela
+   * viaja junto das linhas, então uma página além do fim volta SEM linha
+   * nenhuma — e com ela o total, que é justamente o que diz "existem 300, você
+   * pediu a página 99". A tela ficaria dizendo "nenhum resultado" para uma
+   * busca que achou trezentos.
+   */
+  const [{ n: total }] = await consultar<{ n: number }>(
+    `select count(*)::int as n from eventos e ${onde}`,
+    valores,
+  );
+
+  const eventos = await consultar<Evento>(
+    `select e.id, e.tenant_id, e.estudio, e.ator, e.acao, e.alvo_tipo, e.alvo_id,
+            e.detalhe, e.criado_em
+       from eventos e ${onde}
+      order by e.id desc
+      limit $6 offset $7`,
+    [...valores, porPagina, (pagina - 1) * porPagina],
+  );
+
+  return { eventos, total, pagina, porPagina, paginas: Math.ceil(total / porPagina) };
+}
+
+/** As ações que existem no log, da mais usada para a menos — para o filtro. */
+export async function acoesRegistradas(): Promise<{ acao: string; n: number }[]> {
+  return consultar<{ acao: string; n: number }>(
+    `select acao, count(*)::int as n from eventos group by acao order by n desc, acao`,
+  );
+}
+
+/** Estúdios que aparecem no log, para o filtro por conta. */
+export async function estudiosComEventos(): Promise<{ tenant_id: string; estudio: string }[]> {
+  return consultar<{ tenant_id: string; estudio: string }>(
+    `select distinct on (tenant_id) tenant_id, estudio
+       from eventos
+      where tenant_id is not null and estudio is not null
+      order by tenant_id, id desc`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // UM ESTÚDIO — a ficha completa
 // ---------------------------------------------------------------------------
 
@@ -271,9 +407,12 @@ export async function fichaDoEstudio(id: string): Promise<FichaDoEstudio | null>
 
   const [galerias, eventos] = await Promise.all([
     galeriasDoEstudio(id),
+    /* Doze, pelo mesmo motivo do painel: uma limpeza de galeria despeja trinta
+       `media.apagada` no mesmo minuto e afogaria a ficha inteira. O resto está
+       em /painel/admin/eventos?estudio=<id>, já filtrado nesta conta. */
     consultar<Evento>(
       `select id, tenant_id, estudio, ator, acao, alvo_tipo, alvo_id, detalhe, criado_em
-         from eventos where tenant_id = $1 order by id desc limit 100`,
+         from eventos where tenant_id = $1 order by id desc limit 12`,
       [id],
     ),
   ]);

@@ -281,14 +281,14 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
 
       <Bloco
         titulo="Histórico"
-        explicacao="Os últimos 100 eventos desta conta. É o que responde 'o que aconteceu no dia 3'."
+        explicacao="Os últimos doze eventos desta conta. O resto está no histórico, já filtrado nela."
       >
         {eventos.length === 0 ? (
           <p className="text-sm text-texto-faint">Nada registrado para esta conta.</p>
         ) : (
           <ul className="divide-y divide-linha rounded-xl border border-linha bg-carbon">
             {eventos.map((ev) => (
-              <li key={String(ev.id)} className="px-4 py-2 text-xs">
+              <li key={String(ev.id)} className="px-4 py-1.5 text-xs">
                 <div className="flex flex-wrap gap-x-3">
                   <span className="font-mono tabular-nums text-texto-faint">
                     {dataHora(ev.criado_em)}
@@ -297,7 +297,7 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
                   <span className="text-texto-faint">por {ev.ator}</span>
                 </div>
                 {Object.keys(ev.detalhe ?? {}).length > 0 && (
-                  <pre className="mt-1 overflow-x-auto font-mono text-[10px] text-texto-faint">
+                  <pre className="mt-0.5 overflow-x-auto font-mono text-[10px] text-texto-faint">
                     {JSON.stringify(ev.detalhe)}
                   </pre>
                 )}
@@ -305,6 +305,12 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
             ))}
           </ul>
         )}
+        <Link
+          href={`/painel/admin/eventos?estudio=${e.id}`}
+          className="mt-3 inline-block text-xs text-acento underline underline-offset-4"
+        >
+          histórico completo desta conta →
+        </Link>
       </Bloco>
     </main>
   );
