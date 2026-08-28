@@ -9,6 +9,18 @@ import {
   Raleway,
   Parisienne,
   Petit_Formal_Script,
+  EB_Garamond,
+  Libre_Baskerville,
+  Bodoni_Moda,
+  Josefin_Sans,
+  Work_Sans,
+  Outfit,
+  Dancing_Script,
+  Sacramento,
+  Italianno,
+  Cinzel,
+  Marcellus,
+  Tenor_Sans,
 } from "next/font/google";
 import { marca } from "@/config/marca";
 import { SCRIPT_TEMA } from "@/config/tema";
@@ -96,6 +108,100 @@ const petitFormal = Petit_Formal_Script({
   preload: false,
 });
 
+/*
+ * ── A SEGUNDA LEVA (27/08/2026) ───────────────────────────────────────────
+ *
+ * Nove fontes eram pouco: o fotógrafo escolhe a tipografia da entrega dele, e
+ * três opções por família viram "nenhuma serve". Vinte e uma é uma lista que
+ * dá para percorrer sem cansar — e o seletor agrupa por família justamente
+ * para ninguém precisar olhar as vinte e uma.
+ *
+ * Todas com `preload: false`, pela mesma razão do bloco acima: a galeria do
+ * casal baixa UMA fonte, a escolhida. `testar-aparencia.mjs` recusa qualquer
+ * uma que escape dessa regra.
+ *
+ * MAIÚSCULAS é família nova. Cinzel, Marcellus e Tenor Sans são a tipografia de
+ * convite de casamento — a que o fotógrafo reconhece do papel, e que não existia
+ * em nenhuma das três famílias anteriores.
+ */
+const ebGaramond = EB_Garamond({
+  variable: "--font-titulo-garamond",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const baskerville = Libre_Baskerville({
+  variable: "--font-titulo-baskerville",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+  preload: false,
+});
+const bodoni = Bodoni_Moda({
+  variable: "--font-titulo-bodoni",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const josefin = Josefin_Sans({
+  variable: "--font-titulo-josefin",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const workSans = Work_Sans({
+  variable: "--font-titulo-work",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const outfit = Outfit({
+  variable: "--font-titulo-outfit",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const dancing = Dancing_Script({
+  variable: "--font-titulo-dancing",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const sacramento = Sacramento({
+  variable: "--font-titulo-sacramento",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  preload: false,
+});
+const italianno = Italianno({
+  variable: "--font-titulo-italianno",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  preload: false,
+});
+const cinzel = Cinzel({
+  variable: "--font-titulo-cinzel",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+const marcellus = Marcellus({
+  variable: "--font-titulo-marcellus",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  preload: false,
+});
+const tenor = Tenor_Sans({
+  variable: "--font-titulo-tenor",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  preload: false,
+});
+
 /** Todas as variáveis de fonte, num lugar só — o <body> não precisa saber quantas são. */
 const FONTES = [
   montserrat,
@@ -107,6 +213,18 @@ const FONTES = [
   raleway,
   parisienne,
   petitFormal,
+  ebGaramond,
+  baskerville,
+  bodoni,
+  josefin,
+  workSans,
+  outfit,
+  dancing,
+  sacramento,
+  italianno,
+  cinzel,
+  marcellus,
+  tenor,
 ]
   .map((f) => f.variable)
   .join(" ");

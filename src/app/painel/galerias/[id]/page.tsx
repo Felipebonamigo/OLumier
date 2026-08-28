@@ -253,6 +253,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         publicada={galeria.publicada}
         temSenha={Boolean(galeria.senha_hash)}
         permiteDownload={galeria.permite_download}
+        semFotos={medias.length === 0}
       />
 
       <PrazoCofre

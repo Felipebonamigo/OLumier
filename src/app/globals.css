@@ -41,6 +41,21 @@
   --texto: #eef1f6;
   --texto-soft: #a4adbd;
   --texto-faint: #6b7484;
+  /*
+   * O TEXTO DE EXEMPLO DO CAMPO tem token proprio, e nao reaproveita
+   * `--texto-faint`.
+   *
+   * Reaproveitar parecia economia e nao era: `--texto-faint` e a cor do texto
+   * secundario que a pessoa LE (dicas, rodapes), e no tema claro ele fica
+   * escuro o bastante para o exemplo passar por conteudo digitado. Em
+   * 27/08/2026 o Felipe abriu o cadastro e achou que o campo ja vinha
+   * preenchido com o nome de outro estudio.
+   *
+   * Exemplo tem de ser visivelmente mais fraco que o que foi digitado, e ainda
+   * legivel. Fica perto de 3:1 sobre o fundo de cada tema — abaixo do minimo de
+   * TEXTO, e isso e o certo: exemplo nao e conteudo, some quando se digita.
+   */
+  --exemplo: #4c545f;
   --linha: rgba(190, 205, 230, 0.13);
   --linha-forte: rgba(190, 205, 230, 0.26);
   --luz: #cfd9ea;
@@ -81,6 +96,7 @@
     --texto: light-dark(#101319, #eef1f6);
     --texto-soft: light-dark(#4a5462, #a4adbd);
     --texto-faint: light-dark(#6d7684, #6b7484);
+    --exemplo: light-dark(#a8b0bd, #4c545f);
     --linha: light-dark(rgba(16, 19, 25, 0.12), rgba(190, 205, 230, 0.13));
     --linha-forte: light-dark(rgba(16, 19, 25, 0.24), rgba(190, 205, 230, 0.26));
 
@@ -145,6 +161,7 @@
   --color-texto: var(--texto);
   --color-texto-soft: var(--texto-soft);
   --color-texto-faint: var(--texto-faint);
+  --color-exemplo: var(--exemplo);
   --color-linha: var(--linha);
   --color-linha-forte: var(--linha-forte);
   --color-marfim: var(--marfim);

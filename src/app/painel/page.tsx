@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { sessaoAtual } from "@/lib/auth";
 import { listarGalerias, listarLixeira, formatarBytes, PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
+import { Lixeira } from "@/components/lixeira";
 import { diasAteArquivar } from "@/config/prazos";
-import { restaurarGaleriaAction } from "./actions";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = { title: "Galerias" };
@@ -117,39 +117,15 @@ export default async function PainelPage() {
        * ensinaria o fotógrafo a ignorar aquele canto da tela — e é justamente
        * onde ele vai precisar olhar no dia em que apagar a galeria errada.
        */}
-      {lixeira.length > 0 && (
-        <section className="mt-12 rounded-xl border border-linha bg-carbon/40 p-5">
-          <h2 className="text-sm font-semibold">Lixeira</h2>
-          <p className="mt-1 text-xs text-texto-soft">
-            Galerias apagadas ficam aqui por {PRAZO_LIXEIRA_DIAS} dias antes de sumir de vez. Nada
-            foi apagado do armazenamento ainda — restaurar traz tudo de volta.
-          </p>
-          <ul className="mt-4 divide-y divide-linha">
-            {lixeira.map((g) => (
-              <li key={g.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">{g.titulo}</span>
-                  <span className="block text-xs text-texto-faint">
-                    {g.total_medias ?? 0} {g.total_medias === 1 ? "arquivo" : "arquivos"} ·{" "}
-                    {g.dias_restantes === 0
-                      ? "some hoje"
-                      : `some em ${g.dias_restantes} ${g.dias_restantes === 1 ? "dia" : "dias"}`}
-                  </span>
-                </span>
-                <form action={restaurarGaleriaAction}>
-                  <input type="hidden" name="galeria_id" value={g.id} />
-                  <button
-                    type="submit"
-                    className="rounded-full border border-linha-forte px-4 py-1.5 text-xs font-medium hover:bg-carbon-2"
-                  >
-                    Restaurar
-                  </button>
-                </form>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <Lixeira
+        prazoDias={PRAZO_LIXEIRA_DIAS}
+        itens={lixeira.map((g) => ({
+          id: g.id,
+          titulo: g.titulo,
+          arquivos: g.total_medias ?? 0,
+          diasRestantes: g.dias_restantes,
+        }))}
+      />
     </main>
   );
 }

@@ -6,8 +6,11 @@ import { salvarPublicacaoAction } from "@/app/painel/actions";
 import { marca } from "@/config/marca";
 
 /**
- * Controles de publicação. É aqui que o fotógrafo decide se a galeria está no ar,
- * se pede senha e se permite baixar — e pega o link para mandar no WhatsApp.
+ * Controles de publicação: senha, download, e o ato de publicar.
+ *
+ * A ordem da seção é a ordem da decisão — ajustes em cima, publicar embaixo.
+ * Publicado, o botão sai da frente e o LINK vira o assunto, porque a partir dali
+ * o trabalho é mandá-lo para o cliente.
  */
 export function PublicarGaleria({
   galeriaId,
@@ -17,6 +20,7 @@ export function PublicarGaleria({
   publicada,
   temSenha,
   permiteDownload,
+  semFotos,
 }: {
   galeriaId: string;
   /** Caminho longo (/g/estudio/galeria) — usado fora de produção. */
@@ -26,6 +30,8 @@ export function PublicarGaleria({
   publicada: boolean;
   temSenha: boolean;
   permiteDownload: boolean;
+  /* Publicar galeria vazia é permitido — só não deve ser acidental. */
+  semFotos: boolean;
 }) {
   const [copiado, setCopiado] = useState(false);
   const [senha, setSenha] = useState("");
@@ -93,31 +99,17 @@ export function PublicarGaleria({
 
   return (
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
-      <h2 className="text-sm font-semibold">Entrega ao cliente</h2>
-
-      <label className="mt-4 flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={publicada}
-          disabled={salvando}
-          onChange={(e) => alternar("publicada", e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-[color:var(--acento)]"
-        />
-        <span>
-          {/*
-            "Publicada" e não "no ar" porque é o que esta caixa de fato controla.
-            As duas coisas se separam no cofre: lá `publicada` continua ligada de
-            propósito — é isso que faz reativar devolver a galeria sem o
-            fotógrafo republicar — enquanto o link NÃO está no ar. Chamar a caixa
-            de "no ar" a fazia afirmar, marcada, uma coisa falsa naquele estado.
-            O selo do cabeçalho é quem responde "abre agora?"; ver page.tsx.
-          */}
-          <span className="block text-sm font-medium">Galeria publicada</span>
-          <span className="block text-xs text-texto-faint">
-            Enquanto estiver desligada, o link não abre para ninguém.
-          </span>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold">Entrega ao cliente</h2>
+        <span className={`text-xs font-medium ${publicada ? "text-ok" : "text-texto-faint"}`}>
+          {publicada ? "no ar" : "rascunho"}
         </span>
-      </label>
+      </div>
+      <p className="mt-0.5 text-xs text-texto-faint">
+        {publicada
+          ? "O link abre para quem tiver ele."
+          : "Ajuste o que quiser e publique quando estiver pronto. Ninguém vê até lá."}
+      </p>
 
       <label className="mt-4 flex items-start gap-3">
         <input
@@ -165,7 +157,7 @@ export function PublicarGaleria({
               setMexeuNaSenha(true);
             }}
             placeholder={temSenha ? "nova senha" : "ex.: anaepedro"}
-            className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-texto-faint focus:border-acento focus:outline-none"
+            className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-exemplo focus:border-acento focus:outline-none"
           />
           <button
             type="button"
@@ -184,34 +176,80 @@ export function PublicarGaleria({
         </div>
       </div>
 
-      {publicada && (
-        <div className="mt-5 border-t border-linha pt-5">
-          <span className="block text-sm font-medium">Link do cliente</span>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <code className="min-w-0 flex-1 truncate rounded-lg border border-linha bg-void px-3 py-2 text-xs text-texto-soft">
-              {linkCompleto}
-            </code>
+      {/*
+        PUBLICAR É UM ATO, NÃO UM AJUSTE.
+
+        Era uma caixa "Galeria publicada" no topo da seção, junto com download e
+        senha — três marcações iguais, e a única que muda o mundo lá fora
+        misturada às duas que só configuram. Caixa marcada descreve um estado;
+        botão faz uma coisa. E ela ficava ANTES dos ajustes, sugerindo publicar
+        primeiro e arrumar depois — o contrário da ordem que a pessoa quer.
+
+        Agora os ajustes vêm em cima e a decisão embaixo, que é onde ela cabe:
+        depois de tudo pronto. Publicado, o botão sai da frente e o LINK vira o
+        assunto, porque a partir dali o trabalho é mandá-lo.
+      */}
+      <div className="mt-5 border-t border-linha pt-5">
+        {!publicada ? (
+          <>
+            {semFotos && (
+              <p className="mb-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta">
+                Esta galeria ainda não tem foto nenhuma. Dá para publicar assim mesmo — o cliente
+                abriria uma galeria vazia.
+              </p>
+            )}
             <button
               type="button"
-              onClick={copiar}
-              className="rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
+              disabled={salvando}
+              onClick={() => alternar("publicada", true)}
+              className="w-full rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:opacity-40"
             >
-              {copiado ? "copiado ✓" : "copiar"}
+              {salvando ? "Publicando…" : "Publicar galeria"}
             </button>
-            {/* Abre o MESMO link que ele vai mandar — conferir outro endereço
-                não provaria que o link entregue funciona. O caminho longo cobre
-                a primeira render, antes de o navegador informar o domínio. */}
-            <a
-              href={linkCompleto || caminho}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
+            <p className="mt-2 text-center text-xs text-texto-faint">
+              A partir daí o link abre para quem tiver ele. Dá para tirar do ar depois.
+            </p>
+          </>
+        ) : (
+          <>
+            <span className="block text-sm font-medium">Link do cliente</span>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded-lg border border-linha bg-void px-3 py-2 text-xs text-texto-soft">
+                {linkCompleto}
+              </code>
+              <button
+                type="button"
+                onClick={copiar}
+                className="rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
+              >
+                {copiado ? "copiado ✓" : "copiar"}
+              </button>
+              {/* Abre o MESMO link que ele vai mandar — conferir outro endereço
+                  não provaria que o link entregue funciona. O caminho longo cobre
+                  a primeira render, antes de o navegador informar o domínio. */}
+              <a
+                href={linkCompleto || caminho}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
+              >
+                abrir ↗
+              </a>
+            </div>
+
+            {/* Discreto de propósito: tirar do ar é raro, e vem depois do link
+                porque o assunto de uma galeria publicada é entregá-la. */}
+            <button
+              type="button"
+              disabled={salvando}
+              onClick={() => alternar("publicada", false)}
+              className="mt-3 text-xs text-texto-faint underline underline-offset-4 transition hover:text-erro disabled:opacity-40"
             >
-              abrir ↗
-            </a>
-          </div>
-        </div>
-      )}
+              tirar do ar
+            </button>
+          </>
+        )}
+      </div>
     </section>
   );
 }

@@ -357,7 +357,19 @@ export async function galeriasVencidasNaLixeira() {
  * que existe: depois dela, o arquivo não volta de lugar nenhum. É por isso que
  * ela só é chamada depois do prazo da lixeira ou por um pedido explícito.
  */
-export async function destruirGaleria(galeriaId: string, chaves: string[]) {
+export async function destruirGaleria(
+  galeriaId: string,
+  chaves: string[],
+  /*
+   * QUEM mandou destruir. O padrão é o temporizador, que é o caminho comum.
+   *
+   * A distinção não é enfeite de log: numa disputa, "o prazo correu" e "o
+   * fotógrafo mandou apagar agora" são fatos diferentes, e este evento é o único
+   * registro de que a galeria existiu. Gravar tudo como "sistema" faria a
+   * exclusão manual se disfarçar de expiração automática.
+   */
+  ator: "sistema" | "estudio" = "sistema",
+) {
   /*
    * Lido antes do delete, pelo mesmo motivo de sempre: depois não existe mais
    * de onde tirar. Este é o evento que alguém vai procurar anos depois — é o
@@ -380,13 +392,15 @@ export async function destruirGaleria(galeriaId: string, chaves: string[]) {
     await registrarEvento({
       tenantId: antes.tenant_id,
       estudio: antes.estudio,
-      // Quem destruiu foi o temporizador, não a pessoa — e a distinção importa
-      // numa disputa: prova que o prazo correu, não que alguém mandou apagar.
-      ator: "sistema",
+      ator,
       acao: ACOES.GALERIA_DESTRUIDA,
       alvoTipo: "galeria",
       alvoId: galeriaId,
-      detalhe: { titulo: antes.titulo, arquivos: chaves.length, apos_dias: PRAZO_LIXEIRA_DIAS },
+      detalhe: {
+        titulo: antes.titulo,
+        arquivos: chaves.length,
+        ...(ator === "sistema" ? { apos_dias: PRAZO_LIXEIRA_DIAS } : { antes_do_prazo: true }),
+      },
     });
   }
 

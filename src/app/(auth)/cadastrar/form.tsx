@@ -21,7 +21,7 @@ export function FormCadastrar({ minimo }: { minimo: number }) {
         name="nome_estudio"
         required
         autoComplete="organization"
-        placeholder="Caroline Tedesco Fotografia"
+        placeholder="Seu estúdio"
         dica="Aparece nas galerias e vira o endereço do seu link."
       />
       <Campo

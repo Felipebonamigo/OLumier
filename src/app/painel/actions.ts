@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { criarSessao, sessaoAtual } from "@/lib/auth";
 import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
 import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
-import { consultar } from "@/lib/db";
+import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { lerAparencia } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
@@ -891,6 +891,52 @@ export async function apagarGaleriaAction(form: FormData) {
 }
 
 /** Tira a galeria da lixeira. Volta como rascunho — republicar é decisão de quem restaurou. */
+/**
+ * Apaga de vez, antes do prazo da lixeira — e é irreversível.
+ *
+ * A lixeira já protege do clique errado: 30 dias, e restaurar traz tudo. Esta
+ * ação existe para o outro caso, que também é real: o fotógrafo que apagou por
+ * engano do CLIENTE, ou que precisa liberar espaço agora e sabe exatamente o que
+ * está fazendo. Sem ela, "apagar" não apaga — e quem quer o espaço de volta
+ * hoje não tem caminho nenhum.
+ *
+ * As chaves são lidas ANTES do delete: depois não haveria como saber o que tirar
+ * do bucket, e o arquivo viraria lixo invisível que só aparece na fatura.
+ *
+ * O filtro por `tenant_id` está na consulta, e não só na tela: id adivinhado
+ * não alcança galeria alheia.
+ */
+export async function destruirGaleriaAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+
+  const alvo = await consultarUm<{ id: string; chaves: string[] }>(
+    `select g.id,
+            coalesce(
+              array_remove(
+                array_agg(m.chave) || array_agg(m.chave_thumb) || array_agg(m.chave_preview),
+                null
+              ),
+              '{}'
+            ) as chaves
+       from galerias g
+       left join medias m on m.galeria_id = g.id
+      where g.id = $1 and g.tenant_id = $2 and g.estado = 'lixeira'
+      group by g.id`,
+    [galeriaId, tenantId],
+  );
+  /* Só destrói o que ESTÁ na lixeira. Sem essa condição, um formulário montado à
+   * mão apagaria de vez uma galeria no ar, pulando os 30 dias inteiros. */
+  if (!alvo) return;
+
+  const { destruirGaleria } = await import("@/lib/tenants");
+  await destruirGaleria(alvo.id, alvo.chaves, "estudio");
+
+  revalidatePath("/painel");
+  revalidatePath("/painel/conta");
+}
+
 export async function restaurarGaleriaAction(form: FormData) {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");

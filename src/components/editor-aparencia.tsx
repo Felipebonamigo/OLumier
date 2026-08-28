@@ -244,7 +244,7 @@ export function EditorAparencia({
               }`}
             >
               <span className="flex items-center gap-2">
-                <MiniaturaPreset id={p.id} />
+                <MiniaturaPreset aparencia={p.aparencia} />
                 <span className="text-sm font-medium">{p.nome}</span>
               </span>
               <span className="mt-1.5 block text-[11px] leading-snug text-texto-faint">
@@ -284,53 +284,89 @@ export function EditorAparencia({
             loading="lazy"
           />
         </div>
+
+        {/*
+          A PRÉVIA CABE NUMA CAIXA; A GALERIA NÃO.
+
+          O iframe tem 460px de altura e a largura do painel — e a galeria é
+          desenhada para tela cheia. Capa imersa, grade editorial e espaçamento
+          arejado são exatamente as escolhas que a caixa achata, então a prévia
+          mostra bem o CLIMA e mal a proporção. Quem vai decidir "está bom para
+          o meu cliente" precisa ver do jeito que o cliente vê.
+
+          Abre em aba nova de propósito: a decisão continua sendo tomada aqui, e
+          perder o editor para conferir seria trocar uma pergunta por outra.
+        */}
+        <a
+          href={caminhoPublico}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
+        >
+          Visualizar galeria ↗
+        </a>
+        <p className="mt-1.5 text-xs text-texto-faint">
+          Abre em tela cheia, do jeito que o seu cliente vê.
+        </p>
       </div>
     </section>
   );
 }
 
-/** Rabisco do layout de cada preset — ajuda a escolher sem precisar abrir. */
-function MiniaturaPreset({ id }: { id: string }) {
+/**
+ * Rabisco do preset — ajuda a escolher sem precisar abrir.
+ *
+ * Deduzido da APARÊNCIA, não escrito por id. Antes havia um desenho codificado
+ * para cada um dos quatro presets e um genérico para o resto; ao acrescentar
+ * quatro em 27/08/2026, os quatro novos cairiam todos no mesmo rabisco — o
+ * oposto do trabalho dele, que é diferenciar.
+ *
+ * O tema dá o papel, a grade dá o arranjo. Preset novo ganha o seu de graça, e
+ * ninguém precisa lembrar de vir aqui.
+ */
+function MiniaturaPreset({ aparencia }: { aparencia: Aparencia }) {
   const comum = "h-6 w-8 shrink-0 rounded-[3px] border border-linha p-[3px]";
-  if (id === "atomo") {
-    return (
-      <span className={`${comum} bg-void`}>
-        <span className="grid h-full grid-cols-3 gap-[1px]">
-          <span className="col-span-2 row-span-2 bg-acento/70" />
-          <span className="bg-texto-faint/50" />
-          <span className="bg-texto-faint/50" />
-        </span>
-      </span>
-    );
-  }
-  if (id === "revista") {
-    return (
-      <span className={`${comum} bg-white`}>
-        <span className="flex h-full gap-[1px]">
-          <span className="flex-1 bg-neutral-400" />
-          <span className="flex-1 bg-neutral-300" />
-          <span className="flex-1 bg-neutral-400" />
-        </span>
-      </span>
-    );
-  }
-  if (id === "atelie") {
-    return (
-      <span className={`${comum}`} style={{ background: "#f2ebdd" }}>
-        <span className="flex h-full flex-col gap-[1px]">
-          <span className="flex-1" style={{ background: "#927659" }} />
-          <span className="flex-1" style={{ background: "#c0ab8e" }} />
-        </span>
-      </span>
-    );
-  }
+
+  /* O papel de cada tema, e a tinta que aparece por cima dele. Valores crus e
+   * não tokens: isto é um rabisco de OUTRO tema dentro do painel, e usar as
+   * cores do painel faria os três rabiscos ficarem iguais. */
+  const papel =
+    aparencia.tema === "noite"
+      ? { fundo: "#07080b", cheio: "#d9a441", vazio: "rgba(190,205,230,0.32)" }
+      : aparencia.tema === "creme"
+        ? { fundo: "#f2ebdd", cheio: "#927659", vazio: "#c0ab8e" }
+        : { fundo: "#ffffff", cheio: "#9ca3af", vazio: "#d1d5db" };
+
+  const bloco = (cor: string, extra = "") => (
+    <span className={extra} style={{ background: cor }} />
+  );
+
   return (
-    <span className={`${comum} bg-white`}>
-      <span className="grid h-full grid-cols-3 grid-rows-2 gap-[1px]">
-        {Array.from({ length: 6 }, (_, i) => (
-          <span key={i} className="bg-neutral-400" />
-        ))}
-      </span>
+    <span className={comum} style={{ background: papel.fundo }}>
+      {aparencia.grade === "editorial" ? (
+        <span className="grid h-full grid-cols-3 grid-rows-2 gap-[1px]">
+          {bloco(papel.cheio, "col-span-2 row-span-2")}
+          {bloco(papel.vazio)}
+          {bloco(papel.vazio)}
+        </span>
+      ) : aparencia.grade === "linhas" ? (
+        <span className="flex h-full flex-col gap-[1px]">
+          {bloco(papel.cheio, "flex-1")}
+          {bloco(papel.vazio, "flex-1")}
+        </span>
+      ) : aparencia.grade === "colunas" ? (
+        <span className="flex h-full items-end gap-[1px]">
+          {bloco(papel.cheio, "h-full flex-1")}
+          {bloco(papel.vazio, "h-2/3 flex-1")}
+          {bloco(papel.cheio, "h-5/6 flex-1")}
+        </span>
+      ) : (
+        <span className="grid h-full grid-cols-3 grid-rows-2 gap-[1px]">
+          {Array.from({ length: 6 }, (_, i) => (
+            <span key={i} style={{ background: i % 2 ? papel.vazio : papel.cheio }} />
+          ))}
+        </span>
+      )}
     </span>
   );
 }

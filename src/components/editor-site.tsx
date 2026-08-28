@@ -197,7 +197,7 @@ export function EditorSite({
                   maxLength={LIMITES.depoimentoTexto}
                   rows={3}
                   placeholder="O que o casal escreveu"
-                  className="w-full resize-y rounded-md border border-linha bg-carbon px-3 py-2 text-sm leading-relaxed text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+                  className="w-full resize-y rounded-md border border-linha bg-carbon px-3 py-2 text-sm leading-relaxed text-texto placeholder:text-exemplo focus:border-acento focus:outline-none"
                 />
                 <div className="mt-2 flex items-center gap-2">
                   <input
@@ -205,7 +205,7 @@ export function EditorSite({
                     onChange={(e) => mudarDepoimento(i, "autor", e.target.value)}
                     maxLength={LIMITES.depoimentoAutor}
                     placeholder="Ana & Pedro"
-                    className="min-w-0 flex-1 rounded-md border border-linha bg-carbon px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+                    className="min-w-0 flex-1 rounded-md border border-linha bg-carbon px-3 py-2 text-sm text-texto placeholder:text-exemplo focus:border-acento focus:outline-none"
                   />
                   <button
                     type="button"

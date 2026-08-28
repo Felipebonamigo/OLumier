@@ -19,7 +19,20 @@ export type Tipografia =
   | "raleway"
   | "manuscrita"
   | "parisienne"
-  | "petit";
+  | "petit"
+  // segunda leva, 27/08/2026 — três opções por família viravam "nenhuma serve"
+  | "garamond"
+  | "baskerville"
+  | "bodoni"
+  | "josefin"
+  | "work"
+  | "outfit"
+  | "dancing"
+  | "sacramento"
+  | "italianno"
+  | "cinzel"
+  | "marcellus"
+  | "tenor";
 export type Grade = "colunas" | "linhas" | "quadrada" | "editorial";
 export type Densidade = "compacta" | "normal" | "arejada";
 
@@ -89,6 +102,20 @@ export const OPCOES = {
     { id: "manuscrita", nome: "Great Vibes", desc: "Manuscrita · assinatura", familia: "Manuscritas" },
     { id: "parisienne", nome: "Parisienne", desc: "Manuscrita · convite", familia: "Manuscritas" },
     { id: "petit", nome: "Petit Formal", desc: "Manuscrita · formal e legível", familia: "Manuscritas" },
+    { id: "garamond", nome: "EB Garamond", desc: "Serifada · quente e clássica", familia: "Serifadas" },
+    { id: "baskerville", nome: "Baskerville", desc: "Serifada · editorial, muito legível", familia: "Serifadas" },
+    { id: "bodoni", nome: "Bodoni", desc: "Serifada · contraste extremo, ar de moda", familia: "Serifadas" },
+    { id: "josefin", nome: "Josefin Sans", desc: "Sem serifa · art déco, delicada", familia: "Sem serifa" },
+    { id: "work", nome: "Work Sans", desc: "Sem serifa · neutra e sólida", familia: "Sem serifa" },
+    { id: "outfit", nome: "Outfit", desc: "Sem serifa · geométrica e atual", familia: "Sem serifa" },
+    { id: "dancing", nome: "Dancing Script", desc: "Manuscrita · solta e alegre", familia: "Manuscritas" },
+    { id: "sacramento", nome: "Sacramento", desc: "Manuscrita · fina e discreta", familia: "Manuscritas" },
+    { id: "italianno", nome: "Italianno", desc: "Manuscrita · caligrafia de convite", familia: "Manuscritas" },
+    /* MAIÚSCULAS é família nova: a tipografia que o fotógrafo reconhece do papel
+     * do convite, e que não cabia em nenhuma das três anteriores. */
+    { id: "cinzel", nome: "Cinzel", desc: "Maiúsculas · romana, de convite", familia: "Maiúsculas" },
+    { id: "marcellus", nome: "Marcellus", desc: "Maiúsculas · clássica e serena", familia: "Maiúsculas" },
+    { id: "tenor", nome: "Tenor Sans", desc: "Maiúsculas · limpa e espaçada", familia: "Maiúsculas" },
   ],
   grade: [
     { id: "colunas", nome: "Colunas", desc: "Alturas variadas, estilo mural" },
@@ -139,6 +166,43 @@ export const PRESETS: Preset[] = [
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
     aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta" },
+  },
+  /*
+   * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
+   *
+   * Quatro presets eram pouco para o que eles fazem: preset é o atalho de quem
+   * NÃO quer abrir o ajuste fino, e com quatro a chance de nenhum servir é alta
+   * — aí a pessoa abre os cinco eixos e monta na mão, que é exatamente o
+   * trabalho que o preset existe para poupar.
+   *
+   * Os quatro novos não são variações de cor dos antigos: cada um combina capa,
+   * grade e densidade diferentes, e usa a família de fonte que os primeiros não
+   * alcançavam. Preset que muda só o tema seria uma quinta pastilha sem quinta
+   * decisão.
+   */
+  {
+    id: "convite",
+    nome: "Convite",
+    desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada" },
+  },
+  {
+    id: "moda",
+    nome: "Moda",
+    desc: "Contraste alto e destaques grandes, como editorial de revista.",
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal" },
+  },
+  {
+    id: "cerimonia",
+    nome: "Cerimônia",
+    desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal" },
+  },
+  {
+    id: "papel",
+    nome: "Papel",
+    desc: "Branco, ar déco e muito espaço. As fotos respiram.",
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada" },
   },
 ];
 
@@ -224,6 +288,18 @@ export const FONTES_TITULO: Record<Tipografia, string> = {
   manuscrita: 'var(--font-script-app), "Segoe Script", cursive',
   parisienne: 'var(--font-titulo-parisienne), "Segoe Script", cursive',
   petit: 'var(--font-titulo-petit), "Segoe Script", cursive',
+  garamond: 'var(--font-titulo-garamond), Garamond, Georgia, serif',
+  baskerville: 'var(--font-titulo-baskerville), Baskerville, Georgia, serif',
+  bodoni: 'var(--font-titulo-bodoni), "Bodoni MT", Didot, Georgia, serif',
+  josefin: 'var(--font-titulo-josefin), "Century Gothic", system-ui, sans-serif',
+  work: 'var(--font-titulo-work), "Segoe UI", system-ui, sans-serif',
+  outfit: 'var(--font-titulo-outfit), "Segoe UI", system-ui, sans-serif',
+  dancing: 'var(--font-titulo-dancing), "Segoe Script", cursive',
+  sacramento: 'var(--font-titulo-sacramento), "Segoe Script", cursive',
+  italianno: 'var(--font-titulo-italianno), "Segoe Script", cursive',
+  cinzel: 'var(--font-titulo-cinzel), "Trajan Pro", Georgia, serif',
+  marcellus: 'var(--font-titulo-marcellus), Georgia, serif',
+  tenor: 'var(--font-titulo-tenor), "Optima", "Segoe UI", sans-serif',
 };
 
 /** Espaçamento entre as fotos e quantas cabem por linha. */

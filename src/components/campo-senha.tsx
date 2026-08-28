@@ -37,7 +37,7 @@ export function CampoSenha({
           type={visivel ? "text" : "password"}
           className={
             "w-full rounded-lg border border-linha bg-carbon py-2.5 pl-3 pr-16 text-sm text-texto " +
-            "placeholder:text-texto-faint focus:border-acento focus:outline-none"
+            "placeholder:text-exemplo focus:border-acento focus:outline-none"
           }
         />
         <button

@@ -108,7 +108,7 @@ export function EditorEndereco({
                 minLength={3}
                 maxLength={40}
                 pattern="[a-zA-Z0-9\-]+"
-                className="w-full rounded-lg border border-linha bg-carbon px-3 py-2.5 font-mono text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+                className="w-full rounded-lg border border-linha bg-carbon px-3 py-2.5 font-mono text-sm text-texto placeholder:text-exemplo focus:border-acento focus:outline-none"
               />
             </div>
             <span className="text-xs text-texto-faint">

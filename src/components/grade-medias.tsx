@@ -46,6 +46,10 @@ export function GradeMedias({
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [definindoCapa, setDefinindoCapa] = useState<string | null>(null);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
+  /* Aberta por padrão: quem acabou de subir quer VER o que subiu. Recolher é
+   * para depois, quando a grade vira obstáculo entre a pessoa e o resto da
+   * página. */
+  const [aberta, setAberta] = useState(true);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
 
@@ -105,16 +109,62 @@ export function GradeMedias({
 
   return (
     <section className="mt-8">
+      {/*
+        RECOLHER EXISTE POR CAUSA DO TAMANHO REAL.
+
+        Um casamento são 192 fotos, medido em 27/08/2026. Aberta, a grade empurra
+        para baixo tudo o que vem depois — capítulos, aparência, publicar — e a
+        pessoa rola centenas de miniaturas para chegar ao próximo passo. Recolher
+        devolve a página; o número no título continua dizendo o que está guardado.
+      */}
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold">
-          {medias.length} {medias.length === 1 ? "arquivo" : "arquivos"}
-        </h2>
-        {selecao.size === 0 && secoes.length > 0 && (
-          <span className="text-xs text-texto-faint">
-            Clique na bolinha para selecionar e mover para um capítulo
+        <button
+          type="button"
+          onClick={() => setAberta((v) => !v)}
+          aria-expanded={aberta}
+          className="flex items-baseline gap-2 text-sm font-semibold transition hover:text-acento"
+        >
+          <span aria-hidden className="text-xs text-texto-faint">
+            {aberta ? "▾" : "▸"}
           </span>
+          {medias.length} {medias.length === 1 ? "arquivo" : "arquivos"}
+        </button>
+
+        {aberta && (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelecao(new Set(medias.map((m) => m.id)))}
+              className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon-2"
+            >
+              selecionar todas
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelecao(new Set())}
+              disabled={selecao.size === 0}
+              className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-40"
+            >
+              limpar
+            </button>
+          </div>
         )}
       </div>
+
+      {/*
+        PARA QUE SERVE SELECIONAR — dito aqui, e não só quando já há seleção.
+
+        Antes a frase só aparecia com `selecao.size === 0 && secoes.length > 0`:
+        sumia assim que a pessoa selecionava algo, e nunca aparecia para quem
+        ainda não tinha criado capítulo — ou seja, faltava exatamente para quem
+        não sabia o que a seleção faz.
+      */}
+      {aberta && (
+        <p className="mt-1.5 text-xs text-texto-faint">
+          Selecionar serve para agir em várias de uma vez: mover para um capítulo, ou remover.
+          Clique na foto (ou na bolinha) para marcar.
+        </p>
+      )}
 
       {/* Barra de ações em lote — só aparece com algo selecionado. */}
       {selecao.size > 0 && (
@@ -122,20 +172,6 @@ export function GradeMedias({
           <span className="text-sm font-medium">
             {selecao.size} {selecao.size === 1 ? "selecionada" : "selecionadas"}
           </span>
-          <button
-            type="button"
-            onClick={() => setSelecao(new Set(medias.map((m) => m.id)))}
-            className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon"
-          >
-            todas
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelecao(new Set())}
-            className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon"
-          >
-            limpar
-          </button>
 
           <span className="ml-auto flex flex-wrap items-center gap-2">
             <label className="text-xs text-texto-soft" htmlFor="mover-para">
@@ -165,6 +201,7 @@ export function GradeMedias({
         </div>
       )}
 
+      {aberta && (
       <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
         {medias.map((m) => {
           const selecionada = selecao.has(m.id);
@@ -189,13 +226,39 @@ export function GradeMedias({
                 )}
               </div>
 
+              {/*
+                CLICAR NA FOTO SELECIONA.
+
+                A bolinha de 24px era o único alvo, e num casamento de 192 fotos
+                marcar cinquenta pela bolinha é um exercício de pontaria. A foto
+                inteira é o alvo óbvio — é onde a mão vai.
+
+                É uma camada por cima da imagem, e não um `onClick` no cartão:
+                dentro dele há botões (capa, remover) e um vídeo com controles, e
+                aninhar interativo dentro de interativo quebra teclado e leitor de
+                tela. Esta camada fica ABAIXO deles no empilhamento, então cada um
+                continua recebendo o próprio clique.
+
+                Vídeo fica de fora: ali o clique é play, e roubá-lo para marcar
+                faria o fotógrafo não conseguir assistir ao que subiu.
+              */}
+              {m.tipo === "foto" && (
+                <button
+                  type="button"
+                  onClick={() => alternarSelecao(m.id)}
+                  aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
+                  aria-pressed={selecionada}
+                  className="absolute inset-x-0 top-0 aspect-[4/5] w-full cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-acento"
+                />
+              )}
+
               {/* Bolinha de seleção — sempre visível, para ficar óbvio que dá para selecionar. */}
               <button
                 type="button"
                 onClick={() => alternarSelecao(m.id)}
                 aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
                 aria-pressed={selecionada}
-                className={`absolute left-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full border text-[11px] transition ${
+                className={`absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-full border text-[11px] transition ${
                   selecionada
                     ? "border-acento bg-acento text-void"
                     : "border-linha-forte bg-void/70 text-transparent hover:text-texto-faint"
@@ -205,7 +268,7 @@ export function GradeMedias({
               </button>
 
               {capaId === m.id && (
-                <span className="absolute left-9 top-1.5 rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
+                <span className="absolute left-9 top-1.5 z-10 rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
                   capa
                 </span>
               )}
@@ -226,7 +289,7 @@ export function GradeMedias({
                 </span>
               )}
 
-              <span className="absolute right-1.5 top-1.5 flex gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+              <span className="absolute right-1.5 top-1.5 z-10 flex gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
                 {m.tipo === "foto" && capaId !== m.id && (
                   <button
                     type="button"
@@ -261,6 +324,7 @@ export function GradeMedias({
           );
         })}
       </ul>
+      )}
     </section>
   );
 }

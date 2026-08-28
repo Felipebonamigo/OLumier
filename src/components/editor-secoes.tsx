@@ -195,7 +195,7 @@ export function EditorSecoes({
           }}
           placeholder="Novo capítulo…"
           maxLength={60}
-          className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-texto-faint focus:border-acento focus:outline-none"
+          className="min-w-0 flex-1 rounded-lg border border-linha bg-void px-3 py-2 text-sm placeholder:text-exemplo focus:border-acento focus:outline-none"
         />
         <button
           type="button"

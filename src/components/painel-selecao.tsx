@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { salvarRegrasSelecaoAction, reabrirSelecaoAction } from "@/app/painel/actions";
 
 /**
- * A escolha do álbum, do lado de quem entrega.
+ * As favoritas do cliente, do lado de quem entrega.
+ *
+ * Chamava-se "Escolha do álbum" — nome do que o fotógrafo FAZ com a lista
+ * depois, não do que a seção mostra. O que ela mostra são as fotos que o cliente
+ * marcou, e é assim que ele fala delas ao telefone.
  *
  * O que estava faltando não era a marcação — os corações já funcionavam desde a
  * migração 010. Faltava tudo o que vem depois dela: quantas fotos cabem, até
@@ -78,7 +82,7 @@ export function PainelSelecao({
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold">Escolha do álbum</h2>
+          <h2 className="text-sm font-semibold">Favoritas do cliente</h2>
           <p className="mt-0.5 text-xs text-texto-faint">
             O cliente marca as favoritas na própria galeria. A lista é uma só — o casal escolhe
             junto, de qualquer aparelho.
