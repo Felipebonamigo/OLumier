@@ -26,6 +26,7 @@ import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { gerarChave } from "../src/lib/chaves-api.ts";
 import { restaurarGaleria } from "../src/lib/tenants.ts";
 import { marca, enderecoDaGaleria } from "../src/config/marca.ts";
+import { CARENCIA_POS_TRIAL_DIAS } from "../src/config/trial.ts";
 
 await exigirBancoDeTeste();
 
@@ -218,6 +219,41 @@ await etapa("noAr é a régua da página pública, não a coluna crua", async ()
 
   await db.query("update galerias set expira_em = null where id = $1", [galeria.id]);
   return "cofre e prazo vencido derrubam o noAr";
+});
+
+await etapa("e o trial abandonado também — a perna mais sutil da régua", async () => {
+  /*
+   * As duas pernas acima moram na galeria; esta mora no ESTÚDIO, e é a única
+   * que some sem ninguém ter mexido na galeria: o trial vence, passa a
+   * carência, e o link do casal para de abrir sozinho. É também a que mais
+   * engana quem consome esta rota — a galeria continua `publicada = true`,
+   * `estado = 'online'`, sem prazo nenhum. Sem este passo, o `noAr` podia
+   * perder a chamada a `galeriasNoAr` e o teste seguiria verde.
+   */
+  const { rows: [antes] } = await db.query(
+    "select status, trial_ate from tenants where id = $1", [estudio.id]);
+
+  const venceuHaMuito = `now() - interval '${CARENCIA_POS_TRIAL_DIAS + 5} days'`;
+  await db.query(
+    `update tenants set status = 'trial', trial_ate = ${venceuHaMuito} where id = $1`,
+    [estudio.id],
+  );
+  let g = await (await chamar(`/api/galerias/${galeria.id}`, { chave: deLeitura })).json();
+  igual(g.publicada, true, "a galeria não mudou");
+  igual(g.estado, "online", "nem o estado");
+  igual(g.noAr, false, "trial abandonado derruba o noAr");
+
+  // Dentro da carência ainda está no ar: a régua falha para o lado de MOSTRAR.
+  await db.query(
+    "update tenants set trial_ate = now() - interval '1 day' where id = $1", [estudio.id]);
+  g = await (await chamar(`/api/galerias/${galeria.id}`, { chave: deLeitura })).json();
+  igual(g.noAr, true, "dentro da carência continua no ar");
+
+  await db.query(
+    "update tenants set status = $2, trial_ate = $3 where id = $1",
+    [estudio.id, antes.status, antes.trial_ate],
+  );
+  return `carência de ${CARENCIA_POS_TRIAL_DIAS} dias respeitada nos dois lados`;
 });
 
 await etapa("galeria de outro estúdio é 404, id torto também", async () => {
