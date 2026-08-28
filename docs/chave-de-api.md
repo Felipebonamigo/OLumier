@@ -166,6 +166,34 @@ graça porque já está no corpo; estas nascem vazias, e uma rota nova que esque
 
 O ganho de escrevê-las: elas servem ao painel também, e encolhem `actions.ts`.
 
+### Adição de 28/08/2026 — a conexão com o Atomatiza
+
+O primeiro consumidor de verdade da chave não foi o plugin do Lightroom: foi o
+**Atomatiza**, o outro produto da casa (contratos, agenda, cobrança). O contrato nasce
+lá; a entrega mora aqui. O fotógrafo cola a chave lá, e o contrato ganha um botão
+"criar a galeria desta venda".
+
+Três coisas entraram para isso, todas dentro do desenho que já existia:
+
+| Rota | Para quê | Escopo |
+|---|---|---|
+| `GET /api/conta` | o aperto de mão: a quem esta chave pertence (`tenantId`, `slug`, `nomeEstudio`, `dominio`) — é o que o outro lado mostra na tela antes de gravar a conexão | `leitura` |
+| `GET /api/galerias/:id` | como está a entrega: estado, contagem, endereço canônico e o `noAr` **calculado** (a régua da página pública, nunca a coluna `publicada` crua) | `leitura` |
+| `POST /api/galerias` + `referenciaExterna` | criar a galeria de um contrato, com **idempotência**: a mesma referência devolve a mesma galeria (200), nunca uma `ana-pedro-2` | `envio` |
+
+A procedência fica em `galerias.origem`/`origem_ref` (migração 026), com índice único
+parcial por `(tenant, origem, origem_ref)` que deixa a lixeira de fora — apagar a
+galeria errada não pode trancar o contrato até a purga. A referência é **opaca**:
+guardamos e devolvemos, nunca interpretamos. Nenhum dado do contrato (valor, cliente,
+telefone) atravessa; senha de galeria não entra em URL nem em resposta.
+
+O `GET /api/conta` não fere o "conta exige cookie" desta página: ele não expõe nada
+que dê poder — nem e-mail, nem plano, nem cobrança. Só a identidade que a tela de
+conexão do outro lado precisa confirmar, e o `tenantId`, que é a âncora estável do
+pareamento (o slug pode mudar — migração 025; o id não).
+
+Prova em `scripts/testar-conexao-atomatiza.mjs`.
+
 ### Limite de uso — NÃO construído, e de propósito
 
 O desenho pedia reaproveitar `src/lib/tentativas.ts` com este argumento: *"sem freio,

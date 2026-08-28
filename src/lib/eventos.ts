@@ -42,6 +42,12 @@ export const ACOES = {
   ASSINATURA_CANCELADA: "assinatura.cancelada",
   SENHA_TROCADA: "senha.trocada",
   CONTA_CRIADA: "conta.criada",
+  /* Galeria criada por um programa, não por um clique no painel — hoje, o
+   * Atomatiza criando a galeria de um contrato pela chave de API. Entra na
+   * lista porque é ACESSO: a pergunta de disputa é "quem criou isto?", e a
+   * resposta precisa sobreviver à galeria. Criação pelo painel continua sem
+   * evento — registrar cada clique é telemetria, e telemetria não mora aqui. */
+  GALERIA_CRIADA_DE_FORA: "galeria.criada-de-fora",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque

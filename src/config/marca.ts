@@ -110,3 +110,20 @@ export const cores = {
   linha: "rgba(190, 205, 230, 0.13)",
   linhaForte: "rgba(190, 205, 230, 0.26)",
 } as const;
+
+/**
+ * O endereço público de uma galeria — o ÚNICO formato que sai daqui.
+ *
+ * Sempre `https://<estudio>.<canônico>/<galeria>`, sempre `marca.dominio`:
+ * link que a gente entrega a outro sistema (hoje, o Atomatiza) vira link que o
+ * casal recebe, e dois formatos para o mesmo lugar viram dois endereços que
+ * envelhecem separados. O `olumier.com.br` continua ABRINDO (ver
+ * `config/dominios.ts`), mas não sai mais em link novo.
+ *
+ * Nada de senha, nada de query: senha de galeria viaja pelo combinado entre
+ * fotógrafo e casal, nunca dentro de URL — URL vaza em histórico, em print,
+ * em "encaminhar".
+ */
+export function enderecoDaGaleria(estudioSlug: string, galeriaSlug: string): string {
+  return `https://${estudioSlug}.${marca.dominio}/${galeriaSlug}`;
+}

@@ -94,6 +94,17 @@ export default async function PainelPage() {
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{g.titulo}</span>
                     <Etiqueta galeria={g} />
+                    {/* Procedência, não estado: diz de onde a galeria veio, e só
+                      * quando veio de fora. Para quem usa os dois produtos, é o
+                      * que explica uma galeria que ele não lembra de ter criado. */}
+                    {g.origem === "atomatiza" && (
+                      <span
+                        title="Criada pelo Atomatiza, a partir de um contrato"
+                        className="rounded-full border border-linha px-2 py-0.5 text-[11px] text-texto-faint"
+                      >
+                        do contrato
+                      </span>
+                    )}
                   </span>
                   <span className="mt-0.5 block text-xs text-texto-faint">
                     {[formatarData(g.data_evento), g.subtitulo].filter(Boolean).join(" · ") ||

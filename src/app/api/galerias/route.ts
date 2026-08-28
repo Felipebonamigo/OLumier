@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { tenantDaRequisicao, tenantQuePodeEnviar } from "@/lib/auth-api";
-import { consultar } from "@/lib/db";
-import { criarGaleria } from "@/lib/tenants";
+import { consultar, consultarUm } from "@/lib/db";
+import { buscarTenantPorId, criarGaleria, type Galeria } from "@/lib/tenants";
+import { registrarEvento, ACOES } from "@/lib/eventos";
+import { enderecoDaGaleria } from "@/config/marca";
 
 /**
  * Listar e criar galeria — as duas coisas que faltavam para um programa
@@ -14,7 +16,35 @@ import { criarGaleria } from "@/lib/tenants";
  *
  * O painel continua usando a server action — ela não sai daqui. Esta rota é a
  * porta de fora, e as duas chamam a mesma `criarGaleria` do `lib/tenants`.
+ *
+ * ── `referenciaExterna` — o Atomatiza criando a galeria de um contrato ─────
+ * Quem manda `referenciaExterna` no POST está dizendo "esta galeria representa
+ * o MEU registro tal" — hoje, um contrato do Atomatiza. A rota guarda isso em
+ * (origem, origem_ref) e passa a responder de forma IDEMPOTENTE: o mesmo
+ * contrato pedindo de novo recebe a galeria que já existe (200), não uma
+ * "ana-pedro-2" ao lado (ver migração 026). A referência é opaca — a gente
+ * guarda e devolve, nunca interpreta.
  */
+
+/** A quem esta rota diz "atomatiza": o único criador de fora que existe hoje. */
+const ORIGEM_INTEGRACAO = "atomatiza";
+
+/** A resposta de criação, igual nos dois caminhos (criou agora / já existia). */
+async function corpoDaGaleria(galeria: Galeria, estudioSlug: string) {
+  return {
+    id: galeria.id,
+    slug: galeria.slug,
+    titulo: galeria.titulo,
+    /*
+     * O endereço já sai CANÔNICO e pronto: é este link que o outro sistema vai
+     * guardar no contrato e mandar ao casal. Montá-lo lá exigiria conhecer o
+     * nosso domínio e o slug do estúdio — e no dia em que qualquer um dos dois
+     * mudasse, todo consumidor montaria link velho.
+     */
+    estudioSlug,
+    url: enderecoDaGaleria(estudioSlug, galeria.slug),
+  };
+}
 
 /** As galerias do estúdio, para o plugin mostrar a lista de destinos. */
 export async function GET(request: NextRequest) {
@@ -26,10 +56,13 @@ export async function GET(request: NextRequest) {
    * oferecê-la como destino faria o plugin ressuscitar entrega que o fotógrafo
    * mandou apagar. O cofre entra, com o estado à mostra — dá para ver que está
    * arquivada e reativar no painel.
+   *
+   * `origem`/`origem_ref` entram para quem monta um seletor de "vincular
+   * galeria existente" poder mostrar quais já pertencem a um registro dele.
    */
   const galerias = await consultar(
     `select id, slug, titulo, subtitulo, data_evento, publicada, estado,
-            bytes_total::text as bytes
+            origem, origem_ref, bytes_total::text as bytes
        from galerias
       where tenant_id = $1 and estado <> 'lixeira'
       order by criado_em desc`,
@@ -45,7 +78,12 @@ export async function POST(request: NextRequest) {
   const quem = await tenantQuePodeEnviar(request);
   if ("erro" in quem) return NextResponse.json({ erro: quem.erro }, { status: quem.status });
 
-  let corpo: { titulo?: string; subtitulo?: string; dataEvento?: string };
+  let corpo: {
+    titulo?: string;
+    subtitulo?: string;
+    dataEvento?: string;
+    referenciaExterna?: string;
+  };
   try {
     corpo = await request.json();
   } catch {
@@ -55,17 +93,73 @@ export async function POST(request: NextRequest) {
   const titulo = String(corpo.titulo ?? "").trim();
   if (!titulo) return NextResponse.json({ erro: "Dê um nome para a galeria." }, { status: 400 });
 
+  /* Curta porque vira metade de um índice único: uma referência de verdade é um
+   * id, e id não tem 200 caracteres. Recusar cedo é melhor que truncar — uma
+   * referência truncada colidiria com outra e a idempotência viraria mistura. */
+  const referencia = String(corpo.referenciaExterna ?? "").trim();
+  if (referencia.length > 200) {
+    return NextResponse.json({ erro: "A referência externa é longa demais." }, { status: 400 });
+  }
+
+  const tenant = await buscarTenantPorId(quem.tenantId);
+  if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
+
+  /*
+   * IDEMPOTÊNCIA, do jeito burro que funciona: procurar antes, e deixar o
+   * índice único da migração 026 segurar a corrida entre duas chamadas
+   * simultâneas. Quem chegar segundo na corrida recebe 23505 do banco e
+   * devolve a galeria do primeiro — o chamador não distingue, e é o ponto.
+   */
+  const buscarExistente = () =>
+    consultarUm<Galeria>(
+      `select * from galerias
+        where tenant_id = $1 and origem = $2 and origem_ref = $3 and estado <> 'lixeira'`,
+      [quem.tenantId, ORIGEM_INTEGRACAO, referencia],
+    );
+
+  if (referencia) {
+    const existente = await buscarExistente();
+    if (existente) {
+      return NextResponse.json(await corpoDaGaleria(existente, tenant.slug), { status: 200 });
+    }
+  }
+
   /* `criarGaleria` resolve a colisão de slug sozinha (ana-pedro, ana-pedro-2…):
    * o plugin pode publicar duas coleções de mesmo nome sem escolher endereço. */
-  const galeria = await criarGaleria({
-    tenantId: quem.tenantId,
-    titulo,
-    subtitulo: String(corpo.subtitulo ?? "").trim() || undefined,
-    dataEvento: String(corpo.dataEvento ?? "").trim() || undefined,
-  });
+  let galeria: Galeria | null | undefined;
+  try {
+    galeria = await criarGaleria({
+      tenantId: quem.tenantId,
+      titulo,
+      subtitulo: String(corpo.subtitulo ?? "").trim() || undefined,
+      dataEvento: String(corpo.dataEvento ?? "").trim() || undefined,
+      origem: referencia ? { de: ORIGEM_INTEGRACAO, ref: referencia } : undefined,
+    });
+  } catch (e) {
+    // A corrida descrita acima: o outro lado criou primeiro. Devolve a dele.
+    const perdeuCorrida = referencia && (e as { code?: string })?.code === "23505";
+    if (!perdeuCorrida) throw e;
+    const existente = await buscarExistente();
+    if (!existente) throw e;
+    return NextResponse.json(await corpoDaGaleria(existente, tenant.slug), { status: 200 });
+  }
 
-  return NextResponse.json(
-    { id: galeria!.id, slug: galeria!.slug, titulo: galeria!.titulo },
-    { status: 201 },
-  );
+  /*
+   * Só a criação DE FORA vira evento de auditoria — é a que alguém pode
+   * questionar depois ("quem criou esta galeria?"), e a resposta precisa
+   * sobreviver à galeria. Criação pelo painel continua sem evento.
+   */
+  if (referencia) {
+    await registrarEvento({
+      tenantId: quem.tenantId,
+      estudio: tenant.nome_estudio,
+      ator: "estudio",
+      acao: ACOES.GALERIA_CRIADA_DE_FORA,
+      alvoTipo: "galeria",
+      alvoId: galeria!.id,
+      detalhe: { titulo, origem: ORIGEM_INTEGRACAO, origem_ref: referencia },
+    });
+  }
+
+  return NextResponse.json(await corpoDaGaleria(galeria!, tenant.slug), { status: 201 });
 }
