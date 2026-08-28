@@ -657,6 +657,43 @@ export async function salvarMarcaAction(
   return { ok: "Marca salva." };
 }
 
+export interface EstadoEndereco {
+  erro?: string;
+  ok?: string;
+}
+
+/**
+ * Troca o endereço do estúdio, guardando o anterior como apelido.
+ *
+ * A regra inteira mora em `lib/endereco.ts`, testada sem servidor; aqui fica só
+ * a sessão e o que a tela precisa saber. É de propósito: esta é a única ação do
+ * painel que pode quebrar um link já entregue a um casal, e regra que não dá
+ * para exercitar num teste acaba não sendo exercitada.
+ *
+ * Os quatro caminhos revalidados são os quatro lugares onde o endereço aparece.
+ * Esquecer um deixaria a pessoa vendo o endereço antigo na tela depois de trocar
+ * — e concluindo que não salvou.
+ */
+export async function trocarEnderecoAction(
+  _estado: EstadoEndereco,
+  form: FormData,
+): Promise<EstadoEndereco> {
+  const tenantId = await exigirTenant();
+  const { trocarEndereco } = await import("@/lib/endereco");
+
+  const r = await trocarEndereco(tenantId, String(form.get("endereco") ?? ""));
+  if (r.erro) return { erro: r.erro };
+
+  revalidatePath("/painel/conta");
+  revalidatePath("/painel");
+  revalidatePath("/painel/site");
+  revalidatePath(`/e/${r.slug}`);
+
+  return {
+    ok: `Endereço trocado para /${r.slug}. O anterior continua abrindo e leva para cá — os links que você já entregou não quebram.`,
+  };
+}
+
 // --- site do estúdio (a vitrine em /e/<slug>) -------------------------------
 
 export interface EstadoSite {
@@ -838,7 +875,19 @@ export async function apagarGaleriaAction(form: FormData) {
   // O apagarGaleria filtra por tenant_id também — id adivinhado não alcança galeria alheia.
   await apagarGaleria(tenantId, galeriaId);
   revalidatePath("/painel");
-  redirect("/painel");
+  revalidatePath("/painel/conta");
+
+  /*
+   * O redirecionamento é PEDIDO por quem chama, não automático.
+   *
+   * Na tela da galeria ele é obrigatório: a página que a pessoa está olhando
+   * acabou de virar lixeira, e ficar nela mostraria uma galeria fantasma. Na
+   * lista da Conta seria o oposto — quem está apagando três galerias seria
+   * expulso da tela na primeira, e teria de voltar duas vezes.
+   *
+   * O padrão é FICAR: sair da página é a decisão que precisa de motivo.
+   */
+  if (String(form.get("voltar") ?? "") === "1") redirect("/painel");
 }
 
 /** Tira a galeria da lixeira. Volta como rascunho — republicar é decisão de quem restaurou. */

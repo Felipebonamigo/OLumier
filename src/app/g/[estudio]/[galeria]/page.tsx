@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { marca } from "@/config/marca";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
 import { estadoSelecao, minhasFavoritas } from "@/lib/favoritas";
 import { galeriasNoAr } from "@/lib/assinatura";
+import { resolverEstudio } from "@/lib/endereco";
 import {
   buscarGaleriaPublica,
   listarMediasPublicas,
@@ -63,7 +64,27 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const ehDono = Boolean(sessao && rascunho && sessao === rascunho.tenant_id);
 
   const galeria = ehDono ? rascunho : await buscarGaleriaPublica(estudio, galeriaSlug);
-  if (!galeria) notFound();
+
+  /*
+   * O ENDEREÇO ANTIGO DO ESTÚDIO ainda abre — este é o ponto de toda a migração
+   * 025.
+   *
+   * Quem trocou de endereço tem links já entregues apontando para o anterior, e
+   * link de casamento não se reenvia: ele está num grupo de WhatsApp que ninguém
+   * vai reabrir. Se a galeria não foi encontrada, pode ser porque o visitante
+   * veio pelo apelido — e aí ele é mandado ao endereço de hoje, com 301
+   * permanente, para o navegador e o buscador aprenderem a troca.
+   *
+   * Só depois disso é 404. A ordem importa: o `notFound()` antes daqui é o que
+   * quebrava o link.
+   */
+  if (!galeria) {
+    const dono = await resolverEstudio(estudio);
+    if (dono?.ehAntigo) {
+      permanentRedirect(`/g/${dono.slugAtual}/${galeriaSlug}`);
+    }
+    notFound();
+  }
 
   /*
    * O estúdio testou, sumiu, e a carência acabou.

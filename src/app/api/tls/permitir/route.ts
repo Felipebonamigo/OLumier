@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { consultarUm } from "@/lib/db";
+import { resolverEstudio } from "@/lib/endereco";
 import { ehDominioPrincipal, estudioDoHost } from "@/config/dominios";
 import { dominioLiberaCertificado } from "@/lib/dominio-proprio";
 
@@ -70,9 +70,17 @@ export async function GET(request: NextRequest) {
    * ponto, nunca `includes`. Emitir certificado para domínio alheio nos
    * transformaria em emissor de graça para um golpista. */
   if (slug) {
-    const estudio = await consultarUm<{ id: string }>("select id from tenants where slug = $1", [
-      slug,
-    ]);
+    /*
+     * `resolverEstudio` e não um `select` cru: o endereço ANTIGO também precisa
+     * de certificado. Um estúdio que trocou de endereço continua tendo links
+     * entregues apontando para o subdomínio velho, e a página sabe redirecionar
+     * — mas só se a conexão chegar a existir. Sem o certificado, o visitante
+     * toma erro de TLS no navegador e nunca vê redirecionamento nenhum.
+     *
+     * A recusa continua fechada para quem não é de ninguém: subdomínio
+     * inventado segue sem certificado, que é o motivo de esta rota existir.
+     */
+    const estudio = await resolverEstudio(slug);
     if (!estudio) return new NextResponse("estúdio não encontrado", { status: 403 });
     return new NextResponse("ok", { status: 200 });
   }

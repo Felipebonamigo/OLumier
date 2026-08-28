@@ -13,6 +13,11 @@ import { PlanoConta } from "@/components/plano-conta";
 import { EditorMarca } from "@/components/editor-marca";
 import { TrocarSenha } from "@/components/trocar-senha";
 import { ChavesApi } from "@/components/chaves-api";
+import { EditorEndereco } from "@/components/editor-endereco";
+import { GaleriasDaConta } from "@/components/galerias-da-conta";
+import { enderecosAntigos, LIMITE_TROCAS } from "@/lib/endereco";
+import { marca } from "@/config/marca";
+import { consultar } from "@/lib/db";
 import { listarChaves } from "@/lib/chaves-api";
 import { MINIMO_SENHA } from "@/lib/recuperacao";
 import { urlDeLeitura } from "@/lib/r2";
@@ -37,6 +42,29 @@ export default async function ContaPage() {
   const plano = planoPorId(tenant.plano_id);
   const uso = await usoPorEstado(tenantId);
   const chavesApi = await listarChaves(tenantId);
+  const antigos = await enderecosAntigos(tenantId);
+
+  /* Galerias da conta, com o peso de cada uma. O tamanho vem aqui porque é a
+   * informação que responde "qual apago?" — a pergunta que traz alguém a esta
+   * lista. Sem ela, apagar vira chute. */
+  const galerias = await consultar<{
+    id: string;
+    titulo: string;
+    slug: string;
+    estado: string;
+    arquivos: string;
+    bytes: string;
+  }>(
+    `select g.id, g.titulo, g.slug, g.estado,
+            count(m.id) as arquivos,
+            coalesce(sum(m.bytes), 0) as bytes
+       from galerias g
+       left join medias m on m.galeria_id = g.id and m.pronto
+      where g.tenant_id = $1
+      group by g.id
+      order by g.criado_em desc`,
+    [tenantId],
+  );
 
   // O bucket não tem endereço público: a logo é guardada como chave e ganha um
   // link assinado a cada render.
@@ -214,13 +242,30 @@ export default async function ContaPage() {
         }))}
       />
 
+      {/* O endereço saiu da lista de "dados" logo abaixo: ele deixou de ser um
+          fato imutável da conta e virou algo que se troca (migração 025). */}
+      <EditorEndereco
+        slug={tenant.slug}
+        dominio={marca.dominio}
+        antigos={antigos.map((a) => a.slug)}
+        restam={Math.max(0, LIMITE_TROCAS - antigos.length)}
+      />
+
+      <GaleriasDaConta
+        galerias={galerias.map((g) => ({
+          id: g.id,
+          titulo: g.titulo,
+          slug: g.slug,
+          estado: g.estado,
+          arquivos: Number(g.arquivos),
+          bytes: Number(g.bytes),
+        }))}
+      />
+
       {/* Dados */}
       <section className="mt-6 rounded-xl border border-linha bg-carbon">
         <dl className="divide-y divide-linha">
-          {[
-            { rotulo: "E-mail", valor: tenant.email },
-            { rotulo: "Endereço das galerias", valor: `/${tenant.slug}` },
-          ].map((l) => (
+          {[{ rotulo: "E-mail", valor: tenant.email }].map((l) => (
             <div key={l.rotulo} className="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-5 py-4">
               <dt className="min-w-[10rem] text-sm text-texto-soft">{l.rotulo}</dt>
               <dd className="text-sm font-medium">{l.valor}</dd>

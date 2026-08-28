@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
+import { resolverEstudio } from "@/lib/endereco";
 import { marca } from "@/config/marca";
 import { consultar, consultarUm } from "@/lib/db";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
@@ -67,7 +68,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function EstudioPage({ params }: Props) {
   const { estudio } = await params;
   const t = await buscarEstudio(estudio);
-  if (!t) notFound();
+
+  /*
+   * Endereço antigo do estúdio ainda abre — mesma regra da galeria (migração
+   * 025). A vitrine é o endereço que o fotógrafo põe no Instagram, e link de
+   * perfil fica lá por anos: quebrá-lo numa troca de endereço apagaria o
+   * caminho pelo qual os clientes dele chegam.
+   *
+   * `generateMetadata` acima NÃO precisa disto: quando o redirecionamento
+   * acontece, o Next descarta a resposta e refaz tudo no endereço novo.
+   */
+  if (!t) {
+    const dono = await resolverEstudio(estudio);
+    if (dono?.ehAntigo) permanentRedirect(`/e/${dono.slugAtual}`);
+    notFound();
+  }
 
   const site = lerSite(t.site);
 

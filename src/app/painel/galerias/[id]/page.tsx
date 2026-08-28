@@ -270,6 +270,9 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         </p>
         <form action={apagarGaleriaAction} className="mt-3">
           <input type="hidden" name="galeria_id" value={galeria.id} />
+          {/* Aqui o redirecionamento É necessário: a página que a pessoa está
+              olhando acabou de ir para a lixeira. Na lista da Conta, não. */}
+          <input type="hidden" name="voltar" value="1" />
           <button
             type="submit"
             className="rounded-lg border border-erro/40 px-4 py-2 text-sm text-erro transition hover:bg-erro/10"
