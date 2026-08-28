@@ -233,6 +233,25 @@ await etapa("a lista traz a procedência para o seletor de vínculo", async () =
   igual(g.origem_ref, contrato, "origem_ref");
 });
 
+await etapa("dois contratos de mesmo título ao mesmo tempo não viram erro", async () => {
+  /* A corrida do índice de SLUG, que não é a do índice de origem: dois
+   * contratos diferentes, mesmo título, ao mesmo tempo. Sem separar os dois
+   * 23505, o segundo virava 500 — não há galeria do outro para lhe devolver.
+   * Aqui as duas saem juntas de propósito. */
+  const titulo = `Homônimos ${carimbo}`;
+  const [a, b] = await Promise.all([
+    chamar("/api/galerias", { metodo: "POST", chave: deEnvio, corpo: { titulo, referenciaExterna: `${contrato}-x` } }),
+    chamar("/api/galerias", { metodo: "POST", chave: deEnvio, corpo: { titulo, referenciaExterna: `${contrato}-y` } }),
+  ]);
+  igual(a.status, 201, "status do primeiro");
+  igual(b.status, 201, "status do segundo");
+  const [ga, gb] = [await a.json(), await b.json()];
+  criadas.galerias.push(ga.id, gb.id);
+  if (ga.id === gb.id) throw new Error("dois contratos receberam a MESMA galeria");
+  if (ga.slug === gb.slug) throw new Error("dois endereços iguais no mesmo estúdio");
+  return `${ga.slug} e ${gb.slug}`;
+});
+
 await etapa("apagar a galeria LIBERA a referência do contrato", async () => {
   await db.query("update galerias set estado = 'lixeira', apagada_em = now() where id = $1", [galeria.id]);
   const r = await chamar("/api/galerias", {

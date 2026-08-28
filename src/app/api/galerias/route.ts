@@ -126,22 +126,57 @@ export async function POST(request: NextRequest) {
 
   /* `criarGaleria` resolve a colisão de slug sozinha (ana-pedro, ana-pedro-2…):
    * o plugin pode publicar duas coleções de mesmo nome sem escolher endereço. */
-  let galeria: Galeria | null | undefined;
-  try {
-    galeria = await criarGaleria({
+  const nascer = () =>
+    criarGaleria({
       tenantId: quem.tenantId,
       titulo,
       subtitulo: String(corpo.subtitulo ?? "").trim() || undefined,
       dataEvento: String(corpo.dataEvento ?? "").trim() || undefined,
       origem: referencia ? { de: ORIGEM_INTEGRACAO, ref: referencia } : undefined,
     });
+
+  /*
+   * DUAS CORRIDAS DIFERENTES CHEGAM AQUI COMO O MESMO 23505, e tratá-las igual
+   * transforma uma delas em erro 500 sem explicação. Quem separa é o NOME do
+   * índice violado:
+   *
+   *   galerias_origem_unica        → o mesmo contrato pediu duas vezes ao mesmo
+   *                                  tempo. A galeria do primeiro é a resposta
+   *                                  certa para o segundo — é a idempotência
+   *                                  funcionando, e o chamador não distingue.
+   *
+   *   galerias_tenant_id_slug_key  → dois contratos DIFERENTES com o mesmo
+   *                                  título, ao mesmo tempo: os dois calcularam
+   *                                  "ana-e-pedro" antes de qualquer um gravar.
+   *                                  Aqui não há galeria do outro para devolver
+   *                                  — a resposta certa é tentar de novo, e a
+   *                                  segunda volta já enxerga o slug tomado e
+   *                                  escolhe "ana-e-pedro-2".
+   */
+  const nomeDoIndice = (e: unknown) =>
+    (e as { code?: string; constraint?: string })?.code === "23505"
+      ? (e as { constraint?: string }).constraint
+      : undefined;
+
+  let galeria: Galeria | null | undefined;
+  try {
+    galeria = await nascer();
   } catch (e) {
-    // A corrida descrita acima: o outro lado criou primeiro. Devolve a dele.
-    const perdeuCorrida = referencia && (e as { code?: string })?.code === "23505";
-    if (!perdeuCorrida) throw e;
-    const existente = await buscarExistente();
-    if (!existente) throw e;
-    return NextResponse.json(await corpoDaGaleria(existente, tenant.slug), { status: 200 });
+    const indice = nomeDoIndice(e);
+
+    if (indice === "galerias_origem_unica" && referencia) {
+      const existente = await buscarExistente();
+      if (!existente) throw e;
+      return NextResponse.json(await corpoDaGaleria(existente, tenant.slug), { status: 200 });
+    }
+
+    if (indice === "galerias_tenant_id_slug_key") {
+      // Uma segunda tentativa, e só uma: se ela também bater, é sinal de algo
+      // que repetir não resolve, e insistir só esconderia o problema.
+      galeria = await nascer();
+    } else {
+      throw e;
+    }
   }
 
   /*
