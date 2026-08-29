@@ -27,6 +27,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
+import { estudioDaRodada, segundoEstudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 exigirBancoDeTeste();
 
@@ -182,12 +183,18 @@ await etapa("o token é longo e aleatório o bastante para não ser adivinhado",
 
 console.log("\nno banco");
 
-const { rows: ts } = await db.query("select id, slug from tenants order by criado_em limit 2");
-if (ts.length < 2) {
-  console.error("✗ preciso de 2 estúdios no banco de teste");
-  process.exit(1);
-}
-const [estudioA, estudioB] = ts;
+/*
+ * Os dois estúdios são DESTA execução, e a diferença não é de estilo.
+ *
+ * Até 29/08/2026 aqui estava `select id, slug from tenants order by criado_em
+ * limit 2` — os dois mais antigos do banco. Este teste ESCREVE neles: o
+ * `limpar()` abaixo zera `dominio_proprio`, `dominio_token` e
+ * `dominio_verificado_em`. Num banco de desenvolvimento com conta de gente, era
+ * o teste apagando o domínio próprio de quem não pediu nada. E num banco novo —
+ * o do CI — não existiam dois, e ele desistia antes de provar coisa alguma.
+ */
+const estudioA = await estudioDaRodada(db);
+const estudioB = await segundoEstudioDaRodada(db);
 const DOM = `teste-dominio-${Date.now()}.com.br`;
 
 const limpar = async () => {
@@ -274,7 +281,7 @@ await etapa("soltar o domínio para de resolver e de liberar certificado", async
   igual(await mod.dominioLiberaCertificado(DOM), false, "porteiro depois de solto");
 });
 
-await limpar();
+await limparRodada(db);
 await db.end();
 
 if (falhou) {

@@ -29,6 +29,7 @@ import {
   revogarChave,
 } from "../src/lib/chaves-api.ts";
 import { tenantDaRequisicao } from "../src/lib/auth-api.ts";
+import { estudioDaRodada, segundoEstudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 await exigirBancoDeTeste();
 
@@ -50,13 +51,13 @@ const igual = (a, b, o) => {
 };
 
 /* Dois estúdios: o teste de isolamento entre contas é o que mais importa aqui,
- * e ele precisa de um segundo tenant de verdade, não de um id inventado. */
-const { rows: ts } = await db.query("select id, nome_estudio from tenants order by criado_em limit 2");
-if (ts.length < 2) {
-  console.error("✗ preciso de dois estúdios no banco de teste — crie outra conta em /cadastrar");
-  process.exit(1);
-}
-const [estudio, outro] = ts;
+ * e ele precisa de um segundo tenant de verdade, não de um id inventado.
+ *
+ * Os DOIS são desta execução. Até 29/08/2026 este teste pegava os dois mais
+ * antigos do banco, e num banco recém-criado não havia dois — ele desistia
+ * antes da primeira etapa. Ver `segundoEstudioDaRodada` em fixture-de-teste.mjs. */
+const estudio = await estudioDaRodada(db);
+const outro = await segundoEstudioDaRodada(db);
 
 console.log(`\nChave de API — estúdio: ${estudio.nome_estudio}\n`);
 
@@ -256,6 +257,7 @@ await etapa("chave revogada fecha a porta na hora", async () => {
 if (criadas.length > 0) {
   await db.query("delete from chaves_api where id = any($1::uuid[])", [criadas]);
 }
+await limparRodada(db);
 await db.end();
 
 console.log(falhou ? "\n✗ chave de API com falha\n" : "\n✓ chave de API ok\n");
