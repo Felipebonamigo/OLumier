@@ -1,0 +1,181 @@
+# Roda a suíte a cada push e pull request.
+#
+# Este repositório passou a existência inteira sem CI: as 62 suítes só rodavam
+# na máquina de quem estava desenvolvendo, e só quando essa pessoa lembrava.
+# O `testar-tudo.mjs` avisa em letras garrafais que "teste que ninguém roda é
+# um teste que não existe" — e era exatamente o que estava acontecendo com ele
+# mesmo.
+#
+# ── POR QUE UM BANCO E UM ARMAZÉM DE VERDADE, E NÃO DUBLÊS ────────────────
+#
+# Porque é isso que as suítes testam. Elas publicam galeria, apagam mídia,
+# assinam URL de upload e conferem que o objeto saiu do bucket. Um dublê de
+# armazenamento provaria que o dublê funciona.
+#
+# O Postgres vem como serviço; o armazém é um MinIO (fala S3, igual ao R2) que
+# o app alcança por `R2_ENDPOINT` — a variável existe para isso e para o dia da
+# troca de fornecedor, que `src/lib/r2.ts` já anunciava.
+#
+# Sem o MinIO, o `healthz` reprova por falta de armazém e o corredor pula as 32
+# suítes de HTTP — inclusive as treze que passam por rota de arquivo. Metade da
+# suíte viraria enfeite. Foi medido antes de este arquivo existir.
+
+name: Verificar
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# Só precisa ler o código: esta workflow roda em `pull_request`, ou seja, faz
+# `npm ci` e build de código vindo de fora com o token do repositório ao alcance.
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          # O nome TERMINA em `_teste` de propósito: `scripts/guarda-producao.mjs`
+          # recusa rodar suíte destrutiva contra banco que não pareça de teste, e
+          # essa guarda tem de valer aqui como vale na máquina de qualquer um.
+          POSTGRES_DB: fotonio_teste
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/fotonio_teste
+      # Segredos de MENTIRA, e é o certo: nenhuma suíte precisa de segredo real,
+      # e um segredo de verdade aqui seria um segredo a mais para vazar. Longos o
+      # bastante para as guardas de tamanho do próprio código aceitarem.
+      SESSION_SECRET: segredo-de-sessao-so-do-ci-0123456789abcdef
+      AVISOS_ENC_KEY: segredo-de-cifra-do-canal-de-avisos-so-do-ci-2026
+      # A suíte de cobrança confere que a rota do webhook RECUSA quem não traz o
+      # token. Para isso ela precisa que exista um token — qualquer um, desde
+      # que os dois lados usem o mesmo. Nada aqui fala com o Asaas.
+      ASAAS_WEBHOOK_TOKEN: token-de-webhook-so-do-ci-0123456789abcdef
+      R2_ENDPOINT: http://127.0.0.1:9000
+      R2_ACCESS_KEY_ID: minioadmin
+      R2_SECRET_ACCESS_KEY: minioadmin
+      R2_BUCKET: galerias
+
+    steps:
+      # Actions presas ao sha do commit, não à tag: tag é PONTEIRO, e quem
+      # controla o repositório da action reaponta `v4` para outro commit sem que
+      # uma linha daqui mude. Mesma regra do repositório vizinho.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # `--ignore-scripts`: o postinstall de qualquer pacote da árvore rodaria no
+      # runner, que tem o token do repositório à mão. Nada aqui precisa deles.
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+        env:
+          NODE_ENV: development
+
+      # O portão de vulnerabilidade fica AQUI, antes de existir o que publicar.
+      # `high`: `moderate` e `low` em árvore de dev pipocam sem parar e treinam a
+      # gente a ignorar o vermelho — portão que vira ruído morre.
+      - name: Vulnerabilidade nas dependências
+        run: npm audit --audit-level=high
+
+      - name: Subir o armazém (MinIO, que fala S3 como o R2)
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio server /data
+          # Espera responder antes de criar o bucket: `docker run -d` volta na
+          # hora, e o servidor leva alguns segundos.
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9000/minio/health/live && break
+            sleep 2
+          done
+          # A AWS CLI já vem no runner. Endereço explícito e caminho no path:
+          # MinIO local não tem DNS curinga para `bucket.host`.
+          AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
+            aws --endpoint-url http://127.0.0.1:9000 --region us-east-1 \
+                s3 mb s3://galerias
+
+      # As suítes recebem o ambiente por `--env-file=.env.local` (é o que o
+      # `testar-tudo.mjs` passa a cada filho), então o arquivo precisa existir.
+      - name: Montar o .env.local do CI
+        run: |
+          {
+            echo "DATABASE_URL=$DATABASE_URL"
+            echo "SESSION_SECRET=$SESSION_SECRET"
+            echo "AVISOS_ENC_KEY=$AVISOS_ENC_KEY"
+            echo "ASAAS_WEBHOOK_TOKEN=$ASAAS_WEBHOOK_TOKEN"
+            echo "R2_ENDPOINT=$R2_ENDPOINT"
+            echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
+            echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
+            echo "R2_BUCKET=$R2_BUCKET"
+          } > .env.local
+
+      # A receita do banco NOVO, e ela é de duas partes: `db/schema.sql` é o
+      # retrato de até a migração 008, e o resto vem por cima. Rodar só o schema
+      # deixaria o banco anos atrasado; rodar só as migrações não teria o que
+      # migrar.
+      - name: Levantar o banco (retrato + migrações)
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d fotonio_teste \
+            -v ON_ERROR_STOP=1 -q -f db/schema.sql
+          node scripts/migrar.mjs --aplicar
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tipos
+        run: npm run typecheck
+
+      # O servidor de desenvolvimento é DEPENDÊNCIA de 32 das suítes — elas
+      # abrem páginas e batem em rotas. Sem ele o corredor as pula, e pular
+      # metade em silêncio é o que o `--exigir-tudo` lá embaixo existe para
+      # impedir.
+      - name: Subir o servidor de desenvolvimento
+        run: |
+          npm run dev > /tmp/dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3040/api/healthz > /dev/null; then
+              echo "servidor no ar e saudável"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "✗ o servidor não ficou saudável a tempo"
+          echo "--- healthz:"; curl -s http://localhost:3040/api/healthz || true
+          echo; echo "--- log:"; tail -60 /tmp/dev.log
+          exit 1
+
+      # `--exigir-tudo` transforma "pulado" em REPROVAÇÃO.
+      #
+      # É a diferença entre um CI que cobre e um que enfeita: se o MinIO não
+      # subir, ou o servidor cair, as suítes seriam puladas em silêncio e a
+      # execução ficaria verde cobrindo um terço. Aqui isso é vermelho, e
+      # vermelho é o que faz alguém olhar.
+      - name: Suíte inteira
+        run: npm test -- --exigir-tudo
+
+      - name: Build de produção
+        run: npm run build
+
+      # O log do servidor só interessa quando algo deu errado — e aí interessa
+      # muito, porque a falha da suíte costuma ser o sintoma e não a causa.
+      - name: Log do servidor (só quando falha)
+        if: failure()
+        run: tail -100 /tmp/dev.log || true

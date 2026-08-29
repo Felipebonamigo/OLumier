@@ -26,10 +26,26 @@ const conta = process.env.R2_ACCOUNT_ID;
 const accessKeyId = process.env.R2_ACCESS_KEY_ID;
 const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
+/**
+ * Onde o armazém atende. Vazio = o endereço do R2, derivado da conta.
+ *
+ * Existe pelo mesmo motivo do `ASAAS_BASE_URL` no produto vizinho — poder
+ * apontar para outro lugar sem tocar em código —, e aqui isso paga uma conta
+ * concreta: o CI sobe um MinIO ao lado e roda a suíte inteira contra ele.
+ * Sem esta variável, TODA suíte que passa por uma rota de arquivo (upload,
+ * derivadas, multipart, cofre, seleção…) só rodaria na máquina de quem tem as
+ * chaves de produção — ou seja, nunca rodaria sozinha.
+ *
+ * O comentário acima já anunciava a mudança para outro fornecedor "sem nada
+ * mudar além das variáveis de ambiente". Faltava esta variável para a frase ser
+ * verdade.
+ */
+const endereco = process.env.R2_ENDPOINT;
+
 export const BUCKET = process.env.R2_BUCKET ?? "galerias";
 
 /** true quando as credenciais estão configuradas — telas mostram aviso amigável se não. */
-export const armazenamentoConfigurado = Boolean(conta && accessKeyId && secretAccessKey);
+export const armazenamentoConfigurado = Boolean((conta || endereco) && accessKeyId && secretAccessKey);
 
 let cliente: S3Client | null = null;
 
@@ -41,7 +57,11 @@ function s3(): S3Client {
   }
   cliente ??= new S3Client({
     region: "auto",
-    endpoint: `https://${conta}.r2.cloudflarestorage.com`,
+    endpoint: endereco || `https://${conta}.r2.cloudflarestorage.com`,
+    /* `forcePathStyle` só quando o endereço é imposto: o R2 e o B2 falam por
+     * subdomínio (`bucket.host`), e um MinIO local não tem DNS curinga para
+     * isso — ali o caminho é `host/bucket`. Ligar sempre quebraria produção. */
+    forcePathStyle: Boolean(endereco),
     credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
   });
   return cliente;

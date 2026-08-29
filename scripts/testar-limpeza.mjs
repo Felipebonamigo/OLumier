@@ -40,7 +40,8 @@ const etapa = async (nome, fn) => {
 
 const s3 = new S3Client({
   region: "auto",
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint: process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  forcePathStyle: Boolean(process.env.R2_ENDPOINT),
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
@@ -207,9 +208,14 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
   const t = [await estudioDaRodada(db)];
 
   const outro = await db.query(
+    /* O e-mail também vai com carimbo, não só o slug: `tenants.email` é ÚNICO, e
+     * com valor fixo a segunda execução nesta mesma base morria em
+     * "duplicate key" — bastava uma rodada anterior ter caído no meio, antes da
+     * limpeza. Vermelho por sobra da rodada passada é o pior tipo: some quando
+     * se investiga (a pessoa limpa o banco) e volta depois. */
     `insert into tenants (slug,nome_estudio,email,senha_hash)
-     values ($1,'Outro','outro-limpeza@teste','x') returning id`,
-    [`outro-limpeza-${Date.now()}`],
+     values ($1,'Outro',$2,'x') returning id`,
+    [`outro-limpeza-${Date.now()}`, `outro-limpeza-${Date.now()}@teste`],
   );
   const g = await db.query(
     `insert into galerias (tenant_id, slug, titulo) values ($1,'alheia','Alheia') returning id`,

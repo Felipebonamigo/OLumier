@@ -120,6 +120,68 @@ const PRECISAM_DO_SERVIDOR = new Set(
   }),
 );
 
+/**
+ * Quais suítes precisam das CREDENCIAIS DO ARMAZÉM — deduzido do arquivo, pelo
+ * mesmo motivo da lista acima: lista escrita à mão envelhece, e a que envelhece
+ * mente.
+ *
+ * Existe porque estas três falhavam de VERMELHO em toda máquina sem as chaves
+ * do R2 — inclusive numa recém-clonada, e no CI. Vermelho por credencial que
+ * ninguém prometeu ter não é defeito encontrado: é ruído, e ruído treina a
+ * gente a ignorar a cor que importa. Puladas, elas contam como "não rodou", que
+ * é a verdade, e o `--exigir-tudo` continua cobrando quem for publicar.
+ *
+ * O marcador é o nome das variáveis, e não a palavra "R2": esta última aparece
+ * em comentário de meia dúzia de arquivos que não tocam no bucket. É o mesmo
+ * cuidado que o bloco anterior documenta sobre `DATABASE_URL` conter `BASE_URL`.
+ */
+const PRECISAM_DO_ARMAZEM = new Set(
+  suites.filter((nome) => {
+    const fonte = readFileSync(path.join(AQUI, `${nome}.mjs`), "utf8");
+    return fonte.includes("R2_ACCOUNT_ID") || fonte.includes("R2_BUCKET");
+  }),
+);
+
+/* As suítes recebem o ambiente por `--env-file=.env.local`; este corredor, não.
+ * Então ele lê o mesmo arquivo para saber o que elas vão encontrar — sem isso,
+ * ele decidiria "não tem armazém" numa máquina que tem. */
+function doAmbiente(chave) {
+  if (process.env[chave]) return process.env[chave];
+  try {
+    const arquivo = readFileSync(path.resolve(AQUI, "..", ".env.local"), "utf8");
+    const linha = arquivo.split("\n").find((l) => l.trimStart().startsWith(`${chave}=`));
+    return linha ? linha.slice(linha.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "") : "";
+  } catch {
+    return "";
+  }
+}
+
+/* `R2_ENDPOINT` conta no lugar de `R2_ACCOUNT_ID`: a conta só existe para
+ * MONTAR o endereço do R2, e quem já tem o endereço (o MinIO do CI, um armazém
+ * local) não precisa dela. */
+const temArmazem =
+  Boolean(doAmbiente("R2_ACCOUNT_ID") || doAmbiente("R2_ENDPOINT")) &&
+  ["R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"].every((chave) => doAmbiente(chave));
+
+/*
+ * ── O PORTÃO CONTINUA SENDO O `ok` INTEIRO DO healthz ─────────────────────
+ *
+ * Tentei afrouxá-lo para "respondeu e o banco está de pé", achando que as
+ * suítes de HTTP que não tocam no bucket poderiam rodar sem as chaves do R2.
+ * MEDIDO: com o servidor de pé e sem armazém, treze delas ficam VERMELHAS —
+ * upload, derivadas, multipart, cofre, seleção, teto do trial… Elas não citam
+ * `R2_` em lugar nenhum (por isso o eixo acima não as pega): passam por ROTAS
+ * que precisam do bucket, e o 503 sai de dentro do app.
+ *
+ * Trocar trinta e dois "pulados" por treze vermelhos é o pior negócio possível:
+ * vermelho que não é defeito ensina a ignorar a cor que importa. Sem armazém o
+ * servidor está mesmo meio quebrado, e o healthz — que é a rota do vigia — está
+ * certo em dizer isso.
+ *
+ * O caminho para cobrir tudo NÃO é afrouxar aqui: é dar um armazém de verdade a
+ * quem roda a suíte. O CI faz isso com um MinIO ao lado (ver
+ * `.github/workflows/verificar.yml`).
+ */
 let servidorNoAr = false;
 try {
   const r = await fetch(`${BASE}/api/healthz`, { signal: AbortSignal.timeout(5000) });
@@ -129,8 +191,13 @@ try {
 }
 
 if (!servidorNoAr) {
-  console.log(`⚠ servidor de desenvolvimento fora do ar (${BASE})`);
+  console.log(`⚠ servidor de desenvolvimento fora do ar, ou sem banco/armazém (${BASE})`);
   console.log("  as suítes que dependem dele serão puladas — rode `npm run dev` para cobrir tudo\n");
+}
+
+if (!temArmazem) {
+  console.log("⚠ sem credenciais do armazém (R2_*)");
+  console.log("  as suítes que mexem no bucket serão puladas\n");
 }
 
 const verdes = [];
@@ -140,7 +207,13 @@ const pulados = [];
 for (const nome of suites) {
   if (PRECISAM_DO_SERVIDOR.has(nome) && !servidorNoAr) {
     pulados.push(nome);
-    console.log(`  – ${nome} (pulado)`);
+    console.log(`  – ${nome} (pulado: sem servidor)`);
+    continue;
+  }
+
+  if (PRECISAM_DO_ARMAZEM.has(nome) && !temArmazem) {
+    pulados.push(nome);
+    console.log(`  – ${nome} (pulado: sem armazém)`);
     continue;
   }
 
@@ -188,8 +261,8 @@ if (vermelhas.length) console.error(`\n✗ ${vermelhas.join(", ")}\n`);
 if (pulados.length) {
   console.log(
     EXIGIR_TUDO
-      ? "\n✗ cobertura parcial, e esta execução exige tudo — suba o servidor e rode de novo\n"
-      : "\n⚠ cobertura parcial — suba o servidor e rode de novo antes de publicar\n",
+      ? "\n✗ cobertura parcial, e esta execução exige tudo — suba o servidor (e as chaves) e rode de novo\n"
+      : "\n⚠ cobertura parcial — suba o servidor (e as chaves) e rode de novo antes de publicar\n",
   );
 } else if (!vermelhas.length) {
   console.log("\n✓ suíte inteira verde\n");

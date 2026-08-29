@@ -19,6 +19,18 @@
  *   2. o GET assinado com Origin — a resposta que ele precisa aceitar
  *
  * Usa a chave normal, de objeto: não mexe em configuração, só exercita.
+ *
+ * ── ESTE TESTE É DE CONFIGURAÇÃO, NÃO DE CÓDIGO ───────────────────────────
+ *
+ * O que ele exercita não está neste repositório: é a política CORS do bucket,
+ * que mora no painel do fornecedor. Nenhum commit daqui pode quebrá-la e nenhum
+ * pode consertá-la — por isso ele PULA quando o armazém apontado não é o de
+ * verdade (`R2_ENDPOINT` no ambiente, como no CI, que sobe um armazém ao lado).
+ *
+ * Reprovar ali seria cobrar de um armazém substituto uma configuração que ele
+ * não tem por que ter, e o vermelho não diria nada sobre a mudança em revisão.
+ * Quem precisa desta prova roda contra o bucket de verdade — é o caso de quem
+ * acabou de mexer na política, que é a única hora em que ela pode ter quebrado.
  */
 import { randomUUID } from "node:crypto";
 import {
@@ -30,15 +42,23 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = process.env;
+if (process.env.R2_ENDPOINT) {
+  console.log("\nCORS do bucket");
+  console.log("  – PULADO: o armazém apontado não é o de verdade (R2_ENDPOINT no ambiente).");
+  console.log("    A política CORS mora no painel do fornecedor; rode contra o bucket real.\n");
+  process.exit(0);
+}
+
 if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) {
   console.error("✗ faltam variáveis do R2 no .env.local");
   process.exit(1);
 }
 
-const ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+const ENDPOINT = process.env.R2_ENDPOINT || `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
 const s3 = new S3Client({
   region: "auto",
   endpoint: ENDPOINT,
+  forcePathStyle: Boolean(process.env.R2_ENDPOINT),
   credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
 });
 
