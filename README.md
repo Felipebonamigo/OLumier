@@ -24,7 +24,7 @@ novo ele PULA o que faltava aplicar de verdade.)
 npm install
 .\tunel.ps1          # túnel SSH para o Postgres do VPS (deixe aberto)
 npm run dev          # http://localhost:3040
-npm test             # as 62 suítes (as de HTTP precisam do `npm run dev` de pé)
+npm test             # as 63 suítes (as de HTTP precisam do `npm run dev` de pé)
 npm test -- --exigir-tudo   # o mesmo, mas "pulado" conta como REPROVADO
 ```
 

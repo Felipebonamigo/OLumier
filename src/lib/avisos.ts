@@ -72,6 +72,51 @@ export async function canalDoEstudio(tenantId: string): Promise<Canal | null> {
   }
 }
 
+/**
+ * O canal como a TELA pode vê-lo. Sem o segredo — nunca, em hipótese nenhuma.
+ *
+ * Existe separado de `canalDoEstudio` de propósito, e a diferença é a única
+ * coisa que importa neste tipo: aquela função decifra o segredo porque vai
+ * ASSINAR com ele; esta serve uma página, e página vira HTML que vira cache,
+ * print, "inspecionar elemento" e relato de suporte. Um segredo que passa por
+ * um componente de tela é um segredo que já vazou — mesmo que nenhum JSX o
+ * escreva hoje, basta o próximo `JSON.stringify` de depuração.
+ *
+ * Por isso o segredo nem sai do banco aqui: o `select` não o pede.
+ *
+ * Devolve `null` quando não há canal. Diferente de `canalDoEstudio`, um segredo
+ * ilegível (chave do servidor trocada) NÃO vira `null`: para quem envia isso é
+ * "não há como avisar", mas para quem OLHA a tela o canal existe e está
+ * quebrado — e é justamente esse o estado que a pessoa precisa enxergar para
+ * saber que tem de reconectar do outro lado.
+ */
+export interface EstadoDoCanal {
+  url: string;
+  criadoEm: Date;
+  ultimoEnvioEm: Date | null;
+  ultimoErro: string | null;
+}
+
+export async function estadoDoCanal(tenantId: string): Promise<EstadoDoCanal | null> {
+  const linha = await consultarUm<{
+    url: string;
+    criado_em: Date;
+    ultimo_envio_em: Date | null;
+    ultimo_erro: string | null;
+  }>(
+    `select url, criado_em, ultimo_envio_em, ultimo_erro
+       from avisos where tenant_id = $1`,
+    [tenantId],
+  );
+  if (!linha) return null;
+  return {
+    url: linha.url,
+    criadoEm: linha.criado_em,
+    ultimoEnvioEm: linha.ultimo_envio_em,
+    ultimoErro: linha.ultimo_erro,
+  };
+}
+
 /** Registra (ou troca) o canal do estúdio. O segredo chega de quem RECEBE. */
 export async function registrarCanal(tenantId: string, url: string, segredo: string) {
   if (!temCripto) throw new Error("AVISOS_ENC_KEY ausente — não guardo segredo em claro.");

@@ -212,6 +212,22 @@ webhook do Asaas. Assim o outro lado gira o segredo quando quiser sem pedir
 nada a ninguém. Ele fica cifrado (`src/lib/cripto.ts`, `AVISOS_ENC_KEY`, próprio
 deste canal — nunca o `SESSION_SECRET`).
 
+**E o dono do estúdio vê o canal na tela**, em `Painel → Conta → Avisos de
+entrega`: para onde está avisando, desde quando, o último aviso e a última
+falha — e um botão para desligar. Só aparece para quem tem canal.
+
+A tela **não cria** canal, e a ausência do botão é a arquitetura aparecendo:
+criar exigiria inventar um segredo aqui e mostrá-lo para alguém copiar, ou
+seja, fazer o segredo passar por dentro de um HTML. Desligar, sim — é a conta
+deste estúdio mandando coisa para fora, e cortar não pode depender de o outro
+sistema estar de pé. Mesma assimetria de "revogar chave".
+
+O que a tela mostra vem de `estadoDoCanal()`, que existe separada de
+`canalDoEstudio()` por um motivo só: aquela decifra o segredo porque vai
+assinar com ele; esta serve uma página, e o `select` dela nem pede a coluna do
+segredo. `testar-tela-avisos.mjs` procura o segredo — em claro e cifrado — no
+HTML da página, e foi conferido que ele reprova com o vazamento plantado.
+
 `POST` exige escopo **envio**, e não leitura: registrar um canal é dizer para
 onde os eventos deste estúdio saem. "Quem lê" e "quem redireciona" não podem ser
 o mesmo poder. O endereço precisa ser **https** — é o nosso servidor fazendo

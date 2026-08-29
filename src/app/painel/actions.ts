@@ -10,7 +10,7 @@ import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 /* O aviso ao outro lado. `avisarEntrega` NUNCA lança — ver lib/avisos.ts —, e é
  * por isso que ele pode ser chamado assim, solto, no fim de cada ação: nenhuma
  * delas passa a depender de o Atomatiza estar de pé. */
-import { avisarEntrega } from "@/lib/avisos";
+import { avisarEntrega, removerCanal } from "@/lib/avisos";
 import { lerAparencia } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
@@ -1016,5 +1016,25 @@ export async function revogarChaveApiAction(form: FormData) {
   if (!id) return;
 
   await revogarChave(id, tenantId);
+  revalidatePath("/painel/conta");
+}
+
+/**
+ * Desliga o canal de avisos deste estúdio.
+ *
+ * O canal é registrado por quem RECEBE (o Atomatiza, por `POST /api/avisos`),
+ * mas quem desliga tem de poder ser o dono do estúdio, aqui, sem depender de o
+ * outro sistema estar de pé — é a conta dele que está mandando coisa para fora.
+ * É a mesma assimetria de "revogar chave": criar exige o fluxo, revogar é um
+ * clique.
+ *
+ * Desligar NÃO quebra nada do outro lado: a ficha do contrato guarda o link
+ * como dado copiado, e o botão "conferir" de lá continua resolvendo. O que se
+ * perde é o retrato se atualizar sozinho — que é o que a tela explica antes de
+ * a pessoa clicar.
+ */
+export async function desligarAvisosAction() {
+  const tenantId = await exigirTenant();
+  await removerCanal(tenantId);
   revalidatePath("/painel/conta");
 }
