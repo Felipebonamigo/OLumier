@@ -51,8 +51,12 @@ interface PecaProps {
  * O texto de amostra é o nome da fonte e não "Aa": num alfabeto de duas
  * letras, manuscrita e serifada se parecem demais.
  */
-function SeletorDeFonte({ ap, mudar }: PecaProps) {
-  const familias = [...new Set(OPCOES.tipografia.map((o) => o.familia))];
+function SeletorDeFonte({ ap, mudar, temFontePropria }: PecaProps & { temFontePropria: boolean }) {
+  /* A fonte do estúdio só existe para quem enviou uma. Some da lista em vez de
+     aparecer desabilitada: opção morta na tela é pergunta que a pessoa faz e
+     ninguém responde — e o lugar de enviar é Conta, não aqui. */
+  const disponiveis = OPCOES.tipografia.filter((o) => o.id !== "propria" || temFontePropria);
+  const familias = [...new Set(disponiveis.map((o) => o.familia))];
   return (
     <div className="sm:col-span-2">
       <span className="block text-xs font-medium text-texto-soft">Fonte do título</span>
@@ -63,7 +67,7 @@ function SeletorDeFonte({ ap, mudar }: PecaProps) {
               {familia}
             </span>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {OPCOES.tipografia
+              {disponiveis
                 .filter((o) => o.familia === familia)
                 .map((op) => {
                   const ativo = ap.tipografia === op.id;
@@ -130,10 +134,13 @@ export function EditorAparencia({
   galeriaId,
   caminhoPublico,
   inicial,
+  temFontePropria,
 }: {
   galeriaId: string;
   caminhoPublico: string;
   inicial: Aparencia;
+  /** O estúdio enviou uma fonte? Decide se a opção aparece no seletor. */
+  temFontePropria: boolean;
 }) {
   const [ap, setAp] = useState<Aparencia>(inicial);
   /* O que está GRAVADO. Separado do que está na tela: é a diferença entre os
@@ -271,7 +278,7 @@ export function EditorAparencia({
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Eixo eixo="capa" titulo="Capa" ap={ap} mudar={mudar} />
           <Eixo eixo="tema" titulo="Cores" ap={ap} mudar={mudar} />
-          <SeletorDeFonte ap={ap} mudar={mudar} />
+          <SeletorDeFonte ap={ap} mudar={mudar} temFontePropria={temFontePropria} />
           <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
           <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
           <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />

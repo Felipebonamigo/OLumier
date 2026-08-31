@@ -25,6 +25,10 @@ export interface GaleriaPublica {
   estudio_nome: string;
   estudio_slug: string;
   estudio_logo: string | null;
+  /* A fonte própria do estúdio. Vem junto porque a galeria pública precisa dela
+     para montar o @font-face — sem isso seria uma segunda consulta por página. */
+  estudio_fonte: string | null;
+  estudio_fonte_nome: string | null;
   estudio_cor: string;
   /** Para `galeriasNoAr` — a carência do trial abandonado. */
   estudio_status: string;
@@ -50,6 +54,7 @@ export async function buscarGaleriaPublica(
             g.permite_download, g.expira_em, g.aparencia, g.capa_media_id,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
+            t.fonte_chave as estudio_fonte, t.fonte_nome as estudio_fonte_nome,
             -- Para galeriasNoAr: o trial abandonado deixa de servir a galeria
             -- 15 dias depois de vencer. Sem estas duas colunas a regra recebe
             -- undefined e libera todo mundo — falha que nenhuma tela denuncia.

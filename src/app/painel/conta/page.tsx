@@ -226,6 +226,7 @@ export default async function ContaPage() {
         nomeEstudio={tenant.nome_estudio}
         corDestaque={tenant.cor_destaque}
         urlLogo={urlLogo}
+        fonteNome={tenant.fonte_nome}
         slug={tenant.slug}
       />
 

@@ -112,14 +112,25 @@ export default async function Image({ params }: Props) {
           />
         )}
 
-        {/* O véu existe mesmo sem foto: assim o bloco de texto tem sempre o
-            mesmo contraste, e não depende de a capa ser clara ou escura. */}
+        {/*
+          O VÉU É CALCULADO PELA PIOR FOTO, não pela foto média.
+
+          A primeira versão ia de 92% no rodapé a 55% na metade, e pareceu boa
+          contra a capa escura do banco de desenvolvimento. Na primeira galeria
+          real — vestido branco e azulejo claro atrás do texto — o nome do
+          estúdio sumiu. Foto de casamento é clara com frequência, e o cartão
+          não pode depender de qual foto caiu ali.
+
+          Agora a faixa onde o texto mora nunca fica abaixo de 82% de preto, e a
+          sombra segura as bordas das letras quando a foto tem detalhe fino
+          (renda, folhagem) exatamente atrás delas.
+        */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(to top, rgba(5,5,5,.92) 0%, rgba(5,5,5,.55) 42%, rgba(5,5,5,.12) 100%)",
+              "linear-gradient(to top, rgba(5,5,5,.96) 0%, rgba(5,5,5,.90) 22%, rgba(5,5,5,.62) 45%, rgba(5,5,5,.18) 72%, rgba(5,5,5,0) 100%)",
           }}
         />
 
@@ -129,12 +140,21 @@ export default async function Image({ params }: Props) {
               fontSize: 26,
               letterSpacing: 6,
               textTransform: "uppercase",
-              color: "#d9a441",
+              color: "#f0c987",
+              textShadow: "0 2px 12px rgba(0,0,0,.85)",
             }}
           >
             {estudioNome}
           </div>
-          <div style={{ fontSize: 78, fontWeight: 700, lineHeight: 1.05, marginTop: 18 }}>
+          <div
+            style={{
+              fontSize: 78,
+              fontWeight: 700,
+              lineHeight: 1.05,
+              marginTop: 18,
+              textShadow: "0 3px 18px rgba(0,0,0,.8)",
+            }}
+          >
             {titulo}
           </div>
         </div>

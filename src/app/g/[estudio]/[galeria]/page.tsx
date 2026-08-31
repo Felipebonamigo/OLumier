@@ -23,6 +23,7 @@ import {
 } from "@/components/galeria-cliente";
 import { GaleriaCapa } from "@/components/galeria-capa";
 import { lerAparencia, TEMAS, AMOSTRA_PREVIA } from "@/config/aparencia";
+import { FAMILIA_PROPRIA } from "@/lib/fonte-estudio";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -318,6 +319,18 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     ? await urlDaDerivada(capa.chave_preview, capa.chave, armazemDe(capa.armazem), VALIDADE)
     : null;
 
+  /*
+   * A fonte só é assinada quando VAI SER USADA.
+   *
+   * Assinar sempre custaria uma chamada por página em toda galeria de todo
+   * estúdio que já enviou um arquivo — inclusive nas que escolheram Bodoni. A
+   * condição é a mesma que decide se o `@font-face` entra no HTML.
+   */
+  const fonteDoEstudio =
+    aparencia.tipografia === "propria" && galeria.estudio_fonte
+      ? await urlDeLeitura(galeria.estudio_fonte, VALIDADE)
+      : null;
+
   // A logo é guardada como CHAVE, não como URL: este bucket não tem endereço
   // público, então todo link é assinado na hora de desenhar a página.
   const urlLogo = galeria.estudio_logo
@@ -334,6 +347,25 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       className="min-h-dvh pb-20"
       style={{ ...TEMAS[aparencia.tema], background: "var(--g-fundo)", color: "var(--g-texto)" }}
     >
+      {/*
+        A FONTE DO ESTÚDIO, quando existe e quando foi escolhida.
+
+        O arquivo mora no bucket do fotógrafo e o link é assinado como qualquer
+        outro — por isso o `@font-face` é escrito aqui, na página, e não numa
+        folha de estilo: o endereço muda a cada visita.
+
+        `font-display: swap` de propósito: o título aparece na hora, com a
+        serifada de reserva, e troca quando a fonte chega. O contrário (`block`)
+        deixaria o nome do casal invisível por até três segundos no 4G do
+        salão de festas.
+
+        Só entra quando os DOIS lados existem — a galeria pediu `propria` e o
+        estúdio tem arquivo. Quem removeu a fonte depois de escolhê-la cai na
+        serifada de reserva sem que nada quebre.
+      */}
+      {fonteDoEstudio && (
+        <style>{`@font-face{font-family:"${FAMILIA_PROPRIA}";src:url("${fonteDoEstudio}");font-display:swap}`}</style>
+      )}
       {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
       <GaleriaCapa
         aparencia={aparencia}

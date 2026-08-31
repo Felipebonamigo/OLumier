@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { salvarMarcaAction, type EstadoMarca } from "@/app/painel/actions";
 import { Campo, Erro, BotaoEnviar } from "@/components/form-ui";
 import { LogoEstudio } from "@/components/logo-estudio";
+import { FonteEstudio } from "@/components/fonte-estudio";
 import {
   COR_PADRAO,
   FUNDO_CLARO,
@@ -29,12 +30,15 @@ export function EditorMarca({
   nomeEstudio,
   corDestaque,
   urlLogo,
+  fonteNome,
   slug,
 }: {
   nomeEstudio: string;
   corDestaque: string;
   /** Link assinado da logo atual, ou null. Expira — serve só para esta tela. */
   urlLogo: string | null;
+  /** Nome da fonte própria já enviada, ou null. */
+  fonteNome: string | null;
   slug: string;
 }) {
   const [estado, action] = useActionState<EstadoMarca, FormData>(salvarMarcaAction, {});
@@ -53,6 +57,8 @@ export function EditorMarca({
           nota={<>Na capa, a logo <strong className="text-texto-soft">substitui</strong> o nome escrito — quase toda logo já traz o nome, e mostrar os dois deixa a capa repetida.</>}
         />
       </div>
+
+      <FonteEstudio fonteNome={fonteNome} />
 
       {/* Nome e cor */}
       <form action={action} className="mt-6 flex flex-col gap-4 border-t border-linha pt-5">

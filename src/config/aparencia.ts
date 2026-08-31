@@ -32,7 +32,10 @@ export type Tipografia =
   | "italianno"
   | "cinzel"
   | "marcellus"
-  | "tenor";
+  | "tenor"
+  /* A fonte que o próprio estúdio enviou. Não é uma fonte nossa: o arquivo mora
+   * no bucket do fotógrafo e a galeria injeta o @font-face. Ver lib/fonte-estudio.ts. */
+  | "propria";
 export type Grade = "colunas" | "linhas" | "quadrada" | "editorial";
 export type Densidade = "compacta" | "normal" | "arejada";
 
@@ -162,6 +165,10 @@ export const OPCOES = {
     { id: "cinzel", nome: "Cinzel", desc: "Maiúsculas · romana, de convite", familia: "Maiúsculas" },
     { id: "marcellus", nome: "Marcellus", desc: "Maiúsculas · clássica e serena", familia: "Maiúsculas" },
     { id: "tenor", nome: "Tenor Sans", desc: "Maiúsculas · limpa e espaçada", familia: "Maiúsculas" },
+    /* Só aparece para quem enviou uma fonte — o editor filtra pela família. Fica
+     * na lista mesmo assim porque  precisa aceitá-la ao ler uma
+     * galeria já gravada, inclusive depois de a fonte ter sido removida. */
+    { id: "propria", nome: "A minha fonte", desc: "O arquivo que você enviou em Conta", familia: "Sua fonte" },
   ],
   grade: [
     { id: "colunas", nome: "Colunas", desc: "Alturas variadas, estilo mural" },
@@ -368,6 +375,11 @@ export const TEMAS: Record<Tema, Record<string, string>> = {
  * em galerias entregues.
  */
 export const FONTES_TITULO: Record<Tipografia, string> = {
+  /* Não é uma fonte nossa: o nome da família é declarado pelo @font-face que a
+     galeria injeta quando o estúdio tem arquivo enviado. Sem esse @font-face
+     (fonte removida, ou estúdio que nunca enviou), o navegador cai na serifada
+     do fim da lista — que é o comportamento certo, e não um erro a tratar. */
+  propria: '"FonteDoEstudio", var(--font-serif-app), Georgia, serif',
   serifada: 'var(--font-serif-app), "Iowan Old Style", Palatino, Georgia, serif',
   playfair: 'var(--font-titulo-playfair), "Times New Roman", Georgia, serif',
   lora: 'var(--font-titulo-lora), Georgia, "Times New Roman", serif',

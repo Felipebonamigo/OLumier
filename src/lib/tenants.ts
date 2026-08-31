@@ -11,6 +11,10 @@ export interface Tenant {
   email: string;
   /** Chave do objeto no bucket — não é URL. O link é assinado na hora de exibir. */
   logo_chave: string | null;
+  /* A fonte própria do estúdio (migração 026). Nulas para quem nunca enviou —
+     e nesse caso a opção nem aparece no seletor de tipografia. */
+  fonte_chave: string | null;
+  fonte_nome: string | null;
   cor_destaque: string;
   /** Conteúdo da vitrine `/e/<slug>`. Formato garantido só por `lerSite`. */
   site: unknown;

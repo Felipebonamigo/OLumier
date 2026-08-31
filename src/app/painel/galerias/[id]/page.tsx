@@ -31,8 +31,10 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
   if (!tenantId) redirect("/entrar");
 
   // O tenant_id no where é a autorização: id de outro estúdio simplesmente não existe aqui.
-  const galeria = await consultarUm<Galeria & { estudio_slug: string }>(
-    `select g.*, t.slug as estudio_slug
+  const galeria = await consultarUm<
+    Galeria & { estudio_slug: string; estudio_fonte: string | null }
+  >(
+    `select g.*, t.slug as estudio_slug, t.fonte_chave as estudio_fonte
        from galerias g join tenants t on t.id = g.tenant_id
       where g.id = $1 and g.tenant_id = $2`,
     [id, tenantId],
@@ -226,6 +228,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         galeriaId={galeria.id}
         caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
         inicial={lerAparencia(galeria.aparencia)}
+        temFontePropria={Boolean(galeria.estudio_fonte)}
       />
 
       {/*
