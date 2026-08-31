@@ -1,4 +1,4 @@
-import { FONTES_TITULO, type Aparencia } from "@/config/aparencia";
+import { FONTES_TITULO, alturaLogoPx, type Aparencia } from "@/config/aparencia";
 
 export interface DadosCapa {
   titulo: string;
@@ -29,16 +29,33 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    * `alt` recebe o nome do estúdio: para quem usa leitor de tela, a logo É o
    * nome — deixar vazio apagaria essa informação da página.
    */
+  /*
+   * A ALTURA VEM DO EIXO, não do componente.
+   *
+   * Era `max-h-14` escrito aqui — 56 px, iguais para logo quadrada e para logo
+   * horizontal fina, e sem nada na tela para mexer. Virou eixo de aparência
+   * (`OPCOES.logo`), e o número mora lá: uma tabela de alturas duplicada aqui
+   * envelheceria separada da que o editor mostra.
+   *
+   * Vai em `style` e não em classe do Tailwind de propósito: `max-h-[88px]`
+   * montado a partir de variável não existe no CSS gerado — o Tailwind varre o
+   * código à procura de classes escritas por extenso, e a que se monta em tempo
+   * de execução simplesmente não é gerada. Já quebrou assim em outros projetos;
+   * `style` não tem esse problema.
+   */
+  const alturaLogo = alturaLogoPx(aparencia.logo);
+
   const Estudio = ({ className = "" }: { className?: string }) =>
     logoUrl ? (
       // eslint-disable-next-line @next/next/no-img-element -- URL externa do estúdio, sem otimização nossa
       <img
         src={logoUrl}
         alt={estudio}
+        style={{ maxHeight: `${alturaLogo}px` }}
         // inline-block em vez de mx-auto: assim o alinhamento vem do pai, e a
         // capa "dividida" (texto à esquerda no desktop) não fica com a logo
         // centralizada sozinha no meio da coluna.
-        className={`inline-block max-h-14 w-auto object-contain ${className}`}
+        className={`inline-block w-auto object-contain ${className}`}
       />
     ) : (
       <TextoEstudio className={className} />

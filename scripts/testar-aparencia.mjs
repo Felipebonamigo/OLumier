@@ -13,7 +13,7 @@ import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
-import { TEMAS, OPCOES, FONTES_TITULO } from "../src/config/aparencia.ts";
+import { TEMAS, OPCOES, FONTES_TITULO, APARENCIA_PADRAO } from "../src/config/aparencia.ts";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -144,6 +144,110 @@ if (semVariavel.length) {
   falhou = true;
 } else {
   console.log(`  ✓ as ${OPCOES.tipografia.length} fontes têm variável declarada`);
+}
+
+/*
+ * ── O TAMANHO DA LOGO (31/08/2026) ────────────────────────────────────────
+ *
+ * A logo do estúdio na capa vivia num `max-h-14` escrito à mão dentro do
+ * componente — 56 px, e ponto. Quem tem logo horizontal fina ficava com uma
+ * marca miúda em cima de uma foto de tela cheia, sem nada na tela para mexer.
+ *
+ * Virou eixo de aparência, como capa, tema e grade. As etapas abaixo prendem as
+ * três pontas: o eixo existe, os tamanhos crescem de verdade, e a capa usa o
+ * eixo em vez de um valor fixo. A terceira é a que importa — sem ela o eixo
+ * apareceria na tela e não mudaria nada, que é pior que não existir.
+ */
+const LOGOS = OPCOES.logo ?? [];
+if (LOGOS.length < 3) {
+  console.error(`  ✗ o eixo de tamanho da logo tem ${LOGOS.length} opções — esperava ao menos 3`);
+  falhou = true;
+} else {
+  console.log(`  ✓ o tamanho da logo é um eixo — ${LOGOS.map((o) => o.nome).join(", ")}`);
+}
+
+/* Tamanho é escada: um degrau que não sobe é opção que não faz nada. */
+const alturas = LOGOS.map((o) => o.px);
+const sobeSempre =
+  alturas.length > 0 &&
+  alturas.every((v, i) => typeof v === "number" && (i === 0 || v > alturas[i - 1]));
+if (!sobeSempre) {
+  console.error(`  ✗ os tamanhos de logo não crescem: ${alturas.join(" → ")}`);
+  falhou = true;
+} else {
+  console.log(`  ✓ os tamanhos crescem — ${alturas.join(" → ")} px`);
+}
+
+/*
+ * O PADRÃO PRECISA SER MAIOR QUE OS 56 px DE ANTES.
+ *
+ * O pedido do dono foi literalmente "a logo tem que ser maior". Um eixo novo
+ * cujo padrão repete o tamanho antigo atenderia à letra e não ao pedido: quem
+ * não mexer em nada continuaria vendo a logo do mesmo tamanho.
+ */
+const padraoLogo = LOGOS.find((o) => o.id === APARENCIA_PADRAO.logo);
+if (!padraoLogo || padraoLogo.px <= 56) {
+  console.error(
+    `  ✗ o tamanho padrão da logo é ${padraoLogo?.px ?? "?"} px — era 56 px antes do eixo existir`,
+  );
+  falhou = true;
+} else {
+  console.log(`  ✓ o padrão subiu de 56 px para ${padraoLogo.px} px`);
+}
+
+/* A capa tem de LER o eixo. Altura escrita à mão ali é o eixo virando enfeite.
+ *
+ * Os comentários saem antes da busca: o comentário que EXPLICA a mudança cita o
+ * `max-h-14` que foi removido, e sem esta limpeza o teste acusaria a própria
+ * documentação de ser o defeito. */
+const semComentarios = (t) => t.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+const capa = semComentarios(
+  readFileSync(path.join(RAIZ, "src/components/galeria-capa.tsx"), "utf8"),
+);
+if (/max-h-\d/.test(capa)) {
+  console.error("  ✗ a capa ainda tem altura de logo fixa (`max-h-…`) — o eixo não muda nada");
+  falhou = true;
+} else if (!capa.includes("aparencia.logo")) {
+  console.error("  ✗ a capa não lê `aparencia.logo`");
+  falhou = true;
+} else {
+  console.log("  ✓ a capa desenha a logo pelo eixo, sem altura fixa");
+}
+
+/*
+ * TODO EIXO PRECISA ESTAR NA TELA.
+ *
+ * Eixo que existe no config e não aparece no editor é opção que ninguém
+ * alcança — e ninguém descobre, porque nada quebra. A tipografia é a exceção
+ * conhecida: ela tem seletor próprio (`SeletorDeFonte`), agrupado por família.
+ */
+const editor = readFileSync(path.join(RAIZ, "src/components/editor-aparencia.tsx"), "utf8");
+const forasDaTela = Object.keys(OPCOES).filter(
+  (eixo) => eixo !== "tipografia" && !editor.includes(`eixo="${eixo}"`),
+);
+if (forasDaTela.length) {
+  console.error(`  ✗ eixo sem lugar no editor: ${forasDaTela.join(", ")}`);
+  falhou = true;
+} else {
+  console.log(`  ✓ os ${Object.keys(OPCOES).length} eixos aparecem no editor`);
+}
+
+/*
+ * ── A LOGO NA HORA DE CRIAR A GALERIA ─────────────────────────────────────
+ *
+ * A logo é do ESTÚDIO, e morava só em Conta. Quem estava criando a primeira
+ * galeria tinha de sair da tarefa, achar outra tela e voltar — e a hora em que
+ * a pessoa pensa na marca é exatamente esta. O editor de marca passa a aparecer
+ * também no formulário de nova galeria, gravando no mesmo lugar de sempre.
+ */
+const telaNova =
+  readFileSync(path.join(RAIZ, "src/app/painel/galerias/nova/page.tsx"), "utf8") +
+  readFileSync(path.join(RAIZ, "src/app/painel/galerias/nova/form.tsx"), "utf8");
+if (!/LogoEstudio|logo-estudio/.test(telaNova)) {
+  console.error("  ✗ criar galeria não oferece a logo — a pessoa precisa sair da tarefa");
+  falhou = true;
+} else {
+  console.log("  ✓ dá para colocar a logo na hora de criar a galeria");
 }
 
 /* Cada fonte precisa estar CARREGADA, não só nomeada. A prova é o layout: se a

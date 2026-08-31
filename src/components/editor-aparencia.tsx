@@ -266,6 +266,7 @@ export function EditorAparencia({
           <SeletorDeFonte ap={ap} mudar={mudar} />
           <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
           <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
+          <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />
         </div>
       </details>
 

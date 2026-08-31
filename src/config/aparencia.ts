@@ -36,20 +36,37 @@ export type Tipografia =
 export type Grade = "colunas" | "linhas" | "quadrada" | "editorial";
 export type Densidade = "compacta" | "normal" | "arejada";
 
+export type TamanhoLogo = "discreta" | "media" | "grande" | "enorme";
+
 export interface Aparencia {
   capa: Capa;
   tema: Tema;
   tipografia: Tipografia;
   grade: Grade;
   densidade: Densidade;
+  logo: TamanhoLogo;
 }
 
+/*
+ * O PADRÃO DA LOGO É `media`, e isso MUDA a capa de quem nunca escolheu.
+ *
+ * Até 31/08/2026 a altura era um `max-h-14` dentro do componente — 56 px fixos,
+ * o mesmo para logo quadrada e para logo horizontal fina. Como `lerAparencia`
+ * completa o que falta com o padrão, toda galeria gravada antes deste eixo passa
+ * a desenhar a logo em 88 px.
+ *
+ * É mudança de cara em galeria já existente, que é justamente o que a regra dos
+ * ids de tipografia proíbe — e aqui é DE PROPÓSITO, porque o pedido do dono foi
+ * "a logo tem que ser maior". Um padrão que repetisse os 56 px atenderia à letra
+ * e não ao pedido: quem não mexesse em nada continuaria com a logo miúda.
+ */
 export const APARENCIA_PADRAO: Aparencia = {
   capa: "imersa",
   tema: "noite",
   tipografia: "serifada",
   grade: "colunas",
   densidade: "normal",
+  logo: "media",
 };
 
 /** Lê o JSON do banco garantindo valores válidos — galeria antiga cai no padrão. */
@@ -64,8 +81,20 @@ export function lerAparencia(bruto: unknown): Aparencia {
     tipografia: valida(o.tipografia, OPCOES.tipografia.map((x) => x.id), APARENCIA_PADRAO.tipografia),
     grade: valida(o.grade, OPCOES.grade.map((x) => x.id), APARENCIA_PADRAO.grade),
     densidade: valida(o.densidade, OPCOES.densidade.map((x) => x.id), APARENCIA_PADRAO.densidade),
+    logo: valida(o.logo, OPCOES.logo.map((x) => x.id), APARENCIA_PADRAO.logo),
   };
 }
+
+/**
+ * Altura máxima da logo na capa, em pixels.
+ *
+ * Máxima, e não fixa: a largura acompanha (`w-auto`) e o `object-contain` cabe a
+ * imagem dentro. Logo horizontal fina chega no teto de altura sem esticar; logo
+ * quadrada usa o teto inteiro. Um número só serve para as duas porque quem
+ * limita é a ALTURA, que é o que aperta contra o título logo abaixo.
+ */
+export const alturaLogoPx = (t: TamanhoLogo): number =>
+  OPCOES.logo.find((o) => o.id === t)?.px ?? OPCOES.logo[1].px;
 
 // --- eixos, com rótulos para a interface --------------------------------------
 
@@ -128,6 +157,20 @@ export const OPCOES = {
     { id: "normal", nome: "Normal", desc: "Equilibrada" },
     { id: "arejada", nome: "Arejada", desc: "Espaço para respirar" },
   ],
+  /*
+   * O `px` é a altura MÁXIMA na capa, e é a fonte única desse número: o
+   * componente lê daqui em vez de trazer a própria tabela. `testar-aparencia`
+   * confere que a escada sobe e que a capa não tem altura escrita à mão.
+   *
+   * O teto é 200 px porque acima disso a logo passa a disputar a tela com o
+   * título do casal na capa imersa — deixa de ser marca e vira cabeçalho.
+   */
+  logo: [
+    { id: "discreta", nome: "Discreta", desc: "Assinatura no canto", px: 56 },
+    { id: "media", nome: "Média", desc: "Marca visível, sem roubar o título", px: 88 },
+    { id: "grande", nome: "Grande", desc: "A marca conduz a capa", px: 136 },
+    { id: "enorme", nome: "Enorme", desc: "Logo em primeiro plano", px: 200 },
+  ],
 } as const;
 
 // --- presets ------------------------------------------------------------------
@@ -147,25 +190,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -184,25 +227,25 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media" },
   },
 ];
 
