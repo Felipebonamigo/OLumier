@@ -1,6 +1,21 @@
 import "server-only";
-import { montarFatias } from "@/config/socios";
+import { montarFatias, type FatiaSocio } from "@/config/socios";
 import type { Ciclo } from "@/config/planos";
+
+/**
+ * Traduz uma fatia para o formato do split do Asaas.
+ *
+ * Duas formas, e a escolha não é de estilo: dividindo o LUCRO o valor é conhecido
+ * e vai em `fixedValue`; dividindo a RECEITA ele não é — a taxa depende do meio
+ * de pagamento, que o cliente só escolhe depois — e vai em `percentualValue`,
+ * para o próprio Asaas aplicar sobre o líquido. O porquê inteiro está em
+ * `montarFatias` e em `scripts/testar-split.mjs`.
+ */
+function montarFatiaAsaas(f: FatiaSocio) {
+  return f.percentual !== undefined
+    ? { walletId: f.carteira, percentualValue: f.percentual }
+    : { walletId: f.carteira, fixedValue: f.centavos / 100 };
+}
 
 /**
  * Cliente do Asaas — cobrança recorrente com split.
@@ -194,10 +209,7 @@ export async function criarAssinatura(dados: {
       cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
       description: dados.descricao,
       externalReference: referencia,
-      split: fatias.map((f) => ({
-        walletId: f.carteira,
-        fixedValue: f.centavos / 100,
-      })),
+      split: fatias.map((f) => montarFatiaAsaas(f)),
     }),
   });
 }
@@ -233,10 +245,7 @@ export async function atualizarAssinatura(dados: {
       value: dados.precoCentavos / 100,
       description: dados.descricao,
       updatePendingPayments: true,
-      split: fatias.map((f) => ({
-        walletId: f.carteira,
-        fixedValue: f.centavos / 100,
-      })),
+      split: fatias.map((f) => montarFatiaAsaas(f)),
     }),
   });
 }

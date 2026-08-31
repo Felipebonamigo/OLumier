@@ -126,10 +126,43 @@ export function lucroCentavos(
   return Math.max(0, precoCentavos - reserva);
 }
 
+/**
+ * ── SOBRE O QUE SE DIVIDE ─────────────────────────────────────────────────
+ *
+ * `lucro`   — a reserva de custo FICA na conta principal (é de onde saem as
+ *             faturas da Backblaze e da Cloudflare) e o split manda embora só o
+ *             que sobra. Era o desenho original.
+ *
+ * `receita` — divide tudo. Decisão do Felipe em 31/08/2026: os sócios acertam o
+ *             custo entre si por fora, fora do sistema.
+ *
+ * A conta final das duas é a MESMA, desde que o custo seja rateado nos mesmos
+ * percentuais. O que muda é quem adianta o dinheiro: em `receita` a conta
+ * principal fica zerada e as faturas dos fornecedores caem inteiras no cartão
+ * do Felipe, que depois cobra a parte de cada um. Nas faixas grandes isso é
+ * caixa de verdade — em 10 TB, 50% da receita é menos que a reserva do plano.
+ *
+ * Trocar aqui muda o FORMATO do que vai ao Asaas, não só o valor: ver
+ * `montarFatias` e `scripts/testar-split.mjs`, que explicam por que `receita`
+ * precisa ir em percentual e não em valor fixo.
+ */
+export type BaseDoSplit = "lucro" | "receita";
+export const BASE_DO_SPLIT: BaseDoSplit = "receita";
+
 export interface FatiaSocio {
   socio: Socio;
   carteira: string;
+  /**
+   * Quanto se espera que chegue.
+   *
+   * Em `lucro` é o valor exato que vai no split. Em `receita` é ESTIMATIVA, e
+   * não é ela que o Asaas usa: quem divide é o percentual, aplicado por eles
+   * sobre o líquido real. Serve para relatório (`ensaio-cobranca`), não para
+   * cobrança.
+   */
   centavos: number;
+  /** Só em `receita` — é isto que vai ao Asaas, como `percentualValue`. */
+  percentual?: number;
 }
 
 /**
@@ -148,8 +181,41 @@ export function montarFatias(
    * adianta nada se quem monta o split chamar sem contar: o cálculo fica certo
    * num lugar e errado no outro, e as duas funções parecem corretas isoladas.
    * `testar-planos.mjs` junta as duas de propósito. */
-  const lucro = lucroCentavos(planoId, precoCentavos, ciclo);
   const fatias: FatiaSocio[] = [];
+
+  /*
+   * DIVIDINDO A RECEITA, VAI EM PERCENTUAL — e isso é regra do Asaas, não gosto.
+   *
+   * O split é validado contra o valor LÍQUIDO, e líquido é o que sobra depois
+   * da taxa. A taxa depende do meio de pagamento, que aqui é escolha do cliente
+   * (`billingType: "UNDEFINED"`): Pix, boleto e cartão cobram diferente, e o
+   * cartão cobra percentual. No instante em que a assinatura é criada, ninguém
+   * sabe qual será.
+   *
+   * Mandar a receita inteira em `fixedValue` seria, então, chutar a taxa. Chute
+   * baixo e a soma passa do líquido: o Asaas BLOQUEIA a cobrança, dispara
+   * `PAYMENT_SPLIT_DIVERGENCE_BLOCK`, dá 2 dias úteis e depois cancela os
+   * splits. Chute alto e sobra dinheiro sem dono. Em percentual o próprio Asaas
+   * aplica sobre o líquido que ele calculou, e a soma nunca estoura.
+   *
+   * O ciclo não entra: 25% de uma cobrança anual já são 25% do ano.
+   */
+  if (BASE_DO_SPLIT === "receita") {
+    const liquidoEstimado = Math.max(0, precoCentavos - TAXA_COBRANCA);
+    for (const socio of SOCIOS) {
+      const carteira = process.env[socio.variavelCarteira];
+      if (!carteira) continue;
+      fatias.push({
+        socio,
+        carteira,
+        percentual: socio.percentual,
+        centavos: Math.floor((liquidoEstimado * socio.percentual) / 100),
+      });
+    }
+    return fatias;
+  }
+
+  const lucro = lucroCentavos(planoId, precoCentavos, ciclo);
 
   for (const socio of SOCIOS) {
     const carteira = process.env[socio.variavelCarteira];

@@ -23,9 +23,36 @@ e o uso segue liberado. Este documento é o roteiro para quando você quiser lig
 | CPF/CNPJ do titular | ✅ coletado e validado ao ativar a assinatura |
 | Trial vencido / inadimplência travam o envio | ✅ `src/lib/assinatura.ts` |
 | Conta do Asaas | usar a **mesma do Atomatiza** (decisão do Felipe) |
-| Carteiras dos sócios | ❌ Carol e Sirius ainda não têm conta no Asaas |
-| Percentuais do lucro | ⚠️ 50/25/25 é **proposta**, não acordo |
-| Ambiente | `sandbox` (não move dinheiro) |
+| Carteiras dos sócios | ✅ os três têm conta e mandaram o `walletId` (31/08/2026) |
+| Base do split | **receita**, decisão do Felipe em 31/08/2026 — ver abaixo |
+| Percentuais | 50/25/25 |
+| Ambiente | `producao` |
+| Variáveis no servidor | ❌ as três `ASAAS_CARTEIRA_*` ainda não foram gravadas |
+
+## O que se divide: receita, não lucro
+
+Até 31/08/2026 o split mandava embora só o **lucro**, e a reserva de custo ficava
+na conta principal — que é de onde saem as faturas da Backblaze e da Cloudflare.
+O Felipe mudou: divide-se a **receita**, e os sócios acertam o custo entre si por
+fora do sistema.
+
+A conta final das duas formas é a mesma, desde que o custo seja rateado nos
+mesmos percentuais. **O que muda é quem adianta o dinheiro:** a conta principal
+fica zerada e a fatura dos fornecedores cai inteira no cartão de quem opera, que
+depois cobra a parte de cada um. Da faixa de 2 TB para cima, 50% da receita é
+**menos** que a reserva do plano no pior caso (espaço 100% cheio) — no anual de
+10 TB o descoberto de um ano chega a R$ 5.501,75. `scripts/testar-planos.mjs`
+mede e imprime esse número a cada execução, de propósito.
+
+Trocar de volta é uma linha: `BASE_DO_SPLIT` em `src/config/socios.ts`.
+
+**Por que a base `receita` vai em percentual e não em valor fixo:** o Asaas valida
+o split contra o valor **líquido**, e a taxa depende do meio de pagamento, que o
+cliente só escolhe depois. Valor fixo sobre a receita inteira seria chutar a taxa;
+chute baixo estoura o líquido, o Asaas bloqueia a cobrança
+(`PAYMENT_SPLIT_DIVERGENCE_BLOCK`), dá 2 dias úteis e cancela os splits. Em
+percentual quem aplica é o Asaas, sobre o líquido que ele mesmo calculou.
+`scripts/testar-split.mjs` prende isso.
 
 **Comportamento enquanto está assim:** o split fica vazio e **100% do valor
 permanece na conta principal**. Nenhuma cobrança falha por causa disso — foi

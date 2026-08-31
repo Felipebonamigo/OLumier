@@ -33,7 +33,14 @@ import {
   precoDoCicloCentavos,
   MESES_PAGOS_NO_ANO,
 } from "../src/config/planos.ts";
-import { lucroCentavos, montarFatias, SOCIOS, FOLGA_ESPACO, TAXA_COBRANCA } from "../src/config/socios.ts";
+import {
+  lucroCentavos,
+  montarFatias,
+  SOCIOS,
+  FOLGA_ESPACO,
+  TAXA_COBRANCA,
+  BASE_DO_SPLIT,
+} from "../src/config/socios.ts";
 
 /*
  * A reserva da montagem. Mesma regra do socios.ts, refeita aqui de propósito:
@@ -345,13 +352,15 @@ await etapa("o desconto do ano sai do lucro, nunca da reserva", () => {
  * O split fica gordo, a reserva fica curta, e nada acusa: as duas funções estão
  * "certas" separadas. Esta etapa junta as duas.
  */
-await etapa("o split do anual não passa do lucro do anual", () => {
+await etapa("o split do anual respeita a base declarada", () => {
   /* Carteiras de mentira só para as fatias existirem: sem carteira o sócio é
    * pulado, e o teste mediria uma lista vazia achando que passou. */
   const salvas = SOCIOS.map((s) => [s.variavelCarteira, process.env[s.variavelCarteira]]);
   for (const s of SOCIOS) process.env[s.variavelCarteira] = `carteira-de-teste-${s.id}`;
 
   try {
+    let piorDescoberto = 0;
+
     for (const m of todasAsMontagens()) {
       const p = montar(m);
       const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
@@ -360,6 +369,27 @@ await etapa("o split do anual não passa do lucro do anual", () => {
         throw new Error(`${p.id}: esperava ${SOCIOS.length} fatias, vieram ${fatias.length}`);
       }
       const enviado = fatias.reduce((s, f) => s + f.centavos, 0);
+      const custoDoAno = custoArmazenamentoTetoCentavos(m) * 12;
+
+      /*
+       * DIVIDINDO A RECEITA, A RESERVA DEIXA DE EXISTIR — de propósito.
+       *
+       * Até 31/08/2026 esta etapa exigia que o split nunca passasse do lucro,
+       * porque o que ficava na conta era o dinheiro do fornecedor. O Felipe
+       * mudou a base para `receita`, com o custo acertado entre os sócios por
+       * fora, e essa exigência virou a descrição de um mundo que não existe
+       * mais.
+       *
+       * Ela não foi apagada, foi VIRADA: em `receita` a conta fica zerada e a
+       * fatura sai do bolso de quem opera. O teste passa a medir e a IMPRIMIR
+       * o tamanho desse descoberto, para a consequência da decisão continuar
+       * visível em vez de sumir junto com a regra antiga.
+       */
+      if (BASE_DO_SPLIT === "receita") {
+        piorDescoberto = Math.max(piorDescoberto, custoDoAno - (anual - enviado));
+        continue;
+      }
+
       const lucro = lucroCentavos(p.id, anual, "anual");
       if (enviado > lucro) {
         throw new Error(
@@ -367,7 +397,6 @@ await etapa("o split do anual não passa do lucro do anual", () => {
             `é R$ ${(lucro / 100).toFixed(2)} — a diferença sai da reserva do fornecedor`,
         );
       }
-      const custoDoAno = custoArmazenamentoTetoCentavos(m) * 12;
       if (anual - enviado < custoDoAno) {
         throw new Error(
           `${p.id}: depois do split ficam R$ ${((anual - enviado) / 100).toFixed(2)} na conta ` +
@@ -375,7 +404,11 @@ await etapa("o split do anual não passa do lucro do anual", () => {
         );
       }
     }
-    return `${todasAsMontagens().length} montagens, split dentro do lucro`;
+
+    return BASE_DO_SPLIT === "receita"
+      ? `base receita — a conta fica zerada; maior descoberto de um ano: ` +
+          `R$ ${(piorDescoberto / 100).toFixed(2)}, que sai do caixa de quem opera`
+      : `${todasAsMontagens().length} montagens, split dentro do lucro`;
   } finally {
     for (const [chave, valor] of salvas) {
       if (valor === undefined) delete process.env[chave];
