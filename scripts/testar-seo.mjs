@@ -105,5 +105,121 @@ await etapa("a FAQ da home existe como dado estruturado, e diz a verdade", async
   return `FAQPage com ${perguntas.length} perguntas, todas visíveis na página`;
 });
 
+/*
+ * ── O CARTÃO DA GALERIA (31/08/2026) ──────────────────────────────────────
+ *
+ * O furo era o mesmo do Open Graph da home, um degrau abaixo: a galeria TINHA
+ * cartão, mas era o da plataforma. O fotógrafo mandava a entrega do casamento
+ * no WhatsApp e o quadro que abria dizia "Galeria Átomo", com a marca do
+ * fornecedor dele no lugar da foto do casal.
+ *
+ * Duas coisas se prendem aqui, e a segunda é a que ninguém lembraria de olhar:
+ * que a foto aparece, e que ela NÃO aparece quando a galeria tem senha — o
+ * cartão é público, e mostrar a capa de uma galeria trancada entregaria
+ * justamente o que a tranca segura.
+ */
+console.log("\no cartão de cada galeria");
+
+const pg = (await import("pg")).default;
+const { exigirBancoDeTeste } = await import("./guarda-producao.mjs");
+const { galeriaDaRodada, limparRodada } = await import("./fixture-de-teste.mjs");
+exigirBancoDeTeste();
+
+const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await db.connect();
+const g = await galeriaDaRodada(db, { nome: "cartao", medias: 3, publicada: true });
+const rotaCartao = `/g/${g.tslug}/${g.gslug}/opengraph-image`;
+
+/* Duas tentativas porque a PRIMEIRA visita a esta rota compila a página no
+   servidor de desenvolvimento e busca a foto no bucket — passa do tempo que o
+   fetch espera, e a conexão cai antes de o PNG existir. Em produção a rota já
+   está compilada; aqui a segunda tentativa pega o trabalho pronto. */
+const baixarCartao = async () => {
+  let ultima;
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    try {
+      const r = await fetch(BASE + rotaCartao, { cache: "no-store" });
+      const buf = Buffer.from(await r.arrayBuffer());
+      return { status: r.status, tipo: r.headers.get("content-type"), bytes: buf.length, buf };
+    } catch (e) {
+      ultima = e;
+    }
+  }
+  throw new Error(`a rota do cartão não respondeu: ${ultima?.message ?? "sem motivo"}`);
+};
+
+await db.query("update galerias set senha_hash = null where id = $1", [g.id]);
+const semSenha = await baixarCartao();
+
+await etapa("a galeria tem cartão próprio, em PNG", () => {
+  if (semSenha.status !== 200) throw new Error(`HTTP ${semSenha.status}`);
+  if (!semSenha.tipo?.includes("image/png")) throw new Error(`veio ${semSenha.tipo}`);
+  /* Assinatura do PNG: 89 50 4E 47. Conferir o cabeçalho, e não só o
+     content-type, porque o content-type é promessa e o cabeçalho é o arquivo. */
+  if (semSenha.buf.subarray(0, 4).toString("hex") !== "89504e47") {
+    throw new Error("o content-type diz PNG mas os bytes não são de PNG");
+  }
+  return `${Math.round(semSenha.bytes / 1024)} KB`;
+});
+
+await etapa("o cartão da página aponta para esta rota", async () => {
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+  if (!html.includes("opengraph-image")) {
+    throw new Error("a galeria não declara og:image — o WhatsApp cai no cartão da plataforma");
+  }
+  return "og:image presente";
+});
+
+await etapa("galeria com senha continua devolvendo cartão, sem quebrar", async () => {
+  await db.query("update galerias set senha_hash = $1 where id = $2", ["$2b$10$naoimporta", g.id]);
+  const comSenha = await baixarCartao();
+  await db.query("update galerias set senha_hash = null where id = $1", [g.id]);
+
+  if (comSenha.status !== 200) throw new Error(`HTTP ${comSenha.status}`);
+  if (comSenha.buf.subarray(0, 4).toString("hex") !== "89504e47") {
+    throw new Error("não veio PNG — o robô desiste e mostra o link pelado");
+  }
+  return `${Math.round(comSenha.bytes / 1024)} KB`;
+});
+
+/*
+ * ── O LIMITE DESTA SUÍTE, DITO EM VOZ ALTA ────────────────────────────────
+ *
+ * A etapa acima prova que a galeria trancada devolve um cartão válido, e NÃO
+ * que a capa some dele. Provar isso de verdade exigiria comparar os dois PNGs,
+ * e para isso a bancada precisaria de uma foto DE VERDADE no balde — as chaves
+ * do fixture apontam para objetos que nunca foram enviados, então os dois
+ * cartões saem iguais (o quadro neutro) e a comparação passaria verde sem
+ * medir nada.
+ *
+ * Escrever um objeto no balde a partir do teste foi descartado: o R2 de
+ * desenvolvimento é o MESMO de produção. Um teste que escreve lá é um teste que
+ * um dia apaga lá.
+ *
+ * Sobra prender a regra no código, que é honesto sobre o que está sendo
+ * medido: o módulo tem de consultar `senha_hash` ANTES de decidir mostrar a
+ * capa. Some essa linha e esta etapa cai.
+ */
+await etapa("a regra da senha está escrita no gerador do cartão", async () => {
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const RAIZ = path.resolve(import.meta.dirname, "..");
+  const fonte = readFileSync(
+    path.join(RAIZ, "src/app/g/[estudio]/[galeria]/opengraph-image.tsx"),
+    "utf8",
+  );
+  const semComentarios = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  if (!/senha_hash/.test(semComentarios)) {
+    throw new Error(
+      "o gerador do cartão não consulta `senha_hash` — a capa de galeria trancada iria " +
+        "para o cartão público, que o robô do WhatsApp guarda e qualquer um encaminha",
+    );
+  }
+  return "consulta senha_hash antes de mostrar a capa";
+});
+
+await limparRodada(db);
+await db.end();
+
 console.log(falhou ? "\n✗ o robô encontra menos do que devia" : "\n✓ seo ok");
 process.exitCode = falhou ? 1 : 0;

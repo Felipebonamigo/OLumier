@@ -29,7 +29,7 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ estudio: string; galeria: string }>;
-  searchParams: Promise<{ previa?: string; amostra?: string }>;
+  searchParams: Promise<{ previa?: string; amostra?: string; ap?: string }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GaleriaPublicaPage({ params, searchParams }: Props) {
   const { estudio, galeria: galeriaSlug } = await params;
-  const { previa, amostra } = await searchParams;
+  const { previa, amostra, ap } = await searchParams;
 
   /*
    * PRÉVIA DO DONO.
@@ -246,7 +246,29 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       })
     : null;
 
-  const aparencia = lerAparencia(galeria.aparencia);
+  /*
+   * A APARÊNCIA QUE AINDA NÃO FOI PUBLICADA.
+   *
+   * O editor gravava a cada clique, e o motivo era esta linha: a prévia desenha
+   * a partir do BANCO, então mostrar a escolha exigia gravá-la antes. Quem
+   * estava experimentando publicava, sem querer, cada passo do caminho.
+   *
+   * Com `?ap=`, a escolha pendente viaja na URL e é desenhada sem tocar no
+   * banco — publicar volta a ser um ato. `lerAparencia` valida campo a campo,
+   * então JSON torto vira o padrão em vez de quebrar a página.
+   *
+   * SÓ PARA O DONO, e isso não é detalhe: sem a trava, qualquer pessoa com o
+   * link montaria a galeria alheia com outra aparência e mandaria o print para
+   * o casal, como se fosse o trabalho do fotógrafo.
+   */
+  let aparencia = lerAparencia(galeria.aparencia);
+  if (ehDono && ap) {
+    try {
+      aparencia = lerAparencia(JSON.parse(ap));
+    } catch {
+      /* Parâmetro ilegível não derruba a prévia: vale o que está gravado. */
+    }
+  }
 
   /*
    * As favoritas DESTE visitante, lidas no servidor.

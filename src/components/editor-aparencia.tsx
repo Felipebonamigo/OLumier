@@ -136,37 +136,41 @@ export function EditorAparencia({
   inicial: Aparencia;
 }) {
   const [ap, setAp] = useState<Aparencia>(inicial);
-  const [versaoPreview, setVersaoPreview] = useState(0);
+  /* O que está GRAVADO. Separado do que está na tela: é a diferença entre os
+     dois que acende o botão e diz o que ainda não foi publicado. */
+  const [salvo, setSalvo] = useState<Aparencia>(inicial);
   const [salvando, iniciar] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
   const router = useRouter();
   const agendado = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /* A escolha que ainda não foi gravada. Existe para a saída da tela poder
-   * disparar a última — o `ap` do estado não serve, porque o fechamento do
-   * efeito de desmontagem congela o valor da primeira renderização. */
-  const pendente = useRef<Aparencia | null>(null);
-
-  const presetAtivo = presetEquivalente(ap);
 
   /*
-   * Cada clique grava. Não há mais botão "Salvar".
+   * ── DE SALVAMENTO AUTOMÁTICO PARA UM ATO (31/08/2026) ────────────────────
    *
-   * Escolher aparência é decisão que se toma OLHANDO — clica, vê, clica de novo.
-   * Um botão no meio disso pede que a pessoa confirme uma escolha que ela ainda
-   * está tomando, e o preço de esquecer de apertar era a prévia mentindo e o
-   * trabalho perdido ao sair da tela.
+   * Cada clique gravava. O motivo era a prévia: o iframe desenha a galeria a
+   * partir do BANCO, então mostrar a escolha exigia gravá-la antes — e o efeito
+   * colateral era que experimentar já mudava a galeria do cliente. Quem estava
+   * no meio de "clica, vê, clica de novo" publicava, sem querer, cada passo do
+   * caminho; se desistisse, o último passo era o que ficava.
    *
-   * A espera de meio segundo não é enfeite: sem ela, passar por quatro presets
-   * dispara quatro gravações e quatro recarregamentos do iframe, e a prévia
-   * pisca mais do que informa. Cada clique novo cancela o anterior, então vale
-   * sempre a ÚLTIMA escolha — que é a que a pessoa quis.
+   * O dono pediu um botão, e o botão só pôde existir porque a prévia parou de
+   * depender do banco: a aparência pendente viaja na URL do iframe (`?ap=`), e
+   * a galeria pública a desenha sem gravar nada (ver a página em `/g`).
+   *
+   * A espera de 400 ms continua, mas mudou de função: antes segurava GRAVAÇÕES,
+   * agora segura RECARGAS do iframe. Sem ela, passar por quatro presets faz a
+   * prévia piscar quatro vezes e informar menos do que atrapalha.
    */
+  const [apPrevia, setApPrevia] = useState<Aparencia>(inicial);
+
+  const presetAtivo = presetEquivalente(ap);
+  const sujo = JSON.stringify(ap) !== JSON.stringify(salvo);
+
   function mudar(novo: Aparencia) {
     setAp(novo);
     setErro(null);
-    pendente.current = novo;
     if (agendado.current) clearTimeout(agendado.current);
-    agendado.current = setTimeout(() => gravar(novo), 500);
+    agendado.current = setTimeout(() => setApPrevia(novo), 400);
   }
 
   function corpo(valor: Aparencia) {
@@ -176,36 +180,33 @@ export function EditorAparencia({
     return f;
   }
 
-  function gravar(valor: Aparencia) {
-    pendente.current = null;
+  function publicar() {
     iniciar(async () => {
-      const r = await salvarAparenciaAction(corpo(valor));
+      const r = await salvarAparenciaAction(corpo(ap));
       if (r?.erro) {
         setErro(r.erro);
         return;
       }
-      setVersaoPreview((v) => v + 1); // recarrega o iframe com o que foi salvo
+      setSalvo(ap);
       router.refresh();
     });
   }
 
   /*
-   * Sair da tela com gravação agendada DISPARA, não cancela.
+   * Fechar a aba com mudança não publicada AVISA.
    *
-   * Cancelar é o reflexo — evita atualizar estado de componente desmontado. Aqui
-   * ele custaria exatamente a última escolha, a que a pessoa acabou de fazer
-   * antes de mudar de página. Por isso a chamada sai crua, fora da transição: o
-   * pedido já saiu do navegador quando o componente some, e ninguém precisa
-   * estar vivo para receber a resposta.
+   * Não substitui o botão, e nem tenta: é a rede para o gesto que ninguém
+   * planeja. Navegação dentro do painel não dispara este evento — ali quem
+   * segura é a barra fixa, que fica na tela enquanto houver o que publicar.
    */
-  useEffect(
-    () => () => {
-      if (agendado.current) clearTimeout(agendado.current);
-      if (pendente.current) void salvarAparenciaAction(corpo(pendente.current));
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- roda só na saída
-    [],
-  );
+  useEffect(() => {
+    if (!sujo) return;
+    const avisar = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [sujo]);
+
+  useEffect(() => () => void (agendado.current && clearTimeout(agendado.current)), []);
 
   return (
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
@@ -216,15 +217,22 @@ export function EditorAparencia({
             Escolha um estilo pronto ou ajuste cada detalhe. A prévia é a galeria de verdade.
           </p>
         </div>
-        {/* No lugar do botão, o estado. Não há o que apertar: a escolha já foi
-            gravada, e a única coisa que a pessoa ainda precisa saber é se deu
-            certo. Erro fica em vermelho e não some sozinho. */}
+        {/*
+          O ESTILO EM USO, DITO POR EXTENSO.
+          Reabrindo a tela, a pessoa via oito botões e precisava caçar qual
+          estava marcado — e quando ela tinha mexido num detalhe, nenhum estava,
+          o que parecia esquecimento do sistema. Agora a resposta está escrita:
+          o nome do preset, ou "personalizado" quando a combinação é dela.
+        */}
         <span
           role="status"
           aria-live="polite"
           className={`text-xs ${erro ? "text-alerta" : "text-texto-faint"}`}
         >
-          {erro ?? (salvando ? "salvando…" : "salvo automaticamente")}
+          {erro ??
+            (sujo
+              ? "alterações não publicadas"
+              : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
         </span>
       </div>
 
@@ -256,7 +264,7 @@ export function EditorAparencia({
       </div>
 
       {/* Ajuste fino */}
-      <details className="mt-5 border-t border-linha pt-4">
+      <details open={!presetAtivo} className="mt-5 border-t border-linha pt-4">
         <summary className="cursor-pointer text-xs text-texto-soft">
           Ajustar em detalhe {presetAtivo ? "" : "· personalizado"}
         </summary>
@@ -291,8 +299,8 @@ export function EditorAparencia({
         */}
         <div className="mt-2 overflow-hidden rounded-lg border border-linha bg-void">
           <iframe
-            key={versaoPreview}
-            src={`${caminhoPublico}&amostra=1`}
+            key={JSON.stringify(apPrevia)}
+            src={`${caminhoPublico}&amostra=1&ap=${encodeURIComponent(JSON.stringify(apPrevia))}`}
             title="Prévia da galeria"
             className="h-[460px] w-full"
             loading="lazy"
@@ -323,6 +331,53 @@ export function EditorAparencia({
           Abre em tela cheia, do jeito que o seu cliente vê.
         </p>
       </div>
+
+      {/*
+        A BARRA QUE NÃO SAI DA TELA.
+
+        `fixed`, e não `sticky`: a seção de aparência é longa, e a decisão de
+        publicar pode ser tomada olhando a prévia lá no fim dela. Grudada na
+        seção, a barra sumiria justamente quando a pessoa rolasse para conferir
+        o resultado — que é o gesto que antecede o clique.
+
+        Só existe quando há o que publicar. Barra permanente vira moldura: em
+        duas semanas ninguém mais a enxerga, e ela deixa de avisar no dia em que
+        precisar avisar.
+      */}
+      {sujo && (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-linha-forte bg-carbon/95 backdrop-blur">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-3">
+            <span className="text-xs text-texto-soft">
+              A prévia já mostra o novo estilo.{" "}
+              <strong className="font-medium text-texto">
+                O seu cliente ainda vê o anterior.
+              </strong>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={salvando}
+                onClick={() => {
+                  setAp(salvo);
+                  setApPrevia(salvo);
+                  setErro(null);
+                }}
+                className="rounded-lg px-3 py-2 text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
+              >
+                descartar
+              </button>
+              <button
+                type="button"
+                disabled={salvando}
+                onClick={publicar}
+                className="rounded-lg bg-acento px-5 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:opacity-40"
+              >
+                {salvando ? "Publicando…" : "Publicar aparência"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

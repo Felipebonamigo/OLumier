@@ -301,12 +301,16 @@ export default function Home() {
 
         <div className="mx-auto w-full max-w-6xl px-6 pb-16 pt-40">
           <p className="text-[13px] tracking-[0.22em] text-texto-soft uppercase">
-            Galerias de entrega para fotógrafos e filmakers
+            Galerias inteligentes para fotógrafos
           </p>
+          {/* As duas linhas juntas são `marca.tagline`, e não por acaso:
+              `testar-marca-plataforma.mjs` exige a igualdade. O corte fica aqui
+              porque a segunda metade é a que recebe o âmbar, e derivar isso de
+              uma string exigiria uma regra que a próxima frase desobedeceria. */}
           <h1 className="mt-5 font-serif text-6xl font-bold leading-[0.98] tracking-tight sm:text-8xl">
-            O dia passa.
+            Onde o instante
             <br />
-            <span className="text-acento-alto">As fotos ficam.</span>
+            <span className="text-acento-alto">permanece.</span>
           </h1>
           <p className="mt-7 max-w-[46ch] text-lg leading-relaxed text-texto sm:text-xl">
             {marca.nome} é o lugar onde o seu trabalho chega ao seu cliente: com a sua marca,

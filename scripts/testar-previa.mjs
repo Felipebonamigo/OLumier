@@ -160,6 +160,67 @@ await etapa("a página da amostra é bem menor", () => {
   return `${queda}% menor`;
 });
 
+/*
+ * ── A PRÉVIA DO QUE AINDA NÃO FOI PUBLICADO (31/08/2026) ──────────────────
+ *
+ * O editor de aparência gravava a cada clique, e o motivo era a prévia: o
+ * iframe desenha a galeria a partir do BANCO, então mostrar a escolha exigia
+ * gravá-la antes. O efeito colateral era que experimentar já mudava a galeria
+ * do cliente — quem estava no meio de "clica, vê, clica de novo" tinha, a cada
+ * passo, um estado publicado que ninguém escolheu de fato.
+ *
+ * O dono pediu um botão. Para o botão existir sem a prévia parar de funcionar,
+ * a aparência PENDENTE viaja na URL da prévia: `?ap=<json>` desenha aquilo sem
+ * gravar nada. Publicar continua sendo a única coisa que escreve no banco.
+ *
+ * As duas etapas abaixo são as duas metades disso: que o parâmetro pinta, e que
+ * ele só pinta para o dono — senão qualquer pessoa com o link poderia forçar
+ * outra aparência na galeria alheia e mandar o print para o casal.
+ */
+console.log("\na aparência pendente na prévia");
+
+const FUNDO_CREME = "#f7f1e6";
+const apPendente = encodeURIComponent(
+  JSON.stringify({
+    capa: "minima",
+    tema: "creme",
+    tipografia: "serifada",
+    grade: "quadrada",
+    densidade: "normal",
+    logo: "media",
+  }),
+);
+
+await etapa("o dono vê a aparência pendente sem nada ser gravado", async () => {
+  const r = await fetch(
+    `${BASE}/g/${noAr.tslug}/${noAr.gslug}?previa=1&amostra=1&ap=${apPendente}`,
+    { cache: "no-store", headers: { cookie } },
+  );
+  const html = await r.text();
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+  if (!html.includes(FUNDO_CREME)) {
+    throw new Error(`a página não pintou o fundo creme (${FUNDO_CREME}) que o parâmetro pediu`);
+  }
+
+  const { rows } = await db.query("select aparencia from galerias where id = $1", [noAr.id]);
+  if (rows[0].aparencia?.tema === "creme") {
+    throw new Error("a aparência pendente foi GRAVADA — o botão de publicar deixou de ter função");
+  }
+  return "pintou creme, banco intacto";
+});
+
+await etapa("visitante não consegue forçar aparência pela URL", async () => {
+  const r = await fetch(
+    `${BASE}/g/${noAr.tslug}/${noAr.gslug}?previa=1&amostra=1&ap=${apPendente}`,
+    { cache: "no-store" },
+  );
+  const html = await r.text();
+  if (html.includes(FUNDO_CREME)) {
+    throw new Error("quem não é dono conseguiu trocar a aparência da galeria pela URL");
+  }
+  return "parâmetro ignorado";
+});
+
 console.log("\na permissão não afrouxou");
 
 /*

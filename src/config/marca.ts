@@ -46,11 +46,10 @@ export const marca = {
   nome: NOME,
   nomeSimples: "galeria-atomo",
   simbolo: "GA",
-  tagline: "O dia passa. As fotos ficam.",
+  tagline: "Onde o instante permanece.",
   /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
   dominio: "galeriaatomo.com.br",
-  descricao:
-    "Galerias de entrega para fotógrafos e filmakers. Downloads e streaming ilimitados, com a sua marca.",
+  descricao: "Galerias inteligentes para fotógrafos.",
   email: "contato@galeriaatomo.com.br",
 
   /*

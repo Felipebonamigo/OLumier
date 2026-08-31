@@ -168,5 +168,41 @@ etapa("o e-mail de contato ainda é de um domínio que existe", () => {
   return marca.email;
 });
 
+/*
+ * ── O SLOGAN NÃO PODE MORAR EM DOIS LUGARES ──────────────────────────────
+ *
+ * O hero da home escreve o slogan em DUAS linhas, com a segunda em âmbar — e
+ * por isso não dá para montá-lo a partir de `marca.tagline` sem inventar uma
+ * regra de corte que a próxima frase vai desobedecer. A cópia fica, então, mas
+ * presa: o teste exige que as duas linhas do hero, juntas, sejam exatamente a
+ * tagline.
+ *
+ * Sem isto, trocar o slogan em `marca.ts` muda o cartão do WhatsApp e o título
+ * da aba, e deixa a home — o lugar onde ele aparece MAIOR — falando a frase
+ * antiga. Ninguém percebe olhando o diff, porque os dois arquivos estão certos
+ * separados.
+ */
+etapa("a home escreve exatamente a tagline de marca.ts", () => {
+  const home = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8");
+  const hero = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(home)?.[1];
+  if (!hero) throw new Error("não achei o <h1> da home");
+
+  /* Tira marcação e junta o que sobra: o que interessa é o TEXTO que a pessoa
+     lê, e ele está partido entre um <br /> e um <span> colorido. */
+  const lido = hero
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\{[^}]*\}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (lido !== marca.tagline) {
+    throw new Error(
+      `o hero diz "${lido}" e marca.tagline diz "${marca.tagline}" — ` +
+        `o cartão do WhatsApp e a home ficariam com slogans diferentes`,
+    );
+  }
+  return lido;
+});
+
 console.log(falhou ? "\n✗ a troca de marca levou junto o que não devia" : "\n✓ marca ok");
 process.exitCode = falhou ? 1 : 0;

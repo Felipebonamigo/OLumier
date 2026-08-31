@@ -286,10 +286,22 @@ export const PRESETS: Preset[] = [
 export const presetPorId = (id: string) => PRESETS.find((p) => p.id === id);
 
 /** Qual preset corresponde à aparência atual (para marcar o card selecionado). */
+/*
+ * TODOS os eixos entram na comparação, `logo` inclusive.
+ *
+ * Ele ficou de fora quando nasceu, e o efeito era o editor marcar "Convite"
+ * numa galeria em que a pessoa tinha aumentado a logo — dizendo que ela estava
+ * num preset em que não estava. Marcação que mente é pior que marcação nenhuma:
+ * quem confia nela deixa de olhar o resto.
+ *
+ * Com o eixo dentro, quem mexeu num detalhe vê "personalizado", que é a
+ * verdade — e o editor abre o ajuste fino sozinho nesse caso, para a escolha
+ * atual continuar visível em vez de virar oito botões apagados.
+ */
 export function presetEquivalente(a: Aparencia): string | null {
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
-    x.grade === y.grade && x.densidade === y.densidade;
+    x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 
