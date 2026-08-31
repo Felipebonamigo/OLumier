@@ -43,6 +43,7 @@ delete process.env.ASAAS_AMBIENTE;
  * chamada, mas quem lê a lista de sócios é o módulo, e ler o ambiente cedo
  * demais é o tipo de acoplamento que faz a suíte passar sozinha e falhar em
  * bateria. Aqui elas entram antes de qualquer coisa, e pronto. */
+const CARTEIRA_OPERACAO = "44444444-4444-4444-4444-444444444444";
 const CARTEIRAS = {
   ASAAS_CARTEIRA_FELIPE: "11111111-1111-1111-1111-111111111111",
   ASAAS_CARTEIRA_CAROL: "22222222-2222-2222-2222-222222222222",
@@ -119,15 +120,14 @@ await etapa("a base do split está declarada", () => {
 
 console.log("\no que chega ao Asaas");
 
-await etapa("dividindo a receita, o split vai em PERCENTUAL", async () => {
-  if (BASE_DO_SPLIT !== "receita") return "base é lucro — etapa não se aplica";
+await etapa("o split vai em PERCENTUAL, nunca em valor fixo", async () => {
   await assinar();
   const split = splitEnviado();
   const comValorFixo = split.filter((f) => f.fixedValue !== undefined);
   if (comValorFixo.length) {
     throw new Error(
       `${comValorFixo.length} fatia(s) em valor fixo — a taxa do Asaas depende do meio de ` +
-        `pagamento, então valor fixo sobre a receita inteira estoura o líquido e bloqueia a cobrança`,
+        `pagamento, então valor fixo é chute, e chute baixo bloqueia a cobrança`,
     );
   }
   if (split.some((f) => typeof f.percentualValue !== "number")) {
@@ -137,7 +137,6 @@ await etapa("dividindo a receita, o split vai em PERCENTUAL", async () => {
 });
 
 await etapa("a soma do split nunca passa de 100%", async () => {
-  if (BASE_DO_SPLIT !== "receita") return "base é lucro — etapa não se aplica";
   await assinar();
   const split = splitEnviado();
   const soma = split.reduce((t, f) => t + (f.percentualValue ?? 0), 0);
@@ -145,7 +144,100 @@ await etapa("a soma do split nunca passa de 100%", async () => {
     throw new Error(`soma ${soma}% — o Asaas bloqueia a cobrança e cancela o split em 2 dias`);
   }
   if (soma === 0) throw new Error("nenhuma fatia trouxe percentual — a soma de zero não prova nada");
-  return `${soma}%`;
+  return `${soma.toFixed(2)}%`;
+});
+
+/*
+ * ── A ETAPA QUE PAGA A FATURA ─────────────────────────────────────────────
+ *
+ * Dividindo o lucro, o que NÃO é distribuído é a reserva de custo: é dela que
+ * saem a Backblaze e a Cloudflare. Se o split levar tudo, a fatura passa a sair
+ * do bolso de quem opera — que foi exatamente o descoberto de R$ 5.501,75 (ano
+ * de 10 TB) que fez o Felipe voltar atrás em 31/08/2026.
+ *
+ * A conta é medida faixa por faixa porque a reserva varia MUITO: 12,7% da
+ * receita em 100 GB, 74,8% em 10 TB. Uma etapa que olhasse só um plano passaria
+ * verde no plano pequeno e deixaria o grande sangrar.
+ */
+await etapa("a reserva de custo sobra em toda faixa", async () => {
+  if (BASE_DO_SPLIT !== "lucro") {
+    throw new Error("base é receita — não existe reserva, e a fatura sai do bolso de quem opera");
+  }
+  const { ESPACOS, montar } = await import("../src/config/planos.ts");
+  const { lucroCentavos, TAXA_COBRANCA } = await import("../src/config/socios.ts");
+  let pior = Infinity;
+  let piorFaixa = "";
+
+  for (const f of ESPACOS) {
+    const p = montar({ segmento: "foto", espacoGb: f.gb });
+    for (const ciclo of ["mensal", "anual"]) {
+      const preco = ciclo === "anual" ? f.precoCentavos * 10 : f.precoCentavos;
+      const liquido = preco - TAXA_COBRANCA;
+      const reserva = liquido - lucroCentavos(p.id, preco, ciclo);
+      const fatias = montarFatias(p.id, preco, ciclo);
+      const distribuido = fatias
+        .filter((x) => x.socio.id !== "operacao")
+        .reduce((t, x) => t + (x.percentual ?? 0), 0);
+      const sobra = liquido - Math.round((liquido * distribuido) / 100);
+      if (sobra < reserva) {
+        throw new Error(
+          `${f.gb} GB ${ciclo}: sobram R$ ${(sobra / 100).toFixed(2)} para uma reserva de ` +
+            `R$ ${(reserva / 100).toFixed(2)} — a diferença sai do caixa de quem opera`,
+        );
+      }
+      if (sobra - reserva < pior) {
+        pior = sobra - reserva;
+        piorFaixa = `${f.gb} GB ${ciclo}`;
+      }
+    }
+  }
+  return `folga mínima R$ ${(pior / 100).toFixed(2)} em ${piorFaixa}`;
+});
+
+await etapa("nenhum sócio recebe mais do que o percentual nominal dele", async () => {
+  const fatias = montarFatias("g:foto:1000", 13999, "mensal");
+  for (const f of fatias) {
+    if (f.socio.id === "operacao") continue;
+    if ((f.percentual ?? 0) > f.socio.percentual) {
+      throw new Error(`${f.socio.nome}: ${f.percentual}% acima do nominal ${f.socio.percentual}%`);
+    }
+  }
+  return fatias
+    .filter((f) => f.socio.id !== "operacao")
+    .map((f) => `${f.socio.nome} ${f.percentual}%`)
+    .join(" · ");
+});
+
+/*
+ * O CAIXA DA OPERAÇÃO é opcional, e as duas metades precisam funcionar: sem ele
+ * a reserva fica na conta principal (o Asaas deixa o não distribuído lá), com
+ * ele a reserva vira linha nomeada e a soma fecha 100%.
+ */
+await etapa("sem carteira de operação, a reserva fica na conta principal", async () => {
+  delete process.env.ASAAS_CARTEIRA_OPERACAO;
+  await assinar();
+  const split = splitEnviado();
+  if (split.some((f) => f.walletId === CARTEIRA_OPERACAO)) {
+    throw new Error("mandou fatia para uma carteira de operação que não está configurada");
+  }
+  const soma = split.reduce((t, f) => t + f.percentualValue, 0);
+  if (soma >= 100) throw new Error(`soma ${soma}% — não sobrou reserva na conta`);
+  return `${(100 - soma).toFixed(2)}% ficou na conta`;
+});
+
+await etapa("com carteira de operação, a reserva vira linha e a soma fecha 100%", async () => {
+  process.env.ASAAS_CARTEIRA_OPERACAO = CARTEIRA_OPERACAO;
+  try {
+    await assinar();
+    const split = splitEnviado();
+    const daOperacao = split.find((f) => f.walletId === CARTEIRA_OPERACAO);
+    if (!daOperacao) throw new Error("a reserva não virou fatia");
+    const soma = split.reduce((t, f) => t + f.percentualValue, 0);
+    if (Math.abs(soma - 100) > 0.001) throw new Error(`soma ${soma}%, esperava 100%`);
+    return `operação com ${daOperacao.percentualValue}%`;
+  } finally {
+    delete process.env.ASAAS_CARTEIRA_OPERACAO;
+  }
 });
 
 await etapa("cada sócio configurado aparece uma vez, com a carteira dele", async () => {
@@ -160,6 +252,10 @@ await etapa("cada sócio configurado aparece uma vez, com a carteira dele", asyn
 });
 
 await etapa("sócio sem carteira fica de fora, e a parte dele fica na conta", async () => {
+  const carol = SOCIOS.find((s) => s.id === "carol");
+  const dela = montarFatias("g:foto:1000", 13999, "mensal").find((f) => f.socio.id === "carol");
+  if (!dela) throw new Error("a Carol não aparece nem com carteira configurada");
+
   const guardada = process.env.ASAAS_CARTEIRA_CAROL;
   delete process.env.ASAAS_CARTEIRA_CAROL;
   try {
@@ -168,12 +264,27 @@ await etapa("sócio sem carteira fica de fora, e a parte dele fica na conta", as
     if (split.some((f) => f.walletId === guardada)) {
       throw new Error("a carteira apagada continuou no split");
     }
-    const soma = split.reduce((t, f) => t + (f.percentualValue ?? 0), 0);
-    const esperado = SOCIOS.filter((s) => s.id !== "carol").reduce((t, s) => t + s.percentual, 0);
-    if (BASE_DO_SPLIT === "receita" && soma !== esperado) {
-      throw new Error(`soma ${soma}%, esperava ${esperado}%`);
+    if (split.length !== SOCIOS.length - 1) {
+      throw new Error(`${split.length} fatias, esperava ${SOCIOS.length - 1}`);
     }
-    return `${split.length} fatias, ${100 - esperado}% ficou na conta principal`;
+    /* A fatia dela não pode ter sido REDISTRIBUÍDA entre os outros: quem não tem
+       carteira ainda tem direito, e o dinheiro espera na conta em vez de virar
+       lucro alheio calado. */
+    for (const f of split) {
+      const socio = SOCIOS.find((s) => process.env[s.variavelCarteira] === f.walletId);
+      const esperado = montarFatias("g:foto:1000", 13999, "mensal").find(
+        (x) => x.socio.id === socio.id,
+      );
+      if (f.percentualValue !== esperado.percentual) {
+        throw new Error(
+          `${socio.nome} passou de ${esperado.percentual}% para ${f.percentualValue}% — ` +
+            `a parte da ${carol.nome} foi redistribuída em vez de esperar na conta`,
+        );
+      }
+    }
+    const soma = split.reduce((t, f) => t + f.percentualValue, 0);
+    return `${split.length} fatias · os ${dela.percentual}% dela ficaram na conta, com a reserva ` +
+      `(${(100 - soma).toFixed(2)}% no total)`;
   } finally {
     process.env.ASAAS_CARTEIRA_CAROL = guardada;
   }
@@ -187,27 +298,37 @@ await etapa("sócio sem carteira fica de fora, e a parte dele fica na conta", as
  * muda nada — 25% de uma cobrança anual já são 25% do ano inteiro. Um `* 12`
  * distraído aqui viraria 300% e bloquearia a cobrança.
  */
-await etapa("no plano anual o percentual continua o mesmo", async () => {
-  if (BASE_DO_SPLIT !== "receita") return "base é lucro — etapa não se aplica";
+await etapa("o anual não multiplica o percentual", async () => {
   await assinar("g:foto:1000", 13999 * 10, "anual");
   const split = splitEnviado();
   for (const f of split) {
     const socio = SOCIOS.find((s) => process.env[s.variavelCarteira] === f.walletId);
-    if (f.percentualValue !== socio.percentual) {
-      throw new Error(`${socio.nome}: ${f.percentualValue}%, esperava ${socio.percentual}%`);
+    if (!socio) continue;
+    if (f.percentualValue > socio.percentual) {
+      throw new Error(
+        `${socio.nome}: ${f.percentualValue}% acima do nominal ${socio.percentual}% — ` +
+          `um "* 12" distraído aqui viraria 300% e bloquearia a cobrança`,
+      );
     }
   }
-  return "percentuais intactos";
+  const soma = split.reduce((t, f) => t + f.percentualValue, 0);
+  return `soma ${soma.toFixed(2)}% no ano`;
 });
 
 console.log("\na conta bate");
 
-await etapa("montarFatias devolve o percentual quando a base é receita", () => {
-  if (BASE_DO_SPLIT !== "receita") return "base é lucro — etapa não se aplica";
+await etapa("toda fatia sai com percentual, nas duas bases", () => {
   const fatias = montarFatias("g:foto:1000", 13999, "mensal");
+  if (fatias.length === 0) throw new Error("nenhuma fatia — as carteiras de teste sumiram?");
   for (const f of fatias) {
-    if (f.percentual !== f.socio.percentual) {
-      throw new Error(`${f.socio.nome}: percentual ${f.percentual}, esperava ${f.socio.percentual}`);
+    if (typeof f.percentual !== "number" || f.percentual <= 0) {
+      throw new Error(`${f.socio.nome}: percentual ${f.percentual}`);
+    }
+    /* `centavos` é estimativa (a taxa real depende do meio de pagamento), mas
+       não pode divergir do percentual — é o número que o extrato vai mostrar. */
+    const esperado = Math.floor(((13999 - 300) * f.percentual) / 100);
+    if (f.centavos !== esperado) {
+      throw new Error(`${f.socio.nome}: centavos ${f.centavos}, esperava ${esperado}`);
     }
   }
   return `${fatias.length} fatias`;

@@ -147,7 +147,43 @@ export function lucroCentavos(
  * precisa ir em percentual e não em valor fixo.
  */
 export type BaseDoSplit = "lucro" | "receita";
-export const BASE_DO_SPLIT: BaseDoSplit = "receita";
+export const BASE_DO_SPLIT: BaseDoSplit = "lucro";
+
+/**
+ * O CAIXA DA OPERAÇÃO — a quarta carteira, opcional.
+ *
+ * A reserva de custo precisa ficar parada em algum lugar até a fatura da
+ * Backblaze e da Cloudflare chegar. Sem esta variável ela fica na conta
+ * principal, que é onde já ficava — e o problema disso não é técnico, é de
+ * sociedade: dinheiro parado na conta de um sócio PARECE margem dele, e a
+ * desconfiança sobre isso é o tipo de coisa que só aparece depois de brigar.
+ *
+ * Com a variável preenchida, a reserva vira uma LINHA COM NOME no split: sai da
+ * cobrança na frente de todo mundo, todo mês, para uma conta que não é de
+ * ninguém em particular. A conta é a mesma; o que muda é que ela deixa de
+ * depender da palavra de quem opera.
+ *
+ * Vazia é o padrão de propósito: abrir conta no Asaas é decisão do Felipe e dos
+ * sócios, não do código, e o sistema tem de funcionar antes dessa conversa.
+ */
+export const VARIAVEL_CARTEIRA_OPERACAO = "ASAAS_CARTEIRA_OPERACAO";
+
+/**
+ * O caixa não é sócio, mas ocupa uma fatia do split — então precisa da mesma
+ * forma. `percentual: 0` porque a fatia dele não é fixa: é o que sobra depois
+ * da reserva de cada plano, e quem calcula é `montarFatias`. Fora de `SOCIOS`
+ * de propósito: ele não vota, não recebe lucro, e não pode entrar na soma que
+ * tem de dar 100.
+ */
+export const OPERACAO: Socio = {
+  id: "operacao",
+  nome: "Caixa da operação",
+  percentual: 0,
+  variavelCarteira: VARIAVEL_CARTEIRA_OPERACAO,
+};
+
+/** Duas casas, arredondando PARA BAIXO. A sobra vai para a reserva, nunca ao contrário. */
+const doisDecimais = (n: number) => Math.floor(n * 100) / 100;
 
 export interface FatiaSocio {
   socio: Socio;
@@ -182,9 +218,11 @@ export function montarFatias(
    * num lugar e errado no outro, e as duas funções parecem corretas isoladas.
    * `testar-planos.mjs` junta as duas de propósito. */
   const fatias: FatiaSocio[] = [];
+  const liquido = Math.max(0, precoCentavos - TAXA_COBRANCA);
+  if (liquido === 0) return fatias;
 
   /*
-   * DIVIDINDO A RECEITA, VAI EM PERCENTUAL — e isso é regra do Asaas, não gosto.
+   * TUDO EM PERCENTUAL — e isso é regra do Asaas, não gosto.
    *
    * O split é validado contra o valor LÍQUIDO, e líquido é o que sobra depois
    * da taxa. A taxa depende do meio de pagamento, que aqui é escolha do cliente
@@ -192,37 +230,65 @@ export function montarFatias(
    * cartão cobra percentual. No instante em que a assinatura é criada, ninguém
    * sabe qual será.
    *
-   * Mandar a receita inteira em `fixedValue` seria, então, chutar a taxa. Chute
-   * baixo e a soma passa do líquido: o Asaas BLOQUEIA a cobrança, dispara
+   * Mandar valor fixo seria, então, chutar a taxa. Chute baixo e a soma passa do
+   * líquido: o Asaas BLOQUEIA a cobrança, dispara
    * `PAYMENT_SPLIT_DIVERGENCE_BLOCK`, dá 2 dias úteis e depois cancela os
-   * splits. Chute alto e sobra dinheiro sem dono. Em percentual o próprio Asaas
-   * aplica sobre o líquido que ele calculou, e a soma nunca estoura.
+   * splits. Em percentual quem aplica é o próprio Asaas, sobre o líquido que ele
+   * calculou, e a soma nunca estoura.
    *
-   * O ciclo não entra: 25% de uma cobrança anual já são 25% do ano.
+   * O ciclo não entra no percentual: 25% de uma cobrança anual já são 25% do
+   * ano. Ele entra na RAZÃO, porque o lucro do anual é outro.
    */
-  if (BASE_DO_SPLIT === "receita") {
-    const liquidoEstimado = Math.max(0, precoCentavos - TAXA_COBRANCA);
-    for (const socio of SOCIOS) {
-      const carteira = process.env[socio.variavelCarteira];
-      if (!carteira) continue;
-      fatias.push({
-        socio,
-        carteira,
-        percentual: socio.percentual,
-        centavos: Math.floor((liquidoEstimado * socio.percentual) / 100),
-      });
-    }
-    return fatias;
-  }
-
   const lucro = lucroCentavos(planoId, precoCentavos, ciclo);
 
+  /*
+   * A RAZÃO — o que sobra para dividir, depois de guardada a reserva.
+   *
+   * Em `lucro` ela é `lucro / líquido`, e varia MUITO com o plano: 87% em
+   * 100 GB, 25% em 10 TB. Não é distorção, é o custo real de cada faixa — o
+   * cliente de 10 TB consome quinze vezes mais armazenamento que o de 100 GB
+   * pelo mesmo tipo de mensalidade.
+   *
+   * Foi essa variação que matou a divisão da receita a percentual fixo: nenhum
+   * número único é seguro em 10 TB e justo em 100 GB. Em 31/08/2026 o Felipe
+   * pediu a receita cheia, viu que da faixa de 2 TB para cima a metade dele não
+   * cobria a fatura (R$ 5.501,75 de descoberto num ano de 10 TB), e voltou para
+   * cá. O caminho de volta continua sendo uma palavra em `BASE_DO_SPLIT`.
+   */
+  const razao = BASE_DO_SPLIT === "receita" ? 1 : Math.max(0, Math.min(1, lucro / liquido));
+
+  let distribuido = 0;
   for (const socio of SOCIOS) {
     const carteira = process.env[socio.variavelCarteira];
     if (!carteira) continue;
-    const centavos = Math.floor((lucro * socio.percentual) / 100);
-    if (centavos > 0) fatias.push({ socio, carteira, centavos });
+    const percentual = doisDecimais(socio.percentual * razao);
+    if (percentual <= 0) continue;
+    distribuido += percentual;
+    fatias.push({
+      socio,
+      carteira,
+      percentual,
+      centavos: Math.floor((liquido * percentual) / 100),
+    });
   }
+
+  /*
+   * A reserva vai para o caixa da operação, se ele existir — e leva junto a
+   * sobra do arredondamento, para a soma fechar exatamente 100%. Sem carteira
+   * de operação nada disso é enviado, e o Asaas deixa o não distribuído na
+   * conta principal sozinho: é o mesmo dinheiro, no mesmo lugar de sempre.
+   */
+  const carteiraOperacao = process.env[VARIAVEL_CARTEIRA_OPERACAO];
+  const resto = doisDecimais(100 - distribuido);
+  if (carteiraOperacao && resto > 0) {
+    fatias.push({
+      socio: OPERACAO,
+      carteira: carteiraOperacao,
+      percentual: resto,
+      centavos: Math.floor((liquido * resto) / 100),
+    });
+  }
+
   return fatias;
 }
 

@@ -24,34 +24,69 @@ e o uso segue liberado. Este documento é o roteiro para quando você quiser lig
 | Trial vencido / inadimplência travam o envio | ✅ `src/lib/assinatura.ts` |
 | Conta do Asaas | usar a **mesma do Atomatiza** (decisão do Felipe) |
 | Carteiras dos sócios | ✅ os três têm conta e mandaram o `walletId` (31/08/2026) |
-| Base do split | **receita**, decisão do Felipe em 31/08/2026 — ver abaixo |
-| Percentuais | 50/25/25 |
+| Base do split | **lucro** — a reserva de custo sai antes, ver abaixo |
+| Percentuais | 50/25/25 do que sobra depois da reserva |
+| Caixa da operação | ⚪ opcional, `ASAAS_CARTEIRA_OPERACAO` vazia |
 | Ambiente | `producao` |
 | Variáveis no servidor | ❌ as três `ASAAS_CARTEIRA_*` ainda não foram gravadas |
 
-## O que se divide: receita, não lucro
+## O que se divide: o que sobra depois da fatura
 
-Até 31/08/2026 o split mandava embora só o **lucro**, e a reserva de custo ficava
-na conta principal — que é de onde saem as faturas da Backblaze e da Cloudflare.
-O Felipe mudou: divide-se a **receita**, e os sócios acertam o custo entre si por
-fora do sistema.
+A reserva de custo sai **antes** do split e fica parada até a fatura da Backblaze
+e da Cloudflare chegar. O que sobra é dividido 50/25/25.
 
-A conta final das duas formas é a mesma, desde que o custo seja rateado nos
-mesmos percentuais. **O que muda é quem adianta o dinheiro:** a conta principal
-fica zerada e a fatura dos fornecedores cai inteira no cartão de quem opera, que
-depois cobra a parte de cada um. Da faixa de 2 TB para cima, 50% da receita é
-**menos** que a reserva do plano no pior caso (espaço 100% cheio) — no anual de
-10 TB o descoberto de um ano chega a R$ 5.501,75. `scripts/testar-planos.mjs`
-mede e imprime esse número a cada execução, de propósito.
+Isso dá exatamente o mesmo resultado que dividir a receita e depois cada um pagar
+sua parte do custo — `p × (receita − custo)` nos dois casos. A diferença é que
+aqui **ninguém adianta dinheiro e ninguém cobra ninguém todo mês**.
 
-Trocar de volta é uma linha: `BASE_DO_SPLIT` em `src/config/socios.ts`.
+Em 31/08/2026 o Felipe pediu a divisão da receita cheia, com o custo acertado por
+fora. Ficou um dia assim e voltou, por causa deste número: da faixa de 2 TB para
+cima, no pior caso (espaço 100% cheio), metade da receita é **menos** que a
+reserva do plano — e num ano de 10 TB o descoberto chega a **R$ 5.501,75**,
+adiantados por quem opera. `scripts/testar-planos.mjs` continua medindo e
+imprimindo esse número quando a base é `receita`, para a conta não sumir junto
+com a decisão.
 
-**Por que a base `receita` vai em percentual e não em valor fixo:** o Asaas valida
-o split contra o valor **líquido**, e a taxa depende do meio de pagamento, que o
-cliente só escolhe depois. Valor fixo sobre a receita inteira seria chutar a taxa;
-chute baixo estoura o líquido, o Asaas bloqueia a cobrança
-(`PAYMENT_SPLIT_DIVERGENCE_BLOCK`), dá 2 dias úteis e cancela os splits. Em
-percentual quem aplica é o Asaas, sobre o líquido que ele mesmo calculou.
+Trocar de volta é uma palavra: `BASE_DO_SPLIT` em `src/config/socios.ts`.
+
+### A reserva varia MUITO com o plano
+
+Não é distorção, é o custo real de cada faixa — e foi o que matou a divisão da
+receita a percentual fixo: nenhum número único é seguro em 10 TB e justo em
+100 GB.
+
+| faixa | reserva | % da receita líquida | Felipe | Carol | Sirius |
+|---|---|---|---|---|---|
+| 100 GB | R$ 5,96 | 12,7% | 43,7% | 21,8% | 21,8% |
+| 500 GB | R$ 29,82 | 27,9% | 36,1% | 18,0% | 18,0% |
+| 1 TB | R$ 59,63 | 43,5% | 28,2% | 14,1% | 14,1% |
+| 2 TB | R$ 119,27 | 55,0% | 22,5% | 11,3% | 11,3% |
+| 10 TB | R$ 596,34 | 74,8% | 12,6% | 6,3% | 6,3% |
+
+Os percentuais são calculados por plano, na criação da assinatura. Cada sócio
+recebe sempre a mesma fatia **do lucro**; o que muda de faixa para faixa é quanto
+do preço é lucro.
+
+### O caixa da operação (opcional)
+
+Sem `ASAAS_CARTEIRA_OPERACAO`, a reserva fica na conta principal — o Asaas deixa
+lá o que não foi distribuído. Funciona, e é o padrão.
+
+Com a variável preenchida, a reserva vira uma **linha com nome** no split: sai da
+cobrança na frente dos três, todo mês, para uma conta que não é de ninguém em
+particular. A conta é a mesma; o que muda é que ela deixa de depender da palavra
+de quem opera — dinheiro parado na conta de um sócio *parece* margem dele.
+
+A reserva usa o pior caso, então ela **sobra** de propósito. O que sobrar no fim
+do ano é lucro a distribuir, e isso precisa estar combinado por escrito.
+
+### Por que tudo vai em percentual, e nunca em valor fixo
+
+O Asaas valida o split contra o valor **líquido**, e a taxa depende do meio de
+pagamento, que o cliente só escolhe depois (`billingType: "UNDEFINED"`). Valor
+fixo seria chutar a taxa; chute baixo estoura o líquido, o Asaas bloqueia a
+cobrança (`PAYMENT_SPLIT_DIVERGENCE_BLOCK`), dá 2 dias úteis e cancela os splits.
+Em percentual quem aplica é o Asaas, sobre o líquido que ele mesmo calculou.
 `scripts/testar-split.mjs` prende isso.
 
 **Comportamento enquanto está assim:** o split fica vazio e **100% do valor
