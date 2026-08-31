@@ -276,10 +276,23 @@ export function EditorAparencia({
           <span className="text-xs font-medium text-texto-soft">Prévia</span>
           {salvando && <span className="text-[11px] text-texto-faint">atualizando…</span>}
         </div>
+        {/*
+          `&amostra=1` SÓ NO IFRAME, nunca no link de baixo.
+
+          A caixa recarrega a cada mudança de eixo, e carregar a galeria inteira
+          para desenhar seis miniaturas era o que fazia a espera que a Carol
+          reclamou. A amostra manda poucas fotos e não assina os tamanhos que a
+          caixa não usa.
+
+          O botão "Visualizar galeria" continua sem o parâmetro de propósito:
+          ele promete a galeria como o cliente vê, e uma amostra ali seria uma
+          mentira difícil de descobrir. `scripts/testar-previa.mjs` prende os
+          dois lados.
+        */}
         <div className="mt-2 overflow-hidden rounded-lg border border-linha bg-void">
           <iframe
             key={versaoPreview}
-            src={caminhoPublico}
+            src={`${caminhoPublico}&amostra=1`}
             title="Prévia da galeria"
             className="h-[460px] w-full"
             loading="lazy"

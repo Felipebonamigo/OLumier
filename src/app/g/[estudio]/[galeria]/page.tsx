@@ -22,14 +22,14 @@ import {
   type CapituloGaleria,
 } from "@/components/galeria-cliente";
 import { GaleriaCapa } from "@/components/galeria-capa";
-import { lerAparencia, TEMAS } from "@/config/aparencia";
+import { lerAparencia, TEMAS, AMOSTRA_PREVIA } from "@/config/aparencia";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ estudio: string; galeria: string }>;
-  searchParams: Promise<{ previa?: string }>;
+  searchParams: Promise<{ previa?: string; amostra?: string }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GaleriaPublicaPage({ params, searchParams }: Props) {
   const { estudio, galeria: galeriaSlug } = await params;
-  const { previa } = await searchParams;
+  const { previa, amostra } = await searchParams;
 
   /*
    * PRÉVIA DO DONO.
@@ -143,7 +143,31 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     );
   }
 
-  const medias = await listarMediasPublicas(galeria.id);
+  const todasAsMedias = await listarMediasPublicas(galeria.id);
+
+  /*
+   * ── A AMOSTRA DA PRÉVIA (31/08/2026) ─────────────────────────────────────
+   *
+   * A prévia do editor de aparência é esta mesma página num iframe de 460 px, e
+   * isso é qualidade do produto: o fotógrafo vê o que o cliente vê, sem
+   * imitação para sair do lugar. O que não fazia sentido era o CUSTO — a cada
+   * troca de fonte ou de grade, a galeria inteira era montada de novo: com 192
+   * fotos, 576 URLs assinadas no servidor e 192 miniaturas baixadas numa caixa
+   * onde cabem seis. A Carol reclamou da demora, e ela estava certa.
+   *
+   * `amostra` corta isso pela raiz: poucas fotos, e sem assinar o que a caixa
+   * não usa. O `ehDono` na frente não é zelo excessivo — sem ele, qualquer
+   * pessoa com o link poderia pedir a galeria pela metade, e o parâmetro
+   * passaria a ser uma forma de ESCONDER fotos do cliente.
+   *
+   * `previa` e `amostra` são separados de propósito. O botão "Visualizar
+   * galeria" abre `?previa=1` e promete "do jeito que o seu cliente vê"; se a
+   * amostra pegasse carona no mesmo parâmetro, essa frase viraria mentira.
+   * `scripts/testar-previa.mjs` existe principalmente para prender essa
+   * diferença.
+   */
+  const amostrando = ehDono && Boolean(amostra);
+  const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : todasAsMedias;
 
   /*
    * Três tamanhos por foto, cada um no seu lugar:
@@ -169,10 +193,16 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        * original sai de onde ele estiver. Quando a derivada não existe, o
        * fallback É o original e segue o armazém dele — ver lib/armazem.ts. */
       const armazem = armazemDe(m.armazem);
+      /* Na amostra, só a miniatura é assinada. O preview de 2048 px serve ao
+         lightbox, e ninguém clica para ampliar dentro de uma caixa de 460 px; o
+         original serve ao download, que a prévia também não oferece. Eram duas
+         assinaturas por foto gastas para nada, e são elas que faziam a espera. */
       const [thumb, preview, download] = await Promise.all([
         urlDaDerivada(m.chave_thumb, m.chave, armazem, VALIDADE),
-        urlDaDerivada(m.chave_preview, m.chave, armazem, VALIDADE),
-        galeria.permite_download
+        amostrando
+          ? Promise.resolve(null)
+          : urlDaDerivada(m.chave_preview, m.chave, armazem, VALIDADE),
+        galeria.permite_download && !amostrando
           ? urlDoOriginal(m.chave, armazem, VALIDADE, m.nome_original)
           : Promise.resolve(null),
       ]);
@@ -184,7 +214,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         largura: m.largura,
         altura: m.altura,
         url: thumb,
-        urlGrande: preview,
+        /* Sem preview (amostra), a miniatura faz as vezes: o tipo continua string,
+           e a caixa de 460 px nunca amplia nada mesmo. */
+        urlGrande: preview ?? thumb,
         urlDownload: download,
       };
     }),

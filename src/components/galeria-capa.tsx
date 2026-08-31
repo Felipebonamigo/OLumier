@@ -92,7 +92,10 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   // --- IMERSA: foto ocupa a tela, texto por cima -----------------------------
   if (aparencia.capa === "imersa" && urlImagem) {
     return (
-      <header className="relative flex min-h-[78vh] items-end justify-center overflow-hidden">
+      <header
+        data-capa="imersa"
+        className="relative flex min-h-[78vh] items-end justify-center overflow-hidden"
+      >
         {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
         <img
           src={urlImagem}
@@ -124,6 +127,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   if (aparencia.capa === "jornal") {
     return (
       <header
+        data-capa="jornal"
         className="px-6 py-20 text-center sm:py-28"
         style={{ borderBottom: "1px solid var(--g-linha)" }}
       >
@@ -145,10 +149,65 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     );
   }
 
+  /* --- CONVITE: foto emoldurada, entrega no pé, botão de entrada ------------
+   *
+   * Pedida pela Carol em 31/08/2026, a partir de uma galeria que ela viu no
+   * Pixieset. É prima da "dividida" e não a mesma coisa — três diferenças, e
+   * cada uma muda o que a capa comunica:
+   *
+   *   · A foto é EMOLDURADA, com margem da cor do tema em volta, em vez de
+   *     sangrar até a borda. É o que dá o ar de convite impresso; foto colada
+   *     na quina é a capa imersa, que conta outra história.
+   *   · O texto ancora no PÉ da coluna, não no meio. A marca fica no alto, o
+   *     olho sobe uma vez e desce para a ação — o mesmo caminho de um convite.
+   *   · Tem BOTÃO de entrada. Na dividida a galeria começa ao rolar; aqui há um
+   *     convite explícito, e é dele que a capa tira o nome.
+   *
+   * Capa nova em vez de mexer na dividida, porque a "Ateliê" já usa a dividida
+   * em galeria que pode estar entregue — e capa que muda sozinha é a coisa que
+   * este arquivo mais evita.
+   */
+  if (aparencia.capa === "convite" && urlImagem) {
+    return (
+      <header
+        data-capa="convite"
+        className="grid gap-8 px-5 py-5 md:min-h-[94vh] md:grid-cols-[1.1fr_1fr] md:gap-14 md:px-10 md:py-10"
+      >
+        <div className="relative min-h-[52vh] overflow-hidden md:min-h-full">
+          {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
+          <img
+            src={urlImagem}
+            alt=""
+            fetchPriority="high"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        </div>
+
+        <div className="flex flex-col justify-between gap-10 md:py-4">
+          <Estudio className="self-start" />
+          <div className="flex flex-col items-start gap-5">
+            <Legenda />
+            {/* Peso normal, e não negrito: a serifada de contraste alto (Bodoni,
+                Playfair) vive do traço fino, e o negrito fecha justamente o que
+                faz ela parecer papel de convite. */}
+            <Titulo tamanho="text-4xl font-normal sm:text-6xl" />
+            <a
+              href="#fotos"
+              className="mt-2 inline-block px-8 py-3 font-mono text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85"
+              style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+            >
+              Ver galeria
+            </a>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   // --- DIVIDIDA: foto de um lado, texto do outro ----------------------------
   if (aparencia.capa === "dividida" && urlImagem) {
     return (
-      <header className="grid min-h-[70vh] md:grid-cols-2">
+      <header data-capa="dividida" className="grid min-h-[70vh] md:grid-cols-2">
         <div className="relative min-h-[42vh] overflow-hidden md:min-h-full">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
           <img
@@ -174,6 +233,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   // --- MÍNIMA (e reserva para quando não há foto de capa) -------------------
   return (
     <header
+      data-capa="minima"
       className="px-6 py-16 text-center sm:py-20"
       style={{ borderBottom: "1px solid var(--g-linha)" }}
     >

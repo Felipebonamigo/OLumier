@@ -43,6 +43,10 @@ const PRESETS = {
   revista: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal" },
   atelie: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada" },
   essencial: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta" },
+  /* A capa que a Carol pediu em 31/08/2026: foto ao lado, data e titulo no pe,
+     botao de entrada. Entra aqui para passar pelas mesmas conferencias das
+     outras — fundo, grade, fonte — e nao so pelas etapas novas. */
+  convite: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta" },
 };
 
 // Assinaturas: o que precisa aparecer no HTML de cada combinação.
@@ -75,9 +79,15 @@ for (const [nome, ap] of Object.entries(PRESETS)) {
   const checagens = [
     [`fundo ${ap.tema}`, normalizado.includes(FUNDO[ap.tema].replace("#", "")) || html.includes(FUNDO[ap.tema])],
     [`grade ${ap.grade}`, normalizado.includes(MARCA_GRADE[ap.grade].replace(/\s/g, ""))],
+    /* A capa agora se identifica no html (`data-capa`), em vez de ser deduzida
+       pela presenca do botao: duas capas ja tem botao de entrada, e deducao por
+       pista indireta confunde uma com a outra em silencio. */
+    [`capa ${ap.capa} marcada no html`, normalizado.includes(`data-capa="${ap.capa}"`)],
     [
-      `capa ${ap.capa}`,
-      ap.capa === "jornal" ? html.includes("Ver galeria") : !html.includes("Ver galeria"),
+      `botao de entrada em ${ap.capa}`,
+      ["jornal", "convite"].includes(ap.capa)
+        ? html.includes("Ver galeria")
+        : !html.includes("Ver galeria"),
     ],
     // O título tem que apontar para a variável do next/font. Já falhou uma vez:
     // usando o token do Tailwind (--font-serif), a variável não existe em tempo

@@ -8,7 +8,7 @@
  * não quer escolher: um clique e está pronto, e ainda dá para ajustar depois.
  */
 
-export type Capa = "imersa" | "jornal" | "dividida" | "minima";
+export type Capa = "imersa" | "jornal" | "dividida" | "minima" | "convite";
 export type Tema = "noite" | "claro" | "creme";
 export type Tipografia =
   | "serifada"
@@ -37,6 +37,22 @@ export type Grade = "colunas" | "linhas" | "quadrada" | "editorial";
 export type Densidade = "compacta" | "normal" | "arejada";
 
 export type TamanhoLogo = "discreta" | "media" | "grande" | "enorme";
+
+/**
+ * Quantas fotos a prévia do editor desenha.
+ *
+ * A prévia é a galeria pública de verdade num iframe de 460 px — e isso é
+ * qualidade do produto, não atalho: o que se vê ali é o que o cliente vê. O
+ * custo era carregar a galeria INTEIRA a cada mudança de eixo; com 192 fotos,
+ * trocar de fonte assinava 576 URLs e baixava 192 miniaturas numa caixa onde
+ * cabem seis.
+ *
+ * Doze é o número que enche a caixa com folga para rolar um pouco, sem que a
+ * conta dependa do tamanho da entrega. Não é teto de nada além da prévia: o
+ * botão "Visualizar galeria" abre a galeria completa, e `testar-previa.mjs`
+ * existe principalmente para prender essa diferença.
+ */
+export const AMOSTRA_PREVIA = 12;
 
 export interface Aparencia {
   capa: Capa;
@@ -104,6 +120,7 @@ export const OPCOES = {
     { id: "jornal", nome: "Jornal", desc: "Fundo limpo, tipografia grande, botão de entrada" },
     { id: "dividida", nome: "Dividida", desc: "Foto de um lado, texto do outro" },
     { id: "minima", nome: "Mínima", desc: "Só tipografia, sem foto de capa" },
+    { id: "convite", nome: "Convite", desc: "Foto emoldurada, título no pé e botão de entrada" },
   ],
   tema: [
     { id: "noite", nome: "Noite", desc: "Fundo escuro — as fotos brilham" },
@@ -209,6 +226,23 @@ export const PRESETS: Preset[] = [
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
     aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media" },
+  },
+  {
+    /*
+     * Pedido da Carol em 31/08/2026, a partir de uma galeria de casamento que
+     * ela viu no Pixieset. As peças que fazem aquela cara, e por quê:
+     *
+     *   capa convite  — foto emoldurada, título e botão no pé
+     *   tema claro    — papel branco; o destaque vira o preto do botão
+     *   Bodoni        — serifada de contraste extremo, a letra de convite
+     *   grade linhas  — fileiras alinhadas, sem cortar foto
+     *   compacta      — as fotos quase se encostando, como um contato impresso
+     *   logo discreta — a marca assina no alto, não disputa com o título
+     */
+    id: "convite",
+    nome: "Convite",
+    desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
