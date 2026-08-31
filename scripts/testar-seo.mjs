@@ -200,6 +200,51 @@ await etapa("galeria com senha continua devolvendo cartão, sem quebrar", async 
  * medido: o módulo tem de consultar `senha_hash` ANTES de decidir mostrar a
  * capa. Some essa linha e esta etapa cai.
  */
+/*
+ * ── O VÉU PRECISA TER TAMANHO ─────────────────────────────────────────────
+ *
+ * O véu escurece a faixa onde o texto do cartão mora. Ele foi escrito com
+ * `position: absolute; inset: 0` — que em navegador resolve o tamanho sozinho —
+ * e no satori, que é quem desenha aqui, ficou com tamanho ZERO. Resultado: o
+ * véu nunca foi pintado, o cartão saiu com o texto direto sobre a foto, e
+ * ninguém percebeu por duas publicações porque a capa do banco de
+ * desenvolvimento é escura e o texto lia de qualquer jeito.
+ *
+ * Só apareceu na primeira galeria real, e mesmo ali só depois de MEDIR a
+ * luminância — a olho o texto parecia aceitável. A <img> ao lado sempre
+ * funcionou porque já trazia `width` e `height`, e foi o que escondeu o defeito.
+ *
+ * A etapa é estática porque a alternativa (decodificar o PNG e medir a faixa)
+ * exigiria uma dependência de imagem só para isto. O que ela prende é
+ * exatamente o erro cometido: absoluto sem medida.
+ */
+await etapa("o véu do cartão tem largura e altura declaradas", async () => {
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const RAIZ = path.resolve(import.meta.dirname, "..");
+  const fonte = readFileSync(
+    path.join(RAIZ, "src/app/g/[estudio]/[galeria]/opengraph-image.tsx"),
+    "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+
+  /* Todo bloco de estilo com `position: "absolute"` precisa trazer as duas
+     medidas. Vale para o véu e para a foto — os dois são absolutos, e o mesmo
+     esquecimento em qualquer um deles apaga a peça em silêncio. */
+  const absolutos = [...fonte.matchAll(/style=\{\{([^}]*position:\s*"absolute"[^}]*)\}\}/g)];
+  if (absolutos.length < 2) {
+    throw new Error(`achei ${absolutos.length} elementos absolutos, esperava ao menos 2 (foto e véu)`);
+  }
+  for (const [, corpo] of absolutos) {
+    if (!/width:/.test(corpo) || !/height:/.test(corpo)) {
+      throw new Error(
+        "elemento absoluto sem width/height — no satori isso vira tamanho zero e a peça " +
+          "some do cartão sem erro nenhum",
+      );
+    }
+  }
+  return `${absolutos.length} elementos absolutos, todos com medida`;
+});
+
 await etapa("a regra da senha está escrita no gerador do cartão", async () => {
   const { readFileSync } = await import("node:fs");
   const path = (await import("node:path")).default;

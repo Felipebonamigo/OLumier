@@ -124,13 +124,31 @@ export default async function Image({ params }: Props) {
           Agora a faixa onde o texto mora nunca fica abaixo de 82% de preto, e a
           sombra segura as bordas das letras quando a foto tem detalhe fino
           (renda, folhagem) exatamente atrás delas.
+
+          ── E POR QUE ISTO NÃO FUNCIONAVA ────────────────────────────────
+
+          A primeira correção do véu não mudou NADA, e demorou a aparecer
+          porque a capa do banco de desenvolvimento é escura: o texto lia de
+          qualquer jeito. O véu simplesmente não era desenhado.
+
+          A causa é do renderizador, não do CSS: no satori, elemento absoluto
+          com "inset: 0" e sem largura e altura fica com tamanho zero. Em
+          navegador o "inset" resolve o tamanho; ali não. A imagem ao lado
+          sempre funcionou porque já trazia as duas medidas — foi o que
+          escondeu o defeito.
+
+          Achado com um diagnóstico grosseiro: o véu pintado de vermelho sólido,
+          que saiu invisível. Medir foi o que resolveu; olhar não resolveu.
         */}
         <div
           style={{
             position: "absolute",
-            inset: 0,
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100%",
             background:
-              "linear-gradient(to top, rgba(5,5,5,.96) 0%, rgba(5,5,5,.90) 22%, rgba(5,5,5,.62) 45%, rgba(5,5,5,.18) 72%, rgba(5,5,5,0) 100%)",
+              "linear-gradient(to top, rgba(5,5,5,.96) 0%, rgba(5,5,5,.90) 24%, rgba(5,5,5,.60) 46%, rgba(5,5,5,.16) 74%, rgba(5,5,5,0) 100%)",
           }}
         />
 
