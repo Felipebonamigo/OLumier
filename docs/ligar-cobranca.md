@@ -1,7 +1,8 @@
 # Ligar a cobrança — passo a passo
 
-*A cobrança está **adormecida**: sem `ASAAS_API_KEY` no ambiente, nada é cobrado
-e o uso segue liberado. Este documento é o roteiro para quando você quiser ligar.*
+*A cobrança está **ligada em produção** desde 01/09/2026, com split para as três
+carteiras. Nenhum cliente pagante existe ainda, então nada foi cobrado nem
+distribuído até agora. Este documento descreve como está e por quê.*
 
 > ⚠️ **Correção de 20/08/2026.** Este documento dizia "pronto e testado" e estava
 > errado, de um jeito que só apareceria no pior momento: o `scripts/testar-cobranca.mjs`
@@ -14,7 +15,7 @@ e o uso segue liberado. Este documento é o roteiro para quando você quiser lig
 > a criação de assinatura só terá sido provada de verdade quando rodar contra a
 > API real.
 
-## Estado de hoje (20/08/2026)
+## Estado de hoje (01/09/2026)
 
 | Item | Situação |
 |---|---|
@@ -26,9 +27,9 @@ e o uso segue liberado. Este documento é o roteiro para quando você quiser lig
 | Carteiras dos sócios | ✅ os três têm conta e mandaram o `walletId` (31/08/2026) |
 | Base do split | **lucro** — a reserva de custo sai antes, ver abaixo |
 | Percentuais | 50/25/25 do que sobra depois da reserva |
-| Caixa da operação | ⚪ opcional, `ASAAS_CARTEIRA_OPERACAO` vazia |
+| Caixa da operação | **conta principal** (decisão do Felipe, 01/09/2026) — `ASAAS_CARTEIRA_OPERACAO` fica vazia |
 | Ambiente | `producao` |
-| Variáveis no servidor | ❌ as três `ASAAS_CARTEIRA_*` ainda não foram gravadas |
+| Variáveis no servidor | ✅ as três `ASAAS_CARTEIRA_*` gravadas em 01/09/2026, split conferido no ar |
 
 ## O que se divide: o que sobra depois da fatura
 
@@ -89,10 +90,23 @@ cobrança (`PAYMENT_SPLIT_DIVERGENCE_BLOCK`), dá 2 dias úteis e cancela os spl
 Em percentual quem aplica é o Asaas, sobre o líquido que ele mesmo calculou.
 `scripts/testar-split.mjs` prende isso.
 
-**Comportamento enquanto está assim:** o split fica vazio e **100% do valor
-permanece na conta principal**. Nenhuma cobrança falha por causa disso — foi
-escrito assim de propósito, porque cobrança que quebra por configuração
-incompleta é muito pior que dinheiro parado esperando distribuição.
+**Sócio sem carteira configurada é pulado**, e a fatia dele fica na conta
+principal em vez de virar erro na cobrança — e em vez de ser redistribuída entre
+os outros. É de propósito nas duas pontas: cobrança que quebra por configuração
+incompleta é pior que dinheiro parado esperando dono, e quem ainda não se
+cadastrou continua tendo direito ao que é dele.
+
+## O que o split NÃO cobre
+
+A reserva cobre só o **armazenamento** (Backblaze e Cloudflare) mais a taxa do
+Asaas. O custo fixo — DAS-MEI, VPS e domínio, R$ 129,33/mês — **não entra**: ele
+não pertence a cobrança nenhuma e não teria como ser rateado por cobrança sem
+mudar de valor a cada cliente novo (ver `src/config/custos-fixos.ts`).
+
+Se o acordo entre os sócios divide o custo fixo, ele precisa ser acertado **por
+fora, uma vez por mês** — R$ 43,11 para cada um, com a lista de três. Nenhum
+split de pagamento resolve isso, porque o Asaas divide cobrança por cobrança e
+não conhece o total do mês.
 
 ## Passo 1 — Cada sócio cria conta no Asaas
 
