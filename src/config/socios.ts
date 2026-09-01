@@ -11,10 +11,14 @@
  *                 →  split envia a fatia de cada sócio (LUCRO)
  *                 →  o resto FICA na conta = reserva de custo
  *
- * ⚠️  OS PERCENTUAIS ABAIXO SÃO PROPOSTA, NÃO ACORDO.
- * O Felipe pediu fatia maior por ser o idealizador e quem constrói, mas a
- * conversa com a Carol e o Sirius ainda não aconteceu. Trocar aqui é uma linha;
- * nada no resto do código depende desses números.
+ * ✅ ACORDO FECHADO em 01/09/2026, nas palavras do Felipe: "o custo todo
+ * (Backblaze + Cloudflare + VPS + DAS) é dividido em 3 igualmente, e o lucro é
+ * dividido 50 eu / 25 Carol / 25 Sirius". O Felipe leva mais por ser o
+ * idealizador e quem constrói; o custo todos carregam igual.
+ *
+ * Duas peças traduzem esse acordo, e as duas estão logo abaixo: `SOCIOS` (quem
+ * leva quanto) e `RATEIO_DO_CUSTO` (quem paga o custo, e em que proporção).
+ * Trocar qualquer uma é uma linha; nada no resto do código depende delas.
  */
 
 import { planoPorId, custoArmazenamentoCentavos, type Ciclo } from "./planos";
@@ -150,6 +154,37 @@ export type BaseDoSplit = "lucro" | "receita";
 export const BASE_DO_SPLIT: BaseDoSplit = "lucro";
 
 /**
+ * ── QUEM PAGA O CUSTO ─────────────────────────────────────────────────────
+ *
+ * `proporcional` — o custo sai do bolo antes, e o que sobra é dividido
+ *                  50/25/25. Cada um banca o custo na proporção da fatia dele.
+ *
+ * `igual`        — o custo é dividido em TRÊS PARTES IGUAIS, e cada um recebe a
+ *                  fatia dele da receita menos o seu terço. Acordo fechado com a
+ *                  Carol e o Sirius em 01/09/2026: "o custo todo dividido em 3
+ *                  igualmente, e o lucro 50/25/25".
+ *
+ * A soma distribuída é a MESMA nos dois — o lucro, nem um centavo a mais. O que
+ * muda é de quem sai. Com R$ 1.000 de receita e R$ 529 de custo:
+ *
+ *     proporcional   Felipe 235,50   Carol 117,75   Sirius 117,75
+ *     igual          Felipe 323,67   Carol  73,67   Sirius  73,67
+ *
+ * ⚠️ EM `igual`, O LUCRO DEIXA DE SAIR 50/25/25. No exemplo acima o Felipe fica
+ * com 68,7% do lucro, não com 50% — porque ele banca só um terço de um custo que
+ * a fatia dele geraria em metade. É consequência aritmética do acordo, não
+ * defeito: quem quiser 50/25/25 do lucro precisa do rateio `proporcional`.
+ *
+ * ⚠️ O CUSTO FIXO NÃO ESTÁ AQUI. A reserva conhece armazenamento (Backblaze e
+ * Cloudflare) e a taxa do Asaas. DAS-MEI, VPS e domínio (R$ 129,33/mês) não
+ * pertencem a cobrança nenhuma e não têm como ser rateados por cobrança — o
+ * Asaas divide uma de cada vez e não sabe o total do mês. Esse terço é acerto
+ * mensal por fora, R$ 43,11 para cada um. Ver `config/custos-fixos.ts`.
+ */
+export type RateioDoCusto = "proporcional" | "igual";
+export const RATEIO_DO_CUSTO: RateioDoCusto = "igual";
+
+/**
  * O CAIXA DA OPERAÇÃO — a quarta carteira, opcional.
  *
  * A reserva de custo precisa ficar parada em algum lugar até a fatura da
@@ -182,8 +217,6 @@ export const OPERACAO: Socio = {
   variavelCarteira: VARIAVEL_CARTEIRA_OPERACAO,
 };
 
-/** Duas casas, arredondando PARA BAIXO. A sobra vai para a reserva, nunca ao contrário. */
-const doisDecimais = (n: number) => Math.floor(n * 100) / 100;
 
 export interface FatiaSocio {
   socio: Socio;
@@ -257,20 +290,64 @@ export function montarFatias(
    */
   const razao = BASE_DO_SPLIT === "receita" ? 1 : Math.max(0, Math.min(1, lucro / liquido));
 
-  let distribuido = 0;
-  for (const socio of SOCIOS) {
+  /*
+   * Quanto CADA SÓCIO leva, em centavos, antes de virar percentual.
+   *
+   * `proporcional`: a fatia dele sobre o que sobrou depois do custo.
+   * `igual`:        a fatia dele sobre o líquido, MENOS um terço do custo.
+   *
+   * A conta é feita para os TRÊS, e não só para quem tem carteira: o terço do
+   * custo é do sócio, exista carteira ou não. Quem ainda não se cadastrou
+   * simplesmente não recebe agora — o dinheiro dele espera na conta em vez de
+   * engordar a fatia dos outros.
+   */
+  const custo = Math.max(0, liquido - lucro);
+  const terco = custo / SOCIOS.length;
+
+  let brutos = SOCIOS.map((s) =>
+    RATEIO_DO_CUSTO === "igual" && BASE_DO_SPLIT === "lucro"
+      ? /* Trava em zero: um terço do custo pode passar da fatia de quem tem 25%,
+           e aí ele deveria PAGAR — o que um split não sabe fazer. */
+        Math.max(0, (liquido * s.percentual) / 100 - terco)
+      : (liquido * s.percentual * razao) / 100,
+  );
+
+  /*
+   * Travar em zero SOBE a soma, e a soma não pode passar do lucro: o que passar
+   * sai da reserva, que é o dinheiro da Backblaze e da Cloudflare. Sem a trava a
+   * soma seria exatamente o lucro (as fatias somam 100%), então só há excedente
+   * quando alguém foi travado — e aí ele sai de quem ainda tem de onde, na
+   * proporção do que cada um ia levar.
+   */
+  const soma = brutos.reduce((t, v) => t + v, 0);
+  if (soma > lucro && soma > 0) {
+    const fator = lucro / soma;
+    brutos = brutos.map((v) => v * fator);
+  }
+
+  /*
+   * A conta do percentual é feita em CENTÉSIMOS DE PONTO, em inteiro.
+   *
+   * Somar `35.49 + 10.49 + 10.49` em ponto flutuante dá 56.470000000000006, e o
+   * resto calculado a partir daí virava 43.52 em vez de 43.53 — split de 99,99%,
+   * um centésimo de ponto sumindo sem dono. Em inteiro a soma fecha sempre.
+   */
+  let distribuidoCentesimos = 0;
+  SOCIOS.forEach((socio, i) => {
     const carteira = process.env[socio.variavelCarteira];
-    if (!carteira) continue;
-    const percentual = doisDecimais(socio.percentual * razao);
-    if (percentual <= 0) continue;
-    distribuido += percentual;
+    if (!carteira) return;
+    /* Para baixo, sempre: a sobra do arredondamento vai para a reserva. */
+    const centesimos = Math.floor((brutos[i] / liquido) * 10000);
+    if (centesimos <= 0) return;
+    distribuidoCentesimos += centesimos;
+    const percentual = centesimos / 100;
     fatias.push({
       socio,
       carteira,
       percentual,
       centavos: Math.floor((liquido * percentual) / 100),
     });
-  }
+  });
 
   /*
    * A reserva vai para o caixa da operação, se ele existir — e leva junto a
@@ -279,7 +356,7 @@ export function montarFatias(
    * conta principal sozinho: é o mesmo dinheiro, no mesmo lugar de sempre.
    */
   const carteiraOperacao = process.env[VARIAVEL_CARTEIRA_OPERACAO];
-  const resto = doisDecimais(100 - distribuido);
+  const resto = (10000 - distribuidoCentesimos) / 100;
   if (carteiraOperacao && resto > 0) {
     fatias.push({
       socio: OPERACAO,

@@ -194,6 +194,79 @@ await etapa("a reserva de custo sobra em toda faixa", async () => {
   return `folga mínima R$ ${(pior / 100).toFixed(2)} em ${piorFaixa}`;
 });
 
+/*
+ * ── O CUSTO EM TRÊS PARTES IGUAIS ─────────────────────────────────────────
+ *
+ * Acordo de 01/09/2026: o custo todo dividido em três, e o que sobra 50/25/25.
+ * Em conta: cada um recebe `fatia × líquido − custo/3`.
+ *
+ * Isso tem duas bordas que o rateio proporcional não tinha, e as duas viram
+ * dinheiro errado se ninguém prender:
+ *
+ *   1. Um terço do custo pode ser MAIOR que a fatia de quem tem 25%. Acontece
+ *      quando o custo passa de 75% da receita — o anual de 5 TB e o de 10 TB
+ *      estão lá. Split negativo não existe: a fatia trava em zero.
+ *
+ *   2. Travar em zero SOBE a soma distribuída, e a soma não pode passar do
+ *      lucro: o que passar sai da reserva, que é o dinheiro do fornecedor. Por
+ *      isso, depois de travar, o excedente é tirado de quem ainda tem de onde.
+ */
+await etapa("com o custo em terços, ninguém fica negativo e a reserva fica inteira", async () => {
+  const { RATEIO_DO_CUSTO } = await import("../src/config/socios.ts");
+  if (RATEIO_DO_CUSTO !== "igual") throw new Error(`rateio é "${RATEIO_DO_CUSTO}", esperava "igual"`);
+
+  const { ESPACOS, montar } = await import("../src/config/planos.ts");
+  const { lucroCentavos, TAXA_COBRANCA } = await import("../src/config/socios.ts");
+  let zerados = 0;
+
+  for (const f of ESPACOS) {
+    const p = montar({ segmento: "foto", espacoGb: f.gb });
+    for (const ciclo of ["mensal", "anual"]) {
+      const preco = ciclo === "anual" ? f.precoCentavos * 10 : f.precoCentavos;
+      const liquido = preco - TAXA_COBRANCA;
+      const lucro = lucroCentavos(p.id, preco, ciclo);
+      const fatias = montarFatias(p.id, preco, ciclo);
+
+      for (const x of fatias) {
+        if (x.percentual <= 0) throw new Error(`${f.gb} GB ${ciclo}: ${x.socio.nome} com ${x.percentual}%`);
+      }
+      const distribuido = fatias.reduce((t, x) => t + Math.round((liquido * x.percentual) / 100), 0);
+      if (distribuido > lucro) {
+        throw new Error(
+          `${f.gb} GB ${ciclo}: distribui R$ ${(distribuido / 100).toFixed(2)} e o lucro é ` +
+            `R$ ${(lucro / 100).toFixed(2)} — a diferença sai da reserva do fornecedor`,
+        );
+      }
+      if (fatias.length < SOCIOS.length) zerados++;
+    }
+  }
+  return zerados === 0
+    ? "todas as faixas com os três recebendo"
+    : `${zerados} faixa(s) em que alguém zerou (o terço dele passou da fatia)`;
+});
+
+await etapa("o custo em terços bate com a conta na mão", async () => {
+  const { lucroCentavos, TAXA_COBRANCA } = await import("../src/config/socios.ts");
+  const preco = 13999;
+  const liquido = preco - TAXA_COBRANCA;
+  const custo = liquido - lucroCentavos("g:foto:1000", preco, "mensal");
+  const terco = custo / 3;
+
+  for (const f of montarFatias("g:foto:1000", preco, "mensal")) {
+    const naMao = (liquido * f.socio.percentual) / 100 - terco;
+    const recebido = (liquido * f.percentual) / 100;
+    /* Tolerância de um centavo: o percentual é arredondado para baixo em duas
+       casas, e a diferença vai para a reserva de propósito. */
+    if (recebido > naMao + 1 || recebido < naMao - liquido * 0.0001 - 1) {
+      throw new Error(
+        `${f.socio.nome}: recebe R$ ${(recebido / 100).toFixed(2)}, a conta dá ` +
+          `R$ ${(naMao / 100).toFixed(2)}`,
+      );
+    }
+  }
+  return `custo R$ ${(custo / 100).toFixed(2)} · terço R$ ${(terco / 100).toFixed(2)}`;
+});
+
 await etapa("nenhum sócio recebe mais do que o percentual nominal dele", async () => {
   const fatias = montarFatias("g:foto:1000", 13999, "mensal");
   for (const f of fatias) {

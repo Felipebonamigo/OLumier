@@ -26,19 +26,50 @@ distribuído até agora. Este documento descreve como está e por quê.*
 | Conta do Asaas | usar a **mesma do Atomatiza** (decisão do Felipe) |
 | Carteiras dos sócios | ✅ os três têm conta e mandaram o `walletId` (31/08/2026) |
 | Base do split | **lucro** — a reserva de custo sai antes, ver abaixo |
-| Percentuais | 50/25/25 do que sobra depois da reserva |
+| Percentuais | 50/25/25 do lucro |
+| Rateio do custo | **igual** — o custo todo dividido em 3 partes iguais (acordo de 01/09/2026) |
 | Caixa da operação | **conta principal** (decisão do Felipe, 01/09/2026) — `ASAAS_CARTEIRA_OPERACAO` fica vazia |
 | Ambiente | `producao` |
 | Variáveis no servidor | ✅ as três `ASAAS_CARTEIRA_*` gravadas em 01/09/2026, split conferido no ar |
 
-## O que se divide: o que sobra depois da fatura
+## Como o dinheiro é dividido
 
-A reserva de custo sai **antes** do split e fica parada até a fatura da Backblaze
-e da Cloudflare chegar. O que sobra é dividido 50/25/25.
+O acordo, nas palavras do Felipe em 01/09/2026: **o custo todo é dividido em 3
+partes iguais, e o lucro é 50/25/25.**
 
-Isso dá exatamente o mesmo resultado que dividir a receita e depois cada um pagar
-sua parte do custo — `p × (receita − custo)` nos dois casos. A diferença é que
-aqui **ninguém adianta dinheiro e ninguém cobra ninguém todo mês**.
+Em conta, cada sócio recebe `fatia × líquido − custo ÷ 3`. Com R$ 1.000 de
+receita e R$ 529 de custo:
+
+| | recebe |
+|---|---|
+| Felipe | R$ 323,67 |
+| Carol | R$ 73,67 |
+| Sirius | R$ 73,67 |
+| **soma** | **R$ 471,00** (o lucro inteiro) |
+
+A reserva de custo sai antes e fica parada na conta principal até a fatura da
+Backblaze e da Cloudflare chegar. Ninguém adianta dinheiro e ninguém cobra
+ninguém.
+
+### O que isso faz com a divisão do lucro
+
+Com o custo em partes iguais, **o lucro deixa de sair 50/25/25**. No exemplo
+acima o Felipe fica com 68,7% do lucro, e cada um dos outros com 15,6% — porque
+ele banca um terço de um custo que a fatia dele geraria em metade. É consequência
+aritmética do acordo, não defeito. Quem quiser 50/25/25 do lucro precisa do
+rateio `proporcional`, que é uma palavra em `RATEIO_DO_CUSTO`.
+
+### Onde o acordo encosta no limite
+
+Quando o custo passa de **75% da receita**, um terço dele fica maior que a fatia
+de quem tem 25% — ou seja, a Carol e o Sirius deveriam PAGAR. Split negativo não
+existe, então a fatia deles trava em zero e o que sobra vai para o Felipe (nunca
+para a reserva: essa é intocável).
+
+Acontece em seis planos, todos anuais: 5 TB e 10 TB nos três segmentos. Num anual
+de 10 TB (R$ 7.999,90) a Carol e o Sirius ficam com **zero** e o Felipe com
+R$ 840,82. `scripts/testar-planos.mjs` lista esses planos a cada execução, para
+a consequência não sumir de vista.
 
 Em 31/08/2026 o Felipe pediu a divisão da receita cheia, com o custo acertado por
 fora. Ficou um dia assim e voltou, por causa deste número: da faixa de 2 TB para

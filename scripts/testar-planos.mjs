@@ -40,6 +40,7 @@ import {
   FOLGA_ESPACO,
   TAXA_COBRANCA,
   BASE_DO_SPLIT,
+  RATEIO_DO_CUSTO,
 } from "../src/config/socios.ts";
 
 /*
@@ -360,13 +361,24 @@ await etapa("o split do anual respeita a base declarada", () => {
 
   try {
     let piorDescoberto = 0;
+    const zerados = [];
 
     for (const m of todasAsMontagens()) {
       const p = montar(m);
       const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
       const fatias = montarFatias(p.id, anual, "anual");
+      /*
+       * Com o custo em TERÇOS, sócio de 25% pode ficar de fora: quando o custo
+       * passa de 75% da receita, o terço dele é maior que a fatia, e ele
+       * deveria PAGAR — coisa que um split não sabe fazer, então a fatia dele
+       * trava em zero. Não é defeito, é o acordo encostando no limite; o teste
+       * anota QUAIS planos fazem isso, porque é informação de negócio.
+       */
       if (fatias.length !== SOCIOS.length) {
-        throw new Error(`${p.id}: esperava ${SOCIOS.length} fatias, vieram ${fatias.length}`);
+        if (RATEIO_DO_CUSTO !== "igual") {
+          throw new Error(`${p.id}: esperava ${SOCIOS.length} fatias, vieram ${fatias.length}`);
+        }
+        zerados.push(p.id);
       }
       const enviado = fatias.reduce((s, f) => s + f.centavos, 0);
       const custoDoAno = custoArmazenamentoTetoCentavos(m) * 12;
@@ -405,10 +417,17 @@ await etapa("o split do anual respeita a base declarada", () => {
       }
     }
 
-    return BASE_DO_SPLIT === "receita"
-      ? `base receita — a conta fica zerada; maior descoberto de um ano: ` +
-          `R$ ${(piorDescoberto / 100).toFixed(2)}, que sai do caixa de quem opera`
-      : `${todasAsMontagens().length} montagens, split dentro do lucro`;
+    if (BASE_DO_SPLIT === "receita") {
+      return (
+        `base receita — a conta fica zerada; maior descoberto de um ano: ` +
+        `R$ ${(piorDescoberto / 100).toFixed(2)}, que sai do caixa de quem opera`
+      );
+    }
+    const total = todasAsMontagens().length;
+    return zerados.length
+      ? `${total} montagens, split dentro do lucro · em ${zerados.length} delas quem tem 25% ` +
+          `fica com zero no anual (o terço do custo passa da fatia): ${zerados.join(", ")}`
+      : `${total} montagens, split dentro do lucro`;
   } finally {
     for (const [chave, valor] of salvas) {
       if (valor === undefined) delete process.env[chave];
