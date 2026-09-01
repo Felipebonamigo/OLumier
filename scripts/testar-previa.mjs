@@ -221,6 +221,82 @@ await etapa("visitante não consegue forçar aparência pela URL", async () => {
   return "parâmetro ignorado";
 });
 
+/*
+ * ── O RASCUNHO NÃO PODE SE PERDER (01/09/2026) ────────────────────────────
+ *
+ * O botão "Publicar aparência" trouxe, junto, um jeito de perder trabalho que
+ * não existia com o salvamento automático: escolher e sair sem apertar. Custou
+ * exatamente isso, no mesmo dia, com a primeira usuária de verdade — a Carol
+ * escolheu o tema claro, viu a prévia ficar branca, saiu, e a galeria seguiu
+ * preta com `aparencia` em `{}`.
+ *
+ * O conserto separa as duas coisas que estavam grudadas: o que o CLIENTE vê
+ * (`aparencia`, que só muda ao publicar) e o que o FOTÓGRAFO está
+ * experimentando (`aparencia_rascunho`, que grava sozinho). As três etapas
+ * abaixo são as três metades disso — e a terceira é a que não pode falhar
+ * nunca: o rascunho não pode vazar para o cliente.
+ */
+console.log("\no rascunho da aparência");
+
+/* A REGRA mora na lib, e não na action, justamente para poder ser exercitada
+   aqui: server action puxa o runtime do cliente do Next e estoura fora de uma
+   requisição. Assim o teste escreve no banco de verdade, em vez de conferir a
+   tela e torcer. */
+const { gravarRascunho, publicarAparencia } = await import("../src/lib/aparencia-galeria.ts");
+
+const CREME = {
+  capa: "minima",
+  tema: "creme",
+  tipografia: "serifada",
+  grade: "quadrada",
+  densidade: "normal",
+  logo: "media",
+};
+
+await etapa("o rascunho grava sem tocar no que o cliente vê", async () => {
+  await db.query("update galerias set aparencia = $1, aparencia_rascunho = null where id = $2", [
+    JSON.stringify({ tema: "noite" }),
+    noAr.id,
+  ]);
+  const r = await gravarRascunho(noAr.id, noAr.estudio.id, CREME);
+  if (!r.ok) throw new Error("a gravação não achou a galeria");
+
+  const { rows } = await db.query(
+    "select aparencia, aparencia_rascunho from galerias where id = $1",
+    [noAr.id],
+  );
+  if (rows[0].aparencia_rascunho?.tema !== "creme") {
+    throw new Error("o rascunho não foi gravado — é o trabalho que se perdia");
+  }
+  if (rows[0].aparencia?.tema !== "noite") {
+    throw new Error("publicou sem ninguém mandar: a galeria do cliente mudou sozinha");
+  }
+  return "rascunho creme, publicado noite";
+});
+
+await etapa("a galeria do cliente ignora o rascunho", async () => {
+  const html = await (await fetch(`${BASE}/g/${noAr.tslug}/${noAr.gslug}`, { cache: "no-store" })).text();
+  if (html.includes("#f7f1e6")) {
+    throw new Error("o creme do RASCUNHO apareceu para o cliente antes de alguém publicar");
+  }
+  return "cliente segue vendo o publicado";
+});
+
+await etapa("publicar promove o rascunho e o apaga", async () => {
+  const r = await publicarAparencia(noAr.id, noAr.estudio.id, CREME);
+  if (!r.ok) throw new Error("a publicação não achou a galeria");
+
+  const { rows } = await db.query(
+    "select aparencia, aparencia_rascunho from galerias where id = $1",
+    [noAr.id],
+  );
+  if (rows[0].aparencia?.tema !== "creme") throw new Error("não publicou");
+  if (rows[0].aparencia_rascunho !== null) {
+    throw new Error("o rascunho ficou para trás — a barra continuaria pedindo para publicar");
+  }
+  return "publicado e rascunho limpo";
+});
+
 console.log("\na permissão não afrouxou");
 
 /*

@@ -227,7 +227,10 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       <EditorAparencia
         galeriaId={galeria.id}
         caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
-        inicial={lerAparencia(galeria.aparencia)}
+        /* Abre no RASCUNHO quando existe: é o trabalho que a pessoa deixou
+           pela metade, e perdê-lo foi exatamente o defeito de 31/08. */
+        inicial={lerAparencia(galeria.aparencia_rascunho ?? galeria.aparencia)}
+        publicado={lerAparencia(galeria.aparencia)}
         temFontePropria={Boolean(galeria.estudio_fonte)}
       />
 

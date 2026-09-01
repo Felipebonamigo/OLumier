@@ -7,7 +7,7 @@ import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
 import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
-import { lerAparencia } from "@/config/aparencia";
+import { gravarRascunho, publicarAparencia } from "@/lib/aparencia-galeria";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
 import { planoPorId, GB, cicloDe, precoDoCicloCentavos, type Ciclo } from "@/config/planos";
@@ -135,24 +135,40 @@ export async function salvarAparenciaAction(form: FormData): Promise<{ erro?: st
     return { erro: "Não consegui ler a aparência escolhida." };
   }
 
-  // lerAparencia descarta qualquer chave desconhecida ou valor inválido:
-  // o que é gravado é sempre um objeto que o renderizador sabe desenhar.
-  const limpa = lerAparencia(bruto);
-
-  /* O `returning` existe para saber se ESCREVEU. `consultar` devolve só as
-   * linhas, e um update sem returning devolve lista vazia tanto quando gravou
-   * quanto quando não achou nada — a tela diria "salvo" para uma gravação que
-   * não aconteceu (galeria de outro estúdio, ou apagada em outra aba). */
-  const gravadas = await consultar(
-    `update galerias set aparencia = $1, atualizado_em = now()
-      where id = $2 and tenant_id = $3
-      returning id`,
-    [JSON.stringify(limpa), galeriaId, tenantId],
-  );
-  if (gravadas.length === 0) return { erro: "Esta galeria não é sua, ou não existe mais." };
+  const { ok } = await publicarAparencia(galeriaId, tenantId, bruto);
+  if (!ok) return { erro: "Esta galeria não é sua, ou não existe mais." };
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
   return {};
+}
+
+/**
+ * Guarda a escolha que o fotógrafo ainda está experimentando.
+ *
+ * Grava sozinho, a cada mudança, e NÃO muda a galeria que o cliente está vendo.
+ * É o que devolve ao editor a virtude que o salvamento automático tinha — nada
+ * se perde ao sair da tela — sem devolver o defeito dele, que era publicar cada
+ * passo do caminho. Ver `lib/aparencia-galeria.ts`.
+ *
+ * Não revalida caminho nenhum: rascunho não muda página que alguém esteja
+ * vendo, e revalidar a cada tecla seria trabalho jogado fora.
+ */
+export async function salvarRascunhoAparenciaAction(
+  form: FormData,
+): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(String(form.get("aparencia") ?? "{}"));
+  } catch {
+    return { erro: "Não consegui ler a aparência escolhida." };
+  }
+
+  const { ok } = await gravarRascunho(galeriaId, tenantId, bruto);
+  return ok ? {} : { erro: "Esta galeria não é sua, ou não existe mais." };
 }
 
 /** Define qual foto abre a galeria. */

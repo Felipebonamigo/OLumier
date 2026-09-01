@@ -62,6 +62,9 @@ export interface Galeria {
   expira_em: Date | null;
   arquivada_em: Date | null;
   aparencia: unknown;
+  /* O que o fotógrafo está experimentando e ainda não publicou (migração 027).
+     O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
+  aparencia_rascunho: unknown;
   capa_media_id: string | null;
   criado_em: Date;
   total_medias?: number;

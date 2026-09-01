@@ -9,7 +9,7 @@ import {
   FONTES_TITULO,
   type Aparencia,
 } from "@/config/aparencia";
-import { salvarAparenciaAction } from "@/app/painel/actions";
+import { salvarAparenciaAction, salvarRascunhoAparenciaAction } from "@/app/painel/actions";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -134,18 +134,22 @@ export function EditorAparencia({
   galeriaId,
   caminhoPublico,
   inicial,
+  publicado,
   temFontePropria,
 }: {
   galeriaId: string;
   caminhoPublico: string;
+  /** O que a tela abre mostrando: o rascunho, se houver, senão o publicado. */
   inicial: Aparencia;
+  /** O que o CLIENTE vê hoje. É contra isto que a barra decide se aparece. */
+  publicado: Aparencia;
   /** O estúdio enviou uma fonte? Decide se a opção aparece no seletor. */
   temFontePropria: boolean;
 }) {
   const [ap, setAp] = useState<Aparencia>(inicial);
   /* O que está GRAVADO. Separado do que está na tela: é a diferença entre os
      dois que acende o botão e diz o que ainda não foi publicado. */
-  const [salvo, setSalvo] = useState<Aparencia>(inicial);
+  const [salvo, setSalvo] = useState<Aparencia>(publicado);
   const [salvando, iniciar] = useTransition();
   const [erro, setErro] = useState<string | null>(null);
   const router = useRouter();
@@ -173,11 +177,38 @@ export function EditorAparencia({
   const presetAtivo = presetEquivalente(ap);
   const sujo = JSON.stringify(ap) !== JSON.stringify(salvo);
 
+  /*
+   * ── O RASCUNHO VOLTA A GRAVAR SOZINHO (01/09/2026) ───────────────────────
+   *
+   * O botão trouxe um jeito de perder trabalho que o salvamento automático não
+   * tinha: escolher e sair sem apertar. Custou isso no mesmo dia, com a primeira
+   * usuária de verdade — escolheu o tema claro, viu a prévia ficar branca, saiu,
+   * e a galeria seguiu preta.
+   *
+   * O erro não foi pôr o botão; foi ter deixado a escolha existir SÓ na memória
+   * do navegador. Agora ela grava sozinha em `aparencia_rascunho`, que o cliente
+   * nunca vê — e publicar continua sendo o único jeito de mexer no que ele vê.
+   *
+   * Guardar em localStorage seria mais barato e resolveria menos: quem escolhe
+   * no celular e volta no computador é justamente o caso de quem está
+   * experimentando.
+   *
+   * A mesma espera de 400 ms serve às duas coisas — recarregar o iframe e gravar
+   * o rascunho —, porque as duas querem a ÚLTIMA escolha, não as quatro do
+   * caminho.
+   */
   function mudar(novo: Aparencia) {
     setAp(novo);
     setErro(null);
     if (agendado.current) clearTimeout(agendado.current);
-    agendado.current = setTimeout(() => setApPrevia(novo), 400);
+    agendado.current = setTimeout(() => {
+      setApPrevia(novo);
+      /* Fora da transição de propósito: gravar rascunho não pode acender o
+         "Publicando…" nem desabilitar o botão que a pessoa está prestes a
+         apertar. Falha aqui é silenciosa porque o trabalho continua na tela —
+         quem avisa é a barra, que só some quando a publicação confirma. */
+      void salvarRascunhoAparenciaAction(corpo(novo));
+    }, 400);
   }
 
   function corpo(valor: Aparencia) {
@@ -352,7 +383,13 @@ export function EditorAparencia({
         precisar avisar.
       */}
       {sujo && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-linha-forte bg-carbon/95 backdrop-blur">
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 border-t border-linha-forte bg-carbon/95 backdrop-blur"
+          /* A barra do Safari no iPhone come o rodapé da página. Sem esta folga
+             o botão fica ATRÁS dela — visível pela metade e difícil de acertar,
+             que é meio caminho para não ser apertado. */
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
           <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-3">
             <span className="text-xs text-texto-soft">
               A prévia já mostra o novo estilo.{" "}
@@ -368,6 +405,9 @@ export function EditorAparencia({
                   setAp(salvo);
                   setApPrevia(salvo);
                   setErro(null);
+                  /* Apaga o rascunho no servidor também: senão a escolha
+                     descartada voltaria na próxima vez que a tela abrisse. */
+                  void salvarRascunhoAparenciaAction(corpo(salvo));
                 }}
                 className="rounded-lg px-3 py-2 text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
               >
