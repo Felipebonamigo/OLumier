@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { consultar, consultarUm } from "./db";
+import { hashDeIp } from "./ip";
 
 /**
  * Acesso do CLIENTE FINAL (o casal) à galeria. Não é login: não existe conta,
@@ -230,12 +231,10 @@ export async function registrarAcesso(dados: {
   ip?: string | null;
   userAgent?: string | null;
 }) {
-  const ipHash = dados.ip
-    ? createHash("sha256")
-        .update(segredo() + dados.ip)
-        .digest("hex")
-        .slice(0, 32)
-    : null;
+  /* A MESMA função de `eventos`: é o que permite cruzar as duas tabelas e dizer
+     que o acesso e a ação vieram do mesmo lugar. Já foram duas cópias, e as duas
+     divergiram em silêncio — ver o cabeçalho de `lib/ip.ts`. */
+  const ipHash = dados.ip ? hashDeIp(dados.ip) : null;
 
   try {
     await consultar(

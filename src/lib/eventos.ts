@@ -1,6 +1,6 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { consultar } from "./db";
+import { hashDeIp } from "./ip";
 
 /**
  * AUDITORIA — quem fez o quê, e quando.
@@ -63,11 +63,14 @@ export interface Evento {
   criado_em: Date;
 }
 
-/** Mesmo segredo e mesmo formato usados pela tabela `acessos`. */
-function hashDeIp(ip: string): string {
-  const segredo = process.env.SESSAO_SEGREDO ?? "sem-segredo";
-  return createHash("sha256").update(segredo + ip).digest("hex").slice(0, 32);
-}
+/*
+ * O hash de IP mora em `./ip`, e é a MESMA função que a tabela `acessos` usa.
+ *
+ * Havia uma cópia aqui, com este mesmo comentário afirmando que era igual à de
+ * lá — e não era: ela lia `SESSAO_SEGREDO ?? "sem-segredo"`, uma variável que
+ * nunca existiu em ambiente nenhum. O sal era sempre a string do código, e as
+ * duas tabelas nunca casaram. Ver o cabeçalho de `lib/ip.ts`.
+ */
 
 export interface DadosEvento {
   tenantId?: string | null;
