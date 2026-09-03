@@ -38,7 +38,7 @@ import {
   montarFatias,
   SOCIOS,
   FOLGA_ESPACO,
-  TAXA_COBRANCA,
+  taxaCobrancaCentavos,
   BASE_DO_SPLIT,
   RATEIO_DO_CUSTO,
 } from "../src/config/socios.ts";
@@ -47,7 +47,9 @@ import {
  * A reserva da montagem. Mesma regra do socios.ts, refeita aqui de propósito:
  * se a de lá mudar sem ninguém pensar na grade, este teste conta a diferença.
  */
-const reserva = (m) => Math.round(custoArmazenamentoCentavos(m) * FOLGA_ESPACO) + TAXA_COBRANCA;
+const reserva = (m) =>
+  Math.round(custoArmazenamentoCentavos(m) * FOLGA_ESPACO) +
+  taxaCobrancaCentavos(montar(m).precoCentavos);
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -334,7 +336,9 @@ await etapa("o desconto do ano sai do lucro, nunca da reserva", () => {
 
     /* Tolerância de 11 taxas de cobrança: o anual cobra UMA vez no ano, o mensal
      * cobra doze — essa economia é real e fica no lucro do anual. */
-    const folga = TAXA_COBRANCA * 11;
+    /* A taxa deixou de ser fixa (R$ 0,49 + 2,99% no cartão), então a folga é a
+       taxa do MENSAL onze vezes — que é o que o anual deixa de pagar. */
+    const folga = taxaCobrancaCentavos(p.precoCentavos) * 11;
     if (perdido > doisMeses + 1 || perdido < doisMeses - folga - 1) {
       throw new Error(
         `${p.id}: o anual custa R$ ${(perdido / 100).toFixed(2)} de lucro, e o desconto ` +

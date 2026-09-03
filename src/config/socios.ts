@@ -56,8 +56,34 @@ export const SOCIOS: Socio[] = [
  * 100% cheio e a ocupação típica é de 30 a 60%.
  */
 export const FOLGA_ESPACO = 1.3;
-/** Taxa do Asaas por cobrança, em centavos. */
-export const TAXA_COBRANCA = 300;
+/**
+ * ── A TAXA DO ASAAS DEPENDE DO PREÇO, E NÃO É R$ 3,00 ─────────────────────
+ *
+ * Era `TAXA_COBRANCA = 300` — um número fixo, chutado. As taxas REAIS desta
+ * conta, lidas em `GET /myAccount/fees` em 05/09/2026:
+ *
+ *     boleto  R$ 1,99        pix  R$ 1,99        cartão  R$ 0,49 + 2,99%
+ *
+ * O cliente escolhe como paga, então a reserva tem de aguentar a MAIS CARA — e
+ * a mais cara é a única que cresce com o preço. Com R$ 3,00 fixo a conta fechava
+ * no Pix e furava no cartão, que é justamente a forma que virou padrão da tela
+ * em 05/09: na faixa de 10 TB anual faltavam R$ 211,47 para pagar a Backblaze,
+ * saídos do bolso de quem opera.
+ *
+ * Reservar pelo cartão sobra-reserva para quem paga por Pix, e sobrar é o lado
+ * certo do erro: o excedente é lucro a distribuir depois, pela mesma regra que
+ * já vale para a folga cambial. Faltar não tem conserto — vira fatura sem
+ * dinheiro para cobrir.
+ *
+ * `Math.ceil` pelo mesmo motivo: o centavo do arredondamento fica com a reserva.
+ */
+const TAXA_CARTAO_FIXA = 49;
+const TAXA_CARTAO_PERCENTUAL = 0.0299;
+
+/** A taxa que a cobrança vai custar, no pior meio de pagamento. Em centavos. */
+export function taxaCobrancaCentavos(precoCentavos: number): number {
+  return Math.ceil(TAXA_CARTAO_FIXA + precoCentavos * TAXA_CARTAO_PERCENTUAL);
+}
 
 /**
  * Reserva de custo de um plano, em centavos.
@@ -90,7 +116,10 @@ function reservaDoPlano(planoId: string): number | null {
   const plano = planoPorId(planoId);
   if (!plano) return null;
   const custo = custoArmazenamentoCentavos({ segmento: plano.segmento, espacoGb: plano.quotaGb });
-  return Math.round(custo * FOLGA_ESPACO) + TAXA_COBRANCA;
+  /* SÓ o armazenamento de UM mês, com a folga cambial. A taxa da cobrança saiu
+     daqui em 05/09/2026: ela depende do PREÇO, e este função não conhece o preço
+     do ciclo — quem soma a taxa é `lucroCentavos`, que conhece. */
+  return Math.round(custo * FOLGA_ESPACO);
 }
 
 /**
@@ -118,14 +147,18 @@ export function lucroCentavos(
 ): number {
   const meses = ciclo === "anual" ? 12 : 1;
 
-  const doPlano = reservaDoPlano(planoId);
+  const armazemDoMes = reservaDoPlano(planoId);
   const reserva =
-    doPlano === null
+    armazemDoMes === null
       ? /* Id irreconhecível cai num terço do preço — chute conservador, e o
          * único caminho em que a reserva não sai do espaço contratado. Aqui o
          * preço JÁ é o do ciclo, então não se multiplica de novo. */
         Math.round(precoCentavos * 0.35)
-      : (doPlano - TAXA_COBRANCA) * meses + TAXA_COBRANCA;
+      : /* Doze meses de disco, UMA taxa de cobrança — e a taxa calculada sobre o
+           preço do CICLO, que é o que o Asaas vai cobrar de verdade. Somar a taxa
+           doze vezes reservaria dinheiro que ninguém vai gastar; somar a do
+           mensal reservaria de menos, que é o erro caro. */
+        armazemDoMes * meses + taxaCobrancaCentavos(precoCentavos);
 
   return Math.max(0, precoCentavos - reserva);
 }
@@ -251,7 +284,7 @@ export function montarFatias(
    * num lugar e errado no outro, e as duas funções parecem corretas isoladas.
    * `testar-planos.mjs` junta as duas de propósito. */
   const fatias: FatiaSocio[] = [];
-  const liquido = Math.max(0, precoCentavos - TAXA_COBRANCA);
+  const liquido = Math.max(0, precoCentavos - taxaCobrancaCentavos(precoCentavos));
   if (liquido === 0) return fatias;
 
   /*

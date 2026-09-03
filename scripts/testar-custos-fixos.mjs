@@ -29,7 +29,14 @@ import {
   clientesParaEquilibrio,
 } from "../src/config/custos-fixos.ts";
 import { custoArmazenamentoCentavos, montar, ESPACOS } from "../src/config/planos.ts";
-import { TAXA_COBRANCA } from "../src/config/socios.ts";
+import { taxaCobrancaCentavos } from "../src/config/socios.ts";
+
+/* A taxa do Asaas deixou de ser um valor fixo em 05/09/2026: é R$ 0,49 + 2,99%
+   sobre o preço, que é o que o cartão cobra. Aqui ela sai do plano de 1 TB, que
+   é o usado nas duas etapas abaixo. */
+const TAXA_DO_PLANO = taxaCobrancaCentavos(
+  montar({ segmento: "foto", espacoGb: 1000 }).precoCentavos,
+);
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -88,10 +95,10 @@ await etapa("o custo variável inclui IOF e spread do cartão", () => {
   const m = { segmento: "foto", espacoGb: 1000 };
   const soArmazenamento = custoArmazenamentoCentavos(m);
   const real = custoVariavelRealCentavos(m);
-  if (real <= soArmazenamento + TAXA_COBRANCA) {
+  if (real <= soArmazenamento + TAXA_DO_PLANO) {
     throw new Error(`R$ ${(real / 100).toFixed(2)} não cobre armazenamento + taxa + IOF/câmbio`);
   }
-  const esperado = soArmazenamento * (1 + IOF) * (1 + SPREAD_CARTAO) + TAXA_COBRANCA;
+  const esperado = soArmazenamento * (1 + IOF) * (1 + SPREAD_CARTAO) + TAXA_DO_PLANO;
   if (Math.abs(real - esperado) > 1) {
     throw new Error(`esperava ~R$ ${(esperado / 100).toFixed(2)}, veio R$ ${(real / 100).toFixed(2)}`);
   }
@@ -108,7 +115,7 @@ await etapa("meia ocupação custa menos que o teto", () => {
   const meio = custoVariavelRealCentavos(m, 0.5);
   if (meio >= cheio) throw new Error("ocupação não muda o custo");
   /* A taxa do Asaas não escala com ocupação: ela é por cobrança. */
-  if (meio <= TAXA_COBRANCA) throw new Error("a taxa da cobrança sumiu do cálculo");
+  if (meio <= TAXA_DO_PLANO) throw new Error("a taxa da cobrança sumiu do cálculo");
   return `R$ ${(cheio / 100).toFixed(2)} cheio · R$ ${(meio / 100).toFixed(2)} pela metade`;
 });
 
