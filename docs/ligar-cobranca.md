@@ -15,12 +15,15 @@ distribuído até agora. Este documento descreve como está e por quê.*
 > a criação de assinatura só terá sido provada de verdade quando rodar contra a
 > API real.
 
-## Estado de hoje (01/09/2026)
+## Estado de hoje (05/09/2026)
 
 | Item | Situação |
 |---|---|
 | Webhook e matemática do split | ✅ testado (`scripts/testar-cobranca.mjs`) |
-| Criar cliente/assinatura no Asaas | ⚠️ código pronto, **nunca rodou contra a API** |
+| Criar cliente/assinatura no Asaas | ✅ provado no sandbox (`scripts/ensaio-cartao-sandbox.mjs`, 05/09/2026) |
+| Cartão salvo e captura automática | ✅ provado: cartão fica com token, e assinatura com o token nasce CONFIRMED sem abrir fatura |
+| Webhook | ✅ URL, 9 eventos e **token** conferidos em 05/09/2026 |
+| Assinaturas reais | ❌ **zero** — nada foi cobrado ainda |
 | CPF/CNPJ do titular | ✅ coletado e validado ao ativar a assinatura |
 | Trial vencido / inadimplência travam o envio | ✅ `src/lib/assinatura.ts` |
 | Conta do Asaas | usar a **mesma do Atomatiza** (decisão do Felipe) |
@@ -186,13 +189,52 @@ Depois: `systemctl restart fotonio`.
 ⚠️ Comece com `ASAAS_AMBIENTE=sandbox` e faça uma assinatura de teste antes de
 apontar para produção.
 
-## Passo 4 — Webhook no painel do Asaas
+## Passo 4 — Webhook no painel do Asaas ✅ feito
 
-Adicionar uma URL **nova** (sem mexer na que o Atomatiza já usa):
+Configurado e conferido em 05/09/2026:
 
-- URL: `https://olumier.com.br/api/asaas/webhook`
-- Token: o mesmo do `ASAAS_WEBHOOK_TOKEN`
-- Eventos: pagamento confirmado/recebido, vencido, estornado, assinatura removida
+- Nome: `galeriaatomo` · id `0d8a68bd-95ef-4a87-af3b-da4ae555ada5`
+- URL: `https://galeriaatomo.com.br/api/asaas/webhook`
+- Token: o mesmo do `ASAAS_WEBHOOK_TOKEN` do servidor
+- 9 eventos · `SEQUENTIALLY` · fila ok · `penalizedRequestsCount: 0`
+
+### O token faltava, e isso era um bloqueio silencioso
+
+Até 05/09 o webhook existia, apontava certo e estava ativo — mas **sem token**. A
+rota exige o header `asaas-access-token` e devolvia **401** a toda entrega.
+
+O efeito não seria "webhook falhando": seria **o cliente pagar e continuar
+bloqueado**. O cartão é capturado, o dinheiro entra, o Asaas avisa, e o sistema
+recusa o aviso — sem ninguém perceber, porque nada na tela diz que um aviso foi
+recusado.
+
+E passava do nosso quintal: o Asaas repete entrega que falha e **suspende a fila
+da conta** depois de falhas seguidas. A conta é compartilhada com o Atomatiza,
+que tem cliente pagando. A primeira assinatura aqui poderia derrubar a cobrança
+de lá.
+
+Não tinha mordido só porque ninguém havia pagado ainda.
+
+### Como conferir que o token dos dois lados é o mesmo
+
+O Asaas **nunca devolve** o valor do token — só o booleano `hasAuthToken` no
+recurso individual (`GET /v3/webhooks/{id}`; na LISTA nem o booleano aparece,
+que foi o que me fez achar que a gravação tinha falhado). Então `hasAuthToken:
+true` prova que existe um token, não que é o certo.
+
+A prova de verdade é bater na rota, do próprio servidor:
+
+```bash
+T=$(grep -m1 "^ASAAS_WEBHOOK_TOKEN=" /opt/fotonio-shared/.env.production | cut -d= -f2-)
+curl -s -o /dev/null -w "sem token:  %{http_code}
+" -X POST   -H "Content-Type: application/json"   -d "{\"event\":\"PAYMENT_CONFIRMED\",\"payment\":{\"externalReference\":\"nao-existe:0000\"}}"   https://galeriaatomo.com.br/api/asaas/webhook
+curl -s -w "com token:  %{http_code}
+" -X POST   -H "Content-Type: application/json" -H "asaas-access-token: $T"   -d "{\"event\":\"PAYMENT_CONFIRMED\",\"payment\":{\"externalReference\":\"nao-existe:0000\"}}"   https://galeriaatomo.com.br/api/asaas/webhook
+```
+
+Medido em 05/09/2026: **401** sem token, **200** com token, e o corpo
+`{"ok":true,"ignorado":"outro produto"}` — que de quebra prova a proteção do
+Atomatiza funcionando, já que a referência não tem o prefixo nosso.
 
 ## ⚠️ O cuidado que não pode ser esquecido
 
