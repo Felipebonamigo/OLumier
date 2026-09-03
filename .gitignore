@@ -41,3 +41,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Pesos do reconhecimento facial (13 MB). Não versionados: são cópia exata do
+# pacote e voltam com um comando. Ver src/app/spike-rostos/page.tsx.
+/public/modelos-rosto/
