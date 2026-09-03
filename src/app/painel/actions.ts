@@ -10,7 +10,7 @@ import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { gravarRascunho, publicarAparencia } from "@/lib/aparencia-galeria";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
-import { planoPorId, GB, cicloDe, precoDoCicloCentavos, type Ciclo } from "@/config/planos";
+import { planoPorId, GB, cicloDe, precoDoCicloCentavos } from "@/config/planos";
 import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
 import {
@@ -321,7 +321,13 @@ export async function moverMediasAction(form: FormData) {
  */
 export async function criarAssinaturaAction(
   documento: string,
-  ciclo: Ciclo = "mensal",
+  /*
+   * `unknown` e não `Ciclo`: isto vem da tela, atravessando uma server action, e
+   * ali o tipo é promessa do cliente. `cicloDe` fecha a lista, e o lado seguro é
+   * o MENSAL — o anual reserva doze meses de custo contra dez de preço, e
+   * reservar de menos seria pagar sócio com o dinheiro da fatura da Backblaze.
+   */
+  cicloBruto: unknown = "mensal",
   /*
    * A escolha crua da tela, não o `billingType`. Traduzir aqui, e não no
    * componente, é o que garante a tradução: o cliente pode mandar o que quiser,
@@ -330,6 +336,7 @@ export async function criarAssinaturaAction(
    */
   escolhaDaForma?: unknown,
 ): Promise<{ erro?: string } | void> {
+  const ciclo = cicloDe(cicloBruto);
   const tenantId = await exigirTenant();
 
   if (!asaasConfigurado()) return { erro: "A cobranca ainda nao foi ligada." };

@@ -167,14 +167,20 @@ export type Ciclo = "mensal" | "anual";
 export const MESES_PAGOS_NO_ANO = 10;
 
 /**
- * Normaliza o que veio do banco.
+ * Normaliza o que veio do banco OU do formulário.
  *
  * Qualquer coisa que não seja exatamente "anual" vira "mensal" — que é o que
  * TODA assinatura era até a migração 018, e o padrão seguro: mensal reserva um
- * mês de custo, e reservar de menos é o erro caro. O `check` da migração já
+ * mês de custo, e reservar de MENOS é o erro caro. O `check` da migração já
  * impede lixo de entrar na coluna; isto protege o caminho de leitura.
+ *
+ * Aceita `unknown` de propósito, e não `string | null`: desde 05/09/2026 o
+ * ciclo também chega da tela, atravessando uma server action — e ali o tipo é
+ * promessa do cliente, não garantia. Tipar como `Ciclo` o que veio do navegador
+ * seria uma mentira que o TypeScript não tem como cobrar. Mesma razão de
+ * `formaDaAssinatura` em `config/forma-assinatura.ts`.
  */
-export function cicloDe(valor: string | null | undefined): Ciclo {
+export function cicloDe(valor: unknown): Ciclo {
   return valor === "anual" ? "anual" : "mensal";
 }
 

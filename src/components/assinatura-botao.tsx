@@ -5,6 +5,23 @@ import { useRouter } from "next/navigation";
 import { criarAssinaturaAction } from "@/app/painel/actions";
 import { formatarDocumento, soDigitos } from "@/lib/documento";
 import { ESCOLHA_CARTAO } from "@/config/forma-assinatura";
+import { MESES_PAGOS_NO_ANO, formatarReais } from "@/config/planos";
+
+/**
+ * Os dois prazos. O anual cobra `MESES_PAGOS_NO_ANO` mensalidades de uma vez —
+ * o desconto sai da constante, nunca de um número escrito aqui: uma segunda
+ * fonte de verdade viraria mentira no dia em que a política mudasse, e a mentira
+ * estaria na tela onde a pessoa decide pagar.
+ */
+const CICLOS = [
+  { valor: "mensal", titulo: "Mensal", sufixo: "/mês", detalhe: null },
+  {
+    valor: "anual",
+    titulo: "Anual",
+    sufixo: "/ano",
+    detalhe: `${12 - MESES_PAGOS_NO_ANO} meses grátis`,
+  },
+] as const;
 
 /** As duas formas, com a promessa de cada uma escrita do lado. */
 const OPCOES = [
@@ -31,10 +48,13 @@ export function AssinaturaBotao({
   temAssinatura,
   cobrancaLigada,
   documentoSalvo,
+  precoMensalCentavos,
 }: {
   temAssinatura: boolean;
   cobrancaLigada: boolean;
   documentoSalvo: string | null;
+  /** O mensal da faixa contratada. O anual é derivado, nunca uma segunda tabela. */
+  precoMensalCentavos: number;
 }) {
   const [documento, setDocumento] = useState(
     documentoSalvo ? formatarDocumento(documentoSalvo) : "",
@@ -43,7 +63,12 @@ export function AssinaturaBotao({
   /* Cartão pré-marcado: é o que resolve a queixa de ir pagar na mão todo mês, e
      ninguém cai nele sem ver a outra opção do lado. */
   const [forma, setForma] = useState<string>(ESCOLHA_CARTAO);
+  /* Mensal pré-marcado, ao contrário do cartão: o anual é um compromisso de doze
+     meses e um valor dez vezes maior de uma vez. Empurrar isso por padrão seria
+     vender prazo por descuido — quem quer o desconto escolhe. */
+  const [ciclo, setCiclo] = useState<string>("mensal");
   const [ocupado, iniciar] = useTransition();
+  const precoAnual = precoMensalCentavos * MESES_PAGOS_NO_ANO;
   const router = useRouter();
 
   if (!cobrancaLigada) {
@@ -99,7 +124,50 @@ export function AssinaturaBotao({
         Exigido pelo Asaas para emitir a cobrança em seu nome.
       </p>
 
+      {/*
+        DUAS PERGUNTAS, NA ORDEM DA DECISÃO: primeiro de quanto em quanto tempo
+        se paga (é o que muda o preço), depois em que forma. Quatro combinações
+        numa grade só obrigariam a comparar prazo e forma ao mesmo tempo, que é
+        o jeito mais rápido de a pessoa fechar a aba.
+      */}
       <fieldset className="mt-5">
+        <legend className="text-xs font-medium text-texto-soft">De quanto em quanto tempo</legend>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          {CICLOS.map((c) => {
+            const marcada = ciclo === c.valor;
+            const centavos = c.valor === "anual" ? precoAnual : precoMensalCentavos;
+            return (
+              <label
+                key={c.valor}
+                className={`cursor-pointer rounded-xl border px-4 py-3 transition ${
+                  marcada ? "border-acento bg-carbon-2" : "border-linha hover:border-linha-forte"
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="ciclo"
+                    value={c.valor}
+                    checked={marcada}
+                    onChange={() => setCiclo(c.valor)}
+                    className="h-4 w-4 accent-[color:var(--acento)]"
+                  />
+                  <span className="text-sm font-medium">{c.titulo}</span>
+                </span>
+                <span className="mt-1 block text-sm tabular-nums">
+                  {formatarReais(centavos)}
+                  <span className="text-xs text-texto-faint">{c.sufixo}</span>
+                </span>
+                {c.detalhe && (
+                  <span className="mt-0.5 block text-xs text-ok">{c.detalhe}</span>
+                )}
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <fieldset className="mt-4">
         <legend className="text-xs font-medium text-texto-soft">Como você quer pagar</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {OPCOES.map((o) => {
@@ -135,7 +203,7 @@ export function AssinaturaBotao({
         onClick={() =>
           iniciar(async () => {
             setErro(null);
-            const r = await criarAssinaturaAction(documento, "mensal", forma);
+            const r = await criarAssinaturaAction(documento, ciclo, forma);
             if (r?.erro) setErro(r.erro);
             else router.refresh();
           })

@@ -175,6 +175,10 @@ export default async function ContaPage() {
             temAssinatura={Boolean(tenant.asaas_assinatura_id)}
             cobrancaLigada={asaasConfigurado()}
             documentoSalvo={tenant.cpf_cnpj}
+            /* Só o MENSAL da faixa. O anual é derivado na tela a partir de
+               `MESES_PAGOS_NO_ANO`, para não existir um segundo lugar guardando
+               preço — e para o desconto na tela nunca discordar do cobrado. */
+            precoMensalCentavos={plano?.precoCentavos ?? 0}
           />
         )}
 

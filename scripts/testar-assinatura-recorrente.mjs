@@ -62,6 +62,7 @@ process.env.ASAAS_API = `http://127.0.0.1:${servidor.address().port}`;
 
 const { criarAssinatura, atualizarAssinatura } = await import("../src/lib/asaas.ts");
 const { formaDaAssinatura, ESCOLHA_CARTAO } = await import("../src/config/forma-assinatura.ts");
+const { cicloDe, MESES_PAGOS_NO_ANO } = await import("../src/config/planos.ts");
 const { rotuloDoCartao } = await import("../src/lib/cartao-salvo.ts");
 
 let falhou = false;
@@ -76,13 +77,13 @@ const etapa = async (nome, fn) => {
   }
 };
 
-const assinar = (forma) =>
+const assinar = (forma, precoCentavos = 13999, ciclo = "mensal") =>
   criarAssinatura({
     clienteAsaasId: "cus_1",
     tenantId: "11111111-2222-3333-4444-555555555555",
     planoId: "g:foto:1000",
-    precoCentavos: 13999,
-    ciclo: "mensal",
+    precoCentavos,
+    ciclo,
     descricao: "Teste",
     primeiroVencimento: new Date("2026-10-01"),
     forma,
@@ -172,6 +173,70 @@ await etapa("o split continua viajando na assinatura de cartão", async () => {
   }
   const soma = corpo.split.reduce((t, f) => t + (f.percentualValue ?? 0), 0);
   return `${corpo.split.length} fatias, ${soma.toFixed(2)}%`;
+});
+
+console.log("\no plano anual");
+
+/*
+ * O ciclo vem do MESMO formulário, e corre o mesmo risco da forma de pagamento.
+ * O lado seguro aqui é o MENSAL: o anual reserva doze meses de custo, o mensal
+ * reserva um, e reservar de MENOS é o erro caro — seria pagar sócio com o
+ * dinheiro que vai virar fatura da Backblaze. `cicloDe` fecha a lista.
+ */
+await etapa("qualquer coisa que não seja 'anual' vira mensal", () => {
+  const lixo = ["ANUAL", "anual ", "yearly", "12", "", null, undefined, 1, {}, ["anual"]];
+  for (const v of lixo) {
+    if (cicloDe(v) !== "mensal") {
+      throw new Error(`${JSON.stringify(v)} virou ${cicloDe(v)} — reservaria doze meses sem pedir`);
+    }
+  }
+  if (cicloDe("anual") !== "anual") throw new Error('"anual" deveria virar anual');
+  return `${lixo.length} valores recusados`;
+});
+
+await etapa("no anual, a fatura cobra dez meses de uma vez", async () => {
+  await assinar("CREDIT_CARD", 13999 * MESES_PAGOS_NO_ANO, "anual");
+  const corpo = corpoDoPost();
+  if (corpo.cycle !== "YEARLY") throw new Error(`cycle veio "${corpo.cycle}"`);
+  const esperado = (13999 * MESES_PAGOS_NO_ANO) / 100;
+  if (corpo.value !== esperado) throw new Error(`value R$ ${corpo.value}, esperava R$ ${esperado}`);
+  return `YEARLY · R$ ${corpo.value.toFixed(2)} (${MESES_PAGOS_NO_ANO} mensalidades)`;
+});
+
+/*
+ * O ANUAL COM CARTÃO é o ponto do trabalho: cobrar uma vez por ano, sozinho.
+ * Sem `billingType` chegando junto com `cycle`, o estúdio anual voltaria a ter
+ * que abrir a fatura à mão — uma vez por ano, o que é ainda mais fácil de
+ * esquecer que uma vez por mês.
+ */
+await etapa("anual e cartão viajam juntos", async () => {
+  await assinar("CREDIT_CARD", 13999 * MESES_PAGOS_NO_ANO, "anual");
+  const corpo = corpoDoPost();
+  if (corpo.cycle !== "YEARLY" || corpo.billingType !== "CREDIT_CARD") {
+    throw new Error(`cycle="${corpo.cycle}" billingType="${corpo.billingType}"`);
+  }
+});
+
+/*
+ * A INVARIANTE DO ANUAL, e é a que mais dói se quebrar: ele paga DEZ meses e
+ * ocupa disco por DOZE, então a reserva do ano é maior em proporção e a fatia
+ * do sócio é necessariamente MENOR que no mensal. Se algum dia o anual passar a
+ * repassar a mesma porcentagem do mensal, dois meses de armazenamento saíram do
+ * bolso de quem opera — sem erro, sem log, e só aparece no décimo primeiro mês.
+ */
+await etapa("no anual o sócio recebe uma fatia MENOR que no mensal", async () => {
+  await assinar("CREDIT_CARD", 13999, "mensal");
+  const mensal = corpoDoPost().split.reduce((t, f) => t + f.percentualValue, 0);
+  pedidos.length = 0;
+  await assinar("CREDIT_CARD", 13999 * MESES_PAGOS_NO_ANO, "anual");
+  const anual = corpoDoPost().split.reduce((t, f) => t + f.percentualValue, 0);
+  if (!(anual < mensal)) {
+    throw new Error(
+      `anual reparte ${anual.toFixed(2)}% e o mensal ${mensal.toFixed(2)}% — o anual tem de ` +
+        `repartir MENOS, porque reserva doze meses de custo contra dez de preço`,
+    );
+  }
+  return `mensal ${mensal.toFixed(2)}% · anual ${anual.toFixed(2)}%`;
 });
 
 /*
