@@ -5,7 +5,13 @@ import { quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais } from "@/config/planos";
-import { asaasConfigurado, asaasEmProducao, proximaCobranca } from "@/lib/asaas";
+import {
+  asaasConfigurado,
+  asaasEmProducao,
+  proximaCobranca,
+  buscarAssinatura,
+} from "@/lib/asaas";
+import { rotuloDoCartao } from "@/lib/cartao-salvo";
 import { conferirConfiguracao } from "@/config/socios";
 import { AssinaturaBotao } from "@/components/assinatura-botao";
 import { situacaoDoTenant } from "@/lib/assinatura";
@@ -89,6 +95,20 @@ export default async function ContaPage() {
       ? await proximaCobranca(tenant.asaas_assinatura_id).catch(() => null)
       : null;
 
+  /*
+   * O cartão que o Asaas guardou, se guardou.
+   *
+   * `.catch(() => null)` e não `throw`: a tela de Conta mostra espaço usado,
+   * marca, senha, endereço e chaves de API — derrubar tudo isso porque o Asaas
+   * demorou a responder seria trocar um aviso por uma página de erro. Sem
+   * resposta, a tela simplesmente não promete cobrança automática, que é o
+   * comportamento certo. Ver a regra de silêncio em `lib/cartao-salvo.ts`.
+   */
+  const cartaoSalvo =
+    asaasConfigurado() && tenant.asaas_assinatura_id
+      ? rotuloDoCartao(await buscarAssinatura(tenant.asaas_assinatura_id).catch(() => null))
+      : null;
+
   // Estado da divisão entre sócios — carteira faltando não quebra a cobrança,
   // mas precisa ficar visível para não passar despercebido.
   const { ok: splitOk, avisos: avisosSplit } = conferirConfiguracao();
@@ -133,13 +153,21 @@ export default async function ContaPage() {
               {new Date(cobranca.dueDate).toLocaleDateString("pt-BR")} ·{" "}
               {formatarReais(Math.round(cobranca.value * 100))}
             </p>
+            {/* A promessa só aparece quando dá para mostrar EM QUAL cartão —
+                prometer "automático" sem provar faria quem paga por Pix parar
+                de pagar. Ver `lib/cartao-salvo.ts`. */}
+            {cartaoSalvo ? (
+              <p className="mt-1 text-xs text-ok">
+                Cobrança automática no {cartaoSalvo} — você não precisa fazer nada.
+              </p>
+            ) : null}
             <a
               href={cobranca.invoiceUrl}
               target="_blank"
               rel="noreferrer"
               className="mt-2 inline-block text-sm text-acento underline underline-offset-4"
             >
-              Ver e pagar ↗
+              {cartaoSalvo ? "Ver a fatura ↗" : "Ver e pagar ↗"}
             </a>
           </div>
         ) : (

@@ -11,6 +11,7 @@ import { gravarRascunho, publicarAparencia } from "@/lib/aparencia-galeria";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
 import { planoPorId, GB, cicloDe, precoDoCicloCentavos, type Ciclo } from "@/config/planos";
+import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
 import {
   asaasConfigurado,
@@ -321,6 +322,13 @@ export async function moverMediasAction(form: FormData) {
 export async function criarAssinaturaAction(
   documento: string,
   ciclo: Ciclo = "mensal",
+  /*
+   * A escolha crua da tela, não o `billingType`. Traduzir aqui, e não no
+   * componente, é o que garante a tradução: o cliente pode mandar o que quiser,
+   * e `formaDaAssinatura` fecha a lista — lixo cai em UNDEFINED, que é o lado
+   * de NÃO guardar o cartão de quem não pediu. Ver `config/forma-assinatura.ts`.
+   */
+  escolhaDaForma?: unknown,
 ): Promise<{ erro?: string } | void> {
   const tenantId = await exigirTenant();
 
@@ -372,6 +380,7 @@ export async function criarAssinaturaAction(
       ciclo,
       descricao: `${marca.nome} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}`,
       primeiroVencimento: vencimento,
+      forma: formaDaAssinatura(escolhaDaForma),
     });
 
     /* O ciclo é gravado JUNTO com o id da assinatura, na mesma escrita. Se
