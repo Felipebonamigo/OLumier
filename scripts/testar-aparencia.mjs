@@ -13,7 +13,14 @@ import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
 exigirBancoDeTeste();
-import { TEMAS, OPCOES, FONTES_TITULO, APARENCIA_PADRAO } from "../src/config/aparencia.ts";
+import {
+  TEMAS,
+  OPCOES,
+  FONTES_TITULO,
+  APARENCIA_PADRAO,
+  PRESETS as CARTOES_DE_PRESET,
+  presetEquivalente,
+} from "../src/config/aparencia.ts";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -128,6 +135,42 @@ if (impressoes.size < 3) {
   falhou = true;
 } else {
   console.log(`  ✓ os ${vistos.size} presets geram páginas distintas (${impressoes.size} variações)`);
+}
+
+/*
+ * ── CADA PASTILHA PRECISA SER UMA ESCOLHA ALCANÇÁVEL ──────────────────────
+ *
+ * `presetPorId` devolve o PRIMEIRO com aquele id, e `presetEquivalente` marca
+ * um só. Dois presets com o mesmo id — ou com o mesmo nome, ou com a mesma
+ * combinação de eixos — viram duas pastilhas iguais na tela com resultados
+ * diferentes: o fotógrafo clica numa e a outra continua apagada, sem nada na
+ * tela que explique por quê. Aconteceu: a segunda leva de presets (27/08/2026)
+ * chamou "Convite" um preset que já existia com esse id desde 31/08/2026.
+ */
+const repetidos = (valores) => [...new Set(valores.filter((v, i) => valores.indexOf(v) !== i))];
+const idsRepetidos = repetidos(CARTOES_DE_PRESET.map((p) => p.id));
+const nomesRepetidos = repetidos(CARTOES_DE_PRESET.map((p) => p.nome));
+if (idsRepetidos.length || nomesRepetidos.length) {
+  console.error(
+    `  ✗ preset repetido — id: ${idsRepetidos.join(", ") || "nenhum"} · nome: ${nomesRepetidos.join(", ") || "nenhum"}`,
+  );
+  falhou = true;
+} else {
+  console.log(`  ✓ os ${CARTOES_DE_PRESET.length} presets têm id e nome únicos`);
+}
+
+/* A volta: a aparência de cada preset tem de marcar ELE, não um vizinho de
+   eixos idênticos — senão a pastilha existe e nunca acende. */
+const naoSeReconhecem = CARTOES_DE_PRESET.filter((p) => presetEquivalente(p.aparencia) !== p.id);
+if (naoSeReconhecem.length) {
+  console.error(
+    `  ✗ preset que não se marca no editor: ${naoSeReconhecem
+      .map((p) => `${p.id} → ${presetEquivalente(p.aparencia)}`)
+      .join(", ")}`,
+  );
+  falhou = true;
+} else {
+  console.log(`  ✓ cada preset se reconhece pelos próprios eixos`);
 }
 
 /*

@@ -429,8 +429,12 @@ export const PRESETS: Preset[] = [
    * decisão.
    */
   {
-    id: "convite",
-    nome: "Convite",
+    /* Nasceu como um segundo "Convite", nome e id iguais aos do preset de
+     * 31/08/2026. Duas pastilhas com o mesmo nome e resultados diferentes: a
+     * pessoa clicava numa e a outra continuava apagada. O id não vai para o
+     * banco (ver o comentário do preset Átomo), então renomear é seguro. */
+    id: "caligrafia",
+    nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
     aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal" },
   },
