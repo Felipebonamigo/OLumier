@@ -22,7 +22,7 @@ import {
   type CapituloGaleria,
 } from "@/components/galeria-cliente";
 import { GaleriaCapa } from "@/components/galeria-capa";
-import { lerAparencia, TEMAS, AMOSTRA_PREVIA } from "@/config/aparencia";
+import { lerAparencia, AMOSTRA_PREVIA, variaveisDoTema } from "@/config/aparencia";
 import { FAMILIA_PROPRIA } from "@/lib/fonte-estudio";
 import { lerSite } from "@/lib/site-estudio";
 import { PortaoDeSenha } from "./portao";
@@ -356,7 +356,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
      */
     <main
       className="min-h-dvh pb-20"
-      style={{ ...TEMAS[aparencia.tema], background: "var(--g-fundo)", color: "var(--g-texto)" }}
+      style={{ ...variaveisDoTema(aparencia), background: "var(--g-fundo)", color: "var(--g-texto)" }}
     >
       {/*
         A FONTE DO ESTÚDIO, quando existe e quando foi escolhida.

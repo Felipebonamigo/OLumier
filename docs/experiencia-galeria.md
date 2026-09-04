@@ -77,6 +77,47 @@ sem migração.
 UI no painel: aba "Aparência" na galeria → presets em cards com miniatura → ajustes finos
 embaixo → preview ao vivo (iframe da própria galeria pública).
 
+### A prévia tem o tamanho de uma tela (05/09/2026)
+
+O iframe da prévia tinha 460 px de altura e a largura do painel, e a galeria é
+desenhada para tela cheia — a capa imersa pede `78vh`, as capas dividida e jornal
+viram duas colunas a partir de 768 px. A caixa achatava a capa e, num notebook,
+mostrava o layout de celular enquanto o cliente via o de computador. O dono foi
+direto: *a publicação tem de ser fiel à prévia, porque é nela que se decide.*
+
+Agora o iframe é renderizado no tamanho de uma tela de verdade e **reduzido em
+escala** para caber na coluna — `VIEWPORTS_PREVIA` em `config/aparencia.ts`:
+**Computador** (1280×800) e **Celular** (390×844, tamanho real, centralizado).
+Mesma marcação, mesmos breakpoints, mesmas fontes; só aparece menor. Continua
+sendo a galeria pública, não uma imitação. `testar-previa.mjs` prende o tamanho.
+
+Uma pegadinha de quem for medir isso: `ResizeObserver` **não entrega em aba de
+fundo** (o Chrome congela o ciclo de renderização). Medido em aba escondida, o
+componente parece quebrado sem estar.
+
+### Cores próprias por cima do tema (05/09/2026)
+
+Três temas prontos serviam a todo mundo mais ou menos e a ninguém exatamente. O
+fotógrafo agora escolhe **fundo, texto e botões** com três seletores nativos
+(`<input type="color">`), e o resto da paleta — superfície, texto suave, texto
+tênue, linha, texto sobre o botão — é **derivado** dessas três em
+`variaveisDoTema`. Oito seletores seriam oito jeitos de quebrar a legibilidade.
+
+Guarda em `aparencia.cores` (JSONB, sem migração), cada cor opcional. Duas regras
+com teste (`testar-cores-galeria.mjs`):
+
+- **Segurança:** o valor vai para um `style` em linha na galeria do cliente. Só
+  `#rrggbb` minúsculo entra; qualquer outra coisa (`red`, `#fff`,
+  `#fff; background:url(x)`) é descartada, não corrigida.
+- **Legibilidade do botão:** o texto sobre o destaque é preto ou branco, o que
+  contrastar mais, e passa de 4,5:1 para qualquer cor de botão — cinza médio é
+  o pior caso e dá 4,69:1. Fundo e texto são escolha da pessoa; se puser cinza
+  sobre cinza, a prévia mostra cinza sobre cinza antes de publicar.
+
+Cor própria tira a galeria de qualquer preset: a tela passa a dizer
+"personalizado". "Voltar às cores do tema" apaga o campo inteiro e ela volta a
+casar com o preset.
+
 ## 3. Subdomínio por estúdio (`siriusfotografia.olumier.com.br/lu-marino`)
 
 **Sim, planejado — em duas etapas:**

@@ -33,7 +33,7 @@ import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
 
 exigirBancoDeTeste();
-import { AMOSTRA_PREVIA } from "../src/config/aparencia.ts";
+import { AMOSTRA_PREVIA, VIEWPORTS_PREVIA } from "../src/config/aparencia.ts";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const QUANTAS = 30; // bem acima da amostra, para a diferença ser inequívoca
@@ -317,6 +317,50 @@ await etapa("o dono continua vendo o próprio rascunho", async () => {
   );
   if (m.status !== 200) throw new Error(`HTTP ${m.status} — o dono perdeu o acesso ao rascunho`);
   return `${m.thumbs} miniaturas`;
+});
+
+/*
+ * ── A PRÉVIA TEM A PROPORÇÃO DE UMA TELA (05/09/2026) ─────────────────────
+ *
+ * "A prévia não está fiel ao resultado final" — o dono, e ele estava certo. O
+ * iframe tinha 460 px de altura e a largura do painel; a galeria é desenhada
+ * para tela cheia, com capa de `78vh` e colunas a partir de 768 px. A caixa
+ * achatava a capa e, num notebook, mostrava o layout de celular enquanto o
+ * cliente via o de computador.
+ *
+ * Agora o iframe é renderizado no tamanho de uma tela de verdade e reduzido em
+ * escala. Estas etapas prendem o tamanho: se alguém devolver a caixa de 460 px,
+ * a prévia volta a mentir sem que nada mais avise.
+ */
+console.log("\na prévia tem a proporção de uma tela");
+
+const editor = await fetch(`${BASE}/painel/galerias/${noAr.id}`, {
+  cache: "no-store",
+  headers: { cookie },
+});
+const htmlEditor = editor.ok ? await editor.text() : "";
+const [computador, celular] = VIEWPORTS_PREVIA;
+
+await etapa("o iframe da prévia nasce do tamanho de um computador", () => {
+  if (editor.status !== 200) throw new Error(`HTTP ${editor.status} no editor`);
+  const iframe = /<iframe[^>]*title="Prévia da galeria"[^>]*>/.exec(htmlEditor)?.[0];
+  if (!iframe) throw new Error("não achei o iframe da prévia no editor");
+  if (!iframe.includes(`width="${computador.largura}"`) || !iframe.includes(`height="${computador.altura}"`)) {
+    throw new Error(
+      `o iframe não tem ${computador.largura}×${computador.altura} — ` +
+        `a prévia não está no tamanho de uma tela: ${iframe.slice(0, 160)}…`,
+    );
+  }
+  if (/h-\[460px\]/.test(iframe)) throw new Error("a caixa de 460 px voltou");
+  return `${computador.largura}×${computador.altura}`;
+});
+
+await etapa("dá para ver como fica no celular também", () => {
+  for (const vp of [computador, celular]) {
+    const botao = new RegExp(`<button[^>]*>[^<]*${vp.nome}[^<]*</button>`);
+    if (!botao.test(htmlEditor)) throw new Error(`não achei o botão "${vp.nome}"`);
+  }
+  return `${computador.nome} e ${celular.nome}`;
 });
 
 await limparRodada(db);

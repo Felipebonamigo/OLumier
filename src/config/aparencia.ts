@@ -44,18 +44,67 @@ export type TamanhoLogo = "discreta" | "media" | "grande" | "enorme";
 /**
  * Quantas fotos a prévia do editor desenha.
  *
- * A prévia é a galeria pública de verdade num iframe de 460 px — e isso é
- * qualidade do produto, não atalho: o que se vê ali é o que o cliente vê. O
- * custo era carregar a galeria INTEIRA a cada mudança de eixo; com 192 fotos,
- * trocar de fonte assinava 576 URLs e baixava 192 miniaturas numa caixa onde
- * cabem seis.
+ * A prévia é a galeria pública de verdade, renderizada no tamanho de uma tela
+ * e reduzida em escala (ver `VIEWPORTS_PREVIA`) — e isso é qualidade do
+ * produto, não atalho: o que se vê ali é o que o cliente vê. O custo era
+ * carregar a galeria INTEIRA a cada mudança de eixo; com 192 fotos, trocar de
+ * fonte assinava 576 URLs e baixava 192 miniaturas para mostrar meia dúzia.
  *
- * Doze é o número que enche a caixa com folga para rolar um pouco, sem que a
- * conta dependa do tamanho da entrega. Não é teto de nada além da prévia: o
- * botão "Visualizar galeria" abre a galeria completa, e `testar-previa.mjs`
- * existe principalmente para prender essa diferença.
+ * Doze fotos enchem a primeira dobra de um computador (grade de quatro colunas,
+ * três linhas) com folga para rolar um pouco, sem que a conta dependa do
+ * tamanho da entrega. Não é teto de nada além da prévia: o botão "Visualizar
+ * galeria" abre a galeria completa, e `testar-previa.mjs` existe principalmente
+ * para prender essa diferença.
  */
 export const AMOSTRA_PREVIA = 12;
+
+/**
+ * ── A PRÉVIA TEM O TAMANHO DE UMA TELA, NÃO DE UMA CAIXA (05/09/2026) ─────
+ *
+ * Até aqui o iframe da prévia tinha 460 px de altura e a largura do painel. A
+ * galeria é desenhada para tela cheia: a capa imersa pede `78vh`, as capas
+ * dividida e jornal viram duas colunas a partir de 768 px. Numa caixa de 460 px
+ * a capa virava uma faixa, e num notebook o painel ficava abaixo de 768 px e a
+ * prévia mostrava o layout de celular — enquanto o cliente, no computador, via
+ * outro. O dono disse, com razão: a publicação tem de ser fiel à prévia, porque
+ * é na prévia que ele decide.
+ *
+ * Agora o iframe é renderizado no tamanho de uma tela DE VERDADE e reduzido em
+ * escala para caber na coluna. A galeria dentro dele bate nos mesmos
+ * breakpoints, desenha as mesmas proporções, carrega as mesmas fontes — só
+ * aparece menor. Continua sendo a galeria pública, não uma imitação.
+ *
+ * Dois tamanhos, porque o cliente do fotógrafo abre em dois lugares: o
+ * computador de quem escolhe as fotos do álbum, e o celular de quem recebeu o
+ * link no WhatsApp. 1280×800 é um notebook comum; 390×844 é um iPhone comum.
+ * Nem o maior nem o menor de cada categoria — o típico.
+ */
+export const VIEWPORTS_PREVIA = [
+  { id: "computador", nome: "Computador", largura: 1280, altura: 800 },
+  { id: "celular", nome: "Celular", largura: 390, altura: 844 },
+] as const;
+export type ViewportPrevia = (typeof VIEWPORTS_PREVIA)[number]["id"];
+
+/**
+ * ── CORES PRÓPRIAS (05/09/2026) ───────────────────────────────────────────
+ *
+ * Três temas prontos serviam a todo mundo mais ou menos e a ninguém exatamente.
+ * O dono pediu cores editáveis, "inclusive dos botões".
+ *
+ * TRÊS cores, e não as oito variáveis do tema: fundo, texto e destaque (o botão,
+ * o coração marcado, o traço do play). O resto — superfície, texto suave, texto
+ * tênue, linha, texto sobre o botão — é DERIVADO dessas três em
+ * `variaveisDoTema`. Oito seletores seriam oito jeitos de quebrar a
+ * legibilidade; três, com derivação, mantêm a paleta coerente por construção.
+ *
+ * Cada uma é opcional: quem mexe só no botão fica com fundo e texto do tema.
+ * Toda cor é `#rrggbb` minúsculo, e SÓ isso — ver `lerCores` para o porquê.
+ */
+export interface CoresProprias {
+  fundo?: string;
+  texto?: string;
+  destaque?: string;
+}
 
 export interface Aparencia {
   capa: Capa;
@@ -64,6 +113,8 @@ export interface Aparencia {
   grade: Grade;
   densidade: Densidade;
   logo: TamanhoLogo;
+  /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
+  cores?: CoresProprias;
 }
 
 /*
@@ -94,6 +145,7 @@ export function lerAparencia(bruto: unknown): Aparencia {
   const valida = <T extends string>(v: unknown, opcoes: readonly T[], padrao: T): T =>
     opcoes.includes(v as T) ? (v as T) : padrao;
 
+  const cores = lerCores(o.cores);
   return {
     capa: valida(o.capa, OPCOES.capa.map((x) => x.id), APARENCIA_PADRAO.capa),
     tema: valida(o.tema, OPCOES.tema.map((x) => x.id), APARENCIA_PADRAO.tema),
@@ -101,7 +153,40 @@ export function lerAparencia(bruto: unknown): Aparencia {
     grade: valida(o.grade, OPCOES.grade.map((x) => x.id), APARENCIA_PADRAO.grade),
     densidade: valida(o.densidade, OPCOES.densidade.map((x) => x.id), APARENCIA_PADRAO.densidade),
     logo: valida(o.logo, OPCOES.logo.map((x) => x.id), APARENCIA_PADRAO.logo),
+    /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
+       ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
+       "sujo/publicado" do editor iguais ao que eram. */
+    ...(cores ? { cores } : {}),
   };
+}
+
+/**
+ * As cores próprias, ou nada.
+ *
+ * ── SEGURANÇA, E NÃO CAPRICHO ─────────────────────────────────────────────
+ * Estes valores vão parar num `style` em linha, como variáveis CSS, na galeria
+ * que o CLIENTE do fotógrafo abre. `"#fff; background:url(x)"` dentro de um
+ * style é CSS injetado. Por isso a regra é a mais burra possível: seis
+ * hexadecimais depois de `#`, e mais nada. Não se corrige, não se apara, não se
+ * aceita `#fff` nem `rgb()` — o que não casar é descartado, como todo eixo de
+ * `lerAparencia` descarta o que não está na lista.
+ *
+ * `<input type="color">` sempre emite `#rrggbb` minúsculo, então a regra não
+ * custa nada para quem usa a tela; custa só para quem tenta passar por fora.
+ */
+const COR_HEX = /^#[0-9a-f]{6}$/;
+
+function lerCores(bruto: unknown): CoresProprias | null {
+  if (!bruto || typeof bruto !== "object") return null;
+  const o = bruto as Record<string, unknown>;
+  const cores: CoresProprias = {};
+  for (const chave of ["fundo", "texto", "destaque"] as const) {
+    const v = o[chave];
+    if (typeof v !== "string") continue;
+    const t = v.toLowerCase();
+    if (COR_HEX.test(t)) cores[chave] = t;
+  }
+  return Object.keys(cores).length ? cores : null;
 }
 
 /**
@@ -306,6 +391,9 @@ export const presetPorId = (id: string) => PRESETS.find((p) => p.id === id);
  * atual continuar visível em vez de virar oito botões apagados.
  */
 export function presetEquivalente(a: Aparencia): string | null {
+  /* Cor própria tira a galeria de qualquer preset: "no ar: Átomo" com o botão
+     rosa seria a tela descrevendo uma galeria que não existe. */
+  if (a.cores && Object.keys(a.cores).length > 0) return null;
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo;
@@ -354,6 +442,94 @@ export const TEMAS: Record<Tema, Record<string, string>> = {
     "--g-sobre-destaque": "#f9f4ea",
   },
 };
+
+// --- cores próprias por cima do tema ------------------------------------------
+
+/*
+ * Aritmética de cor em hexadecimal puro, sem `color-mix()`.
+ *
+ * Poderia ser CSS: `color-mix(in srgb, var(--g-fundo) 94%, var(--g-texto))`
+ * faria a superfície sozinho no navegador. Não é, por dois motivos. O primeiro
+ * é medir: `testar-cores-galeria.mjs` confere o contraste do texto sobre o botão
+ * contra um piso, e não dá para medir contraste de uma expressão que só o
+ * navegador resolve. O segundo é o e-mail: a capa da galeria vai num cartão
+ * para o WhatsApp e num e-mail, e cliente de e-mail não conhece color-mix.
+ * Número concreto serve nos dois lugares; expressão serve num só.
+ */
+const hexParaRgb = (hex: string): [number, number, number] => [
+  parseInt(hex.slice(1, 3), 16),
+  parseInt(hex.slice(3, 5), 16),
+  parseInt(hex.slice(5, 7), 16),
+];
+const rgbParaHex = (r: number, g: number, b: number): string =>
+  "#" + [r, g, b].map((c) => Math.round(Math.max(0, Math.min(255, c))).toString(16).padStart(2, "0")).join("");
+
+/** `t` de `a`: 0 devolve `a`, 1 devolve `b`. */
+function misturar(a: string, b: string, t: number): string {
+  const [r1, g1, b1] = hexParaRgb(a);
+  const [r2, g2, b2] = hexParaRgb(b);
+  return rgbParaHex(r1 + (r2 - r1) * t, g1 + (g2 - g1) * t, b1 + (b2 - b1) * t);
+}
+
+/** Luminância relativa (WCAG 2), a mesma conta de `lib/marca-estudio.ts`. */
+function luminancia(hex: string): number {
+  const [r, g, b] = hexParaRgb(hex).map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/**
+ * As variáveis CSS da galeria: o tema, com as cores próprias por cima.
+ *
+ * Sem `cores`, devolve EXATAMENTE `TEMAS[tema]` — toda galeria de antes de
+ * 05/09/2026 continua idêntica ao pixel. Com cores, as três escolhidas entram
+ * no lugar das do tema, e as derivadas são refeitas a partir delas:
+ *
+ *   superfície  fundo puxado 6% para o texto — o cartão que "sobe" do fundo
+ *   suave       texto puxado 25% para o fundo — o secundário, ainda ≥ 4,5:1
+ *   tênue       texto puxado 40% para o fundo — rótulo miúdo, ≥ 3:1
+ *
+ * Os dois números foram medidos, não escolhidos: a 30% o suave caía a 4,34:1
+ * no par creme (fundo #f7f1e6, texto #43382a), abaixo do piso; a 25% o pior
+ * par dá 5,00:1. A 50% o tênue caía a 2,64:1; a 40% dá 3,37:1 — melhor que os
+ * 2,64:1 do tênue do próprio tema creme, feito à mão.
+ *   linha       o texto a 16% de opacidade — divisória que não grita
+ *   sobre-destaque  preto ou branco, o que contrastar mais com o botão
+ *
+ * A única promessa medida é a última: o texto do botão passa de 4,5:1 para
+ * QUALQUER cor de botão — cinza médio é o pior caso e ainda passa. Fundo e
+ * texto são escolha da pessoa; se ela pôr cinza sobre cinza, a galeria vai
+ * ficar cinza sobre cinza, e a prévia vai mostrar isso antes de publicar.
+ */
+export function variaveisDoTema(a: Aparencia): Record<string, string> {
+  const base = TEMAS[a.tema];
+  const c = a.cores;
+  if (!c || Object.keys(c).length === 0) return base;
+
+  const fundo = c.fundo ?? base["--g-fundo"];
+  const texto = c.texto ?? base["--g-texto"];
+  const destaque = c.destaque ?? base["--g-destaque"];
+  const [tr, tg, tb] = hexParaRgb(texto);
+
+  /* Preto ou branco: o que der mais contraste. `contraste()` de marca-estudio
+     é (L1+0,05)/(L2+0,05); aqui basta comparar as duas luminâncias contra a do
+     botão, que é a mesma decisão sem importar o módulo do servidor. */
+  const L = luminancia(destaque);
+  const sobreDestaque = (1.05) / (L + 0.05) >= (L + 0.05) / 0.05 ? "#ffffff" : "#000000";
+
+  return {
+    "--g-fundo": fundo,
+    "--g-superficie": misturar(fundo, texto, 0.06),
+    "--g-texto": texto,
+    "--g-suave": misturar(texto, fundo, 0.25),
+    "--g-tenue": misturar(texto, fundo, 0.4),
+    "--g-linha": `rgba(${tr},${tg},${tb},.16)`,
+    "--g-destaque": destaque,
+    "--g-sobre-destaque": sobreDestaque,
+  };
+}
 
 /**
  * Aponta para as variáveis que o next/font define no <body> — e NÃO para os

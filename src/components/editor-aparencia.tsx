@@ -7,7 +7,10 @@ import {
   PRESETS,
   presetEquivalente,
   FONTES_TITULO,
+  VIEWPORTS_PREVIA,
+  TEMAS,
   type Aparencia,
+  type ViewportPrevia,
 } from "@/config/aparencia";
 import { salvarAparenciaAction, salvarRascunhoAparenciaAction } from "@/app/painel/actions";
 
@@ -97,7 +100,91 @@ function SeletorDeFonte({ ap, mudar, temFontePropria }: PecaProps & { temFontePr
   );
 }
 
-function Eixo<K extends keyof Aparencia>({
+/*
+ * ── AS CORES PRÓPRIAS (05/09/2026) ───────────────────────────────────────
+ *
+ * Três seletores nativos (`<input type="color">`), e não uma biblioteca: o
+ * navegador já tem um seletor de cor com conta-gotas, e ele sempre emite
+ * `#rrggbb` minúsculo — exatamente o formato que `lerCores` aceita. Nada a
+ * instalar, nada a manter.
+ *
+ * O valor inicial de cada seletor é a cor que o TEMA já usa, e não preto: quem
+ * abre o seletor começa de onde a galeria está, e não de um preto que ninguém
+ * escolheu. Só passa a existir em `ap.cores` quando a pessoa muda algo.
+ *
+ * "Voltar às cores do tema" apaga o campo inteiro, e não zera cada cor: sem
+ * `cores` a galeria volta a casar com o preset e a tela volta a dizer "no ar:
+ * Átomo" em vez de "personalizado".
+ */
+const ROTULOS_DE_COR = [
+  { chave: "fundo", variavel: "--g-fundo", titulo: "Fundo" },
+  { chave: "texto", variavel: "--g-texto", titulo: "Texto" },
+  { chave: "destaque", variavel: "--g-destaque", titulo: "Botões" },
+] as const;
+
+function CoresProprias({ ap, mudar }: PecaProps) {
+  const doTema = TEMAS[ap.tema];
+  const temCorPropria = Boolean(ap.cores && Object.keys(ap.cores).length);
+
+  function definir(chave: (typeof ROTULOS_DE_COR)[number]["chave"], valor: string) {
+    mudar({ ...ap, cores: { ...(ap.cores ?? {}), [chave]: valor } });
+  }
+  function voltarAoTema() {
+    const { cores: _apagar, ...semCores } = ap;
+    void _apagar;
+    mudar(semCores);
+  }
+
+  return (
+    <div>
+      <span className="block text-xs font-medium text-texto-soft">Cores próprias</span>
+      <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+        Por cima do tema. O resto da paleta acompanha.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {ROTULOS_DE_COR.map(({ chave, variavel, titulo }) => {
+          const atual = ap.cores?.[chave] ?? doTema[variavel];
+          const propria = Boolean(ap.cores?.[chave]);
+          return (
+            <label
+              key={chave}
+              className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition ${
+                propria
+                  ? "border-acento bg-acento/10 text-acento-alto"
+                  : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+              }`}
+            >
+              <input
+                type="color"
+                value={atual}
+                onChange={(e) => definir(chave, e.target.value)}
+                aria-label={`Cor de ${titulo.toLowerCase()}`}
+                className="h-5 w-6 cursor-pointer rounded border-0 bg-transparent p-0"
+              />
+              {titulo}
+            </label>
+          );
+        })}
+        {temCorPropria && (
+          <button
+            type="button"
+            onClick={voltarAoTema}
+            className="text-[11px] text-texto-faint underline underline-offset-4 transition hover:text-texto"
+          >
+            voltar às cores do tema
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/*
+ * `keyof typeof OPCOES`, e não `keyof Aparencia`: desde as cores próprias a
+ * aparência tem um campo (`cores`) que não é eixo de botões, e o tipo antigo
+ * deixaria `<Eixo eixo="cores">` compilar para explodir em `OPCOES.cores`.
+ */
+function Eixo<K extends keyof typeof OPCOES>({
   eixo,
   titulo,
   ap,
@@ -173,6 +260,53 @@ export function EditorAparencia({
    * prévia piscar quatro vezes e informar menos do que atrapalha.
    */
   const [apPrevia, setApPrevia] = useState<Aparencia>(inicial);
+
+  /*
+   * ── A PRÉVIA NO TAMANHO DE UMA TELA (05/09/2026) ─────────────────────────
+   *
+   * O iframe é renderizado no tamanho de uma tela de verdade e REDUZIDO em
+   * escala para caber na coluna. A galeria dentro dele bate nos mesmos
+   * breakpoints e desenha as mesmas proporções que o cliente vai ver; só
+   * aparece menor. Ver `VIEWPORTS_PREVIA` para o porquê dos dois tamanhos.
+   *
+   * A largura da coluna sai de um ResizeObserver, e não de CSS, porque `calc()`
+   * não divide comprimento por comprimento — `100cqw / 1280px` não é número
+   * válido. O observador dispara sozinho ao começar a observar, então não há
+   * setState síncrono dentro do efeito (que é o que a regra
+   * `set-state-in-effect` recusa, com razão).
+   *
+   * O OBSERVADOR SÓ CONHECE A COLUNA; a escala é conta feita no render.
+   * A primeira versão calculava a escala DENTRO do observador, com o viewport
+   * do render em que ele nasceu, e recriava o observador a cada troca de
+   * viewport. Resultado medido em 05/09: a escala aplicada era sempre a do
+   * viewport ANTERIOR — o observador velho e o novo disputavam o mesmo estado
+   * com closures diferentes. Separar "quanto mede a coluna" (fato do DOM, um
+   * observador para a vida toda) de "quanto encolher" (função do viewport
+   * escolhido, calculada agora) elimina a corrida por construção.
+   *
+   * Nunca amplia: no celular a coluna é mais larga que 390 px, e um telefone
+   * desenhado a 2,5× seria uma mentira do outro lado.
+   */
+  const [viewport, setViewport] = useState<ViewportPrevia>("computador");
+  const vp = VIEWPORTS_PREVIA.find((v) => v.id === viewport) ?? VIEWPORTS_PREVIA[0];
+  const moldura = useRef<HTMLDivElement>(null);
+  const [larguraColuna, setLarguraColuna] = useState(0);
+  useEffect(() => {
+    const el = moldura.current;
+    if (!el) return;
+    /* A moldura muda de ALTURA quando a escala muda, e isso também acorda o
+       observador — mas a largura vem igual, o estado não muda, e o React não
+       renderiza de novo. Sem laço. */
+    const observador = new ResizeObserver(([entrada]) => {
+      setLarguraColuna(Math.round(entrada.contentRect.width));
+    });
+    observador.observe(el);
+    return () => observador.disconnect();
+  }, []);
+  /* Antes de medir (servidor e primeira pintura) fica em 1: o quadro nasce
+     cortado por um instante e assenta na hidratação. Chutar uma escala aqui
+     seria acertar num tamanho de tela e errar em todos os outros. */
+  const escala = larguraColuna > 0 ? Math.min(1, larguraColuna / vp.largura) : 1;
 
   const presetAtivo = presetEquivalente(ap);
   const sujo = JSON.stringify(ap) !== JSON.stringify(salvo);
@@ -309,6 +443,7 @@ export function EditorAparencia({
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Eixo eixo="capa" titulo="Capa" ap={ap} mudar={mudar} />
           <Eixo eixo="tema" titulo="Cores" ap={ap} mudar={mudar} />
+          <CoresProprias ap={ap} mudar={mudar} />
           <SeletorDeFonte ap={ap} mudar={mudar} temFontePropria={temFontePropria} />
           <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
           <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
@@ -318,9 +453,35 @@ export function EditorAparencia({
 
       {/* Prévia */}
       <div className="mt-5 border-t border-linha pt-4">
-        <div className="flex items-baseline justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-medium text-texto-soft">Prévia</span>
-          {salvando && <span className="text-[11px] text-texto-faint">atualizando…</span>}
+          <div className="flex items-center gap-2">
+            {salvando && <span className="text-[11px] text-texto-faint">atualizando…</span>}
+            {/* Computador e Celular: o cliente abre nos dois, e a capa muda de
+                desenho entre eles. Trocar não recarrega o iframe — só o
+                redimensiona, e a galeria reflui como numa janela de verdade. */}
+            <div
+              role="group"
+              aria-label="Tamanho da prévia"
+              className="flex gap-0.5 rounded-full border border-linha p-0.5"
+            >
+              {VIEWPORTS_PREVIA.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  aria-pressed={viewport === v.id}
+                  onClick={() => setViewport(v.id)}
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] transition ${
+                    viewport === v.id
+                      ? "bg-carbon-2 text-texto"
+                      : "text-texto-soft hover:text-texto"
+                  }`}
+                >
+                  {v.nome}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         {/*
           `&amostra=1` SÓ NO IFRAME, nunca no link de baixo.
@@ -335,27 +496,51 @@ export function EditorAparencia({
           mentira difícil de descobrir. `scripts/testar-previa.mjs` prende os
           dois lados.
         */}
-        <div className="mt-2 overflow-hidden rounded-lg border border-linha bg-void">
-          <iframe
-            key={JSON.stringify(apPrevia)}
-            src={`${caminhoPublico}&amostra=1&ap=${encodeURIComponent(JSON.stringify(apPrevia))}`}
-            title="Prévia da galeria"
-            className="h-[460px] w-full"
-            loading="lazy"
-          />
+        {/*
+          A MOLDURA tem a largura da coluna e a altura da tela reduzida; o QUADRO
+          dentro dela tem o tamanho da tela de verdade e é encolhido por
+          `transform`. A galeria mede a si mesma pelo quadro — 1280 px são
+          1280 px para os breakpoints dela — e o olho vê tudo menor. É o que faz
+          a prévia ser fiel: mesma marcação, mesmas fontes, mesma proporção.
+
+          No celular a escala trava em 1 e o quadro centraliza: um telefone de
+          390 px no meio da coluna, no tamanho real.
+        */}
+        <div
+          ref={moldura}
+          className="mt-2 overflow-hidden rounded-lg border border-linha bg-void"
+          style={{ height: Math.round(vp.altura * escala) }}
+        >
+          <div
+            style={{
+              width: vp.largura,
+              height: vp.altura,
+              transform: `scale(${escala})`,
+              transformOrigin: "top left",
+              marginInline: viewport === "celular" ? "auto" : undefined,
+            }}
+          >
+            <iframe
+              key={JSON.stringify(apPrevia)}
+              src={`${caminhoPublico}&amostra=1&ap=${encodeURIComponent(JSON.stringify(apPrevia))}`}
+              title="Prévia da galeria"
+              width={vp.largura}
+              height={vp.altura}
+              className="block border-0"
+              loading="lazy"
+            />
+          </div>
         </div>
 
         {/*
-          A PRÉVIA CABE NUMA CAIXA; A GALERIA NÃO.
+          A PRÉVIA É FIEL, MAS NÃO É INTERATIVA NO TAMANHO CERTO.
 
-          O iframe tem 460px de altura e a largura do painel — e a galeria é
-          desenhada para tela cheia. Capa imersa, grade editorial e espaçamento
-          arejado são exatamente as escolhas que a caixa achata, então a prévia
-          mostra bem o CLIMA e mal a proporção. Quem vai decidir "está bom para
-          o meu cliente" precisa ver do jeito que o cliente vê.
-
-          Abre em aba nova de propósito: a decisão continua sendo tomada aqui, e
-          perder o editor para conferir seria trocar uma pergunta por outra.
+          Rolar, abrir uma foto, marcar favorita — tudo funciona dentro do
+          quadro, mas em miniatura. Quem vai decidir "está bom para o meu
+          cliente" merece também a experiência no tamanho real, e é isso que
+          este botão dá. Abre em aba nova de propósito: a decisão continua sendo
+          tomada aqui, e perder o editor para conferir seria trocar uma pergunta
+          por outra.
         */}
         <a
           href={caminhoPublico}
