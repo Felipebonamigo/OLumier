@@ -1,4 +1,4 @@
-import { FONTES_TITULO, alturaLogoPx, type Aparencia } from "@/config/aparencia";
+import { FONTES_TITULO, alturaLogoPx, pesoDoTitulo, type Aparencia } from "@/config/aparencia";
 
 export interface DadosCapa {
   titulo: string;
@@ -70,10 +70,24 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     </p>
   );
 
+  /*
+   * A GROSSURA VEM DO EIXO, e o `font-bold` que ficava nas quatro chamadas saiu.
+   *
+   * Ele cravava 700 em toda capa. Nas sete fontes que só têm o peso 400 isso
+   * não deixava a fonte mais forte — o navegador engordava o traço sozinho, e
+   * numa manuscrita o resultado é caligrafia deformada. `pesoDoTitulo` é quem
+   * sabe o que cada família tem; ver o comentário do tipo `Peso`.
+   */
+  const peso = pesoDoTitulo(aparencia.tipografia, aparencia.peso);
+
   const Titulo = ({ tamanho }: { tamanho: string }) => (
     <h1
       className={`text-balance ${tamanho}`}
-      style={{ fontFamily: fonteTitulo, lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05 }}
+      style={{
+        fontFamily: fonteTitulo,
+        fontWeight: peso,
+        lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05,
+      }}
     >
       {titulo}
     </h1>
@@ -113,7 +127,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         <div className="relative z-10 px-6 pb-16 text-center">
           <Estudio />
           <div className="mt-5">
-            <Titulo tamanho="text-5xl font-bold sm:text-7xl" />
+            <Titulo tamanho="text-5xl sm:text-7xl" />
           </div>
           <div className="mt-4">
             <Legenda />
@@ -133,7 +147,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
       >
         <Estudio />
         <div className="mx-auto mt-8 max-w-[16ch]">
-          <Titulo tamanho="text-5xl font-bold sm:text-7xl" />
+          <Titulo tamanho="text-5xl sm:text-7xl" />
         </div>
         <div className="mt-6">
           <Legenda />
@@ -190,7 +204,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             {/* Peso normal, e não negrito: a serifada de contraste alto (Bodoni,
                 Playfair) vive do traço fino, e o negrito fecha justamente o que
                 faz ela parecer papel de convite. */}
-            <Titulo tamanho="text-4xl font-normal sm:text-6xl" />
+            <Titulo tamanho="text-4xl sm:text-6xl" />
             <a
               href="#fotos"
               className="mt-2 inline-block px-8 py-3 font-mono text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85"
@@ -220,7 +234,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         <div className="flex flex-col justify-center px-8 py-16 text-center md:px-14 md:text-left">
           <Estudio />
           <div className="mt-6">
-            <Titulo tamanho="text-4xl font-bold sm:text-6xl" />
+            <Titulo tamanho="text-4xl sm:text-6xl" />
           </div>
           <div className="mt-5">
             <Legenda />
@@ -239,7 +253,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     >
       <Estudio />
       <div className="mx-auto mt-6 max-w-[18ch]">
-        <Titulo tamanho="text-4xl font-bold sm:text-5xl" />
+        <Titulo tamanho="text-4xl sm:text-5xl" />
       </div>
       <div className="mt-4">
         <Legenda />

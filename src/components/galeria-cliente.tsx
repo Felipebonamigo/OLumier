@@ -715,6 +715,40 @@ export function GaleriaCliente({
               </button>
 
               {/*
+                Os dois botões do card, no mesmo canto.
+
+                O de BAIXAR é de 04/09/2026, e o pedido era literal: "sem
+                precisar abrir individualmente". Quem escolhe foto de álbum
+                passa por centenas em sequência, e abrir–baixar–fechar por foto
+                é o atrito que faz o casal desistir e pedir tudo por WhatsApp.
+
+                Ele só existe com download liberado — o mesmo interruptor que a
+                rota `/urls` obedece. Botão que aparece e depois falha seria
+                pior que botão nenhum.
+              */}
+              <span className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+              {permiteDownload && (
+                <button
+                  type="button"
+                  onClick={() => salvarUm(it)}
+                  aria-label={`Baixar ${it.nome}`}
+                  /* Mesma régua de tamanho do coração ao lado: 44px no toque,
+                     36px no mouse. Ver o comentário dele logo abaixo. */
+                  className="grid h-9 w-9 place-items-center rounded-full opacity-0 backdrop-blur transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:h-11 max-[900px]:w-11 max-[900px]:opacity-100"
+                  style={{
+                    background: "color-mix(in srgb, var(--g-fundo) 55%, transparent)",
+                    color: "var(--g-texto)",
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
+                    fill="none" stroke="currentColor" strokeWidth="1.8"
+                    strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4 19h16" />
+                  </svg>
+                </button>
+              )}
+
+              {/*
                 O coração fica SEMPRE visível quando marcado, e só no hover
                 quando não. Depender de hover para ver o que já foi escolhido
                 deixaria a pessoa sem saber onde parou — e no celular não existe
@@ -747,7 +781,10 @@ export function GaleriaCliente({
                  * Cresce só abaixo de 900px, que é a mesma fronteira que este
                  * arquivo já usa para decidir que não há hover. No desktop o
                  * ponteiro é preciso e o círculo menor pesa menos sobre a foto. */
-                className={`absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full backdrop-blur transition max-[900px]:h-11 max-[900px]:w-11
+                /* O posicionamento saiu daqui para o <span> que agrupa os dois
+                   botões — senão o de baixar e o coração se sobreporiam no
+                   mesmo canto. */
+                className={`grid h-9 w-9 place-items-center rounded-full backdrop-blur transition max-[900px]:h-11 max-[900px]:w-11
                   ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}
                   ${!selecao.aberta && !ehFavorita ? "hidden" : ""}`}
                 style={{
@@ -761,6 +798,7 @@ export function GaleriaCliente({
                   <path d="M12 20.5 4.6 13a4.6 4.6 0 0 1 6.5-6.5l.9.9.9-.9A4.6 4.6 0 0 1 19.4 13Z" />
                 </svg>
               </button>
+              </span>
               </div>
                 );
               }}
@@ -786,34 +824,49 @@ export function GaleriaCliente({
           style={{ background: "color-mix(in srgb, var(--g-fundo) 97%, transparent)" }}
           onClick={fechar}
         >
+          {/*
+            FECHAR À ESQUERDA, pedido do sócio em 04/09/2026.
+
+            Não é só gosto: em tela cheia o polegar do celular alcança o canto
+            inferior e a lateral ESQUERDA sem trocar a mão, e é de onde vem o
+            gesto de voltar em todo aplicativo de fotos. À direita ele dividia o
+            canto com "Baixar" — dois alvos vizinhos, um que fecha e outro que
+            salva, no lugar onde a pessoa toca às pressas para sair.
+
+            O contador vai para o meio: ele é informação, não ação, e no meio
+            não disputa canto com botão nenhum.
+          */}
           <div className="flex items-center justify-between gap-4 px-5 py-4 text-sm">
+            <button
+              type="button"
+              onClick={fechar}
+              aria-label="Fechar"
+              className="rounded-lg border px-3 py-1.5 text-xs transition hover:opacity-70"
+              style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
+            >
+              ✕ Fechar
+            </button>
             <span className="truncate" style={{ color: "var(--g-suave)" }}>
               {aberto! + 1} de {itens.length}
             </span>
-            <span className="flex items-center gap-2">
-              {permiteDownload && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    salvarUm(item);
-                  }}
-                  className="rounded-lg border px-3 py-1.5 text-xs transition hover:opacity-70"
-                  style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
-                >
-                  {modoSalvar ? "Salvar no celular" : "↓ Baixar"}
-                </button>
-              )}
+            {permiteDownload ? (
               <button
                 type="button"
-                onClick={fechar}
-                aria-label="Fechar"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  salvarUm(item);
+                }}
                 className="rounded-lg border px-3 py-1.5 text-xs transition hover:opacity-70"
-                  style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
+                style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
               >
-                Fechar ✕
+                {modoSalvar ? "Salvar no celular" : "↓ Baixar"}
               </button>
-            </span>
+            ) : (
+              /* Espaço vazio do tamanho do botão: sem ele o `justify-between`
+                 puxaria o contador para a direita e ele mudaria de lugar
+                 conforme a galeria permitir download ou não. */
+              <span aria-hidden="true" className="w-16" />
+            )}
           </div>
 
           <div

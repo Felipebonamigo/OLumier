@@ -445,6 +445,9 @@ export function EditorAparencia({
           <Eixo eixo="tema" titulo="Cores" ap={ap} mudar={mudar} />
           <CoresProprias ap={ap} mudar={mudar} />
           <SeletorDeFonte ap={ap} mudar={mudar} temFontePropria={temFontePropria} />
+          {/* Ao lado da tipografia, e não junto da logo: quem acha o título
+              grosso está olhando para a LETRA, e é ali que ele procura. */}
+          <Eixo eixo="peso" titulo="Grossura do título" ap={ap} mudar={mudar} />
           <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
           <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
           <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />

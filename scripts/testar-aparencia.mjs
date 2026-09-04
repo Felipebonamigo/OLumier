@@ -55,11 +55,25 @@ const PRESETS = {
 const FUNDO = Object.fromEntries(
   Object.entries(TEMAS).map(([nome, vars]) => [nome, vars["--g-fundo"]]),
 );
+/*
+ * `colunas` deixou de ser `column-width` em 04/09/2026.
+ *
+ * Multi-column do CSS preenche uma coluna inteira antes de começar a próxima:
+ * com 30 fotos em 3 colunas, a foto 21 ia para o TOPO da terceira. O sócio
+ * descreveu como "fotos do fim aparecerem bem em cima". A grade virou colunas
+ * de flex montadas à mão, com a largura medida no navegador — daí a marca ser
+ * `flex-direction:column`. Ver `src/lib/grade-mural.ts`.
+ *
+ * `panorama` é a grade nova do mesmo dia: foto deitada ocupa duas colunas. Ela
+ * declara o número exato de colunas, e é isso que a distingue da `quadrada` e
+ * da `editorial`, que usam `auto-fill`.
+ */
 const MARCA_GRADE = {
-  colunas: "column-width",
+  colunas: "flex-direction:column",
   linhas: "flex-basis",
   quadrada: "aspect-ratio:1 / 1",
   editorial: "grid-auto-rows",
+  panorama: "grid-template-columns:repeat(",
 };
 const FONTE_ESPERADA = {
   serifada: "--font-serif-app",

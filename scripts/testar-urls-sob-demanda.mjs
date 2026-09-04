@@ -119,6 +119,37 @@ await etapa("com download BLOQUEADO, a rota RECUSA o original — o interruptor 
   await db.query("update galerias set permite_download = true where id = $1", [g.id]);
 });
 
+/*
+ * ── BAIXAR SEM ABRIR A FOTO (04/09/2026) ──────────────────────────────────
+ *
+ * Pedido do sócio: "adicionar botão de baixar a foto ao lado do coração, sem
+ * precisar abrir individualmente". Quem escolhe foto de álbum passa por
+ * centenas em sequência; obrigar dois cliques a mais por foto (abrir, baixar,
+ * fechar) é o tipo de atrito que faz a pessoa desistir e pedir tudo por
+ * WhatsApp.
+ *
+ * O botão nasce no HTML do servidor, junto do coração — por isso dá para
+ * conferir daqui. E ele obedece ao MESMO interruptor da rota: com download
+ * bloqueado, some. Um botão que aparece e depois falha seria pior que não ter.
+ */
+await etapa("o card da grade tem botão de baixar, sem precisar abrir a foto", async () => {
+  await db.query("update galerias set permite_download = true where id = $1", [g.id]);
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`)).text();
+  const botoes = (html.match(/Baixar [^"<]*\.jpg/g) ?? []).length;
+  if (botoes === 0) throw new Error("nenhum botão de baixar no card");
+  return `${botoes} cards com botão`;
+});
+
+await etapa("com download bloqueado, o botão de baixar some do card", async () => {
+  await db.query("update galerias set permite_download = false where id = $1", [g.id]);
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`)).text();
+  const botoes = (html.match(/Baixar [^"<]*\.jpg/g) ?? []).length;
+  if (botoes > 0) throw new Error(`${botoes} botões de baixar numa galeria bloqueada`);
+  /* O coração continua: bloquear download não é bloquear a escolha do álbum. */
+  if (!/Marcar .*como favorita/.test(html)) throw new Error("o coração sumiu junto");
+  await db.query("update galerias set permite_download = true where id = $1", [g.id]);
+});
+
 await etapa("foto de OUTRA galeria não sai por esta rota", async () => {
   const r = await pedir([outra.midias[0].id, m0.id], "preview");
   const corpo = await r.json();

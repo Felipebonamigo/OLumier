@@ -36,10 +36,29 @@ export type Tipografia =
   /* A fonte que o próprio estúdio enviou. Não é uma fonte nossa: o arquivo mora
    * no bucket do fotógrafo e a galeria injeta o @font-face. Ver lib/fonte-estudio.ts. */
   | "propria";
-export type Grade = "colunas" | "linhas" | "quadrada" | "editorial";
+export type Grade = "colunas" | "linhas" | "quadrada" | "editorial" | "panorama";
 export type Densidade = "compacta" | "normal" | "arejada";
 
 export type TamanhoLogo = "discreta" | "media" | "grande" | "enorme";
+
+/**
+ * A grossura do título da capa.
+ *
+ * ── POR QUE ISTO É UM EIXO, E POR QUE ELE É TRAVADO EM ALGUMAS FONTES ─────
+ *
+ * Até 04/09/2026 `galeria-capa.tsx` cravava `font-bold` — 700 — nas quatro
+ * capas. Para as fontes variáveis isso é um peso de manchete de jornal aplicado
+ * a uma serifada de alto contraste em 7xl; para SETE fontes do catálogo é pior,
+ * porque elas só têm o peso 400 no arquivo, e pedir 700 de quem não tem faz o
+ * navegador ENGORDAR o traço artificialmente. Numa manuscrita de casamento o
+ * negrito sintético deforma a caligrafia.
+ *
+ * Daí a regra que `pesoDoTitulo` implementa: onde não há peso de verdade, o
+ * eixo não inventa um. Escolher "forte" numa Italianno continua desenhando 400
+ * — e é o certo, porque a alternativa não é uma Italianno mais forte, é uma
+ * Italianno borrada.
+ */
+export type Peso = "leve" | "normal" | "forte";
 
 /**
  * Quantas fotos a prévia do editor desenha.
@@ -113,6 +132,7 @@ export interface Aparencia {
   grade: Grade;
   densidade: Densidade;
   logo: TamanhoLogo;
+  peso: Peso;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
 }
@@ -130,6 +150,17 @@ export interface Aparencia {
  * "a logo tem que ser maior". Um padrão que repetisse os 56 px atenderia à letra
  * e não ao pedido: quem não mexesse em nada continuaria com a logo miúda.
  */
+/*
+ * O PADRÃO DO PESO É `normal` (400), e isso ALIVIA o título de quem nunca
+ * escolheu — de propósito, pelo mesmo motivo do padrão da logo acima.
+ *
+ * Toda galeria gravada antes deste eixo desenhava o título em 700, porque era
+ * o que o componente cravava. Com o padrão em 400 elas passam a desenhar mais
+ * leve. É mudança de cara em galeria entregue, e é exatamente o pedido: "o
+ * título tá muito grosso". Um padrão que repetisse os 700 atenderia à letra
+ * (o eixo existe!) e não ao pedido — quem não mexesse em nada continuaria com
+ * o título grosso, inclusive nas manuscritas, onde o 700 nem era real.
+ */
 export const APARENCIA_PADRAO: Aparencia = {
   capa: "imersa",
   tema: "noite",
@@ -137,7 +168,42 @@ export const APARENCIA_PADRAO: Aparencia = {
   grade: "colunas",
   densidade: "normal",
   logo: "media",
+  peso: "normal",
 };
+
+/**
+ * As fontes que só têm o peso 400 no arquivo — conferidas uma a uma em
+ * `src/app/layout.tsx`, onde o `next/font` as declara com `weight: "400"`.
+ *
+ * `propria` entra aqui porque é a fonte que o ESTÚDIO enviou: não sabemos o que
+ * tem dentro do arquivo, e pedir 700 de uma fonte desconhecida é a mesma aposta
+ * que criou o defeito. Na dúvida, não engorda.
+ */
+const SEM_NEGRITO_REAL = new Set<Tipografia>([
+  "manuscrita", // Great Vibes
+  "parisienne",
+  "petit", // Petit Formal Script
+  "sacramento",
+  "italianno",
+  "marcellus",
+  "tenor", // Tenor Sans
+  "propria",
+]);
+
+/** O que cada opção pede, quando a fonte tem peso de verdade para dar. */
+const PESO_ALVO: Record<Peso, number> = { leve: 300, normal: 400, forte: 700 };
+
+/**
+ * O `font-weight` que a capa deve pedir.
+ *
+ * Pedir 300 de uma fonte cujo eixo começa em 400 é inofensivo: o navegador
+ * escolhe o mais próximo para baixo e, não havendo, sobe — nunca afina nada
+ * artificialmente. O risco só existe para CIMA, e é dele que a lista acima
+ * protege.
+ */
+export function pesoDoTitulo(t: Tipografia, p: Peso): number {
+  return SEM_NEGRITO_REAL.has(t) ? 400 : PESO_ALVO[p];
+}
 
 /** Lê o JSON do banco garantindo valores válidos — galeria antiga cai no padrão. */
 export function lerAparencia(bruto: unknown): Aparencia {
@@ -153,6 +219,7 @@ export function lerAparencia(bruto: unknown): Aparencia {
     grade: valida(o.grade, OPCOES.grade.map((x) => x.id), APARENCIA_PADRAO.grade),
     densidade: valida(o.densidade, OPCOES.densidade.map((x) => x.id), APARENCIA_PADRAO.densidade),
     logo: valida(o.logo, OPCOES.logo.map((x) => x.id), APARENCIA_PADRAO.logo),
+    peso: valida(o.peso, OPCOES.peso.map((x) => x.id), APARENCIA_PADRAO.peso),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
        "sujo/publicado" do editor iguais ao que eram. */
@@ -260,6 +327,10 @@ export const OPCOES = {
     { id: "linhas", nome: "Linhas", desc: "Fileiras alinhadas, sem cortar foto" },
     { id: "quadrada", nome: "Quadrada", desc: "Tudo no mesmo tamanho" },
     { id: "editorial", nome: "Editorial", desc: "Destaques maiores intercalados" },
+    /* Pedido do sócio em 04/09/2026: "um modo em que a foto horizontal seja
+       mais valorizada". A regra é a própria foto, não a posição dela na fila —
+       ao contrário do editorial, que promove uma a cada cinco sem olhar. */
+    { id: "panorama", nome: "Panorama", desc: "Fotos deitadas ocupam o dobro da largura" },
   ],
   densidade: [
     { id: "compacta", nome: "Compacta", desc: "Mais fotos por tela" },
@@ -280,6 +351,14 @@ export const OPCOES = {
     { id: "grande", nome: "Grande", desc: "A marca conduz a capa", px: 136 },
     { id: "enorme", nome: "Enorme", desc: "Logo em primeiro plano", px: 200 },
   ],
+  /* Os rótulos falam do RESULTADO, não do número: ninguém escolhe "400". E o
+     aviso da terceira é honesto — em manuscrita ela de fato não muda nada, e
+     dizer isso aqui evita a pessoa clicar três vezes achando que quebrou. */
+  peso: [
+    { id: "leve", nome: "Fina", desc: "Traço delicado, ar de convite" },
+    { id: "normal", nome: "Normal", desc: "O peso natural da fonte" },
+    { id: "forte", nome: "Forte", desc: "Título encorpado — sem efeito nas manuscritas" },
+  ],
 } as const;
 
 // --- presets ------------------------------------------------------------------
@@ -299,25 +378,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal" },
   },
   {
     /*
@@ -334,7 +413,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -353,25 +432,25 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve" },
   },
 ];
 
@@ -396,7 +475,8 @@ export function presetEquivalente(a: Aparencia): string | null {
   if (a.cores && Object.keys(a.cores).length > 0) return null;
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
-    x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo;
+    x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
+    x.peso === y.peso;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 
@@ -580,8 +660,21 @@ export const FONTES_TITULO: Record<Tipografia, string> = {
 };
 
 /** Espaçamento entre as fotos e quantas cabem por linha. */
-export const DENSIDADES: Record<Densidade, { gap: string; colunas: number }> = {
-  compacta: { gap: "0.25rem", colunas: 5 },
-  normal: { gap: "0.5rem", colunas: 4 },
-  arejada: { gap: "1.25rem", colunas: 3 },
+/*
+ * O respiro entre as fotos, em PIXELS.
+ *
+ * Era `"0.25rem"` — texto, direto para o CSS. Virou número em 04/09/2026 porque
+ * o mural passou a MEDIR a largura para decidir quantas colunas cabem, e essa
+ * conta precisa do espaçamento em pixels. Manter os dois formatos (o texto para
+ * o CSS, o número para a conta) seria manter duas verdades sobre o mesmo
+ * espaço, e a que ninguém olha é a que envelhece errada. O CSS monta o texto a
+ * partir do número.
+ *
+ * Os valores são os mesmos de antes: 0,25rem = 4px, 0,5rem = 8px, 1,25rem =
+ * 20px, com a raiz em 16px. Nenhuma galeria muda de aparência.
+ */
+export const DENSIDADES: Record<Densidade, { gapPx: number; colunas: number }> = {
+  compacta: { gapPx: 4, colunas: 5 },
+  normal: { gapPx: 8, colunas: 4 },
+  arejada: { gapPx: 20, colunas: 3 },
 };
