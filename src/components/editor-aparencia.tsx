@@ -217,6 +217,20 @@ function Eixo<K extends keyof typeof OPCOES>({
   );
 }
 
+/**
+ * Os quatro grupos do ajuste fino, na ordem em que a pessoa costuma decidir:
+ * primeiro a cara da capa, depois a letra, a cor e por fim como as fotos se
+ * arrumam. É a mesma divisão que o Pixieset usa, e ela casa com a pergunta que
+ * o fotógrafo traz — "mudar a letra" é um lugar, não um item no meio de oito.
+ */
+const GRUPOS = [
+  { id: "capa", nome: "Capa" },
+  { id: "tipografia", nome: "Tipografia" },
+  { id: "cor", nome: "Cor" },
+  { id: "grade", nome: "Grade" },
+] as const;
+type Grupo = (typeof GRUPOS)[number]["id"];
+
 export function EditorAparencia({
   galeriaId,
   caminhoPublico,
@@ -233,6 +247,9 @@ export function EditorAparencia({
   /** O estúdio enviou uma fonte? Decide se a opção aparece no seletor. */
   temFontePropria: boolean;
 }) {
+  /* Qual grupo do ajuste fino está aberto. Só desenho: não entra no rascunho
+     nem na publicação — trocar de grupo não é mexer na galeria. */
+  const [grupo, setGrupo] = useState<Grupo>("capa");
   const [ap, setAp] = useState<Aparencia>(inicial);
   /* O que está GRAVADO. Separado do que está na tela: é a diferença entre os
      dois que acende o botão e diz o que ainda não foi publicado. */
@@ -435,24 +452,82 @@ export function EditorAparencia({
         })}
       </div>
 
-      {/* Ajuste fino */}
-      <details open={!presetAtivo} className="mt-5 border-t border-linha pt-4">
-        <summary className="cursor-pointer text-xs text-texto-soft">
-          Ajustar em detalhe {presetAtivo ? "" : "· personalizado"}
-        </summary>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Eixo eixo="capa" titulo="Capa" ap={ap} mudar={mudar} />
-          <Eixo eixo="tema" titulo="Cores" ap={ap} mudar={mudar} />
-          <CoresProprias ap={ap} mudar={mudar} />
-          <SeletorDeFonte ap={ap} mudar={mudar} temFontePropria={temFontePropria} />
-          {/* Ao lado da tipografia, e não junto da logo: quem acha o título
-              grosso está olhando para a LETRA, e é ali que ele procura. */}
-          <Eixo eixo="peso" titulo="Grossura do título" ap={ap} mudar={mudar} />
-          <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
-          <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
-          <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />
+      {/*
+        AJUSTE FINO EM QUATRO GRUPOS (04/09/2026).
+
+        Eram oito peças num grid de duas colunas, dentro de um `<details>`
+        fechado. O sócio apontou o Pixieset, que separa a mesma coisa num menu:
+        Capa, Tipografia, Cor, Grade. A divisão é boa porque casa com a
+        pergunta que a pessoa traz — ela não vem "ajustar a aparência", vem
+        "mudar a letra" ou "deixar a capa diferente".
+
+        ── POR QUE NÃO SÃO ROTAS, COMO AS ABAS DE CIMA ──────────────────────
+
+        As quatro abas da galeria (fotos, design, entrega, atividade) são rotas
+        de verdade, e isso vale a pena porque cada uma carrega dados diferentes.
+        Aqui não: os quatro grupos mexem no MESMO rascunho e são publicados pelo
+        MESMO botão. Em rotas separadas, ou o rascunho se perderia ao trocar de
+        grupo, ou o estado teria de subir para um layout — complexidade sem
+        ganho nenhum, porque não há dado novo para buscar. Trocar de grupo aqui
+        é trocar o que está desenhado, e nada mais.
+      */}
+      <div className="mt-5 border-t border-linha pt-4 sm:flex sm:gap-6">
+        <nav aria-label="Ajuste fino" className="sm:w-36 sm:shrink-0">
+          <span className="block text-[10px] font-mono uppercase tracking-widest text-texto-faint">
+            Ajustar em detalhe
+          </span>
+          <ul className="-mx-1 mt-2 flex gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex-col sm:overflow-visible sm:px-0">
+            {GRUPOS.map((g) => {
+              const ativo = grupo === g.id;
+              return (
+                <li key={g.id} className="shrink-0 sm:shrink">
+                  <button
+                    type="button"
+                    aria-pressed={ativo}
+                    onClick={() => setGrupo(g.id)}
+                    className={`w-full whitespace-nowrap rounded-lg px-3 py-1.5 text-left text-xs transition ${
+                      ativo
+                        ? "bg-carbon-2 font-medium text-texto"
+                        : "text-texto-soft hover:bg-carbon hover:text-texto"
+                    }`}
+                  >
+                    {g.nome}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className="mt-4 grid min-w-0 flex-1 gap-4 sm:mt-0">
+          {grupo === "capa" && (
+            <>
+              <Eixo eixo="capa" titulo="Capa" ap={ap} mudar={mudar} />
+              <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />
+            </>
+          )}
+          {grupo === "tipografia" && (
+            <>
+              <SeletorDeFonte ap={ap} mudar={mudar} temFontePropria={temFontePropria} />
+              {/* Junto da fonte, e não da logo: quem acha o título grosso está
+                  olhando para a LETRA, e é ali que ele procura. */}
+              <Eixo eixo="peso" titulo="Grossura do título" ap={ap} mudar={mudar} />
+            </>
+          )}
+          {grupo === "cor" && (
+            <>
+              <Eixo eixo="tema" titulo="Cores" ap={ap} mudar={mudar} />
+              <CoresProprias ap={ap} mudar={mudar} />
+            </>
+          )}
+          {grupo === "grade" && (
+            <>
+              <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
+              <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
+            </>
+          )}
         </div>
-      </details>
+      </div>
 
       {/* Prévia */}
       <div className="mt-5 border-t border-linha pt-4">

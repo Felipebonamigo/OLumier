@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { urlDeLeitura } from "@/lib/r2";
+import { CAPITULOS_SUGERIDOS } from "@/lib/secoes";
 import { LogoEstudio } from "@/components/logo-estudio";
-import { FormNovaGaleria } from "./form";
+import { AssistenteNovaGaleria } from "./assistente";
 
 export const metadata: Metadata = { title: "Nova galeria" };
 
@@ -20,40 +21,47 @@ export default async function NovaGaleriaPage() {
   const urlLogo = tenant.logo_chave ? await urlDeLeitura(tenant.logo_chave, 3600) : null;
 
   return (
-    <main className="mx-auto max-w-lg px-6 py-10">
+    <main className="mx-auto max-w-2xl px-6 py-10">
       <Link href="/painel" className="text-sm text-texto-soft hover:text-texto">
         ← Galerias
       </Link>
 
       <h1 className="mt-4 text-2xl font-bold tracking-tight">Nova galeria</h1>
       <p className="mt-1 text-sm text-texto-soft">
-        Depois de criar, você sobe as fotos e o filme — e define a senha do cliente.
+        Três etapas, e só a primeira é obrigatória. Estilo e capítulos dá para deixar para depois.
       </p>
 
-      <FormNovaGaleria />
-
       {/*
-        A LOGO É DO ESTÚDIO, E APARECE AQUI MESMO ASSIM.
+        A LOGO É DO ESTÚDIO, E APARECE NA ETAPA DO ESTILO.
+
         Ela não pertence a esta galeria — vale para todas, e é gravada no mesmo
         lugar de sempre. Mas a hora em que o fotógrafo pensa na própria marca é
-        justamente quando está montando a primeira entrega, e até aqui isso
+        justamente quando está escolhendo a cara da entrega, e até aqui isso
         exigia abandonar a tarefa, achar a tela de Conta e voltar. O aviso de
         que vale para todas evita a leitura errada de que se está escolhendo uma
         logo "desta galeria".
+
+        Vai como `slot` porque monta no SERVIDOR: a URL da logo é assinada aqui,
+        e o assistente é componente de cliente.
       */}
-      <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
-        <LogoEstudio
-          nomeEstudio={tenant.nome_estudio}
-          urlLogo={urlLogo}
-          nota={
-            <>
-              Aparece na capa no lugar do nome escrito. Vale para{" "}
-              <strong className="text-texto-soft">todas as suas galerias</strong>, não só esta — e
-              dá para trocar depois em Conta.
-            </>
-          }
-        />
-      </section>
+      <AssistenteNovaGaleria
+        capitulosSugeridos={CAPITULOS_SUGERIDOS}
+        slotLogo={
+          <section className="rounded-xl border border-linha bg-carbon p-5">
+            <LogoEstudio
+              nomeEstudio={tenant.nome_estudio}
+              urlLogo={urlLogo}
+              nota={
+                <>
+                  Aparece na capa no lugar do nome escrito. Vale para{" "}
+                  <strong className="text-texto-soft">todas as suas galerias</strong>, não só esta —
+                  e dá para trocar depois em Conta.
+                </>
+              }
+            />
+          </section>
+        }
+      />
     </main>
   );
 }

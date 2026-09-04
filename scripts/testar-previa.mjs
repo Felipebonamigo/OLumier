@@ -334,7 +334,10 @@ await etapa("o dono continua vendo o próprio rascunho", async () => {
  */
 console.log("\na prévia tem a proporção de uma tela");
 
-const editor = await fetch(`${BASE}/painel/galerias/${noAr.id}`, {
+/* O editor mudou de endereço em 04/09/2026: a tela da galeria virou quatro abas
+   com menu lateral, e a aparência ficou em `/design`. O endereço antigo
+   redireciona para `/fotos`, então buscar nele traria a aba errada. */
+const editor = await fetch(`${BASE}/painel/galerias/${noAr.id}/design`, {
   cache: "no-store",
   headers: { cookie },
 });

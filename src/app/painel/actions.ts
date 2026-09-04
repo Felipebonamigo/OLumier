@@ -8,6 +8,7 @@ import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import { gravarRascunho, publicarAparencia } from "@/lib/aparencia-galeria";
+import { presetPorId } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
 import { planoPorId, GB, cicloDe, precoDoCicloCentavos } from "@/config/planos";
@@ -69,6 +70,38 @@ export async function criarGaleriaAction(
   const dataEvento = String(form.get("data_evento") ?? "").trim();
 
   const galeria = await criarGaleria({ tenantId, titulo, subtitulo, dataEvento });
+
+  /*
+   * ── O QUE O ASSISTENTE TRAZ JUNTO (04/09/2026) ──────────────────────────
+   *
+   * Estilo e capítulos passaram a ser perguntados na criação, em duas etapas
+   * opcionais. As duas decisões já existiam — só ficavam escondidas em outra
+   * tela, e muita gente nunca descobria que dava para tomá-las.
+   *
+   * As duas falham em SILÊNCIO de propósito: a galeria já existe e é o que a
+   * pessoa pediu. Perder o estilo escolhido é chato e tem conserto num clique
+   * em Design; recusar a criação inteira por causa de um preset inválido não
+   * tem conserto nenhum — ela perderia o nome, a data e a vontade.
+   */
+  const preset = presetPorId(String(form.get("preset") ?? ""));
+  if (preset) {
+    await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
+      JSON.stringify(preset.aparencia),
+      galeria!.id,
+      tenantId,
+    ]).catch(() => {});
+  }
+
+  /* Uma linha por capítulo, na ordem em que a pessoa marcou. `garantirSecoes`
+     já ignora nome repetido e vazio — ver lib/secoes.ts. */
+  const capitulos = String(form.get("capitulos") ?? "")
+    .split("\n")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (capitulos.length > 0) {
+    await garantirSecoes(galeria!.id, tenantId, capitulos).catch(() => []);
+  }
+
   revalidatePath("/painel");
   redirect(`/painel/galerias/${galeria!.id}`);
 }

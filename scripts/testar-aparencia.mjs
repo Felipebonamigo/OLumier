@@ -307,9 +307,12 @@ if (forasDaTela.length) {
  * a pessoa pensa na marca é exatamente esta. O editor de marca passa a aparecer
  * também no formulário de nova galeria, gravando no mesmo lugar de sempre.
  */
+/* `form.tsx` virou `assistente.tsx` em 04/09/2026: a criação passou a ter três
+   etapas (dados, estilo, capítulos) e a logo mora na etapa do estilo, que é
+   onde a pessoa está pensando na marca. */
 const telaNova =
   readFileSync(path.join(RAIZ, "src/app/painel/galerias/nova/page.tsx"), "utf8") +
-  readFileSync(path.join(RAIZ, "src/app/painel/galerias/nova/form.tsx"), "utf8");
+  readFileSync(path.join(RAIZ, "src/app/painel/galerias/nova/assistente.tsx"), "utf8");
 if (!/LogoEstudio|logo-estudio/.test(telaNova)) {
   console.error("  ✗ criar galeria não oferece a logo — a pessoa precisa sair da tarefa");
   falhou = true;
