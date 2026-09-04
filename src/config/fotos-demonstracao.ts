@@ -71,7 +71,6 @@ export interface FotoDemonstracao {
   altura: number;
   url: string;
   urlGrande: string;
-  urlDownload: null;
   secaoId: null;
 }
 
@@ -95,7 +94,6 @@ export function fotosDeDemonstracao(tema: Tema): FotoDemonstracao[] {
       altura: c.altura,
       url: imagem,
       urlGrande: imagem,
-      urlDownload: null,
       secaoId: null,
     };
   });

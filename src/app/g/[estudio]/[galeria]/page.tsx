@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { marca } from "@/config/marca";
 import { urlDeLeitura } from "@/lib/r2";
-import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
 import { estadoSelecao, minhasFavoritas } from "@/lib/favoritas";
 import { galeriasNoAr } from "@/lib/assinatura";
@@ -177,37 +177,29 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    *   lightbox  → preview (~400 KB) — nítido em tela cheia
    *   download  → original — só quando o cliente pede de fato
    * Derivada nula (vídeo, foto antiga) cai no original, sem quebrar nada.
+   *
+   * ── SÓ A MINIATURA É ASSINADA AQUI (03/09/2026) ──────────────────────────
+   *
+   * As outras duas eram assinadas também, e iam no HTML. Medido na galeria
+   * real de 111 fotos: 454 KB de página, 62 % de URL assinada, e preview +
+   * original — que a primeira pintura não usa — eram 147 KB. Agora elas são
+   * pedidas a `/api/g/<id>/urls` quando o lightbox abre ou quando alguém
+   * clica em baixar. A régua de acesso (senha, download permitido) mudou de
+   * casa junto: mora na rota. Ver o cabeçalho dela.
+   *
+   * O que isso resolve de segurança, de carona: a URL do original nunca mais
+   * vai no HTML, nem com download liberado. Antes, "download bloqueado" era o
+   * que decidia se ela ia; esconder o botão não é proteger, e agora o link
+   * nem chega a nascer sem alguém pedir.
    */
   const VALIDADE = 6 * 3600;
 
-  /*
-   * A URL do ORIGINAL só é gerada quando o download é permitido.
-   *
-   * Antes ela era gerada sempre e o componente apenas escondia os botões — mas o
-   * link ia no HTML da página do mesmo jeito, válido por 6 horas. Quem abrisse
-   * "ver código-fonte" baixava tudo em resolução cheia numa galeria com download
-   * bloqueado. Esconder o botão não é proteger: o interruptor precisa apagar o
-   * link, não só o desenho dele.
-   */
   const itens: ItemGaleria[] = await Promise.all(
     medias.map(async (m) => {
-      /* Miniatura e preview saem do R2 (borda perto do Brasil, grid rápido); o
-       * original sai de onde ele estiver. Quando a derivada não existe, o
-       * fallback É o original e segue o armazém dele — ver lib/armazem.ts. */
-      const armazem = armazemDe(m.armazem);
-      /* Na amostra, só a miniatura é assinada. O preview de 2048 px serve ao
-         lightbox, e ninguém clica para ampliar dentro de uma caixa de 460 px; o
-         original serve ao download, que a prévia também não oferece. Eram duas
-         assinaturas por foto gastas para nada, e são elas que faziam a espera. */
-      const [thumb, preview, download] = await Promise.all([
-        urlDaDerivada(m.chave_thumb, m.chave, armazem, VALIDADE),
-        amostrando
-          ? Promise.resolve(null)
-          : urlDaDerivada(m.chave_preview, m.chave, armazem, VALIDADE),
-        galeria.permite_download && !amostrando
-          ? urlDoOriginal(m.chave, armazem, VALIDADE, m.nome_original)
-          : Promise.resolve(null),
-      ]);
+      /* A miniatura sai do R2 (borda perto do Brasil, grid rápido). Quando a
+       * derivada não existe, o fallback É o original e segue o armazém dele —
+       * ver lib/armazem.ts. */
+      const thumb = await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), VALIDADE);
       return {
         id: m.id,
         nome: m.nome_original,
@@ -216,10 +208,10 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         largura: m.largura,
         altura: m.altura,
         url: thumb,
-        /* Sem preview (amostra), a miniatura faz as vezes: o tipo continua string,
-           e a caixa de 460 px nunca amplia nada mesmo. */
-        urlGrande: preview ?? thumb,
-        urlDownload: download,
+        /* Na amostra da prévia a miniatura faz as vezes do preview: a caixa de
+           460 px nunca amplia nada, e pedir à rota seria uma ida e volta para
+           nada. Fora da amostra fica em aberto, e o lightbox pede quando abre. */
+        urlGrande: amostrando ? thumb : undefined,
       };
     }),
   );

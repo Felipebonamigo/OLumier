@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -18,11 +18,13 @@ export interface ItemGaleria {
   tipo: "foto" | "video";
   /** miniatura da grade (~50 KB) */
   url: string;
-  /** versão do lightbox (~400 KB) */
-  urlGrande: string;
-  /** original, com nome de arquivo para salvar */
-  /** null quando a galeria nao permite download — ver page.tsx */
-  urlDownload: string | null;
+  /**
+   * Versão do lightbox (~400 KB). Só vem preenchida quando já é conhecida —
+   * fotos de demonstração e a amostra da prévia. Nas outras, o lightbox pede à
+   * rota `/api/g/<id>/urls` ao abrir e mostra a miniatura até chegar. O
+   * original nunca vem: é pedido à mesma rota na hora de baixar.
+   */
+  urlGrande?: string;
   bytes: number;
   largura: number | null;
   altura: number | null;
@@ -101,6 +103,40 @@ export function GaleriaCliente({
 
   const limite = selecao.limite;
   const cheia = limite !== null && favoritas.size >= limite;
+
+  /*
+   * URLs assinadas SOB DEMANDA (03/09/2026).
+   *
+   * O HTML traz só a miniatura; preview e original são pedidos à rota quando
+   * precisam — ver `api/g/[id]/urls`. Os dois caches vivem em ref (é o que a
+   * lógica consulta); `previews` é o espelho em estado, para a tela reagir
+   * quando o preview de uma foto aberta chega. O original só é lido dentro de
+   * ações, então não precisa de espelho.
+   */
+  const cachePreview = useRef(new Map<string, string>());
+  const cacheOriginal = useRef(new Map<string, string>());
+  const [previews, setPreviews] = useState<Map<string, string>>(() => new Map());
+
+  const assinar = useCallback(
+    async (ids: string[], tipo: "preview" | "download"): Promise<Map<string, string>> => {
+      const cache = tipo === "preview" ? cachePreview.current : cacheOriginal.current;
+      // Foto de demonstração não existe no banco; pedir por ela seria 400.
+      const faltam = ids.filter((id) => !cache.has(id) && !id.startsWith("demo:"));
+      if (faltam.length > 0) {
+        const r = await fetch(`/api/g/${galeriaId}/urls`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: faltam, tipo }),
+        });
+        if (!r.ok) throw new Error(String(r.status));
+        const { urls } = (await r.json()) as { urls: Record<string, string> };
+        for (const [id, url] of Object.entries(urls)) cache.set(id, url);
+        if (tipo === "preview") setPreviews(new Map(cache));
+      }
+      return cache;
+    },
+    [galeriaId],
+  );
 
   /*
    * Marca na tela ANTES de o servidor responder, e desfaz se falhar.
@@ -222,17 +258,43 @@ export function GaleriaCliente({
   }, [aberto, fechar, anterior, proximo]);
 
   /**
-   * Pré-carrega a foto seguinte e a anterior enquanto o visitante olha a atual.
-   * Quem navega de seta em seta vê a próxima aparecer instantaneamente, em vez
-   * de esperar o download a cada clique.
+   * Ao abrir uma foto, pede o preview dela E dos vizinhos numa chamada só, e
+   * pré-carrega os vizinhos. Quem navega de seta em seta vê a próxima aparecer
+   * na hora, em vez de esperar o download a cada clique.
+   *
+   * Enquanto o preview não chega, a tela mostra a miniatura — que o navegador
+   * já tem, porque acabou de pintá-la na grade. Ninguém vê tela em branco.
    */
   useEffect(() => {
-    if (aberto === null || itens.length < 2) return;
-    for (const i of [(aberto + 1) % itens.length, (aberto - 1 + itens.length) % itens.length]) {
-      const vizinho = itens[i];
-      if (vizinho.tipo === "foto") new Image().src = vizinho.urlGrande;
-    }
-  }, [aberto, itens]);
+    if (aberto === null) return;
+    const vizinhos = [
+      aberto,
+      (aberto + 1) % itens.length,
+      (aberto - 1 + itens.length) % itens.length,
+    ];
+    const ids = [...new Set(vizinhos)]
+      .map((i) => itens[i])
+      .filter((it) => !it.urlGrande)
+      .map((it) => it.id);
+
+    let cancelado = false;
+    (async () => {
+      try {
+        const cache = ids.length > 0 ? await assinar(ids, "preview") : cachePreview.current;
+        if (cancelado) return;
+        for (const i of vizinhos.slice(1)) {
+          const v = itens[i];
+          const url = v.urlGrande ?? cache.get(v.id);
+          if (v.tipo === "foto" && url) new Image().src = url;
+        }
+      } catch {
+        /* A miniatura continua na tela; a próxima seta tenta de novo. */
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [aberto, itens, assinar]);
 
   const registrar = (acao: string, mediaId?: string) => {
     // keepalive: o registro sobrevive à navegação que o download dispara.
@@ -249,10 +311,22 @@ export function GaleriaCliente({
    * grava nas Fotos); no computador baixa direto.
    */
   async function salvarUm(it: ItemGaleria) {
-    // Sem URL = galeria com download bloqueado. O servidor nem gerou o link,
-    // então não há o que baixar — e é assim que tem que ser.
-    const url = it.urlDownload;
-    if (!url) return;
+    /*
+     * O link do original nasce AGORA, pedido à rota — que recusa quando o
+     * download está bloqueado. Antes o servidor decidia isso ao montar a
+     * página; agora decide ao ser pedido, e o HTML nunca carrega o link.
+     */
+    let url: string | undefined;
+    try {
+      url = (await assinar([it.id], "download")).get(it.id);
+    } catch {
+      url = undefined;
+    }
+    if (!url) {
+      setAviso("não consegui preparar o download. Tente de novo.");
+      setTimeout(() => setAviso(null), 3000);
+      return;
+    }
 
     registrar("baixou", it.id);
     if (!modoSalvar) {
@@ -291,15 +365,37 @@ export function GaleriaCliente({
    * inteira para o nosso servidor antes — lento para o casal e caro para nós.
    */
   async function salvarTudo() {
-    // Só o que tem link de verdade. Numa galeria bloqueada a lista fica vazia e
-    // o laço não roda — nada a baixar, nenhuma exceção.
-    const baixaveis = itens
-      .map((it) => ({ url: it.urlDownload, nome: it.nome, bytes: it.bytes }))
-      .filter((x): x is { url: string; nome: string; bytes: number } => Boolean(x.url));
-    if (baixaveis.length === 0) return;
-
     setBaixandoTudo(true);
     setProgressoLote(0);
+
+    /*
+     * Os links da galeria inteira, numa chamada só. Seiscentas URLs assinadas
+     * são uns 400 KB de JSON — que só quem clicou em "baixar tudo" paga, em
+     * vez de todo visitante pagar no HTML.
+     */
+    let cache: Map<string, string>;
+    try {
+      cache = await assinar(
+        itens.map((it) => it.id),
+        "download",
+      );
+    } catch {
+      setAviso("não consegui preparar os downloads. Confira sua conexão e tente de novo.");
+      setTimeout(() => setAviso(null), 4000);
+      setBaixandoTudo(false);
+      return;
+    }
+
+    // Só o que tem link de verdade. Numa galeria bloqueada a rota não entrega
+    // nada, a lista fica vazia e o laço não roda — nada a baixar, nenhuma exceção.
+    const baixaveis = itens
+      .map((it) => ({ url: cache.get(it.id), nome: it.nome, bytes: it.bytes }))
+      .filter((x): x is { url: string; nome: string; bytes: number } => Boolean(x.url));
+    if (baixaveis.length === 0) {
+      setBaixandoTudo(false);
+      return;
+    }
+
     registrar("baixou_tudo");
 
     try {
@@ -358,6 +454,9 @@ export function GaleriaCliente({
   const swipe = useSwipe(proximo, anterior);
 
   const item = aberto === null ? null : itens[aberto];
+  /* O preview da foto aberta: o já conhecido, o que a rota devolveu, ou nada
+     ainda — e aí a foto mostra a miniatura e o vídeo avisa que está vindo. */
+  const urlGrandeAberta = item ? (item.urlGrande ?? previews.get(item.id)) : undefined;
 
   return (
     <>
@@ -725,19 +824,25 @@ export function GaleriaCliente({
             {item.tipo === "foto" ? (
               // eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária
               <img
-                src={item.urlGrande}
+                /* A miniatura segura o lugar até o preview chegar: mesma foto,
+                   menos nítida, já em cache — melhor que tela vazia. */
+                src={urlGrandeAberta ?? item.url}
                 alt={item.nome}
                 fetchPriority="high"
                 className="max-h-full max-w-full rounded-lg object-contain"
               />
-            ) : (
+            ) : urlGrandeAberta ? (
               <video
-                src={item.urlGrande}
+                src={urlGrandeAberta}
                 controls
                 autoPlay
                 playsInline
                 className="max-h-full max-w-full rounded-lg"
               />
+            ) : (
+              <span className="text-sm" style={{ color: "var(--g-suave)" }}>
+                preparando o vídeo…
+              </span>
             )}
           </div>
 
