@@ -208,9 +208,12 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         só via o resultado de verdade depois de subir o casamento inteiro. A
         ordem da tela é o roteiro que ela sugere, e o roteiro estava invertido.
 
-        Agora ela segue o trabalho: manda as fotos, vê o que chegou, organiza em
-        capítulos, escolhe o visual JÁ VENDO as fotos, define as regras do álbum
-        e só então entrega. `testar-upload.mjs` prende esta ordem.
+        Agora ela segue o trabalho: manda as fotos, monta os capítulos, vê o que
+        chegou em cada um, escolhe o visual JÁ VENDO as fotos, define as regras
+        do álbum e só então entrega. `testar-upload.mjs` prende esta ordem.
+
+        Capítulos antes da grade desde 04/09/2026, a pedido do Felipe: "faça com
+        que capítulos venham antes das imagens".
       */}
       <EnviarArquivos
         galeriaId={galeria.id}
@@ -218,17 +221,17 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         rostosAtivos={galeria.rostos_ativos}
       />
 
+      <EditorSecoes
+        galeriaId={galeria.id}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
+        semCapitulo={medias.filter((m) => !m.secao_id).length}
+      />
+
       <GradeMedias
         medias={exibidas}
         galeriaId={galeria.id}
         capaId={galeria.capa_media_id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
-      />
-
-      <EditorSecoes
-        galeriaId={galeria.id}
-        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
-        semCapitulo={medias.filter((m) => !m.secao_id).length}
       />
 
       <EditorAparencia
