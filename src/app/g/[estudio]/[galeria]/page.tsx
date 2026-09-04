@@ -291,9 +291,29 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     .filter((i) => i !== undefined);
 
   const capitulos: CapituloGaleria[] = [];
-  // Fotos soltas abrem a galeria, sem título — não inventamos um "Diversos".
+  /*
+   * ── A FOTO SOLTA SÓ GANHA NOME QUANDO CONVIVE COM CAPÍTULO (04/09/2026) ──
+   *
+   * Antes o grupo das soltas entrava sempre com `nome: ""`. Numa galeria de
+   * fluxo único isso é certo — não se inventa um "Diversos" para a galeria
+   * inteira. Mas quando HÁ capítulos, o menu do cliente (que aparece com dois
+   * ou mais) desenhava uma pastilha VAZIA no meio das outras: um botão sem
+   * texto que leva a algum lugar. Era o "ou organiza isso" do sócio.
+   *
+   * A saída não é obrigar a escolher no envio (atrito no pior momento) nem
+   * mover as fotos sozinho (mexer no trabalho dele sem pedir): é dar nome ao
+   * grupo quando ele precisa de um. Quem quiser arrumar tem, no painel, o
+   * botão de mover todas de uma vez.
+   */
   if (semCapitulo.length > 0) {
-    capitulos.push({ id: "sem-capitulo", nome: "", indices: semCapitulo });
+    const temCapitulo = secoes.some((s) =>
+      medias.some((m) => m.secao_id === s.id),
+    );
+    capitulos.push({
+      id: "sem-capitulo",
+      nome: temCapitulo ? "Outras fotos" : "",
+      indices: semCapitulo,
+    });
   }
   for (const s of secoes) {
     const indices = medias
@@ -304,13 +324,26 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     if (indices.length > 0) capitulos.push({ id: s.id, nome: s.nome, indices });
   }
 
-  // Capa escolhida pelo fotógrafo; sem escolha, a primeira foto da galeria.
+  /*
+   * A CAPA, em três degraus (migração 029):
+   *
+   *   1. o arquivo ENVIADO só para ser capa — uma arte, um convite, um cartão
+   *      com o nome do casal. Vence os outros porque é a decisão mais
+   *      explícita: ninguém sobe uma capa por acidente;
+   *   2. a foto da galeria que o fotógrafo marcou como capa;
+   *   3. a primeira foto, quando ele não escolheu nada.
+   *
+   * A enviada não é uma `media`: não entra na grade, não conta como entrega e
+   * não vai no "baixar tudo". Ver `lib/capa-galeria.ts`.
+   */
   const capa =
     medias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
     medias.find((m) => m.tipo === "foto");
-  const urlCapa = capa
-    ? await urlDaDerivada(capa.chave_preview, capa.chave, armazemDe(capa.armazem), VALIDADE)
-    : null;
+  const urlCapa = galeria.capa_chave
+    ? await urlDeLeitura(galeria.capa_chave, VALIDADE)
+    : capa
+      ? await urlDaDerivada(capa.chave_preview, capa.chave, armazemDe(capa.armazem), VALIDADE)
+      : null;
 
   /*
    * A fonte só é assinada quando VAI SER USADA.

@@ -114,6 +114,26 @@ await etapa("o menu lateral aparece em todas, com as quatro entradas", async () 
   }
 });
 
+await etapa('"Ver como o cliente vê" aparece nas quatro abas, e abre a prévia do dono', async () => {
+  /*
+   * O botão existia e era o problema: morava dentro do editor de aparência,
+   * atrás de um rótulo pequeno. O sócio pediu "um botão de visualização mais
+   * fácil de ver". No cabeçalho ele serve às quatro abas, porque "como está
+   * ficando?" não pertence a nenhuma delas em particular.
+   *
+   * `?previa=1` é o que faz o RASCUNHO abrir para o dono — sem ele, a galeria
+   * que ainda não foi publicada devolveria 404 justamente para quem a monta.
+   */
+  const esperado = `/g/${g.tslug}/${g.gslug}?previa=1`;
+  for (const aba of ABAS) {
+    const html = await (await pegar(`/painel/galerias/${g.id}/${aba}`)).text();
+    const limpo = html.replaceAll("&amp;", "&").replaceAll("\\", "");
+    if (!limpo.includes(esperado)) throw new Error(`"${aba}" não tem o link da prévia`);
+    if (!limpo.includes("Ver como o cliente vê")) throw new Error(`"${aba}" não tem o botão`);
+  }
+  return esperado;
+});
+
 await etapa("cada aba mostra a SUA seção, e não as das outras", async () => {
   for (const aba of ABAS) {
     const html = await (await pegar(`/painel/galerias/${g.id}/${aba}`)).text();

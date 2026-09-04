@@ -22,6 +22,8 @@ export interface GaleriaPublica {
   expira_em: Date | null;
   aparencia: unknown;
   capa_media_id: string | null;
+  /** Capa enviada como arquivo (migração 029). Vence `capa_media_id`. */
+  capa_chave: string | null;
   /** Busca por rosto ligada pelo fotógrafo (migração 028). */
   rostos_ativos: boolean;
   // do estúdio dono — a marca que aparece é a dele, não a nossa
@@ -58,7 +60,7 @@ export async function buscarGaleriaPublica(
 ) {
   return consultarUm<GaleriaPublica>(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
-            g.permite_download, g.expira_em, g.aparencia, g.capa_media_id, g.rostos_ativos,
+            g.permite_download, g.expira_em, g.aparencia, g.capa_media_id, g.capa_chave, g.rostos_ativos,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug, t.site as estudio_site,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
             t.fonte_chave as estudio_fonte, t.fonte_nome as estudio_fonte_nome,

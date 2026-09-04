@@ -197,3 +197,46 @@ export async function moverMediasParaSecao(
     [secaoId, mediaIds, tenantId],
   );
 }
+
+/**
+ * Manda TODAS as fotos sem capítulo desta galeria para um capítulo.
+ *
+ * ── POR QUE NÃO REUSA `moverMediasParaSecao` ───────────────────────────────
+ *
+ * Aquela recebe uma lista de ids, e a lista teria de ser montada antes — o
+ * painel precisaria carregar as mídias só para descobrir quais estão soltas, e
+ * a aba Fotos de um casamento tem 600 delas. Aqui o "quais" é uma condição
+ * (`secao_id is null`), e o banco resolve num UPDATE só.
+ *
+ * As duas travas de sempre, e as duas importam:
+ *
+ *   o CAPÍTULO tem de ser desta galeria E deste estúdio — senão um id de
+ *   capítulo alheio no formulário jogaria as fotos para a conta de outro;
+ *   a GALERIA tem de ser deste estúdio — o update filtra por `tenant_id`
+ *   também nas mídias, e não só pela galeria.
+ *
+ * Devolve quantas moveu. Zero quando o capítulo não é válido para esta
+ * galeria: quem chama trata como "não fiz nada", que é a verdade.
+ */
+export async function moverSoltasParaSecao(
+  galeriaId: string,
+  secaoId: string,
+  tenantId: string,
+): Promise<number> {
+  const destino = await consultarUm<{ id: string }>(
+    `select s.id
+       from secoes s
+       join galerias g on g.id = s.galeria_id
+      where s.id = $1 and s.galeria_id = $2 and g.tenant_id = $3`,
+    [secaoId, galeriaId, tenantId],
+  );
+  if (!destino) return 0;
+
+  const movidas = await consultar<{ id: string }>(
+    `update medias set secao_id = $1
+      where galeria_id = $2 and tenant_id = $3 and secao_id is null
+      returning id`,
+    [secaoId, galeriaId, tenantId],
+  );
+  return movidas.length;
+}

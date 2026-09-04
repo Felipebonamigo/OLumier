@@ -59,10 +59,39 @@ export interface Faixa {
  * prende essa monotonicidade — uma inversão aqui é erro de digitação em
  * dinheiro, e passaria despercebida numa tabela.
  */
+/*
+ * ── A GRADE DE 04/09/2026 ─────────────────────────────────────────────────
+ *
+ * O sócio pediu três planos na vitrine — 250 GB, 500 GB, 1 TB — e "TERA
+ * ADICIONAL" vendido à parte. A vitrine mudou; a GRADE não encolheu.
+ *
+ * SAIU A FAIXA DE 100 GB. Era a mais exposta da tabela: o GoFotógrafo entrega
+ * 300 GB mais um CRM inteiro por R$ 49,90 (medido em 26/08/2026), e 100 GB
+ * pelo mesmo dinheiro perdia em qualquer comparação lado a lado. A entrada
+ * passa a ser 250 GB pelos mesmos R$ 49,99 — dois e meio pelo preço de um.
+ *
+ * Fica registrado o que eu disse ao propor e ele decidiu contra: 250 continua
+ * abaixo dos 300 GB do concorrente, e a linha de 300 GB é onde os dois mercados
+ * se separam. Ele preferiu 250, e é decisão dele — o número está aqui, num
+ * lugar só, e mudar é trocar uma linha.
+ *
+ * FICARAM 2 A 10 TB, e isso é o oposto de teimosia: acima de 300 GB nenhum
+ * concorrente existe, por nenhum preço. Tirá-las para caber numa página de
+ * vendas mais curta seria abandonar o único mercado sem briga. Elas saem da
+ * VITRINE (ver `planos`), não da tabela — quem precisa acha no montador.
+ *
+ * O "TB ADICIONAL" não é produto novo nem coluna nova: é a diferença entre
+ * degraus vizinhos acima de 1 TB, mantida CONSTANTE em R$ 80,00. É o que
+ * permite dizer "cada TB a mais custa R$ 80" sem mentir, e sem inventar uma
+ * segunda estrutura de cobrança (quota = plano + N × TB) que exigiria mexer em
+ * schema e no Asaas para não entregar nada de novo.
+ * `scripts/testar-planos.mjs` prende essa constância e o piso de custo: um TB
+ * cheio custa R$ 59,63 com a folga cambial, então abaixo disso o adicional
+ * venderia prejuízo que cresce com o uso.
+ */
 export const ESPACOS: Faixa[] = [
-  { gb: 100, precoCentavos: 4999 },
-  { gb: 250, precoCentavos: 7999 },
-  { gb: 500, precoCentavos: 10999 },
+  { gb: 250, precoCentavos: 4999 },
+  { gb: 500, precoCentavos: 7999 },
   /* A faixa que briga com o Pixieset Pro (1 TB por ~R$ 135 no cartão do
    * brasileiro). Empate no preço, e lá o vídeo é 1 hora em HD.
    *
@@ -73,15 +102,15 @@ export const ESPACOS: Faixa[] = [
    * a grade encostando no limite de propósito. A saída é reler o preço do Pro
    * (o número e a data da conferência estão no teste) e mover o teto por
    * decisão — nunca afrouxar o teto para caber um preço já escolhido. */
-  { gb: 1000, precoCentavos: 13999 },
-  { gb: 2000, precoCentavos: 21999 },
+  { gb: 1000, precoCentavos: 11999 },
+  { gb: 2000, precoCentavos: 19999 },
   /* Degrau herdado do cofre: existia lá e faltava aqui. É o passo que evita o
    * salto de R$ 219 para R$ 449 bater de frente com quem só precisava de 3 TB. */
-  { gb: 3000, precoCentavos: 29999 },
-  { gb: 5000, precoCentavos: 44999 },
+  { gb: 3000, precoCentavos: 27999 },
+  { gb: 5000, precoCentavos: 43999 },
   /* O topo, para quem filma casamento em 4K o ano inteiro. Acima do Pixieset
    * Ultimate, que nem aceita vídeo 4K — aqui não existe concorrente. */
-  { gb: 10000, precoCentavos: 79999 },
+  { gb: 10000, precoCentavos: 83999 },
 ];
 
 /*
@@ -391,14 +420,42 @@ export function planoPorId(id: string): Plano | undefined {
  * Não são planos separados: cada um é uma montagem que a grade também produz.
  * Servem à home e a quem abre a tela de plano querendo só escolher e sair.
  */
+/*
+ * TRÊS, e não seis — pedido do sócio em 04/09/2026.
+ *
+ * Seis cartões na vitrine não são seis opções: são seis contas para fazer antes
+ * de escolher. Ele resumiu o papel de cada um: "250 GB pra conseguir competir,
+ * 500 GB para a maioria pegar, 1 TB o maior plano" — e é por isso que o
+ * destaque é o do meio, e não o mais caro.
+ *
+ * Quem precisa de mais que 1 TB não perdeu nada: a grade inteira continua no
+ * montador, e o TB adicional (R$ 80) descreve exatamente o que ela cobra acima
+ * de 1 TB. Ver o comentário de `ESPACOS`.
+ *
+ * Os combos são de `foto` porque o segmento não muda preço nenhum — é só qual
+ * recurso liga. Escolher filme na vitrine daria a impressão de que filme custa
+ * diferente, que é justamente a mentira que a home promete não contar.
+ */
 export const planos: Plano[] = [
   { ...montar({ segmento: "foto", espacoGb: 250 }) },
-  { ...montar({ segmento: "foto", espacoGb: 1000 }), destaque: true },
-  { ...montar({ segmento: "foto", espacoGb: 2000 }) },
-  { ...montar({ segmento: "filme", espacoGb: 3000 }) },
-  { ...montar({ segmento: "filme", espacoGb: 5000 }) },
-  { ...montar({ segmento: "filme", espacoGb: 10000 }) },
+  { ...montar({ segmento: "foto", espacoGb: 500 }), destaque: true },
+  { ...montar({ segmento: "foto", espacoGb: 1000 }) },
 ];
+
+/**
+ * Quanto custa cada TB acima de 1 TB — o "TERA ADICIONAL" da vitrine.
+ *
+ * Derivado da grade, e não escrito à mão: é a diferença entre dois degraus
+ * vizinhos. Um número solto aqui viraria propaganda que a tabela desmente no
+ * dia em que alguém reajustar uma faixa e esquecer da outra.
+ * `testar-planos.mjs` exige que essa diferença seja a MESMA em todos os
+ * degraus acima de 1 TB — sem isso a frase "cada TB a mais custa X" seria falsa
+ * em algum ponto da tabela.
+ */
+export const TB_ADICIONAL_CENTAVOS = (() => {
+  const acima = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  return (acima[1].precoCentavos - acima[0].precoCentavos) / ((acima[1].gb - acima[0].gb) / 1000);
+})();
 
 /**
  * Plano com que uma conta nova nasce.

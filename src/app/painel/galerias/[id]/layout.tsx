@@ -90,17 +90,60 @@ export default async function GaleriaLayout({
           arquivada com `publicada` true tem o link fora do ar do mesmo jeito.
           `scripts/testar-cofre.mjs` prende isto.
         */}
-        <span
-          className={`rounded-full border px-3 py-1 text-xs ${
-            noAr
-              ? "border-ok/40 bg-ok/10 text-ok"
-              : noCofre
-                ? "border-acento/40 bg-acento/10 text-acento-alto"
-                : "border-linha text-texto-faint"
-          }`}
-        >
-          {noAr ? "publicada" : noCofre ? "no cofre" : "rascunho"}
-        </span>
+        <div className="flex items-center gap-2">
+          {/*
+            VER COMO O CLIENTE VÊ — pedido do sócio em 04/09/2026, "um botão de
+            visualização mais fácil de ver".
+
+            Ele existia, e era o problema: morava dentro do editor de aparência,
+            atrás de um rótulo pequeno, e só depois de publicar aparecia um
+            "abrir ↗" na seção de entrega. Quem quisesse conferir o trabalho
+            precisava saber onde procurar.
+
+            Agora fica no cabeçalho, ao lado do selo, visível das QUATRO abas —
+            porque a pergunta "como está ficando?" não pertence a nenhuma delas
+            em particular.
+
+            `?previa=1` é o que faz o rascunho abrir para o DONO: sem ele, uma
+            galeria ainda não publicada devolveria 404 justamente para quem
+            está montando. A permissão vem da sessão, não do parâmetro — ver
+            `app/g/[estudio]/[galeria]/page.tsx`.
+          */}
+          <a
+            href={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-linha-forte px-3 py-1.5 text-xs transition hover:bg-carbon-2"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="14"
+              height="14"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z" />
+              <circle cx="12" cy="12" r="2.6" />
+            </svg>
+            Ver como o cliente vê
+          </a>
+
+          <span
+            className={`rounded-full border px-3 py-1 text-xs ${
+              noAr
+                ? "border-ok/40 bg-ok/10 text-ok"
+                : noCofre
+                  ? "border-acento/40 bg-acento/10 text-acento-alto"
+                  : "border-linha text-texto-faint"
+            }`}
+          >
+            {noAr ? "publicada" : noCofre ? "no cofre" : "rascunho"}
+          </span>
+        </div>
       </header>
 
       {/* Menu à esquerda no computador, fila que rola no celular. */}

@@ -530,5 +530,73 @@ await etapa("existe um combo em destaque para a home", () => {
   return `${destaque[0].nome} — R$ ${destaque[0].precoCentavos / 100}`;
 });
 
+/*
+ * ── A GRADE DE 04/09/2026, E O QUE ELA PRENDE ─────────────────────────────
+ *
+ * O sócio propôs três planos na vitrine — 250 GB, 500 GB, 1 TB — e "TERA
+ * ADICIONAL" vendido à parte. A vitrine mudou; a grade NÃO encolheu, e é isso
+ * que as etapas abaixo garantem.
+ *
+ * As faixas de 2 a 10 TB continuam existindo porque acima de 300 GB nenhum
+ * concorrente existe, por nenhum preço (medido em 26/08/2026: Lumi trava em
+ * 100 GB, GoFotógrafo em 300 GB). Tirá-las da tabela seria abandonar o único
+ * mercado sem briga para caber numa página de vendas mais curta.
+ *
+ * O "TB adicional" não é produto novo nem coluna nova: é a DIFERENÇA entre
+ * degraus vizinhos acima de 1 TB. Mantê-la constante é o que permite dizer
+ * "cada TB a mais custa R$ X" sem mentir, e sem inventar uma segunda estrutura
+ * de cobrança (quota = plano + N) que exigiria mexer em schema e no Asaas.
+ */
+await etapa("acima de 1 TB, cada TB a mais custa o MESMO — é o que sustenta o adicional", () => {
+  const acima = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  const passos = [];
+  for (let i = 1; i < acima.length; i++) {
+    const tb = (acima[i].gb - acima[i - 1].gb) / 1000;
+    passos.push((acima[i].precoCentavos - acima[i - 1].precoCentavos) / tb);
+  }
+  const distintos = [...new Set(passos)];
+  if (distintos.length !== 1) {
+    throw new Error(
+      `o TB adicional varia: ${passos.map((c) => `R$ ${(c / 100).toFixed(2)}`).join(", ")}`,
+    );
+  }
+  return `R$ ${(distintos[0] / 100).toFixed(2)} por TB`;
+});
+
+await etapa("o TB adicional cobre o próprio custo com folga", () => {
+  /* O custo de mil GB com o espaço CHEIO, com a mesma folga cambial da reserva.
+     Abaixo disto o adicional venderia prejuízo — e prejuízo que cresce com o
+     uso, que é o pior tipo. */
+  const custoTb = custoArmazenamentoTetoCentavos({ segmento: "foto", espacoGb: 1000 }) * 1.3;
+  const acima = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  const porTb =
+    (acima[1].precoCentavos - acima[0].precoCentavos) / ((acima[1].gb - acima[0].gb) / 1000);
+  if (porTb <= custoTb) {
+    throw new Error(
+      `TB adicional a R$ ${(porTb / 100).toFixed(2)} não cobre o custo de R$ ${(custoTb / 100).toFixed(2)}`,
+    );
+  }
+  return `R$ ${(porTb / 100).toFixed(2)} contra R$ ${(custoTb / 100).toFixed(2)} de custo`;
+});
+
+await etapa("a vitrine mostra três planos, e a grade continua indo até 10 TB", () => {
+  igual(planos.length, 3, "planos na vitrine");
+  const gbs = planos.map((p) => p.quotaGb);
+  igual(JSON.stringify(gbs), JSON.stringify([250, 500, 1000]), "quais");
+  /* A grade completa é o que o montador oferece — e é onde mora o dinheiro que
+     não tem concorrente. */
+  if (!ESPACOS.some((e) => e.gb === 10000)) throw new Error("a grade perdeu o topo de 10 TB");
+  return `vitrine ${gbs.join("/")} GB · grade até ${Math.max(...ESPACOS.map((e) => e.gb)) / 1000} TB`;
+});
+
+await etapa("a entrada de 250 GB é o preço que o sócio pediu", () => {
+  const entrada = ESPACOS.sort((a, b) => a.gb - b.gb)[0];
+  igual(entrada.gb, 250, "menor faixa");
+  igual(entrada.precoCentavos, 4999, "preço da entrada");
+  /* A faixa de 100 GB saiu: o GoFotógrafo dá 300 GB mais um CRM inteiro por
+     R$ 49,90, e 100 GB pelo mesmo dinheiro perdia em qualquer comparação. */
+  if (ESPACOS.some((e) => e.gb === 100)) throw new Error("a faixa de 100 GB voltou");
+});
+
 console.log(falhou ? "\n✗ suíte vermelha\n" : "\n✓ planos ok\n");
 process.exit(falhou ? 1 : 0);

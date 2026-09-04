@@ -8,6 +8,7 @@ import {
   renomearSecaoAction,
   apagarSecaoAction,
   moverSecaoAction,
+  moverSoltasAction,
 } from "@/app/painel/actions";
 
 export interface SecaoResumo {
@@ -170,14 +171,41 @@ export function EditorSecoes({
           ))}
 
           {semCapitulo > 0 && (
-            <li className="flex items-center gap-2 bg-carbon-2/50 px-3 py-2.5">
+            <li className="flex flex-wrap items-center gap-2 bg-carbon-2/50 px-3 py-2.5">
               <span className="min-w-0 flex-1">
                 <span className="block text-sm text-texto-soft">Sem capítulo</span>
                 <span className="text-[11px] text-texto-faint">
-                  {semCapitulo} {semCapitulo === 1 ? "foto aparece" : "fotos aparecem"} antes dos
+                  {semCapitulo} {semCapitulo === 1 ? "foto aparece" : "fotos aparecem"} como{" "}
+                  <strong className="font-normal text-texto-soft">Outras fotos</strong>, antes dos
                   capítulos
                 </span>
               </span>
+              {/*
+                MOVER TODAS DE UMA VEZ — pedido do sócio em 04/09/2026: "as
+                fotos sem capítulo devem ir obrigatoriamente para um capítulo".
+
+                Obrigar no ENVIO seria atrito no pior momento: quem está subindo
+                600 fotos não quer responder pergunta. Um botão que arruma
+                depois entrega o mesmo resultado e não cobra nada de quem não se
+                importa — e quem não clicar não fica com pastilha sem nome na
+                galeria, porque o grupo agora se chama "Outras fotos".
+              */}
+              <select
+                aria-label={`Mover as ${semCapitulo} fotos sem capítulo`}
+                disabled={ocupado}
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) executar(moverSoltasAction, { secao_id: e.target.value });
+                }}
+                className="rounded-lg border border-linha bg-void px-2 py-1 text-xs text-texto-soft focus:border-acento focus:outline-none disabled:opacity-50"
+              >
+                <option value="">mover todas para…</option>
+                {secoes.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.nome}
+                  </option>
+                ))}
+              </select>
             </li>
           )}
         </ul>

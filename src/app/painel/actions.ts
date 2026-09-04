@@ -37,6 +37,7 @@ import {
   criarSecao,
   garantirSecoes,
   moverMediasParaSecao,
+  moverSoltasParaSecao,
   moverSecao,
   renomearSecao,
 } from "@/lib/secoes";
@@ -1138,4 +1139,23 @@ export async function fotosSemRostoAction(
       url: await urlDaDerivada(f.chave_preview, f.chave, armazemDe(f.armazem), 3600),
     })),
   );
+}
+
+/**
+ * Manda todas as fotos sem capítulo para um capítulo, de uma vez.
+ *
+ * Pedido do sócio em 04/09/2026: "as fotos subidas sem capítulo devem ir
+ * obrigatoriamente para um capítulo. Ou organizar isso." Obrigar na hora do
+ * envio seria atrito no pior momento — quem está subindo 600 fotos não quer
+ * responder pergunta. Um botão que arruma depois resolve o mesmo, sem cobrar
+ * nada de quem não se importa.
+ */
+export async function moverSoltasAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const secaoId = String(form.get("secao_id") ?? "");
+  if (!galeriaId || !secaoId) return;
+
+  await moverSoltasParaSecao(galeriaId, secaoId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
 }

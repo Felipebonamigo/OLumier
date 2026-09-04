@@ -66,6 +66,9 @@ export interface Galeria {
      O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
   aparencia_rascunho: unknown;
   capa_media_id: string | null;
+  /* Capa enviada como arquivo (migração 029). Vence capa_media_id, e não é uma
+     linha em `medias`: não aparece na galeria nem conta como entrega. */
+  capa_chave: string | null;
   /* Busca por rosto (migração 028). `rostos_ligados_em` é a prova do
      consentimento do fotógrafo; nula enquanto desligada. */
   rostos_ativos: boolean;

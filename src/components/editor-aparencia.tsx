@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   OPCOES,
@@ -237,9 +237,13 @@ export function EditorAparencia({
   inicial,
   publicado,
   temFontePropria,
+  slotCapa,
 }: {
   galeriaId: string;
   caminhoPublico: string;
+  /** A área de escolher a capa. Vem montada do servidor: a URL da imagem é
+      assinada lá, e este componente é de cliente. Fica no grupo "Capa". */
+  slotCapa?: ReactNode;
   /** O que a tela abre mostrando: o rascunho, se houver, senão o publicado. */
   inicial: Aparencia;
   /** O que o CLIENTE vê hoje. É contra isto que a barra decide se aparece. */
@@ -502,7 +506,8 @@ export function EditorAparencia({
         <div className="mt-4 grid min-w-0 flex-1 gap-4 sm:mt-0">
           {grupo === "capa" && (
             <>
-              <Eixo eixo="capa" titulo="Capa" ap={ap} mudar={mudar} />
+              {slotCapa}
+              <Eixo eixo="capa" titulo="Desenho da capa" ap={ap} mudar={mudar} />
               <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />
             </>
           )}

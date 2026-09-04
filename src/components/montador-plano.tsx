@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import {
   SEGMENTOS,
   ESPACOS,
+  TB_ADICIONAL_CENTAVOS,
   montar,
   formatarGb,
   formatarReais,
@@ -170,8 +171,8 @@ export function MontadorPlano({
         </p>
       </div>
 
-      {/* Oito colunas para oito faixas. Mudou ESPACOS? confira a contagem. */}
-      <div className="mt-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-8">
+      {/* Uma coluna por faixa. Mudou ESPACOS? confira a contagem. */}
+      <div className="mt-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-7">
         {ESPACOS.map((e) => (
           <Peca
             key={e.gb}
@@ -182,6 +183,23 @@ export function MontadorPlano({
           />
         ))}
       </div>
+
+      {/*
+        O TERA ADICIONAL, dito em voz alta.
+
+        A vitrine mostra três planos (250 GB, 500 GB, 1 TB) e a grade vai até
+        10 TB. Sem esta linha, quem precisa de 3 TB olha os três cartões e
+        conclui que o produto não serve — quando a tabela ao lado já resolve.
+        O número é DERIVADO da grade (`TB_ADICIONAL_CENTAVOS`), não escrito à
+        mão: propaganda que a tabela desmente é o pior tipo de erro de preço.
+      */}
+      <p className="mt-3 text-xs text-texto-faint">
+        Acima de 1 TB, cada tera a mais custa{" "}
+        <strong className="font-medium text-texto-soft">
+          {formatarReais(TB_ADICIONAL_CENTAVOS)}
+        </strong>{" "}
+        por mês — sem adicional por hora de vídeo, sem cobrança por galeria.
+      </p>
 
       {/* ── peça 3: como pagar ─────────────────────────────────────────── */}
       <div className="mt-9 flex items-center gap-3">
