@@ -24,6 +24,7 @@ import {
 import { GaleriaCapa } from "@/components/galeria-capa";
 import { lerAparencia, TEMAS, AMOSTRA_PREVIA } from "@/config/aparencia";
 import { FAMILIA_PROPRIA } from "@/lib/fonte-estudio";
+import { lerSite } from "@/lib/site-estudio";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -337,6 +338,24 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     ? await urlDeLeitura(galeria.estudio_logo, VALIDADE)
     : null;
 
+  /*
+   * A BUSCA POR ROSTO só existe quando o fotógrafo a ligou — e nunca na
+   * amostra da prévia, que mostra doze fotos de um total maior: "você aparece
+   * em 2 fotos" sobre uma amostra seria mentira.
+   *
+   * O contato é o do estúdio, como ele preencheu no site. A tela de
+   * consentimento diz ao convidado com quem falar sobre as fotos dele, e a
+   * resposta certa é o fotógrafo, não nós.
+   */
+  const site = lerSite(galeria.estudio_site);
+  const contatoEstudio = site.whatsapp
+    ? `WhatsApp ${site.whatsapp.replace(/^55(\d{2})(\d{4,5})(\d{4})$/, "($1) $2-$3")}`
+    : site.email || (site.instagram ? `@${site.instagram}` : null);
+  const buscaPorRosto =
+    galeria.rostos_ativos && !amostrando
+      ? { nomeEstudio: galeria.estudio_nome, contato: contatoEstudio }
+      : null;
+
   return (
     /*
      * O tema vive em variáveis CSS neste elemento. Assim a galeria pode ser
@@ -427,6 +446,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             aparencia={aparencia}
             capitulos={capitulos}
             celularProvavel={celularProvavel}
+            buscaPorRosto={buscaPorRosto}
           />
         )}
       </div>

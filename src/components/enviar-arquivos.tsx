@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
+import type { RostoMedido } from "@/lib/rostos-client";
 import { enviarEmPartes } from "@/lib/multipart-client";
 import {
   PARALELOS,
@@ -28,6 +29,8 @@ interface ItemFila {
   situacao: Situacao;
   tentativa: number;
   erro?: string;
+  /** Quantos rostos a busca por rosto guardou desta foto. */
+  rostos?: number;
 }
 
 export interface SecaoDestino {
@@ -82,14 +85,18 @@ const duracao = (ms: number) => {
 export function EnviarArquivos({
   galeriaId,
   secoes,
+  rostosAtivos,
 }: {
   galeriaId: string;
   secoes: SecaoDestino[];
+  /** A busca por rosto está ligada: cada foto é medida durante o envio. */
+  rostosAtivos: boolean;
 }) {
   const [fila, setFila] = useState<ItemFila[]>([]);
   const [arrastando, setArrastando] = useState(false);
   const [rodando, setRodando] = useState(false);
   const [destino, setDestino] = useState("");
+  const [avisoRostos, setAvisoRostos] = useState<string | null>(null);
   const [inicio, setInicio] = useState<number | null>(null);
   /* Começa em 0, não em Date.now(): ler o relógio durante a renderização é
    * impuro (o servidor e o cliente leem instantes diferentes) e o valor era
@@ -166,6 +173,35 @@ export function EnviarArquivos({
 
       const soltar = await manterAcordado();
 
+      /*
+       * A BUSCA POR ROSTO entra aqui, e só aqui: com ela ligada, cada foto é
+       * medida no ORIGINAL enquanto está aberta para gerar as derivadas. É o
+       * único momento em que o original está decodificado no navegador — depois
+       * ele mora no B2, e cada byte lido de lá é cobrado.
+       *
+       * O modelo (12 MB) é baixado uma vez por sessão. Se não carregar (sem
+       * WebGL, rede ruim), o envio SEGUE sem medir: a foto entra na fila de
+       * "ainda não medidas" do painel. Perder a busca é chato; perder o
+       * casamento inteiro por causa dela seria inaceitável.
+       */
+      let medidor: ((bitmap: ImageBitmap) => Promise<RostoMedido[]>) | undefined;
+      if (rostosAtivos) {
+        try {
+          const rostosClient = await import("@/lib/rostos-client");
+          await rostosClient.carregarModelos("fotografo");
+          medidor = rostosClient.medirRostos;
+          setAvisoRostos(
+            rostosClient.backendEmUso() === "webgl"
+              ? null
+              : "Este computador está sem aceleração gráfica: medir os rostos leva uns 12 segundos por foto.",
+          );
+        } catch {
+          setAvisoRostos(
+            "Não consegui carregar o reconhecimento de rosto. As fotos sobem normalmente; dá para medi-las depois, em “Busca por rosto”.",
+          );
+        }
+      }
+
       // Vários ao mesmo tempo: um por vez faria 600 fotos levarem horas.
       await emParalelo(arquivos, PARALELOS, async (arquivo, i) => {
         const item = novos[i];
@@ -192,7 +228,7 @@ export function EnviarArquivos({
           await comRetentativa(
             async () => {
               atualizar(item.id, { situacao: "preparando", progresso: 0 });
-              const derivadas = await gerarDerivadas(arquivo);
+              const derivadas = await gerarDerivadas(arquivo, { medirRostos: medidor });
 
               atualizar(item.id, { situacao: "enviando" });
 
@@ -253,6 +289,24 @@ export function EnviarArquivos({
                   throw new Error(c.erro ?? "o arquivo não foi confirmado");
                 }
               }
+
+              /*
+               * Os rostos sobem DEPOIS da confirmação e fora da retentativa: a
+               * foto já está entregue, e falhar aqui não pode desfazê-la. Vai
+               * mesmo com lista vazia — é o que tira a foto da fila de
+               * "ainda não medidas".
+               */
+              if (medidor && derivadas?.rostos) {
+                const r = await fetch(`/api/medias/${dados.mediaId}/rostos`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ rostos: derivadas.rostos }),
+                }).catch(() => null);
+                if (r?.ok) {
+                  const { salvos } = (await r.json()) as { salvos: number };
+                  atualizar(item.id, { rostos: salvos });
+                }
+              }
             },
             (tentativa) => atualizar(item.id, { tentativa, situacao: "esperando", progresso: 0 }),
           );
@@ -283,7 +337,7 @@ export function EnviarArquivos({
       setRodando(false);
       router.refresh();
     },
-    [galeriaId, destino, router],
+    [galeriaId, destino, router, rostosAtivos],
   );
 
   const enviados = fila.filter((i) => i.situacao === "pronto").length;
@@ -414,6 +468,7 @@ export function EnviarArquivos({
             {formatar(bytesEnviados)} enviados
             {rodando && " · mantenha esta aba aberta"}
           </p>
+          {avisoRostos && <p className="mt-1.5 text-[11px] text-alerta">{avisoRostos}</p>}
 
           {/* Lista com altura limitada: sem isso, 600 itens esticariam a página sem fim. */}
           <ul className="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
@@ -425,7 +480,11 @@ export function EnviarArquivos({
                     {item.situacao === "erro" ? (
                       <span className="text-erro">{item.erro}</span>
                     ) : item.situacao === "pronto" ? (
-                      <span className="text-ok">enviado</span>
+                      <span className="text-ok">
+                        enviado
+                        {item.rostos !== undefined &&
+                          ` · ${item.rostos} ${item.rostos === 1 ? "rosto" : "rostos"}`}
+                      </span>
                     ) : item.tentativa > 0 ? (
                       <span className="text-alerta">tentando de novo ({item.tentativa})…</span>
                     ) : item.situacao === "preparando" ? (

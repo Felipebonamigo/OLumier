@@ -10,6 +10,7 @@ import {
   salvarNoCelular,
 } from "@/lib/salvar-client";
 import { useSwipe } from "@/lib/usar-swipe";
+import { EncontrarMe } from "./encontrar-me";
 
 export interface ItemGaleria {
   id: string;
@@ -47,6 +48,7 @@ export function GaleriaCliente({
   celularProvavel,
   favoritasIniciais,
   selecaoInicial,
+  buscaPorRosto = null,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
@@ -55,6 +57,11 @@ export function GaleriaCliente({
   capitulos: CapituloGaleria[];
   /** Palpite do servidor pelo user-agent, só para a primeira pintura não piscar. */
   celularProvavel: boolean;
+  /**
+   * A busca por rosto, quando o fotógrafo ligou. Null = o botão não existe.
+   * O contato é do estúdio: é com ele que o convidado fala sobre as fotos.
+   */
+  buscaPorRosto?: { nomeEstudio: string; contato: string | null } | null;
   /**
    * Ids das fotos já escolhidas NESTA galeria. Desde a migração 019 a lista é
    * uma só, compartilhada: a noiva no celular e o noivo no notebook veem a mesma
@@ -86,6 +93,9 @@ export function GaleriaCliente({
 
   const [favoritas, setFavoritas] = useState<Set<string>>(() => new Set(favoritasIniciais));
   const [soFavoritas, setSoFavoritas] = useState(false);
+  /* As fotos em que o convidado se achou pela selfie. Null = sem filtro. Vive
+     só nesta página: fechar a aba apaga, que é o que o texto prometeu. */
+  const [encontradas, setEncontradas] = useState<Set<string> | null>(null);
   const [selecao, setSelecao] = useState(selecaoInicial);
   const [fechando, setFechando] = useState(false);
 
@@ -398,6 +408,16 @@ export function GaleriaCliente({
         </p>
       )}
 
+      {buscaPorRosto && (
+        <EncontrarMe
+          galeriaId={galeriaId}
+          nomeEstudio={buscaPorRosto.nomeEstudio}
+          contatoEstudio={buscaPorRosto.contato}
+          encontradas={encontradas}
+          aoEncontrar={setEncontradas}
+        />
+      )}
+
       {favoritas.size > 0 && (
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <button
@@ -492,9 +512,14 @@ export function GaleriaCliente({
            * inteiro se nada ali foi. Manter um capítulo vazio com o título na
            * tela faria parecer que as fotos sumiram.
            */
-          const indices = soFavoritas
-            ? capOriginal.indices.filter((i) => favoritas.has(itens[i].id))
-            : capOriginal.indices;
+          /* Os dois filtros somam: "só as favoritas" E "só onde eu apareço"
+             podem estar ligados ao mesmo tempo, e o resultado é a interseção. */
+          const indices = capOriginal.indices.filter((i) => {
+            const id = itens[i].id;
+            if (soFavoritas && !favoritas.has(id)) return false;
+            if (encontradas && !encontradas.has(id)) return false;
+            return true;
+          });
           if (indices.length === 0) return null;
           const cap = { ...capOriginal, indices };
           return (

@@ -66,6 +66,10 @@ export interface Galeria {
      O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
   aparencia_rascunho: unknown;
   capa_media_id: string | null;
+  /* Busca por rosto (migração 028). `rostos_ligados_em` é a prova do
+     consentimento do fotógrafo; nula enquanto desligada. */
+  rostos_ativos: boolean;
+  rostos_ligados_em: Date | null;
   criado_em: Date;
   total_medias?: number;
 }

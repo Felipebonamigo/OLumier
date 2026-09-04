@@ -42,6 +42,11 @@ export const ACOES = {
   ASSINATURA_CANCELADA: "assinatura.cancelada",
   SENHA_TROCADA: "senha.trocada",
   CONTA_CRIADA: "conta.criada",
+  /* Consentimento para dado biométrico (LGPD art. 11): ligar é o aceite, e o
+   * registro é a prova de quando; desligar apaga os vetores e o registro diz
+   * quantos. Sem isto, "quando o estúdio consentiu?" não teria resposta. */
+  ROSTOS_LIGADOS: "rostos.ligados",
+  ROSTOS_DESLIGADOS: "rostos.desligados",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque

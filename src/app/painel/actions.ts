@@ -40,6 +40,8 @@ import {
   renomearSecao,
 } from "@/lib/secoes";
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
+import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
+import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -1027,4 +1029,80 @@ export async function revogarChaveApiAction(form: FormData) {
 
   await revogarChave(id, tenantId);
   revalidatePath("/painel/conta");
+}
+
+// ── busca por rosto ──────────────────────────────────────────────────────────
+
+/**
+ * Liga a busca por rosto. É o ATO DE CONSENTIMENTO do fotógrafo (LGPD art.
+ * 11): só chega aqui quem leu o texto e marcou que aceita — e o `aceito` é
+ * conferido de novo, porque o formulário é do navegador.
+ *
+ * O evento registra QUANDO. É a resposta para "o estúdio consentiu?", que um
+ * dia alguém pode perguntar.
+ */
+export async function ligarBuscaPorRostoAction(form: FormData): Promise<{ erro?: string } | void> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não informada." };
+  if (form.get("aceito") !== "1") {
+    return { erro: "Para ligar, é preciso aceitar as condições." };
+  }
+
+  const ok = await ligarRostos(galeriaId, tenantId);
+  if (!ok) return { erro: "Galeria não encontrada." };
+
+  await registrarEvento({
+    tenantId,
+    ator: "estudio",
+    acao: ACOES.ROSTOS_LIGADOS,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    ip: await ipDaRequisicao(),
+  });
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * Desliga E apaga os vetores. As duas coisas são uma só — ver `desligarRostos`.
+ * O evento diz quantos foram apagados: é a prova de que o dado sumiu.
+ */
+export async function desligarBuscaPorRostoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+
+  const apagados = await desligarRostos(galeriaId, tenantId);
+  await registrarEvento({
+    tenantId,
+    ator: "estudio",
+    acao: ACOES.ROSTOS_DESLIGADOS,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    detalhe: { rostosApagados: apagados },
+    ip: await ipDaRequisicao(),
+  });
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * As fotos que ainda não passaram pela medição, com o link da PRÉVIA de cada
+ * uma — é o que o navegador do fotógrafo baixa para medir as fotos que já
+ * estavam na galeria antes de a busca ser ligada.
+ *
+ * Prévia, não original: a prévia sai do R2, onde a saída não custa nada; o
+ * original mora no B2 e cada byte lido é cobrado. O preço é que rosto pequeno
+ * demais na prévia fica de fora — a tela avisa isso.
+ */
+export async function fotosSemRostoAction(
+  galeriaId: string,
+): Promise<{ id: string; url: string }[]> {
+  const tenantId = await exigirTenant();
+  const fotos = await fotosSemRosto(galeriaId, tenantId);
+  return Promise.all(
+    fotos.map(async (f) => ({
+      id: f.id,
+      url: await urlDaDerivada(f.chave_preview, f.chave, armazemDe(f.armazem), 3600),
+    })),
+  );
 }

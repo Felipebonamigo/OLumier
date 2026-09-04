@@ -22,8 +22,14 @@ export interface GaleriaPublica {
   expira_em: Date | null;
   aparencia: unknown;
   capa_media_id: string | null;
+  /** Busca por rosto ligada pelo fotógrafo (migração 028). */
+  rostos_ativos: boolean;
   // do estúdio dono — a marca que aparece é a dele, não a nossa
   estudio_nome: string;
+  /* O contato do estúdio, como ele preencheu no site. A tela de consentimento
+     da busca por rosto diz ao convidado com quem falar sobre as fotos dele —
+     e é o estúdio, não nós. */
+  estudio_site: unknown;
   estudio_slug: string;
   estudio_logo: string | null;
   /* A fonte própria do estúdio. Vem junto porque a galeria pública precisa dela
@@ -52,8 +58,8 @@ export async function buscarGaleriaPublica(
 ) {
   return consultarUm<GaleriaPublica>(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
-            g.permite_download, g.expira_em, g.aparencia, g.capa_media_id,
-            t.nome_estudio as estudio_nome, t.slug as estudio_slug,
+            g.permite_download, g.expira_em, g.aparencia, g.capa_media_id, g.rostos_ativos,
+            t.nome_estudio as estudio_nome, t.slug as estudio_slug, t.site as estudio_site,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
             t.fonte_chave as estudio_fonte, t.fonte_nome as estudio_fonte_nome,
             -- Para galeriasNoAr: o trial abandonado deixa de servir a galeria

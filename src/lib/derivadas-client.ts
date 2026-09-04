@@ -9,6 +9,8 @@
  * Roda no cliente; não importar em código de servidor.
  */
 
+import type { RostoMedido } from "./rostos-client";
+
 export const TAMANHO_THUMB = 640; // grade — igual ao que o Pixieset usa
 export const TAMANHO_PREVIEW = 2048; // lightbox — nítido em tela cheia, fração do original
 
@@ -17,6 +19,8 @@ export interface Derivadas {
   preview: Blob;
   largura: number; // do original, para a grade reservar o espaço certo
   altura: number;
+  /** Só quando a galeria tem a busca por rosto ligada e a medição deu certo. */
+  rostos?: RostoMedido[];
 }
 
 async function redimensionar(bitmap: ImageBitmap, alvo: number): Promise<Blob> {
@@ -40,8 +44,16 @@ async function redimensionar(bitmap: ImageBitmap, alvo: number): Promise<Blob> {
 /**
  * Devolve null quando não dá para gerar (vídeo, HEIC em navegador que não decodifica,
  * arquivo corrompido) — aí o fluxo segue só com o original e a grade usa ele mesmo.
+ *
+ * `medirRostos` é opcional e vem de fora: este módulo não sabe de reconhecimento
+ * facial, e não deve — quem não ligou a busca não carrega o modelo. O que ele
+ * garante é que a foto é DECODIFICADA UMA VEZ: o mesmo bitmap serve às três
+ * derivadas e à medição, no original, que é onde o rosto pequeno ainda tem pixel.
  */
-export async function gerarDerivadas(arquivo: File): Promise<Derivadas | null> {
+export async function gerarDerivadas(
+  arquivo: File,
+  opcoes: { medirRostos?: (bitmap: ImageBitmap) => Promise<RostoMedido[]> } = {},
+): Promise<Derivadas | null> {
   if (!arquivo.type.startsWith("image/")) return null;
   try {
     // from-image respeita a orientação EXIF — foto de celular não vira deitada.
@@ -51,7 +63,21 @@ export async function gerarDerivadas(arquivo: File): Promise<Derivadas | null> {
         redimensionar(bitmap, TAMANHO_THUMB),
         redimensionar(bitmap, TAMANHO_PREVIEW),
       ]);
-      return { thumb, preview, largura: bitmap.width, altura: bitmap.height };
+      const derivadas: Derivadas = { thumb, preview, largura: bitmap.width, altura: bitmap.height };
+
+      /*
+       * A medição falhando NÃO derruba o envio: a foto sobe, a galeria abre, e
+       * só a busca fica sem aquela foto. Ela reaparece na fila de "ainda não
+       * medidas" do painel, de onde pode ser medida depois.
+       */
+      if (opcoes.medirRostos) {
+        try {
+          derivadas.rostos = await opcoes.medirRostos(bitmap);
+        } catch {
+          /* segue sem rostos */
+        }
+      }
+      return derivadas;
     } finally {
       bitmap.close();
     }

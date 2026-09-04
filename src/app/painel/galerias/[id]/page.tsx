@@ -19,6 +19,8 @@ import { EditorGaleria } from "@/components/editor-galeria";
 import { paraCampoDeData } from "@/lib/datas";
 import { estadoSelecao, listaDaSelecao, resumoDaGaleria } from "@/lib/favoritas";
 import { PainelSelecao } from "@/components/painel-selecao";
+import { BuscaPorRosto } from "@/components/busca-por-rosto";
+import { fotosSemRosto, resumoDeRostos } from "@/lib/rostos";
 import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
 import { apagarGaleriaAction } from "../../actions";
 
@@ -49,6 +51,10 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
   const favoritas = await resumoDaGaleria(galeria.id);
   const selecao = await estadoSelecao(galeria.id);
   const listaSelecao = await listaDaSelecao(galeria.id);
+
+  // Só pesa quando a busca está ligada; desligada, os dois números são zero.
+  const rostos = galeria.rostos_ativos ? await resumoDeRostos(galeria.id) : { rostos: 0, fotos: 0 };
+  const semMedir = galeria.rostos_ativos ? (await fotosSemRosto(galeria.id, tenantId)).length : 0;
 
   // URLs assinadas com validade curta: o objeto no bucket nunca fica público.
   // Aqui também usamos a miniatura — o painel de quem tem 600 fotos precisa abrir rápido.
@@ -209,6 +215,7 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       <EnviarArquivos
         galeriaId={galeria.id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
+        rostosAtivos={galeria.rostos_ativos}
       />
 
       <GradeMedias
@@ -249,6 +256,29 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
         aberta={selecao.aberta}
         motivo={selecao.motivo}
         lista={listaSelecao.map((l) => ({ nome: l.nome, capitulo: l.capitulo }))}
+      />
+
+      {/*
+        A busca por rosto vem ANTES de publicar, e depois das regras do álbum:
+        é uma decisão sobre a entrega (o que o convidado vai poder fazer), e
+        precisa estar tomada antes de o link sair — ligar depois deixa as fotos
+        já enviadas na fila de "ainda não medidas".
+      */}
+      <BuscaPorRosto
+        galeriaId={galeria.id}
+        ativa={galeria.rostos_ativos}
+        ligadaEm={
+          galeria.rostos_ligados_em
+            ? new Date(galeria.rostos_ligados_em).toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+              })
+            : null
+        }
+        rostos={rostos.rostos}
+        fotosComRosto={rostos.fotos}
+        fotosSemMedir={semMedir}
       />
 
       <PublicarGaleria
