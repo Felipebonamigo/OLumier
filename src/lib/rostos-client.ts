@@ -121,10 +121,19 @@ function emCanvas(fonte: ImageBitmap | HTMLImageElement, lado: number): HTMLCanv
  * Recebe o bitmap que o envio já decodificou para gerar as derivadas: a foto
  * não é aberta duas vezes. Rostos abaixo do piso saem aqui, e saem de novo no
  * servidor, que não confia neste filtro.
+ *
+ * CONTRATO: o bitmap é copiado para um canvas ANTES do primeiro `await`. Quem
+ * chama pode fechar o bitmap assim que esta função devolver a promessa — é o
+ * que permite a medição correr na placa de vídeo enquanto o arquivo sobe, sem
+ * segurar 96 MB de bitmap por foto em voo.
  */
-export async function medirRostos(fonte: ImageBitmap): Promise<RostoMedido[]> {
-  const fa = await faceapi();
+export function medirRostos(fonte: ImageBitmap): Promise<RostoMedido[]> {
   const tela = emCanvas(fonte, LADO_MEDICAO);
+  return medirNaTela(tela);
+}
+
+async function medirNaTela(tela: HTMLCanvasElement): Promise<RostoMedido[]> {
+  const fa = await faceapi();
 
   const achados = await fa
     .detectAllFaces(tela, new fa.SsdMobilenetv1Options({ minConfidence: 0.5 }))

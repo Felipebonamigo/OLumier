@@ -262,6 +262,28 @@ export function EnviarArquivos({
               }
               const dados = preparado!;
 
+              /*
+               * As DERIVADAS sobem JUNTO com o original, não depois dele.
+               *
+               * Medido em 03/09/2026, seis fotos de 6 MB: o PUT do original
+               * levava 1,2 s e o par de derivadas, enfileirado atrás dele,
+               * mais 0,8 s — para 300 KB. Não é banda, é latência: cada PUT
+               * paga a ida e volta até o bucket, e esperar o original acabar
+               * para pagá-la é pagar em série o que cabe em paralelo. Agora a
+               * ida e volta das derivadas some debaixo da transferência do
+               * original.
+               *
+               * Continuam não travando a fila se falharem: o confirmar anula a
+               * derivada que não chegou e a grade cai no original.
+               */
+              const derivadasSubindo =
+                derivadas && dados.urlThumb && dados.urlPreview
+                  ? Promise.allSettled([
+                      enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}),
+                      enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}),
+                    ])
+                  : Promise.resolve();
+
               // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
               if (dados.emPartes) {
                 await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
@@ -272,14 +294,7 @@ export function EnviarArquivos({
                   atualizar(item.id, { progresso: pct }),
                 );
               }
-
-              // Derivadas juntas: somam ~5% do original e não travam a fila se falharem.
-              if (derivadas && dados.urlThumb && dados.urlPreview) {
-                await Promise.allSettled([
-                  enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}),
-                  enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}),
-                ]);
-              }
+              await derivadasSubindo;
 
               // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
               if (!dados.emPartes) {
@@ -295,16 +310,23 @@ export function EnviarArquivos({
                * foto já está entregue, e falhar aqui não pode desfazê-la. Vai
                * mesmo com lista vazia — é o que tira a foto da fila de
                * "ainda não medidas".
+               *
+               * A medição começou lá atrás, junto com as derivadas, e correu
+               * na placa de vídeo ENQUANTO o arquivo subia. Aqui só se espera
+               * o resultado — que quase sempre já está pronto.
                */
               if (medidor && derivadas?.rostos) {
-                const r = await fetch(`/api/medias/${dados.mediaId}/rostos`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ rostos: derivadas.rostos }),
-                }).catch(() => null);
-                if (r?.ok) {
-                  const { salvos } = (await r.json()) as { salvos: number };
-                  atualizar(item.id, { rostos: salvos });
+                const rostos = await derivadas.rostos.catch(() => null);
+                if (rostos) {
+                  const r = await fetch(`/api/medias/${dados.mediaId}/rostos`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ rostos }),
+                  }).catch(() => null);
+                  if (r?.ok) {
+                    const { salvos } = (await r.json()) as { salvos: number };
+                    atualizar(item.id, { rostos: salvos });
+                  }
                 }
               }
             },

@@ -19,8 +19,13 @@ export interface Derivadas {
   preview: Blob;
   largura: number; // do original, para a grade reservar o espaço certo
   altura: number;
-  /** Só quando a galeria tem a busca por rosto ligada e a medição deu certo. */
-  rostos?: RostoMedido[];
+  /**
+   * A medição dos rostos, JÁ EM ANDAMENTO. Só existe com a busca por rosto
+   * ligada. É uma promessa, e não o resultado, de propósito: ela roda na placa
+   * de vídeo enquanto o arquivo sobe pela rede — esperar aqui somaria um
+   * segundo por foto que cabe inteiro debaixo do envio.
+   */
+  rostos?: Promise<RostoMedido[]>;
 }
 
 async function redimensionar(bitmap: ImageBitmap, alvo: number): Promise<Blob> {
@@ -66,13 +71,18 @@ export async function gerarDerivadas(
       const derivadas: Derivadas = { thumb, preview, largura: bitmap.width, altura: bitmap.height };
 
       /*
-       * A medição falhando NÃO derruba o envio: a foto sobe, a galeria abre, e
-       * só a busca fica sem aquela foto. Ela reaparece na fila de "ainda não
-       * medidas" do painel, de onde pode ser medida depois.
+       * A medição é DISPARADA, não esperada. `medirRostos` copia o bitmap para
+       * o próprio canvas antes do primeiro `await` — é o contrato dele — então
+       * o `close()` do `finally` logo abaixo não a alcança, e ela segue na
+       * placa de vídeo enquanto este arquivo sobe. Quem chama espera a
+       * promessa depois de confirmar o envio.
+       *
+       * Falhar NÃO derruba o envio: a foto sobe, a galeria abre, e só a busca
+       * fica sem aquela foto — que reaparece na fila de "ainda não medidas".
        */
       if (opcoes.medirRostos) {
         try {
-          derivadas.rostos = await opcoes.medirRostos(bitmap);
+          derivadas.rostos = opcoes.medirRostos(bitmap);
         } catch {
           /* segue sem rostos */
         }
