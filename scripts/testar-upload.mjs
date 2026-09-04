@@ -151,8 +151,9 @@ await db.end();
  * pega, porque a página continua funcionando perfeitamente na ordem errada.
  *
  * Ajuste de 04/09/2026, pedido do Felipe: "faça com que capítulos venham antes
- * das imagens". O envio segue primeiro; os capítulos sobem para antes da grade,
- * porque o fotógrafo organiza o casamento e depois confere as fotos em cada um.
+ * das imagens" e, logo depois, "coloca capítulos antes do envio também". Os
+ * capítulos abrem a página: o fotógrafo monta o roteiro do casamento e manda
+ * as fotos já para o capítulo certo, em vez de mover depois.
  */
 await etapa("a tela da galeria segue a ordem do trabalho", async () => {
   const { readFileSync } = await import("node:fs");
@@ -163,8 +164,8 @@ await etapa("a tela da galeria segue a ordem do trabalho", async () => {
 
   const ordem = [
     "EditorGaleria", // quem é a galeria
-    "EnviarArquivos", // manda as fotos — o começo
-    "EditorSecoes", // monta os capítulos — antes das fotos, a pedido de 04/09
+    "EditorSecoes", // monta os capítulos — o começo, a pedido de 04/09
+    "EnviarArquivos", // manda as fotos, já para o capítulo certo
     "GradeMedias", // vê o que chegou
     "EditorAparencia", // escolhe o visual JÁ VENDO as fotos
     "PainelSelecao", // define as regras do álbum
@@ -184,7 +185,7 @@ await etapa("a tela da galeria segue a ordem do trabalho", async () => {
       );
     }
   }
-  return "envio primeiro, aparência depois das fotos";
+  return "capítulos primeiro, aparência depois das fotos";
 });
 
 if (falhou) {

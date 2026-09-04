@@ -201,30 +201,32 @@ export default async function GaleriaPage({ params }: { params: Promise<{ id: st
       </dl>
 
       {/*
-        O ENVIO VEM PRIMEIRO, e a ordem desta página é a decisão.
+        OS CAPÍTULOS VÊM PRIMEIRO, O ENVIO LOGO DEPOIS, e a ordem desta página é a decisão.
 
-        Até 27/08/2026 vinham antes dele o publicar, o prazo e a APARÊNCIA — o
+        Até 27/08/2026 vinham antes do envio o publicar, o prazo e a APARÊNCIA — o
         fotógrafo escolhia capa, tipografia e grade olhando fotos de exemplo, e
         só via o resultado de verdade depois de subir o casamento inteiro. A
         ordem da tela é o roteiro que ela sugere, e o roteiro estava invertido.
 
-        Agora ela segue o trabalho: manda as fotos, monta os capítulos, vê o que
-        chegou em cada um, escolhe o visual JÁ VENDO as fotos, define as regras
-        do álbum e só então entrega. `testar-upload.mjs` prende esta ordem.
+        Agora ela segue o trabalho: monta os capítulos, manda as fotos já para o
+        capítulo certo, vê o que chegou, escolhe o visual JÁ VENDO as fotos,
+        define as regras do álbum e só então entrega. `testar-upload.mjs` prende
+        esta ordem.
 
-        Capítulos antes da grade desde 04/09/2026, a pedido do Felipe: "faça com
-        que capítulos venham antes das imagens".
+        Capítulos no topo desde 04/09/2026, a pedido do Felipe: "faça com que
+        capítulos venham antes das imagens" e "coloca capítulos antes do envio
+        também".
       */}
-      <EnviarArquivos
-        galeriaId={galeria.id}
-        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
-        rostosAtivos={galeria.rostos_ativos}
-      />
-
       <EditorSecoes
         galeriaId={galeria.id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
         semCapitulo={medias.filter((m) => !m.secao_id).length}
+      />
+
+      <EnviarArquivos
+        galeriaId={galeria.id}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
+        rostosAtivos={galeria.rostos_ativos}
       />
 
       <GradeMedias
