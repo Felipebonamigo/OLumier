@@ -20,9 +20,12 @@
  * incluso. Este arquivo prende as duas metades disso: que a peça sumiu, e que
  * ninguém que já assinou perdeu espaço nem pagou mais caro.
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   SEGMENTOS,
   ESPACOS,
+  TB_ADICIONAL_CENTAVOS,
   montar,
   idDaMontagem,
   planoPorId,
@@ -50,6 +53,8 @@ import {
 const reserva = (m) =>
   Math.round(custoArmazenamentoCentavos(m) * FOLGA_ESPACO) +
   taxaCobrancaCentavos(montar(m).precoCentavos);
+
+const RAIZ = path.resolve(import.meta.dirname, "..");
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -83,6 +88,67 @@ await etapa("tamanhos de espaço em ordem crescente", () => {
   }
   return `${ESPACOS.length} faixas, ${ESPACOS[0].gb} GB a ${ESPACOS.at(-1).gb} GB`;
 });
+
+/*
+ * ── A ESCADA DE TB É CONTÍNUA E LINEAR (05/09/2026) ───────────────────────
+ *
+ * O Felipe: "eu havia solicitado para mudar os planos, deixando apenas 3 e
+ * depois plano adicional por 1TB". O seletor da home mostrava as sete faixas;
+ * passa a mostrar três mais um passo de "+1 TB".
+ *
+ * O passo só é honesto se a tabela tiver TODOS os teras. Antes ela pulava
+ * 3 → 5 → 10: apertar "+1 TB" a partir de 3 daria 5, e a conta na tela não
+ * bateria com o que a pessoa clicou. Estas duas etapas prendem as duas metades
+ * da promessa "cada TB a mais custa R$ 80": nenhum buraco, e o mesmo degrau em
+ * todos os passos.
+ *
+ * Nenhum preço existente mudou para isso — 2, 3, 5 e 10 TB já eram
+ * exatamente 1 TB + N × R$ 80. O que faltava eram os degraus do meio.
+ */
+etapa("acima de 1 TB não há buraco na escada", () => {
+  const teras = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  for (let i = 1; i < teras.length; i++) {
+    if (teras[i].gb - teras[i - 1].gb !== 1000) {
+      throw new Error(
+        `de ${teras[i - 1].gb / 1000} TB pula para ${teras[i].gb / 1000} TB — "+1 TB" não teria onde pousar`,
+      );
+    }
+  }
+  return `${teras[0].gb / 1000} a ${teras.at(-1).gb / 1000} TB, de 1 em 1`;
+});
+
+etapa("cada TB a mais custa o MESMO, em toda a escada", () => {
+  const teras = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  for (let i = 1; i < teras.length; i++) {
+    const passo = teras[i].precoCentavos - teras[i - 1].precoCentavos;
+    if (passo !== TB_ADICIONAL_CENTAVOS) {
+      throw new Error(
+        `de ${teras[i - 1].gb / 1000} para ${teras[i].gb / 1000} TB o passo é ${passo} e não ${TB_ADICIONAL_CENTAVOS}`,
+      );
+    }
+  }
+  return `R$ ${(TB_ADICIONAL_CENTAVOS / 100).toFixed(2)} por TB, em ${teras.length - 1} passos`;
+});
+
+etapa("a vitrine continua com três, e o seletor com três mais o passo", () => {
+  if (planos.length !== 3) throw new Error(`a vitrine tem ${planos.length} planos`);
+  const base = ESPACOS.filter((e) => e.gb <= 1000);
+  if (base.length !== 3) {
+    throw new Error(`${base.length} faixas até 1 TB — o seletor mostra uma por botão`);
+  }
+  const montador = readFileSync(
+    path.join(RAIZ, "src/components/montador-plano.tsx"),
+    "utf8",
+  );
+  if (montador.includes("ESPACOS.map(")) {
+    throw new Error("o seletor ainda desenha um botão por faixa da tabela inteira");
+  }
+  if (!/TB adicional|tera a mais/i.test(montador)) {
+    throw new Error("o seletor não oferece o passo de TB adicional");
+  }
+  return "3 botões + passo";
+});
+
 
 /*
  * A escada tem de ficar mais barata por GB a cada degrau — é o que empurra o

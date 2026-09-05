@@ -103,11 +103,34 @@ export const ESPACOS: Faixa[] = [
    * (o número e a data da conferência estão no teste) e mover o teto por
    * decisão — nunca afrouxar o teto para caber um preço já escolhido. */
   { gb: 1000, precoCentavos: 11999 },
+  /*
+   * ── DE 2 A 10 TB, DE UM EM UM (05/09/2026) ──────────────────────────────
+   *
+   * A escada era 2, 3, 5 e 10 TB. Os preços destes quatro degraus NÃO mudaram:
+   * eles já eram exatamente 1 TB + N × R$ 80, e é dessa igualdade que
+   * `TB_ADICIONAL_CENTAVOS` nasce. O que faltava eram 4, 6, 7, 8 e 9 TB.
+   *
+   * O buraco não incomodava enquanto o seletor da home desenhava um botão por
+   * faixa: quem precisava de 4 TB clicava em 5 e pagava por 5. Ele passou a
+   * incomodar quando o Felipe pediu "apenas 3 planos e depois plano adicional
+   * por 1 TB" — porque um passo de "+1 TB" que sai de 3 e chega em 5 mente
+   * para quem apertou o botão uma vez.
+   *
+   * Escrito por extenso, e não gerado por laço, pelo mesmo motivo de sempre
+   * nesta tabela: é dinheiro. Uma linha de código que produz nove preços
+   * esconde o preço — e o dia em que alguém trocar o passo de 8000 para 8500,
+   * a diferença tem de aparecer no diff, degrau por degrau.
+   */
   { gb: 2000, precoCentavos: 19999 },
   /* Degrau herdado do cofre: existia lá e faltava aqui. É o passo que evita o
    * salto de R$ 219 para R$ 449 bater de frente com quem só precisava de 3 TB. */
   { gb: 3000, precoCentavos: 27999 },
+  { gb: 4000, precoCentavos: 35999 },
   { gb: 5000, precoCentavos: 43999 },
+  { gb: 6000, precoCentavos: 51999 },
+  { gb: 7000, precoCentavos: 59999 },
+  { gb: 8000, precoCentavos: 67999 },
+  { gb: 9000, precoCentavos: 75999 },
   /* O topo, para quem filma casamento em 4K o ano inteiro. Acima do Pixieset
    * Ultimate, que nem aceita vídeo 4K — aqui não existe concorrente. */
   { gb: 10000, precoCentavos: 83999 },
