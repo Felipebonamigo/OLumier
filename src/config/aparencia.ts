@@ -106,6 +106,23 @@ export type CantoFoto = "reto" | "suave" | "redondo" | "muito";
 export type FonteDoTexto = "padrao" | "propria";
 
 /**
+ * Como o texto da capa se alinha.
+ *
+ * Juan, 05/09/2026: "me incomoda tudo estar torto. Não tá nem centralizado,
+ * nem tudo pra esquerda. Cada coisa tá de um jeito".
+ *
+ * Ele estava olhando a capa jornal, e a queixa é precisa. Nome do estúdio,
+ * título, data e botão são todos centralizados — e como têm larguras
+ * diferentes, a borda ESQUERDA de cada um cai num lugar diferente.
+ * Centralizado está certo em relação ao eixo do meio e torto em relação a
+ * qualquer linha vertical, que é o que o olho procura quando lê de cima para
+ * baixo. Não havia defeito a corrigir: havia uma escolha faltando.
+ *
+ * `centro` é o que as capas sempre desenharam, e continua sendo o padrão.
+ */
+export type Alinhamento = "centro" | "esquerda";
+
+/**
  * Quantas fotos a prévia do editor desenha.
  *
  * A prévia é a galeria pública de verdade, renderizada no tamanho de uma tela
@@ -181,6 +198,7 @@ export interface Aparencia {
   alturaCapa: AlturaCapa;
   canto: CantoFoto;
   fonteTexto: FonteDoTexto;
+  alinhamento: Alinhamento;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
 }
@@ -227,6 +245,7 @@ export const APARENCIA_PADRAO: Aparencia = {
      fonte própria antes deste eixo a escolheu PARA O TÍTULO, e o corpo dessas
      galerias não pode mudar sozinho. Ver o comentário de `FonteDoTexto`. */
   fonteTexto: "padrao",
+  alinhamento: "centro",
 };
 
 /**
@@ -281,6 +300,7 @@ export function lerAparencia(bruto: unknown): Aparencia {
     alturaCapa: valida(o.alturaCapa, OPCOES.alturaCapa.map((x) => x.id), APARENCIA_PADRAO.alturaCapa),
     canto: valida(o.canto, OPCOES.canto.map((x) => x.id), APARENCIA_PADRAO.canto),
     fonteTexto: valida(o.fonteTexto, OPCOES.fonteTexto.map((x) => x.id), APARENCIA_PADRAO.fonteTexto),
+    alinhamento: valida(o.alinhamento, OPCOES.alinhamento.map((x) => x.id), APARENCIA_PADRAO.alinhamento),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
        "sujo/publicado" do editor iguais ao que eram. */
@@ -445,6 +465,10 @@ export const OPCOES = {
     { id: "padrao", nome: "A do sistema", desc: "Sem serifa, feita para ler em tela" },
     { id: "propria", nome: "A minha fonte", desc: "O arquivo que você enviou em Conta" },
   ],
+  alinhamento: [
+    { id: "centro", nome: "Centralizado", desc: "Tudo no eixo do meio" },
+    { id: "esquerda", nome: "À esquerda", desc: "Tudo encostado na mesma linha" },
+  ],
 } as const;
 
 // --- presets ------------------------------------------------------------------
@@ -478,25 +502,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   {
     /*
@@ -513,7 +537,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -536,25 +560,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro" },
   },
 ];
 
@@ -580,7 +604,7 @@ export function presetEquivalente(a: Aparencia): string | null {
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
-    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto;
+    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 
@@ -822,3 +846,57 @@ export const DENSIDADES: Record<Densidade, { gapPx: number; colunas: number }> =
   normal: { gapPx: 8, colunas: 4 },
   arejada: { gapPx: 20, colunas: 3 },
 };
+
+/**
+ * ── AS CARTELAS PRONTAS (05/09/2026) ──────────────────────────────────────
+ *
+ * Juan: "adorei isso das cores, mas podemos deixar ainda melhor fazendo
+ * sugestões de cores mais direcionadas. Essas principais cores que aparecem são
+ * difíceis de encaixar. Talvez alguma cartela de cores diferentes?"
+ *
+ * O que ele viu foi a cartela do SISTEMA: o `<input type="color">` abre o
+ * seletor do macOS, com vermelho, verde e azul puros e um degradê de 12
+ * colunas. São cores de interface. Nenhuma delas encaixa numa galeria de
+ * casamento, e achar o tom certo ali é um trabalho de designer feito com o
+ * mouse.
+ *
+ * ── O QUE UMA PALETA É, E O QUE ELA NÃO É ─────────────────────────────────
+ *
+ * Ela escolhe as TRÊS cores juntas, e é aí que está o valor: o problema do Juan
+ * não era achar um verde, era achar um verde que combinasse com o fundo e com o
+ * texto. Escolhida a cartela, os três seletores continuam ali — a paleta é um
+ * ponto de partida bom, não uma gaiola.
+ *
+ * Não substitui os TEMAS. Tema é a base de quem não quer escolher cor nenhuma;
+ * paleta é para quem quer, e grava em `cores` como qualquer escolha manual.
+ *
+ * ── A REGRA QUE ELAS TÊM DE CUMPRIR ───────────────────────────────────────
+ *
+ * Texto sobre fundo ≥ 4,5:1, o piso do WCAG AA para texto corrido, medido em
+ * `testar-cores-galeria.mjs`. Paleta bonita e ilegível é pior que cartela ruim,
+ * porque a pessoa confia nela — e quem paga o preço é o convidado lendo o nome
+ * do casal no celular, no sol.
+ *
+ * Metade clara, metade escura, também medido: uma cartela em que tudo é bege
+ * não é cartela, é um bege com variações.
+ */
+export interface Paleta {
+  id: string;
+  nome: string;
+  cores: Required<CoresProprias>;
+}
+
+export const PALETAS: Paleta[] = [
+  // — claras —
+  { id: "areia", nome: "Areia", cores: { fundo: "#f6f1ea", texto: "#3a332b", destaque: "#b08968" } },
+  { id: "oliva", nome: "Oliva", cores: { fundo: "#f4f5ef", texto: "#2f3327", destaque: "#5d6d42" } },
+  { id: "terracota", nome: "Terracota", cores: { fundo: "#fbf5f1", texto: "#40312b", destaque: "#b45733" } },
+  { id: "marinho", nome: "Marinho", cores: { fundo: "#f5f7fa", texto: "#1e2a3a", destaque: "#2f5d8c" } },
+  { id: "rose", nome: "Rosé", cores: { fundo: "#faf3f3", texto: "#3d2f31", destaque: "#a45965" } },
+  { id: "bruma", nome: "Bruma", cores: { fundo: "#eef0f1", texto: "#2b3033", destaque: "#5c7076" } },
+  // — escuras —
+  { id: "carvao", nome: "Carvão", cores: { fundo: "#101113", texto: "#ece9e4", destaque: "#cbb08a" } },
+  { id: "mata", nome: "Verde-mata", cores: { fundo: "#0f1512", texto: "#e8ece7", destaque: "#7f9c6d" } },
+  { id: "vinho", nome: "Vinho", cores: { fundo: "#14100f", texto: "#efe7e2", destaque: "#a35b5b" } },
+  { id: "dourado", nome: "Dourado", cores: { fundo: "#12100c", texto: "#f0eade", destaque: "#c9a227" } },
+];

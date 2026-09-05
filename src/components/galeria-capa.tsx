@@ -45,6 +45,25 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    */
   const alturaLogo = alturaLogoPx(aparencia.logo);
 
+  /*
+   * ── O ALINHAMENTO, EM TRÊS CLASSES ─────────────────────────────────────
+   *
+   * São três e não uma porque alinhar texto tem três mecanismos diferentes,
+   * e usar só o primeiro é o que deixa a capa pela metade:
+   *
+   *   texto   `text-align`, que move as LINHAS dentro da caixa
+   *   bloco   o `mx-auto`, que centra a CAIXA (a de 16ch do título)
+   *   itens   o `align-items` do flex, para os filhos de largura própria
+   *
+   * Trocar só o `text-align` deixaria a caixa do título no meio com o texto
+   * encostado na esquerda dela — ainda torto, e agora com duas referências.
+   * É exatamente a queixa que o eixo existe para resolver.
+   */
+  const aEsquerda = aparencia.alinhamento === "esquerda";
+  const alinharTexto = aEsquerda ? "text-left" : "text-center";
+  const alinharBloco = aEsquerda ? "" : "mx-auto";
+  const alinharItens = aEsquerda ? "items-start" : "items-center";
+
   const Estudio = ({ className = "" }: { className?: string }) =>
     logoUrl ? (
       // eslint-disable-next-line @next/next/no-img-element -- URL externa do estúdio, sem otimização nossa
@@ -61,10 +80,24 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
       <TextoEstudio className={className} />
     );
 
+  /*
+   * O NOME DO ESTÚDIO NÃO USA A COR DO BOTÃO.
+   *
+   * Juan, 05/09/2026: "deixei os botões verdinhos e gostei, mas a logo também
+   * ficou verde e isso ficou ruim". Ele tem razão, e o defeito nasceu quando as
+   * cores viraram escolha: enquanto `--g-destaque` era a cor do tema, pintar a
+   * assinatura com ela era coerência. Desde que o editor a rotulou "Botões",
+   * ela virou uma promessa — e pintar o nome do estúdio com ela é o botão
+   * vazando para onde ninguém pediu.
+   *
+   * `--g-suave` é o secundário do tema, com contraste medido (ver
+   * `variaveisDoTema`): a assinatura continua discreta sem herdar a cor de
+   * ação.
+   */
   const TextoEstudio = ({ className = "" }: { className?: string }) => (
     <p
       className={`font-mono text-[11px] uppercase tracking-[0.3em] ${className}`}
-      style={{ color: "var(--g-destaque)" }}
+      style={{ color: "var(--g-suave)" }}
     >
       {estudio}
     </p>
@@ -108,7 +141,9 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa="imersa"
-        className="relative flex min-h-[var(--g-capa-h,78vh)] items-end justify-center overflow-hidden"
+        className={`relative flex min-h-[var(--g-capa-h,78vh)] items-end overflow-hidden ${
+          aEsquerda ? "justify-start" : "justify-center"
+        }`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
         <img
@@ -124,7 +159,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
               "linear-gradient(to top, var(--g-fundo) 2%, color-mix(in srgb, var(--g-fundo) 55%, transparent) 35%, transparent 75%)",
           }}
         />
-        <div className="relative z-10 px-6 pb-16 text-center">
+        <div className={`relative z-10 w-full max-w-3xl px-6 pb-16 ${alinharTexto}`}>
           <Estudio />
           <div className="mt-5">
             <Titulo tamanho="text-5xl sm:text-7xl" />
@@ -142,11 +177,11 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa="jornal"
-        className="px-6 py-20 text-center sm:py-28"
+        className={`px-6 py-20 sm:py-28 ${alinharTexto}`}
         style={{ borderBottom: "1px solid var(--g-linha)" }}
       >
         <Estudio />
-        <div className="mx-auto mt-8 max-w-[16ch]">
+        <div className={`mt-8 max-w-[16ch] ${alinharBloco}`}>
           <Titulo tamanho="text-5xl sm:text-7xl" />
         </div>
         <div className="mt-6">
@@ -198,8 +233,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         </div>
 
         <div className="flex flex-col justify-between gap-10 md:py-4">
-          <Estudio className="self-start" />
-          <div className="flex flex-col items-start gap-5">
+          <Estudio className={aEsquerda ? "self-start" : "self-center"} />
+          <div className={`flex flex-col gap-5 ${alinharItens} ${alinharTexto}`}>
             <Legenda />
             {/* Peso normal, e não negrito: a serifada de contraste alto (Bodoni,
                 Playfair) vive do traço fino, e o negrito fecha justamente o que
@@ -231,7 +266,9 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
-        <div className="flex flex-col justify-center px-8 py-16 text-center md:px-14 md:text-left">
+        <div
+          className={`flex flex-col justify-center px-8 py-16 md:px-14 md:text-left ${alinharTexto}`}
+        >
           <Estudio />
           <div className="mt-6">
             <Titulo tamanho="text-4xl sm:text-6xl" />
@@ -248,11 +285,11 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   return (
     <header
       data-capa="minima"
-      className="px-6 py-16 text-center sm:py-20"
+      className={`px-6 py-16 sm:py-20 ${alinharTexto}`}
       style={{ borderBottom: "1px solid var(--g-linha)" }}
     >
       <Estudio />
-      <div className="mx-auto mt-6 max-w-[18ch]">
+      <div className={`mt-6 max-w-[18ch] ${alinharBloco}`}>
         <Titulo tamanho="text-4xl sm:text-5xl" />
       </div>
       <div className="mt-4">

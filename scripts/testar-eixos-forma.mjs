@@ -221,6 +221,66 @@ try {
    * deploy, senão a folha velha responde pela nova.
    */
 
+  /*
+   * ── O ALINHAMENTO DA CAPA (05/09/2026) ───────────────────────────────────
+   *
+   * Juan: "me incomoda tudo estar torto. Não tá nem centralizado, nem tudo pra
+   * esquerda. Cada coisa tá de um jeito". Ele estava olhando a capa jornal, em
+   * que nome do estúdio, título, data e botão são todos centralizados — e por
+   * terem larguras diferentes, as bordas ESQUERDAS de cada um caem em lugares
+   * diferentes. Centralizado está certo em relação ao eixo do meio e torto em
+   * relação a qualquer linha vertical, que é o que o olho procura.
+   *
+   * A resposta é a escolha que ele pediu junto ("tem como escolher entre as
+   * opções de formatação? centralizado, alinhamento pra esquerda"): um eixo, e
+   * `centro` como padrão para nenhuma galeria entregue mudar de cara.
+   */
+  for (const [alinhamento, marca, ausente] of [
+    ["centro", "text-center", "text-left"],
+    ["esquerda", "text-left", "text-center"],
+  ]) {
+    const corpo = await html({ ...base, capa: "jornal", alinhamento });
+    const cabecalho = corpo.match(/<header[^>]*data-capa="jornal"[^>]*>/)?.[0] ?? "";
+    if (cabecalho.includes(marca) && !cabecalho.includes(ausente)) {
+      ok(`alinhamento "${alinhamento}" desenha a capa com ${marca}`);
+    } else {
+      erro(`alinhamento "${alinhamento}": cabeçalho veio "${cabecalho.slice(0, 120)}"`);
+    }
+  }
+
+  /* O título da jornal mora numa caixa de 16ch centrada por `mx-auto`. Trocar
+     só o `text-align` deixaria a CAIXA no meio e o texto encostado na esquerda
+     dela — ou seja, ainda torto, e pior, porque agora há duas referências. */
+  const jornalEsquerda = await html({ ...base, capa: "jornal", alinhamento: "esquerda" });
+  const caixaDoTitulo = jornalEsquerda.match(/<div class="[^"]*max-w-\[16ch\][^"]*"/)?.[0] ?? "";
+  if (caixaDoTitulo && !caixaDoTitulo.includes("mx-auto")) {
+    ok("à esquerda, a caixa do título perde o mx-auto e encosta na mesma linha");
+  } else {
+    erro(`a caixa do título veio "${caixaDoTitulo.slice(0, 100)}" — ainda centrada`);
+  }
+
+  /*
+   * A COR DO NOME DO ESTÚDIO NÃO É A COR DO BOTÃO.
+   *
+   * Juan: "deixei os botões verdinhos e gostei, mas a logo também ficou verde
+   * e isso ficou ruim". `TextoEstudio` pintava com `--g-destaque` — a mesma
+   * variável do botão. Enquanto o destaque era do tema, ninguém reparava;
+   * desde que ele virou escolha rotulada "Botões", pintar o nome do estúdio com
+   * ela é o botão vazando para onde ninguém pediu.
+   */
+  const comBotaoVerde = await html({
+    ...base,
+    capa: "jornal",
+    cores: { destaque: "#22c55e" },
+  });
+  const nomeDoEstudio =
+    comBotaoVerde.match(/<p class="font-mono text-\[11px\] uppercase[^"]*"[^>]*>/)?.[0] ?? "";
+  if (nomeDoEstudio && !/--g-destaque/.test(nomeDoEstudio)) {
+    ok("o nome do estúdio não usa a cor do botão");
+  } else {
+    erro(`o nome do estúdio ainda pinta com --g-destaque: "${nomeDoEstudio.slice(0, 120)}"`);
+  }
+
   /* Aparência de antes dos eixos: os campos simplesmente não existem. */
   const corpoAntigo = await html(base);
   if (corpoAntigo.includes("--g-capa-h:78vh") && corpoAntigo.includes("--g-canto:6px")) {

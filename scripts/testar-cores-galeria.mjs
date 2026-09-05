@@ -42,6 +42,8 @@ const { lerAparencia, variaveisDoTema, presetEquivalente, PRESETS, TEMAS, APAREN
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 
 let falhou = false;
+/* Marcador para as etapas das paletas ficarem juntas do resto — ver o bloco
+   "Paletas prontas" mais abaixo. */
 const etapa = async (nome, fn) => {
   try {
     const extra = await fn();
@@ -225,6 +227,72 @@ await etapa("sem sessão, a cor da URL é ignorada", async () => {
   if (html.includes(`--g-fundo:${FUNDO}`) || html.includes(`--g-fundo: ${FUNDO}`)) {
     throw new Error("qualquer pessoa com o link conseguiu repintar a galeria alheia");
   }
+});
+
+/*
+ * ── PALETAS PRONTAS (05/09/2026) ──────────────────────────────────────────
+ *
+ * Juan: "adorei isso das cores, mas podemos deixar ainda melhor fazendo
+ * sugestões de cores mais direcionadas. Essas principais cores que aparecem são
+ * difíceis de encaixar. Talvez alguma cartela de cores diferentes?"
+ *
+ * O seletor nativo do sistema abre a cartela do MACOS — vermelho, verde, azul
+ * puros, o cinza escadinha. São cores de interface, não de casamento: nenhuma
+ * delas encaixa numa galeria de noiva, e a pessoa fica tentando achar o tom
+ * certo num quadrado de 12 colunas.
+ *
+ * As paletas resolvem o encaixe escolhendo os três valores JUNTOS. E é por
+ * isso que elas se testam: uma paleta é uma promessa de legibilidade, e a
+ * promessa tem número — 4,5:1 entre texto e fundo, o piso do WCAG AA para
+ * texto corrido. Paleta bonita e ilegível é pior que cartela ruim, porque a
+ * pessoa confia nela.
+ */
+console.log("\nPaletas prontas:\n");
+
+const { PALETAS } = await import("../src/config/aparencia.ts");
+const { luminancia } = await import("../src/lib/marca-estudio.ts");
+
+await etapa("existem paletas prontas para escolher", () => {
+  if (!Array.isArray(PALETAS) || PALETAS.length < 6) {
+    throw new Error(`PALETAS tem ${PALETAS?.length ?? 0} — poucas para servir de cartela`);
+  }
+  return `${PALETAS.length} cartelas`;
+});
+
+await etapa("toda paleta traz as três cores em #rrggbb minúsculo", () => {
+  const hex = /^#[0-9a-f]{6}$/;
+  for (const p of PALETAS) {
+    for (const chave of ["fundo", "texto", "destaque"]) {
+      if (!hex.test(p.cores[chave] ?? "")) {
+        throw new Error(`"${p.nome}" tem ${chave} = ${JSON.stringify(p.cores[chave])}`);
+      }
+    }
+  }
+  return "o mesmo formato que `lerCores` aceita";
+});
+
+await etapa("texto sobre fundo passa de 4,5:1 em toda paleta", () => {
+  let pior = { nome: null, razao: Infinity };
+  for (const p of PALETAS) {
+    const r = contraste(p.cores.texto, p.cores.fundo);
+    if (r < pior.razao) pior = { nome: p.nome, razao: r };
+  }
+  if (pior.razao < 4.5) {
+    throw new Error(`"${pior.nome}" dá ${pior.razao.toFixed(2)}:1 — abaixo do piso`);
+  }
+  return `pior caso "${pior.nome}" com ${pior.razao.toFixed(2)}:1`;
+});
+
+/* Uma cartela em que todas as opções são variações do mesmo bege não é cartela.
+   Metade clara e metade escura é o mínimo para a escolha significar algo. */
+await etapa("a cartela tem opções claras E escuras", () => {
+
+  const claras = PALETAS.filter((p) => luminancia(p.cores.fundo) > 0.5).length;
+  const escuras = PALETAS.length - claras;
+  if (claras < 2 || escuras < 2) {
+    throw new Error(`${claras} claras e ${escuras} escuras — a cartela puxa para um lado só`);
+  }
+  return `${claras} claras · ${escuras} escuras`;
 });
 
 await limparRodada(db);

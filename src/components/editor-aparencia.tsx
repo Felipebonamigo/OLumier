@@ -8,6 +8,7 @@ import {
   presetEquivalente,
   FONTES_TITULO,
   VIEWPORTS_PREVIA,
+  PALETAS,
   TEMAS,
   type Aparencia,
   type ViewportPrevia,
@@ -85,7 +86,7 @@ function SeletorDeFonte({ ap, mudar, temFontePropria }: PecaProps & { temFontePr
                       className={`rounded-lg border px-3.5 py-2 text-base leading-none transition ${
                         ativo
                           ? "border-acento bg-acento/10 text-acento-alto"
-                          : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+                          : "border-linha text-texto-soft hover:border-acento hover:bg-acento/5 hover:text-texto"
                       }`}
                     >
                       {op.nome}
@@ -141,7 +142,56 @@ function CoresProprias({ ap, mudar }: PecaProps) {
       <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
         Por cima do tema. O resto da paleta acompanha.
       </p>
-      <div className="mt-2 flex flex-wrap items-center gap-2">
+      {/*
+        AS CARTELAS VÊM ANTES DOS SELETORES, e a ordem é a resposta ao pedido.
+
+        Juan: "essas principais cores que aparecem são difíceis de encaixar.
+        Talvez alguma cartela de cores diferentes?" O que ele viu foi o seletor
+        do sistema — vermelho, verde e azul puros —, cores de interface que não
+        encaixam em galeria de casamento.
+
+        Cada pastilha escolhe as TRÊS cores juntas, que é onde estava a
+        dificuldade: achar um verde é fácil, achar um verde que combine com o
+        fundo e com o texto é trabalho de designer. Depois de clicar, os três
+        seletores continuam logo abaixo — a cartela é ponto de partida, não
+        gaiola.
+      */}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {PALETAS.map((p) => {
+          const ativa =
+            ap.cores?.fundo === p.cores.fundo &&
+            ap.cores?.texto === p.cores.texto &&
+            ap.cores?.destaque === p.cores.destaque;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => mudar({ ...ap, cores: { ...p.cores } })}
+              aria-pressed={ativa}
+              title={`${p.nome} — fundo, texto e botão`}
+              className={`flex items-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] transition ${
+                ativa
+                  ? "border-acento bg-acento/10 text-acento-alto"
+                  : "border-linha text-texto-soft hover:border-acento hover:bg-acento/5 hover:text-texto"
+              }`}
+            >
+              {/* As três cores desenhadas, e não só o nome: "Terracota" não diz
+                  qual terracota, e a amostra decide a escolha em meio segundo. */}
+              <span
+                aria-hidden="true"
+                className="flex h-4 w-9 shrink-0 overflow-hidden rounded-[3px] border border-linha"
+              >
+                <span className="flex-1" style={{ background: p.cores.fundo }} />
+                <span className="flex-1" style={{ background: p.cores.texto }} />
+                <span className="flex-1" style={{ background: p.cores.destaque }} />
+              </span>
+              {p.nome}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         {ROTULOS_DE_COR.map(({ chave, variavel, titulo }) => {
           const atual = ap.cores?.[chave] ?? doTema[variavel];
           const propria = Boolean(ap.cores?.[chave]);
@@ -151,7 +201,7 @@ function CoresProprias({ ap, mudar }: PecaProps) {
               className={`flex cursor-pointer items-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs transition ${
                 propria
                   ? "border-acento bg-acento/10 text-acento-alto"
-                  : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+                  : "border-linha text-texto-soft hover:border-acento hover:bg-acento/5 hover:text-texto"
               }`}
             >
               <input
@@ -213,7 +263,7 @@ function Eixo<K extends keyof typeof OPCOES>({
               className={`rounded-lg border px-3 py-1.5 text-xs transition ${
                 ativo
                   ? "border-acento bg-acento/10 text-acento-alto"
-                  : "border-linha text-texto-soft hover:border-linha-forte hover:text-texto"
+                  : "border-linha text-texto-soft hover:border-acento hover:bg-acento/5 hover:text-texto"
               }`}
             >
               {op.nome}
@@ -245,6 +295,18 @@ function Eixo<K extends keyof typeof OPCOES>({
  * cada vez, e o menu à vista. É também o que a ordem diz — escolher um estilo é
  * a primeira decisão, e por isso ele abre selecionado.
  */
+/**
+ * Os desenhos de capa que NÃO usam foto — os dois são só tipografia.
+ *
+ * Escrito à mão, e não deduzido de `OPCOES.capa`: é uma propriedade do
+ * COMPONENTE (`galeria-capa.tsx` só lê `urlImagem` nas outras três), e uma
+ * lista que se deduz sozinha da tabela de opções concordaria com qualquer capa
+ * nova sem ninguém decidir nada. Capa nova entra aqui de propósito, ou não
+ * entra de propósito.
+ */
+const CAPAS_SEM_FOTO: string[] = ["jornal", "minima"];
+const nomeDaCapa = (id: string) => OPCOES.capa.find((o) => o.id === id)?.nome ?? id;
+
 const GRUPOS = [
   { id: "estilos", nome: "Estilos prontos" },
   { id: "capa", nome: "Capa" },
@@ -488,7 +550,7 @@ export function EditorAparencia({
                     className={`w-full whitespace-nowrap rounded-lg px-3 py-1.5 text-left text-xs transition ${
                       ativo
                         ? "bg-carbon-2 font-medium text-texto"
-                        : "text-texto-soft hover:bg-carbon hover:text-texto"
+                        : "text-texto-soft hover:bg-acento/10 hover:text-texto"
                     }`}
                   >
                     {g.nome}
@@ -512,7 +574,7 @@ export function EditorAparencia({
                     className={`rounded-lg border p-3 text-left transition ${
                       ativo
                         ? "border-acento bg-acento/5"
-                        : "border-linha hover:border-linha-forte hover:bg-carbon-2"
+                        : "border-linha hover:border-acento hover:bg-acento/5"
                     }`}
                   >
                     <span className="flex items-center gap-2">
@@ -530,12 +592,47 @@ export function EditorAparencia({
           {grupo === "capa" && (
             <>
               {slotCapa}
+              {/*
+                "ESCOLHI A CAPA MAS TÁ NÃO APARECENDO" — Juan, 05/09/2026.
+
+                Não era defeito de gravação: ele tinha escolhido a foto de capa
+                E o desenho "Jornal", que é o desenho SEM foto — fundo limpo,
+                tipografia grande. A tela deixava as duas escolhas conviverem e
+                não dizia que uma anulava a outra, então o resultado parecia o
+                sistema tendo perdido a foto.
+
+                O aviso só aparece na combinação que causa isso, e resolve com
+                um clique: dizer o problema sem dar a saída é metade do trabalho.
+              */}
+              {CAPAS_SEM_FOTO.includes(ap.capa) && (
+                <div className="rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2.5">
+                  <p className="text-xs text-alerta">
+                    O desenho <strong>{nomeDaCapa(ap.capa)}</strong> não mostra foto de capa — ele é
+                    só tipografia. A foto escolhida acima fica guardada, mas não aparece.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {OPCOES.capa
+                      .filter((o) => !CAPAS_SEM_FOTO.includes(o.id))
+                      .map((o) => (
+                        <button
+                          key={o.id}
+                          type="button"
+                          onClick={() => mudar({ ...ap, capa: o.id })}
+                          className="rounded-md border border-linha-forte px-2.5 py-1 text-[11px] transition hover:bg-carbon-2"
+                        >
+                          usar {o.nome}
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
               <Eixo eixo="capa" titulo="Desenho da capa" ap={ap} mudar={mudar} />
               <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />
               {/* Junto do desenho da capa porque é a MESMA decisão vista de
                   outro lado: escolher "imersa" e depois "baixa" é dizer foto em
                   tela cheia, mas não a tela inteira. */}
               <Eixo eixo="alturaCapa" titulo="Altura da capa" ap={ap} mudar={mudar} />
+              <Eixo eixo="alinhamento" titulo="Alinhamento do texto" ap={ap} mudar={mudar} />
             </>
           )}
           {grupo === "tipografia" && (
