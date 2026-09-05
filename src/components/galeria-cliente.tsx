@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
-  montarLotes,
+  entregarTudo,
+  entregouUmaFoto,
   baixarNoComputador,
   deveOferecerSalvar,
   salvarNoCelular,
@@ -328,14 +329,18 @@ export function GaleriaCliente({
       return;
     }
 
-    registrar("baixou", it.id);
     if (!modoSalvar) {
+      registrar("baixou", it.id);
       baixarNoComputador(url, it.nome);
       return;
     }
     setAviso("preparando…");
     try {
+      /* O registro espera o desfecho pelo mesmo motivo do "baixar tudo": até
+         05/09/2026 ele vinha antes de abrir o menu, então fechar o menu
+         contava um download que nunca aconteceu. Ver `entregouUmaFoto`. */
       const r = await salvarNoCelular([{ url, nome: it.nome }]);
+      if (entregouUmaFoto(r)) registrar("baixou", it.id);
       if (r === "salvou") {
         setAviso("salvo ✓");
       } else if (r === "cancelou") {
@@ -344,10 +349,11 @@ export function GaleriaCliente({
         // sem-suporte, expirou ou sem-acesso: o menu nativo não rolou, mas a
         // foto não pode simplesmente não vir. Cai no download comum.
         baixarNoComputador(url, it.nome);
-        setAviso(r === "expirou" ? "baixado — procure em Arquivos" : null);
+        setAviso("baixada — procure em Arquivos ou Downloads");
       }
     } catch {
       setAviso(null);
+      registrar("baixou", it.id);
       baixarNoComputador(url, it.nome);
     } finally {
       setTimeout(() => setAviso(null), 2500);
@@ -396,51 +402,41 @@ export function GaleriaCliente({
       return;
     }
 
-    registrar("baixou_tudo");
-
+    /*
+     * O REGISTRO VEM DEPOIS, e não aqui.
+     *
+     * Ficava exatamente neste ponto — logo após assinar as URLs — e por isso
+     * contava o CLIQUE. O Juan tentou baixar tudo no celular em 05/09/2026,
+     * não veio nada, e a aba Atividade marcou 1 download. A Atividade é prova
+     * de entrega para o fotógrafo; número que sobe sem entrega é prova falsa,
+     * e ela aparece justamente na conversa em que o cliente diz que não
+     * recebeu.
+     *
+     * Toda a orquestração mora em `entregarTudo` (lib/salvar-client.ts), que é
+     * pura e devolve o desfecho — é o que permite `testar-salvar-mobile.mjs`
+     * perguntar "e se a pessoa fechar o menu?" sem um celular na mão.
+     */
     try {
-      if (modoSalvar) {
-        /*
-         * Lotes por MEMÓRIA, não por contagem. O menu nativo precisa dos
-         * arquivos carregados como Blob; vinte fotos de 8 MB já são 160 MB, e um
-         * vídeo de casamento sozinho derrubaria a aba. O que é grande demais vai
-         * pelo download comum, que o navegador escreve direto no disco.
-         */
-        const { lotes, grandes } = montarLotes(baixaveis);
-        let feitos = 0;
+      const desfecho = await entregarTudo(baixaveis, {
+        peloMenu: modoSalvar,
+        salvarLote: (lote) => salvarNoCelular(lote),
+        baixar: baixarNoComputador,
+        esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
+        aoProgredir: setProgressoLote,
+      });
 
-        for (const g of grandes) {
-          baixarNoComputador(g.url, g.nome);
-          setProgressoLote(++feitos);
-          await new Promise((r) => setTimeout(r, 700));
-        }
+      if (desfecho.entregues > 0) registrar("baixou_tudo");
 
-        for (const lote of lotes) {
-          const inicio = feitos;
-          const r = await salvarNoCelular(lote, (baixados) =>
-            setProgressoLote(inicio + baixados),
-          );
-          // Fechou o menu: entende-se como "chega", e não como erro.
-          if (r === "cancelou") break;
-          if (r !== "salvou") {
-            // Antes só "sem-suporte" caía no download; "expirou" e "sem-acesso"
-            // viravam erro vermelho e o casal ficava sem as fotos. Qualquer
-            // desfecho que não seja "salvou" precisa entregar os arquivos.
-            for (const it of lote) baixarNoComputador(it.url, it.nome);
-            if (r === "expirou") {
-              setAviso("baixados — procure em Arquivos");
-            }
-          }
-          feitos += lote.length;
-          setProgressoLote(feitos);
-        }
-      } else {
-        for (let i = 0; i < baixaveis.length; i++) {
-          baixarNoComputador(baixaveis[i].url, baixaveis[i].nome);
-          setProgressoLote(i + 1);
-          // Intervalo curto: o navegador ignora downloads disparados todos juntos.
-          await new Promise((r) => setTimeout(r, 700));
-        }
+      /* Cancelar é escolha da pessoa e não vira mensagem. O resto vira: quem
+         batia em CORS via o contador chegar ao fim e nada acontecer, sem uma
+         palavra — era o "não deu" dito em silêncio. */
+      const aviso = desfecho.cancelado
+        ? null
+        : (desfecho.aviso ??
+          (desfecho.entregues === 0 ? "não consegui salvar. Tente em partes." : null));
+      if (aviso) {
+        setAviso(aviso);
+        setTimeout(() => setAviso(null), 4000);
       }
     } catch {
       setAviso("não consegui salvar tudo. Tente em partes.");

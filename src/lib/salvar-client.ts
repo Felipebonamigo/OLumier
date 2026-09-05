@@ -158,6 +158,134 @@ export async function salvarNoCelular(
   }
 }
 
+/**
+ * O desfecho de UMA foto conta como entrega?
+ *
+ * Só "cancelou" não conta — a pessoa viu o menu e fechou, e nada saiu. Os
+ * outros três desfechos ruins ("sem-suporte", "expirou", "sem-acesso") caem no
+ * download comum, que entrega; contá-los é a mesma régua do computador.
+ *
+ * Existe como função, e não como um `!==` solto no componente, porque é uma
+ * regra sobre a PROVA DE ENTREGA do fotógrafo — e regra que sustenta prova
+ * merece um teste com nome.
+ */
+export const entregouUmaFoto = (r: ResultadoSalvar): boolean => r !== "cancelou";
+
+/**
+ * A pausa entre um download e o outro.
+ *
+ * Navegador ignora downloads disparados todos juntos — no computador ele
+ * pergunta "permitir vários downloads?" e no celular simplesmente descarta os
+ * seguintes. 700 ms é o intervalo que o caminho do computador já usava desde
+ * sempre; o que faltava era o caminho do CELULAR usar o mesmo quando cai no
+ * download comum, que é exatamente onde "não veio nada" nascia.
+ */
+export const PAUSA_ENTRE_DOWNLOADS = 700;
+
+export interface DesfechoEntrega {
+  /** Arquivos efetivamente passados adiante. Zero é uma resposta legítima. */
+  entregues: number;
+  /** A pessoa fechou o menu nativo. Não é erro, e não é entrega. */
+  cancelado: boolean;
+  /** O que dizer na tela, ou `null` quando não há o que dizer. */
+  aviso: string | null;
+}
+
+export interface GanchosDeEntrega {
+  /** true no celular com menu nativo; false no computador. */
+  peloMenu: boolean;
+  salvarLote: (lote: ArquivoParaSalvar[]) => Promise<ResultadoSalvar>;
+  baixar: (url: string, nome: string) => void;
+  esperar: (ms: number) => Promise<void>;
+  aoProgredir?: (feitos: number) => void;
+}
+
+/**
+ * Entrega a galeria inteira, e DIZ o que aconteceu.
+ *
+ * ── POR QUE ISTO SAIU DE DENTRO DO COMPONENTE (05/09/2026) ─────────────────
+ *
+ * O Juan tentou baixar tudo no celular, não veio nada, e a aba Atividade marcou
+ * 1 download. O registro ficava logo depois de assinar as URLs — ou seja,
+ * contava o CLIQUE. E a Atividade é PROVA DE ENTREGA para o fotógrafo: um
+ * número que sobe quando nada saiu não é impreciso, é falso, e aparece
+ * justamente na conversa em que o cliente diz que não recebeu.
+ *
+ * Aqui a pergunta "quantos saíram?" tem resposta, e ela pode ser zero: menu
+ * fechado é zero, lista vazia é zero. Quem chama decide o que fazer com isso —
+ * e é assim que o registro passa a depender do desfecho em vez do clique.
+ *
+ * O que esta função NÃO promete: que o arquivo chegou ao disco. Download comum
+ * é disparar e soltar; ninguém, em nenhum navegador, avisa o site que o
+ * arquivo terminou. `entregues` conta o que foi passado adiante, que é o
+ * máximo que dá para afirmar com honestidade — a mesma régua do download de
+ * uma foto só.
+ */
+export async function entregarTudo(
+  arquivos: ArquivoParaSalvar[],
+  ganchos: GanchosDeEntrega,
+): Promise<DesfechoEntrega> {
+  const { peloMenu, salvarLote, baixar, esperar, aoProgredir } = ganchos;
+  if (arquivos.length === 0) return { entregues: 0, cancelado: false, aviso: null };
+
+  let entregues = 0;
+  const avancar = (n: number) => {
+    entregues += n;
+    aoProgredir?.(entregues);
+  };
+
+  /* Um atrás do outro, com pausa entre eles. A pausa vem DEPOIS de cada
+     arquivo, inclusive do último: 700 ms a mais no fim custam menos que um
+     caso especial que ninguém revisita. */
+  const baixarEmSequencia = async (lista: ArquivoParaSalvar[]) => {
+    for (const a of lista) {
+      baixar(a.url, a.nome);
+      avancar(1);
+      await esperar(PAUSA_ENTRE_DOWNLOADS);
+    }
+  };
+
+  if (!peloMenu) {
+    await baixarEmSequencia(arquivos);
+    return { entregues, cancelado: false, aviso: null };
+  }
+
+  const { lotes, grandes } = montarLotes(arquivos);
+  await baixarEmSequencia(grandes);
+
+  let aviso: string | null = grandes.length > 0 ? AVISO_ARQUIVOS : null;
+
+  for (const lote of lotes) {
+    const r = await salvarLote(lote);
+
+    // Fechou o menu: entende-se como "chega", e não como erro. O que já saiu
+    // continua contando; o que viria depois, não.
+    if (r === "cancelou") return { entregues, cancelado: true, aviso };
+
+    if (r === "salvou") {
+      avancar(lote.length);
+      continue;
+    }
+
+    /*
+     * "sem-suporte", "expirou" ou "sem-acesso": o menu nativo não rolou, e as
+     * fotos não podem simplesmente não vir. Vão pelo download comum — e o
+     * aviso deixou de ser exclusivo do "expirou": antes, quem batia em CORS
+     * via o contador chegar ao fim e NADA acontecer, sem uma palavra. Era o
+     * "não deu" do Juan, dito pela tela em silêncio.
+     */
+    await baixarEmSequencia(lote);
+    aviso = AVISO_ARQUIVOS;
+  }
+
+  return { entregues, cancelado: false, aviso };
+}
+
+/* Uma frase só para os três desfechos que caem no download comum: o lugar onde
+   o arquivo termina é o mesmo, e é essa a dúvida de quem está com o celular na
+   mão. */
+const AVISO_ARQUIVOS = "baixadas — procure em Arquivos ou Downloads";
+
 /** Download clássico, para computador. */
 export function baixarNoComputador(url: string, nome: string) {
   const a = document.createElement("a");

@@ -169,6 +169,162 @@ const okLote = mod.LOTE_MAXIMO > 0 && mod.LOTE_MAXIMO <= 30;
 if (!okLote) falhou = true;
 console.log(`  ${okLote ? "✓" : "✗"} lote de ${mod.LOTE_MAXIMO} fotos por vez (memória do celular)`);
 
+/*
+ * ── "BAIXAR TUDO" NO CELULAR (05/09/2026) ─────────────────────────────────
+ *
+ * O Juan tentou baixar tudo no celular, não veio nada — e a aba Atividade
+ * marcou 1 download. Duas coisas erradas de uma vez, e a segunda é a pior: a
+ * Atividade é PROVA DE ENTREGA para o fotógrafo ("o casal baixou dia tal"). Um
+ * número que sobe quando nada foi entregue não é um número impreciso, é uma
+ * prova falsa — e ela aparece justamente na conversa em que o cliente diz que
+ * não recebeu.
+ *
+ * Daí `entregarTudo` existir como função pura, fora do componente: o desfecho
+ * ("quantos saíram, a pessoa cancelou?") passa a ser algo que se pergunta num
+ * teste, em vez de um efeito colateral no meio de um `onClick`.
+ */
+console.log("\nBaixar tudo — o que conta como entregue:\n");
+
+{
+  const ok = (nome, cond, extra) => {
+    if (!cond) falhou = true;
+    console.log(`  ${cond ? "✓" : "✗"} ${nome}${extra ? ` — ${extra}` : ""}`);
+  };
+
+  const fotos = Array.from({ length: 5 }, (_, i) => arq(`f${i}.jpg`, 2));
+
+  /** Bancada: conta o que foi baixado e quanto se esperou entre um e outro. */
+  function bancada(resultadoDoMenu) {
+    const baixados = [];
+    const esperas = [];
+    return {
+      baixados,
+      esperas,
+      ganchos: {
+        salvarLote: async () =>
+          typeof resultadoDoMenu === "function" ? resultadoDoMenu() : resultadoDoMenu,
+        baixar: (url, nome) => baixados.push(nome),
+        esperar: async (ms) => void esperas.push(ms),
+      },
+    };
+  }
+
+  // 1. O caso do Juan: a pessoa fecha o menu. Nada saiu.
+  {
+    const b = bancada("cancelou");
+    const r = await mod.entregarTudo(fotos, { peloMenu: true, ...b.ganchos });
+    ok("fechar o menu não entrega nada", r.entregues === 0 && r.cancelado === true,
+      `entregues=${r.entregues}`);
+    ok("e não dispara download nenhum por baixo", b.baixados.length === 0);
+  }
+
+  // 2. Salvou de verdade.
+  {
+    const b = bancada("salvou");
+    const r = await mod.entregarTudo(fotos, { peloMenu: true, ...b.ganchos });
+    ok("menu concluído entrega as fotos do lote", r.entregues === fotos.length,
+      `entregues=${r.entregues}`);
+  }
+
+  // 3. O menu falhou: cai no download comum — mas ESPAÇADO.
+  //    Vinte cliques de download disparados juntos são ignorados pelo
+  //    navegador; é a mesma razão pela qual o caminho do computador já
+  //    espera entre um e outro. Sem a espera, "não veio nada" no celular.
+  {
+    const b = bancada("sem-acesso");
+    const r = await mod.entregarTudo(fotos, { peloMenu: true, ...b.ganchos });
+    ok("menu recusado cai no download comum", b.baixados.length === fotos.length);
+    ok(
+      "com pausa entre um download e o outro",
+      b.esperas.filter((ms) => ms > 0).length >= fotos.length - 1,
+      `${b.esperas.length} pausas`,
+    );
+    ok("e diz onde as fotos foram parar", Boolean(r.aviso), r.aviso ?? "sem aviso");
+  }
+
+  // 4. Lista vazia: galeria com download bloqueado devolve zero links.
+  {
+    const b = bancada("salvou");
+    const r = await mod.entregarTudo([], { peloMenu: true, ...b.ganchos });
+    ok("lista vazia não entrega nada", r.entregues === 0 && !r.cancelado);
+  }
+
+  // 5. Computador: um download atrás do outro, espaçados.
+  {
+    const b = bancada("sem-suporte");
+    const r = await mod.entregarTudo(fotos, { peloMenu: false, ...b.ganchos });
+    ok("no computador baixa todas em sequência", r.entregues === fotos.length);
+    ok("também espaçadas", b.esperas.filter((ms) => ms > 0).length >= fotos.length - 1);
+  }
+}
+
+/*
+ * A MESMA prova falsa existia numa foto só, a uma linha de distância: o
+ * registro vinha antes de abrir o menu, então fechar o menu contava um
+ * download. Ninguém reclamou dessa ainda — e é justamente por isso que ela
+ * entra junto, enquanto o defeito está identificado.
+ */
+{
+  const casos = [
+    ["cancelou", false],
+    ["salvou", true],
+    ["expirou", true],
+    ["sem-acesso", true],
+    ["sem-suporte", true],
+  ];
+  for (const [r, esperado] of casos) {
+    const veio = mod.entregouUmaFoto(r);
+    const ok = veio === esperado;
+    if (!ok) falhou = true;
+    console.log(
+      `  ${ok ? "✓" : "✗"} "${r}" ${esperado ? "conta" : "NÃO conta"} como foto entregue`,
+    );
+  }
+}
+
+/*
+ * A trava do lado do componente: o registro só pode acontecer DEPOIS de saber
+ * o desfecho. Antes, `registrar("baixou_tudo")` ficava logo após assinar as
+ * URLs — ou seja, contava o CLIQUE.
+ */
+{
+  const { readFileSync } = await import("node:fs");
+  const path = await import("node:path");
+  const arquivo = path.default.resolve(
+    import.meta.dirname,
+    "../src/components/galeria-cliente.tsx",
+  );
+  const fonte = readFileSync(arquivo, "utf8");
+  const semComentarios = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const registro = semComentarios.indexOf('registrar("baixou_tudo")');
+  /* A CHAMADA, e não o import: `entregarTudo` aparece primeiro na lista de
+     imports, no topo do arquivo, e medir dali não diria nada sobre a ordem. */
+  const desfecho = semComentarios.indexOf("entregarTudo(");
+  const okOrdem = registro > 0 && desfecho > 0 && registro > desfecho;
+  if (!okOrdem) falhou = true;
+  console.log(
+    `  ${okOrdem ? "✓" : "✗"} a galeria só registra o download DEPOIS de saber o desfecho`,
+  );
+
+  /* E só quando alguma coisa saiu. Sem esta condição, cancelar contaria. */
+  const trecho = semComentarios.slice(desfecho, desfecho + 400);
+  const okCondicao = /entregues\s*>\s*0/.test(trecho);
+  if (!okCondicao) falhou = true;
+  console.log(
+    `  ${okCondicao ? "✓" : "✗"} e só quando alguma foto foi de fato entregue`,
+  );
+
+  /* Uma foto só: o registro não pode estar antes do menu abrir. */
+  const umaFoto = semComentarios.match(/async function salvarUm\([\s\S]*?\n  \}/)?.[0] ?? "";
+  const okUma =
+    umaFoto.includes("entregouUmaFoto") &&
+    umaFoto.indexOf("entregouUmaFoto") < umaFoto.lastIndexOf('registrar("baixou"');
+  if (!okUma) falhou = true;
+  console.log(
+    `  ${okUma ? "✓" : "✗"} baixar UMA foto também só conta depois de saber o desfecho`,
+  );
+}
+
 if (falhou) {
   console.error("\n✗ a lógica de salvamento tem problema");
   process.exit(1);
