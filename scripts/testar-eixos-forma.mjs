@@ -199,6 +199,28 @@ try {
     erro("valor inválido não caiu no padrão");
   }
 
+  /*
+   * ── O QUE ESTE ARQUIVO NÃO CONFERE, E POR QUÊ ──────────────────────────
+   *
+   * Falta uma pergunta: o Tailwind chegou a GERAR a regra de
+   * `.min-h-[var(--g-capa-h,78vh)]`? Classe no atributo sem regra na folha é
+   * atributo decorativo, e a capa colapsaria com tudo aqui verde.
+   *
+   * Tentei três formas de escrevê-la em 04/09/2026 e nenhuma falhou pelo
+   * motivo certo. Em desenvolvimento a folha do Next ACUMULA: apaguei a classe
+   * do componente e a regra continuou lá, de uma compilação anterior — a
+   * conferência ficava verde exatamente no caso que ela existia para pegar. E
+   * um valor arbitrário que o Tailwind recusa de verdade (colchete
+   * desbalanceado) derruba a página inteira com HTTP 500, que já é vermelho
+   * antes de chegar no CSS.
+   *
+   * Fica sem, de propósito. As duas conferências que sobraram — "nenhuma
+   * altura cravada no componente" e "o valor chega no HTML" — eu vi falharem
+   * ao recolocar `rounded-md` no lugar, e é essa a regressão provável. Quem
+   * for tentar de novo: precisa de servidor recém-subido, como o do portão do
+   * deploy, senão a folha velha responde pela nova.
+   */
+
   /* Aparência de antes dos eixos: os campos simplesmente não existem. */
   const corpoAntigo = await html(base);
   if (corpoAntigo.includes("--g-capa-h:78vh") && corpoAntigo.includes("--g-canto:6px")) {
