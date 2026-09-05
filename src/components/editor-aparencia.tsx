@@ -189,12 +189,20 @@ function Eixo<K extends keyof typeof OPCOES>({
   titulo,
   ap,
   mudar,
-}: PecaProps & { eixo: K; titulo: string }) {
+  /* Ids que não aparecem nesta galeria. Hoje só o `propria` do eixo da fonte do
+     corpo, para quem nunca enviou arquivo: opção morta na tela é pergunta que a
+     pessoa faz e ninguém responde — a mesma razão do filtro de `SeletorDeFonte`,
+     e o lugar de enviar continua sendo Conta. */
+  ocultar,
+}: PecaProps & { eixo: K; titulo: string; ocultar?: readonly string[] }) {
+  const opcoes = ocultar?.length
+    ? OPCOES[eixo].filter((o) => !ocultar.includes(o.id))
+    : OPCOES[eixo];
   return (
     <div>
       <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
       <div className="mt-2 flex flex-wrap gap-1.5">
-        {OPCOES[eixo].map((op) => {
+        {opcoes.map((op) => {
           const ativo = ap[eixo] === op.id;
           return (
             <button
@@ -536,6 +544,17 @@ export function EditorAparencia({
               {/* Junto da fonte, e não da logo: quem acha o título grosso está
                   olhando para a LETRA, e é ali que ele procura. */}
               <Eixo eixo="peso" titulo="Grossura do título" ap={ap} mudar={mudar} />
+              {/* Logo abaixo da grossura porque a pergunta é a mesma escada: a
+                  letra do título, o peso dela, e então a letra de todo o resto.
+                  Marca de fotógrafo costuma ser display — por isso este eixo é
+                  independente do de cima e nasce em "A do sistema". */}
+              <Eixo
+                eixo="fonteTexto"
+                titulo="Fonte do texto"
+                ap={ap}
+                mudar={mudar}
+                ocultar={temFontePropria ? undefined : ["propria"]}
+              />
             </>
           )}
           {grupo === "cor" && (

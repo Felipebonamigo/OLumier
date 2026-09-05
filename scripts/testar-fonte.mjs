@@ -104,7 +104,7 @@ await db.connect();
 const g = await galeriaDaRodada(db, { nome: "fonte", medias: 2, publicada: true });
 const url = `${BASE}/g/${g.tslug}/${g.gslug}`;
 
-const comAparencia = async (tipografia) => {
+const comAparencia = async (tipografia, extra = {}) => {
   await db.query("update galerias set aparencia = $1 where id = $2", [
     JSON.stringify({
       capa: "minima",
@@ -113,11 +113,38 @@ const comAparencia = async (tipografia) => {
       grade: "quadrada",
       densidade: "normal",
       logo: "media",
+      ...extra,
     }),
     g.id,
   ]);
   return await (await fetch(url, { cache: "no-store" })).text();
 };
+
+/*
+ * A pergunta é sobre o `style` do <main>, e não sobre o HTML inteiro: o
+ * `@font-face` também escreve `font-family:"FonteDoEstudio"`, então procurar a
+ * família na página toda daria verde só por ela ter sido DECLARADA — que é o
+ * que já acontecia antes deste eixo existir.
+ *
+ * Dentro do atributo as aspas vêm escapadas (`&quot;`), o que de quebra torna
+ * `[^"]*` um recorte exato do atributo.
+ */
+const corpoUsaFonteDoEstudio = (html) => {
+  const estilo = html.match(/<main[^>]*\sstyle="([^"]*)"/)?.[1] ?? "";
+  return /font-family:[^;]*FonteDoEstudio/.test(estilo.replace(/&quot;/g, '"'));
+};
+
+const temArquivoDeFonte = () =>
+  db.query("update tenants set fonte_chave = $1, fonte_nome = $2 where id = $3", [
+    `${g.estudio.id}/marca/fonte-de-teste.fonte`,
+    "Fonte De Teste",
+    g.estudio.id,
+  ]);
+
+const semArquivoDeFonte = () =>
+  db.query("update tenants set fonte_chave = null, fonte_nome = null where id = $1", [
+    g.estudio.id,
+  ]);
 
 await etapa("sem fonte enviada, escolher 'propria' não quebra nada", async () => {
   await db.query("update tenants set fonte_chave = null, fonte_nome = null where id = $1", [
@@ -158,7 +185,76 @@ await etapa("galeria que escolheu outra fonte não carrega a do estúdio", async
   return "nada injetado";
 });
 
+/*
+ * ── A FONTE NO CORPO DA GALERIA (05/09/2026) ──────────────────────────────
+ *
+ * Até aqui a fonte enviada valia só no TÍTULO. O Felipe pediu que valesse
+ * também no corpo — legendas, botões, o nome do capítulo, o rodapé.
+ *
+ * É um eixo SEPARADO do da tipografia, e não um efeito colateral dela, por
+ * duas razões que estas etapas prendem:
+ *
+ *   1. Marca de fotógrafo costuma ser display ou manuscrita. Fazer o título
+ *      arrastar o corpo junto transformaria em ilegível toda galeria que hoje
+ *      escolheu "propria" só para o título — mudança de cara em entrega feita,
+ *      sem ninguém ter pedido. Por isso o padrão é `padrao`.
+ *   2. Separado, ele permite o contrário e útil: título em Bodoni, corpo na
+ *      sem-serifa da marca. Um eixo só nunca daria essa combinação.
+ */
+console.log("\nno corpo da galeria");
+
+await etapa("por padrão o corpo NÃO usa a fonte do estúdio", async () => {
+  await temArquivoDeFonte();
+  const html = await comAparencia("propria");
+  if (corpoUsaFonteDoEstudio(html)) {
+    throw new Error("o corpo pegou a fonte sem ninguém escolher — galeria antiga mudaria de cara");
+  }
+  return "só o título";
+});
+
+await etapa("escolhido, o corpo usa a fonte do estúdio", async () => {
+  await temArquivoDeFonte();
+  const html = await comAparencia("propria", { fonteTexto: "propria" });
+  if (!html.includes("@font-face")) throw new Error("não injetou o @font-face");
+  if (!corpoUsaFonteDoEstudio(html)) {
+    throw new Error("o corpo continuou na fonte do sistema");
+  }
+  return FAMILIA_PROPRIA;
+});
+
+/* O caso que só existe porque os dois eixos são independentes. */
+await etapa("título em Bodoni e corpo na fonte do estúdio convivem", async () => {
+  await temArquivoDeFonte();
+  const html = await comAparencia("bodoni", { fonteTexto: "propria" });
+  if (!html.includes("@font-face")) {
+    throw new Error("o corpo pediu a fonte e ela não foi injetada — o título decidiu sozinho");
+  }
+  if (!corpoUsaFonteDoEstudio(html)) throw new Error("o corpo não recebeu a família");
+  return "@font-face entra pelo corpo, não pelo título";
+});
+
+await etapa("sem arquivo enviado, pedir a fonte no corpo não quebra nada", async () => {
+  await semArquivoDeFonte();
+  const html = await comAparencia("bodoni", { fonteTexto: "propria" });
+  if (html.includes("@font-face")) {
+    throw new Error("injetou @font-face sem arquivo — o navegador buscaria o nada");
+  }
+  if (!html.includes(g.titulo)) throw new Error("a galeria não abriu");
+  return "cai na fonte do sistema";
+});
+
 console.log("\na opção só existe para quem enviou");
+
+await etapa("o eixo da fonte do texto também esconde 'propria' de quem não tem arquivo", () => {
+  const editor = readFileSync(path.join(RAIZ, "src/components/editor-aparencia.tsx"), "utf8");
+  const semComentarios = editor.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  const bloco = semComentarios.match(/<Eixo\s+eixo="fonteTexto"[\s\S]*?\/>/)?.[0];
+  if (!bloco) throw new Error("o editor não oferece o eixo `fonteTexto` — a escolha não existe");
+  if (!/ocultar=\{temFontePropria/.test(bloco)) {
+    throw new Error("o eixo aparece sem filtro — 'A minha fonte' seria oferecida a quem não tem");
+  }
+  return "ocultar={temFontePropria ...}";
+});
 
 await etapa("o seletor de fonte esconde 'propria' de quem não tem arquivo", () => {
   const editor = readFileSync(path.join(RAIZ, "src/components/editor-aparencia.tsx"), "utf8");

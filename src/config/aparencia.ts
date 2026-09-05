@@ -86,6 +86,26 @@ export type AlturaCapa = "baixa" | "media" | "cheia";
 export type CantoFoto = "reto" | "suave" | "redondo" | "muito";
 
 /**
+ * A fonte do CORPO da galeria — legenda, botão, nome do capítulo, rodapé.
+ *
+ * Pedido do Felipe em 05/09/2026: a fonte que o estúdio envia valia só no
+ * título, e ele quis que valesse no texto também.
+ *
+ * ── POR QUE É UM EIXO SEPARADO, E NÃO UM EFEITO DA TIPOGRAFIA ───────────
+ *
+ * O caminho curto seria: escolheu `propria` no título, o corpo vai junto.
+ * Ele quebra duas coisas de uma vez. Marca de fotógrafo costuma ser display
+ * ou manuscrita, e arrastar o corpo junto tornaria ILEGÍVEL toda galeria que
+ * hoje escolheu `propria` só para o título — mudança de cara em entrega já
+ * feita, que é justamente o que o resto deste arquivo evita. E fecharia a
+ * combinação mais provável de dar certo: título em Bodoni, corpo na
+ * sem-serifa da marca.
+ *
+ * Separado, o padrão `padrao` não mexe em nada e a escolha existe.
+ */
+export type FonteDoTexto = "padrao" | "propria";
+
+/**
  * Quantas fotos a prévia do editor desenha.
  *
  * A prévia é a galeria pública de verdade, renderizada no tamanho de uma tela
@@ -160,6 +180,7 @@ export interface Aparencia {
   peso: Peso;
   alturaCapa: AlturaCapa;
   canto: CantoFoto;
+  fonteTexto: FonteDoTexto;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
 }
@@ -202,6 +223,10 @@ export const APARENCIA_PADRAO: Aparencia = {
      de escolha. */
   alturaCapa: "cheia",
   canto: "suave",
+  /* Nasceu `padrao` em 05/09/2026 e tem de continuar assim: quem escolheu a
+     fonte própria antes deste eixo a escolheu PARA O TÍTULO, e o corpo dessas
+     galerias não pode mudar sozinho. Ver o comentário de `FonteDoTexto`. */
+  fonteTexto: "padrao",
 };
 
 /**
@@ -255,6 +280,7 @@ export function lerAparencia(bruto: unknown): Aparencia {
     peso: valida(o.peso, OPCOES.peso.map((x) => x.id), APARENCIA_PADRAO.peso),
     alturaCapa: valida(o.alturaCapa, OPCOES.alturaCapa.map((x) => x.id), APARENCIA_PADRAO.alturaCapa),
     canto: valida(o.canto, OPCOES.canto.map((x) => x.id), APARENCIA_PADRAO.canto),
+    fonteTexto: valida(o.fonteTexto, OPCOES.fonteTexto.map((x) => x.id), APARENCIA_PADRAO.fonteTexto),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
        "sujo/publicado" do editor iguais ao que eram. */
@@ -415,6 +441,10 @@ export const OPCOES = {
     { id: "redondo", nome: "Redondo", desc: "Arredondado de verdade", px: 14 },
     { id: "muito", nome: "Bem redondo", desc: "Cantos macios, ar de aplicativo", px: 24 },
   ],
+  fonteTexto: [
+    { id: "padrao", nome: "A do sistema", desc: "Sem serifa, feita para ler em tela" },
+    { id: "propria", nome: "A minha fonte", desc: "O arquivo que você enviou em Conta" },
+  ],
 } as const;
 
 // --- presets ------------------------------------------------------------------
@@ -448,25 +478,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   {
     /*
@@ -483,7 +513,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -506,25 +536,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao" },
   },
 ];
 
@@ -550,7 +580,7 @@ export function presetEquivalente(a: Aparencia): string | null {
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
-    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto;
+    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 
@@ -727,6 +757,23 @@ export function variaveisDoTema(a: Aparencia): Record<string, string> {
  * `script-app`) e não podem ser renomeadas: os ids que as usam estão gravados
  * em galerias entregues.
  */
+/**
+ * A família do CORPO da galeria.
+ *
+ * `padrao` repete o que o <body> já aplica (ver globals.css) em vez de deixar
+ * o campo vazio: quem lê este arquivo vê as duas opções escritas lado a lado, e
+ * a página não precisa de um `if` para o caso de não haver escolha.
+ *
+ * Em `propria` a família do estúdio vem PRIMEIRO e a do sistema logo atrás.
+ * Não é redundância: o @font-face só entra no HTML quando o arquivo existe, e
+ * sem ele o navegador cai na segunda — que é o comportamento certo para quem
+ * removeu a fonte depois de escolhê-la.
+ */
+export const FONTES_TEXTO: Record<FonteDoTexto, string> = {
+  padrao: 'var(--font-sans-app), system-ui, "Segoe UI", sans-serif',
+  propria: '"FonteDoEstudio", var(--font-sans-app), system-ui, "Segoe UI", sans-serif',
+};
+
 export const FONTES_TITULO: Record<Tipografia, string> = {
   /* Não é uma fonte nossa: o nome da família é declarado pelo @font-face que a
      galeria injeta quando o estúdio tem arquivo enviado. Sem esse @font-face

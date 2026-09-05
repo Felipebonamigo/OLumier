@@ -27,6 +27,7 @@ import {
   AMOSTRA_PREVIA,
   variaveisDoTema,
   variaveisDeForma,
+  FONTES_TEXTO,
 } from "@/config/aparencia";
 import { FAMILIA_PROPRIA } from "@/lib/fonte-estudio";
 import { lerSite } from "@/lib/site-estudio";
@@ -356,9 +357,16 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * Assinar sempre custaria uma chamada por página em toda galeria de todo
    * estúdio que já enviou um arquivo — inclusive nas que escolheram Bodoni. A
    * condição é a mesma que decide se o `@font-face` entra no HTML.
+   *
+   * São DOIS pedidos possíveis desde 05/09/2026, e basta um: o título (eixo
+   * `tipografia`) ou o corpo (eixo `fonteTexto`). Ler só o primeiro deixaria a
+   * galeria de título em Bodoni e corpo na fonte da marca pedindo uma família
+   * que o navegador nunca recebeu.
    */
+  const querFontePropria =
+    aparencia.tipografia === "propria" || aparencia.fonteTexto === "propria";
   const fonteDoEstudio =
-    aparencia.tipografia === "propria" && galeria.estudio_fonte
+    querFontePropria && galeria.estudio_fonte
       ? await urlDeLeitura(galeria.estudio_fonte, VALIDADE)
       : null;
 
@@ -399,6 +407,17 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         ...variaveisDeForma(aparencia),
         background: "var(--g-fundo)",
         color: "var(--g-texto)",
+        /*
+          A FONTE DO CORPO fica aqui, e não numa classe, porque é herança: tudo
+          o que a galeria desenha mora dentro deste <main> e não há portal
+          nenhum saindo dele (o visualizador de foto inclusive). Uma linha, e o
+          título continua decidindo a dele por `FONTES_TITULO`.
+
+          `propria` sem arquivo enviado não é caso a tratar: a família do
+          estúdio simplesmente não existe, e a lista de reserva de
+          `FONTES_TEXTO` responde.
+        */
+        fontFamily: FONTES_TEXTO[aparencia.fonteTexto],
       }}
     >
       {/*
