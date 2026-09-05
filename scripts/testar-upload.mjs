@@ -131,6 +131,114 @@ await etapa("remove o arquivo de teste", async () => {
   return `espaço devolvido (estúdio agora com ${rows[0].usado_bytes} B)`;
 });
 
+/*
+ * ── APAGAR TUDO DE UMA VEZ (05/09/2026) ───────────────────────────────────
+ *
+ * Juan: "botei as fotos aqui e fui pro design, daí parou de subir. Mas como
+ * encerrou no meio, quero excluir as que já subiram e refazer a ação". A saída
+ * dele era remover 519 arquivos um a um, clicando em "remover" em cada cartão.
+ *
+ * As duas etapas abaixo são a mesma rota vista dos dois lados: ela apaga tudo
+ * da galeria de quem pediu, e NÃO enxerga a galeria de mais ninguém.
+ */
+/*
+ * ── A FILA NÃO PODE VOLTAR PARA DENTRO DA ABA ─────────────────────────────
+ *
+ * O envio do Juan morreu quando ele foi para o Design, e a causa era o LUGAR:
+ * a fila vivia no componente da rota `/fotos`, que é desmontado ao trocar de
+ * aba. Mover para o layout resolveu — e é o tipo de correção que uma
+ * "simplificação" futura desfaz sem perceber, porque o código volta a
+ * funcionar na aba Fotos.
+ */
+await etapa("a fila de envio mora no layout, não na aba", async () => {
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const raiz = path.resolve(import.meta.dirname, "..");
+  const layout = readFileSync(
+    path.join(raiz, "src/app/painel/galerias/[id]/layout.tsx"),
+    "utf8",
+  );
+  if (!/<ProvedorDeEnvio/.test(layout)) {
+    throw new Error("o layout não monta o ProvedorDeEnvio — trocar de aba mata o envio de novo");
+  }
+  const zona = readFileSync(path.join(raiz, "src/components/enviar-arquivos.tsx"), "utf8");
+  if (/useState<ItemFila|emParalelo\(/.test(zona)) {
+    throw new Error("a fila voltou para dentro da aba Fotos");
+  }
+  if (!/useEnvio\(\)/.test(zona)) {
+    throw new Error("a zona de arrastar não fala com o provedor");
+  }
+  return "provedor no layout, zona de arrastar sem estado de envio";
+});
+
+console.log("\nApagar todas as fotos:\n");
+
+await etapa("apaga todas as fotos da galeria de uma vez", async () => {
+  const { rows: antes } = await db.query(
+    "select count(*)::int as n from medias where galeria_id = $1",
+    [galeria.id],
+  );
+  if (antes[0].n === 0) throw new Error("a bancada veio sem foto — o teste não provaria nada");
+
+  const r = await fetch(`${BASE}/api/galerias/${galeria.id}/medias`, {
+    method: "DELETE",
+    headers: { cookie },
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const corpo = await r.json();
+
+  const { rows: depois } = await db.query(
+    "select count(*)::int as n from medias where galeria_id = $1",
+    [galeria.id],
+  );
+  if (depois[0].n !== 0) throw new Error(`sobraram ${depois[0].n} de ${antes[0].n}`);
+  if (corpo.apagadas !== antes[0].n) {
+    throw new Error(`disse ter apagado ${corpo.apagadas}, eram ${antes[0].n}`);
+  }
+  return `${corpo.apagadas} de uma vez`;
+});
+
+await etapa("não apaga foto de galeria de outro estúdio", async () => {
+  /* Um tenant DE VERDADE, inserido à mão: `estudioDaRodada` guarda o primeiro
+     e devolve sempre o mesmo, então pedir "outro estúdio" por ali devolveria
+     este — e o teste passaria a apagar as próprias fotos, provando nada. */
+  const { rows: tv } = await db.query(
+    `insert into tenants (slug, nome_estudio, email, senha_hash, quota_bytes, status)
+          values ($1, 'Vizinho', $2, 'x', $3, 'ativo') returning id`,
+    [`vizinho-${galeria.id.slice(0, 8)}`, `vizinho-${galeria.id.slice(0, 8)}@teste.local`, String(1024 ** 4)],
+  );
+  const vizinho = tv[0];
+  const { rows: gv } = await db.query(
+    `insert into galerias (tenant_id, slug, titulo, publicada, estado)
+          values ($1, $2, 'Galeria do vizinho', false, 'online') returning id`,
+    [vizinho.id, `vizinho-apagar-tudo-${galeria.id.slice(0, 8)}`],
+  );
+  const alheia = gv[0].id;
+  try {
+    for (let i = 0; i < 2; i++) {
+      await db.query(
+        `insert into medias (galeria_id, tenant_id, nome_original, mime, tipo, bytes, chave, ordem, pronto)
+              values ($1, $2, $3, 'image/jpeg', 'foto', 1024, $4, $5, true)`,
+        [alheia, vizinho.id, `vizinho-${i}.jpg`, `${vizinho.id}/${alheia}/vizinho-${i}.jpg`, i],
+      );
+    }
+    const r = await fetch(`${BASE}/api/galerias/${alheia}/medias`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    const { rows } = await db.query(
+      "select count(*)::int as n from medias where galeria_id = $1",
+      [alheia],
+    );
+    if (rows[0].n !== 2) throw new Error(`apagou ${2 - rows[0].n} foto(s) de outro estúdio!`);
+    if (r.status !== 404) throw new Error(`devolveu HTTP ${r.status}, esperava 404`);
+    return "404, e as duas fotos continuam lá";
+  } finally {
+    await db.query("delete from galerias where id = $1", [alheia]);
+    await db.query("delete from tenants where id = $1", [vizinho.id]);
+  }
+});
+
 // A bancada desta execucao sai inteira (ver fixture-de-teste.mjs).
 await limparRodada(db);
 await db.end();

@@ -124,6 +124,61 @@ await etapa("desiste depois do limite, sem travar a fila", async () => {
   return `${tentativas} tentativas em ${((Date.now() - t0) / 1000).toFixed(1)}s (espera crescente)`;
 });
 
+/*
+ * ── PAUSAR, PARAR E NOMES REPETIDOS (05/09/2026) ──────────────────────────
+ *
+ * Três pedidos do Juan na manhã de 05/09, todos do mesmo episódio: ele soltou
+ * a pasta do casamento, trocou de aba, o envio morreu, e ele quis desfazer o
+ * que tinha subido pela metade para refazer. Sem parar, sem pausar e sem
+ * aviso de repetido, a saída dele era esperar 519 arquivos subirem para então
+ * remover um a um.
+ */
+console.log("\nPausar, parar e nomes repetidos:\n");
+
+await etapa("o portão pausa a fila sem perder o que falta", async () => {
+  const feitos = [];
+  let solto = false;
+  const p = mod.emParalelo([1, 2, 3, 4], 2, async (n) => void feitos.push(n), async () =>
+    solto ? "seguir" : "esperar",
+  );
+  await new Promise((r) => setTimeout(r, 30));
+  if (feitos.length !== 0) throw new Error(`pausado e ainda assim enviou ${feitos.length}`);
+  solto = true;
+  await p;
+  if (feitos.length !== 4) throw new Error(`retomou e entregou ${feitos.length} de 4`);
+  return "0 durante a pausa, 4 depois";
+});
+
+await etapa("o portão para a fila e o resto não sobe", async () => {
+  const feitos = [];
+  await mod.emParalelo([1, 2, 3, 4, 5, 6], 1, async (n) => void feitos.push(n), async () =>
+    feitos.length >= 2 ? "parar" : "seguir",
+  );
+  if (feitos.length !== 2) throw new Error(`parou e mesmo assim entregou ${feitos.length}`);
+  return "2 de 6";
+});
+
+await etapa("separa os nomes que já estão na galeria", () => {
+  const itens = ["a.jpg", "B.JPG", "c.jpg"].map((nome) => ({ arquivo: { name: nome } }));
+  const { novos, repetidos } = mod.separarRepetidos(itens, ["b.jpg"]);
+  if (repetidos.length !== 1 || repetidos[0].arquivo.name !== "B.JPG") {
+    throw new Error(`repetidos veio ${JSON.stringify(repetidos.map((r) => r.arquivo.name))}`);
+  }
+  if (novos.length !== 2) throw new Error(`novos veio ${novos.length}, esperava 2`);
+  return "sem diferenciar maiúscula de minúscula";
+});
+
+/* Duas cópias na MESMA pasta arrastada também são repetição: subiriam as duas
+   e a galeria mostraria a foto duas vezes, que é o que o Juan quer evitar. */
+await etapa("dois arquivos de mesmo nome na mesma leva contam como repetidos", () => {
+  const itens = ["a.jpg", "a.jpg", "b.jpg"].map((nome) => ({ arquivo: { name: nome } }));
+  const { novos, repetidos } = mod.separarRepetidos(itens, []);
+  if (novos.length !== 2 || repetidos.length !== 1) {
+    throw new Error(`novos ${novos.length}, repetidos ${repetidos.length} — esperava 2 e 1`);
+  }
+  return "a segunda cópia é a repetida";
+});
+
 console.log("\nPasta arrastada:\n");
 
 const arq = (nome, size = 1000, type = "image/jpeg") => ({ name: nome, size, type });

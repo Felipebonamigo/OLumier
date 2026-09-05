@@ -42,6 +42,16 @@ export async function comRetentativa<T>(
 }
 
 /**
+ * O que fazer antes de pegar o próximo item.
+ *
+ * `esperar` é o que separa PAUSAR de PARAR, e a diferença importa para quem
+ * está com 519 fotos na fila: pausado, o trabalhador fica no portão e o índice
+ * não anda — retomar continua de onde estava. Parado, os trabalhadores saem e
+ * o que não subiu não sobe.
+ */
+export type Portao = () => Promise<"seguir" | "esperar" | "parar">;
+
+/**
  * Processa a lista com no máximo `limite` tarefas simultâneas.
  *
  * Quando uma tarefa falha, os outros trabalhadores PARAM e são esperados antes
@@ -55,13 +65,37 @@ export async function emParalelo<T>(
   itens: T[],
   limite: number,
   tarefa: (item: T, indice: number) => Promise<void>,
+  /* Sem portão a fila corre como sempre correu — nenhum chamador antigo muda. */
+  portao?: Portao,
 ): Promise<void> {
   let proximo = 0;
   let falha: unknown = null;
+  let parado = false;
 
   const trabalhadores = Array.from({ length: Math.min(limite, itens.length) }, async () => {
     while (proximo < itens.length) {
-      if (falha) return; // outro trabalhador já falhou: não começar mais nada
+      if (falha || parado) return; // outro trabalhador já falhou ou alguém parou
+      if (portao) {
+        /* O laço é a pausa: enquanto o portão disser "esperar", ninguém pega
+           item nenhum. 120 ms é o intervalo entre olhadas — rápido o bastante
+           para o botão parecer instantâneo, devagar o bastante para não custar
+           nada enquanto a pessoa está em outra aba. */
+        let ordem = await portao();
+        while (ordem === "esperar") {
+          await new Promise((r) => setTimeout(r, 120));
+          ordem = await portao();
+        }
+        if (ordem === "parar") {
+          parado = true;
+          return;
+        }
+        /* Confere o fim OUTRA vez: o `while` lá em cima leu `proximo` antes da
+           espera, e com dois trabalhadores parados no mesmo portão os dois
+           passariam com o índice já no fim — o segundo chamaria a tarefa com
+           `undefined`. Daqui até o `proximo++` não há await, então a leitura e
+           o incremento são indivisíveis. */
+        if (proximo >= itens.length) return;
+      }
       const i = proximo++;
       try {
         await tarefa(itens[i], i);
@@ -185,4 +219,42 @@ export async function manterAcordado(): Promise<() => void> {
   } catch {
     return () => {};
   }
+}
+
+/**
+ * Separa o que já existe na galeria do que é novo, pelo NOME do arquivo.
+ *
+ * ── POR QUE PELO NOME, E NÃO PELO CONTEÚDO ────────────────────────────────
+ *
+ * Comparar conteúdo seria mais exato e é a resposta errada aqui: para saber que
+ * dois arquivos são iguais é preciso LER os dois, e a metade que está no bucket
+ * custa banda e dinheiro para ser lida de volta. O nome resolve o caso real —
+ * a pessoa arrasta a mesma pasta duas vezes, ou arrasta de novo depois de um
+ * envio interrompido, e o exportador do Lightroom nomeia em sequência.
+ *
+ * Sem diferenciar maiúscula de minúscula porque o Windows e o macOS também não:
+ * `IMG_01.JPG` e `img_01.jpg` não coexistem no disco de onde a pasta saiu.
+ *
+ * A segunda cópia DENTRO da mesma leva também conta como repetida. É o caso de
+ * quem arrasta a pasta com uma subpasta "selecionadas" dentro: os mesmos
+ * arquivos aparecem duas vezes e subiriam os dois.
+ */
+export function separarRepetidos<T extends { arquivo: { name: string } }>(
+  itens: T[],
+  jaNaGaleria: Iterable<string>,
+): { novos: T[]; repetidos: T[] } {
+  const vistos = new Set<string>();
+  for (const nome of jaNaGaleria) vistos.add(nome.toLowerCase());
+
+  const novos: T[] = [];
+  const repetidos: T[] = [];
+  for (const item of itens) {
+    const chave = item.arquivo.name.toLowerCase();
+    if (vistos.has(chave)) repetidos.push(item);
+    else {
+      vistos.add(chave);
+      novos.push(item);
+    }
+  }
+  return { novos, repetidos };
 }

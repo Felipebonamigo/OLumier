@@ -276,3 +276,52 @@ export async function republicarMedia(
     [mediaId, tenantId, dados.bytes, dados.largura ?? null, dados.altura ?? null],
   );
 }
+
+/**
+ * Apaga TODAS as fotos de uma galeria e devolve as chaves para o bucket limpar.
+ *
+ * `null` quando a galeria não é do estúdio que pediu — quem chama traduz isso
+ * em 404. Lista vazia é sucesso: galeria sem foto apagou o que tinha a apagar.
+ *
+ * ── UM EVENTO, E NÃO 519 ──────────────────────────────────────────────────
+ *
+ * `apagarMedia` registra um evento por foto, e ali faz sentido: apagar uma foto
+ * no meio da seleção é um ato isolado, e o registro é a única memória de que
+ * aquele arquivo existiu. Aqui o ato é OUTRO — "esvaziei a galeria" — e 519
+ * linhas iguais no histórico esconderiam justamente essa decisão no meio do
+ * ruído. Um evento, com a contagem e o nome da galeria dentro.
+ *
+ * O filtro por tenant está no próprio DELETE, e não numa consulta antes: entre
+ * conferir e apagar cabe uma troca de dono, e o banco não deixa essa fresta.
+ */
+export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
+  const galeria = await consultarUm<{ id: string; titulo: string }>(
+    "select id, titulo from galerias where id = $1 and tenant_id = $2",
+    [galeriaId, tenantId],
+  );
+  if (!galeria) return null;
+
+  const apagadas = await consultar<Media>(
+    "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
+    [galeriaId, tenantId],
+  );
+
+  if (apagadas.length > 0) {
+    const { registrarEvento, ACOES } = await import("./eventos");
+    await registrarEvento({
+      tenantId,
+      ator: "estudio",
+      acao: ACOES.MEDIA_APAGADA,
+      alvoTipo: "galeria",
+      alvoId: galeriaId,
+      detalhe: {
+        galeria: galeria.titulo,
+        quantas: String(apagadas.length),
+        bytes: String(apagadas.reduce((s, m) => s + Number(m.bytes), 0)),
+        motivo: "todas de uma vez",
+      },
+    });
+  }
+
+  return apagadas;
+}

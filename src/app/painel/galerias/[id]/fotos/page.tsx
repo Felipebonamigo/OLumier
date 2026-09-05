@@ -123,9 +123,13 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       />
 
       <EnviarArquivos
-        galeriaId={galeria.id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
         rostosAtivos={galeria.rostos_ativos}
+        /* O que já está na galeria, para a pergunta do nome repetido. Só os
+           nomes — a lista já foi consultada acima, então não custa consulta
+           nenhuma, e mandar a mídia inteira para o cliente seria pagar por
+           dado que ele não usa. */
+        nomesNaGaleria={medias.map((m) => m.nome_original)}
       />
 
       <GradeMedias

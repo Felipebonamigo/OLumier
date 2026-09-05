@@ -5,6 +5,7 @@ import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { paraCampoDeData } from "@/lib/datas";
 import { EditorGaleria } from "@/components/editor-galeria";
 import { MenuGaleria } from "@/components/menu-galeria";
+import { ProvedorDeEnvio } from "@/components/envio-em-curso";
 
 export const dynamic = "force-dynamic";
 
@@ -189,12 +190,27 @@ export default async function GaleriaLayout({
         encosta no topo e fica. No celular a fila continua rolando com a
         página, que é o certo numa tela de 390 px.
       */}
-      <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
-        <div className="lg:sticky lg:top-6 lg:w-56 lg:shrink-0">
-          <MenuGaleria galeriaId={galeria.id} />
+      {/*
+        O PROVEDOR DE ENVIO MORA AQUI, E O LUGAR É A CORREÇÃO.
+
+        O Juan soltou a pasta na aba Fotos, foi para o Design e o envio morreu.
+        Não era bug de lógica: a fila vivia dentro do componente da rota
+        `/fotos`, e navegar para `/design` desmonta aquela árvore. No App Router
+        o LAYOUT não é remontado ao trocar de aba filha — só o `children` troca —
+        então a fila montada aqui atravessa as quatro abas, e a barra flutuante
+        dele aparece em todas.
+
+        Ver `components/envio-em-curso.tsx`; `scripts/testar-upload.mjs` confere
+        que ela não voltou para dentro da aba.
+      */}
+      <ProvedorDeEnvio galeriaId={galeria.id}>
+        <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
+          <div className="lg:sticky lg:top-6 lg:w-56 lg:shrink-0">
+            <MenuGaleria galeriaId={galeria.id} />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-8">{children}</div>
         </div>
-        <div className="flex min-w-0 flex-1 flex-col gap-8">{children}</div>
-      </div>
+      </ProvedorDeEnvio>
     </main>
   );
 }

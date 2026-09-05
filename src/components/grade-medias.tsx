@@ -45,6 +45,7 @@ export function GradeMedias({
 }) {
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [definindoCapa, setDefinindoCapa] = useState<string | null>(null);
+  const [apagandoTudo, setApagandoTudo] = useState(false);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
   /* Aberta por padrão: quem acabou de subir quer VER o que subiu. Recolher é
    * para depois, quando a grade vira obstáculo entre a pessoa e o resto da
@@ -88,6 +89,25 @@ export function GradeMedias({
     }
   }
 
+  async function apagarTodas() {
+    const resposta = prompt(
+      `Apagar TODAS as ${medias.length} fotos desta galeria? Não dá para desfazer.\n\n` +
+        `Para confirmar, digite ${medias.length}:`,
+    );
+    if (resposta?.trim() !== String(medias.length)) return;
+    setApagandoTudo(true);
+    try {
+      const r = await fetch(`/api/galerias/${galeriaId}/medias`, { method: "DELETE" });
+      if (!r.ok) throw new Error();
+      setSelecao(new Set());
+      router.refresh();
+    } catch {
+      alert("Não foi possível apagar agora. Tente de novo.");
+    } finally {
+      setApagandoTudo(false);
+    }
+  }
+
   async function remover(m: MediaExibida) {
     if (!confirm(`Remover “${m.nome}”? Não dá para desfazer.`)) return;
     setRemovendo(m.id);
@@ -117,17 +137,44 @@ export function GradeMedias({
         pessoa rola centenas de miniaturas para chegar ao próximo passo. Recolher
         devolve a página; o número no título continua dizendo o que está guardado.
       */}
-      <div className="flex flex-wrap items-baseline justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        {/*
+          O ALVO É O BOTÃO INTEIRO, e a seta agora tem tamanho de seta.
+
+          Juan, 05/09/2026: "deixar maior esse tiquinho que faz minimizar ou
+          maximizar a pasta das fotos". Era um `▾` de 12 px dentro de um botão
+          sem moldura — o alvo existia, mas nada dizia que existia, e mirar num
+          caractere de 12 px com o mouse é o que ele estava fazendo.
+
+          Agora é uma pastilha com borda: a seta cresceu para 20 px, ganhou
+          rotação em vez de trocar de caractere (o `▸` e o `▾` têm larguras
+          diferentes e o texto pulava ao abrir), e o alvo tem 40 px de altura —
+          o mínimo confortável para o dedo, no celular também.
+        */}
         <button
           type="button"
           onClick={() => setAberta((v) => !v)}
           aria-expanded={aberta}
-          className="flex items-baseline gap-2 text-sm font-semibold transition hover:text-acento"
+          className="flex items-center gap-2 rounded-lg border border-linha px-3 py-2 text-sm font-semibold transition hover:border-linha-forte hover:bg-carbon-2"
         >
-          <span aria-hidden className="text-xs text-texto-faint">
-            {aberta ? "▾" : "▸"}
-          </span>
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            aria-hidden="true"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={`shrink-0 text-texto-faint transition-transform ${aberta ? "rotate-90" : ""}`}
+          >
+            <path d="M9 5l7 7-7 7" />
+          </svg>
           {medias.length} {medias.length === 1 ? "arquivo" : "arquivos"}
+          <span className="text-xs font-normal text-texto-faint">
+            {aberta ? "recolher" : "abrir"}
+          </span>
         </button>
 
         {aberta && (
@@ -146,6 +193,23 @@ export function GradeMedias({
               className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-40"
             >
               limpar
+            </button>
+            {/*
+              APAGAR TUDO — pedido do Juan no mesmo dia, e pela mesma razão do
+              provedor de envio: o upload dele morreu na metade e ele quis
+              recomeçar. Sem isto, recomeçar eram 519 cliques em "remover".
+
+              A confirmação pede o NÚMERO digitado, e não um "ok": esta é a
+              única ação do painel que apaga a entrega inteira de uma vez, e não
+              tem lixeira. Digitar a contagem obriga a ler a contagem.
+            */}
+            <button
+              type="button"
+              onClick={apagarTodas}
+              disabled={apagandoTudo}
+              className="rounded-md border border-erro/40 px-2.5 py-1 text-xs text-erro transition hover:bg-erro/10 disabled:opacity-40"
+            >
+              {apagandoTudo ? "apagando…" : "apagar todas"}
             </button>
           </div>
         )}
