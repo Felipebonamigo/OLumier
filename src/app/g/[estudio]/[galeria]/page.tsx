@@ -8,6 +8,7 @@ import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
 import { estadoSelecao, minhasFavoritas } from "@/lib/favoritas";
 import { galeriasNoAr } from "@/lib/assinatura";
 import { resolverEstudio } from "@/lib/endereco";
+import { resolverGaleriaDoEstudio } from "@/lib/endereco-galeria";
 import {
   buscarGaleriaPublica,
   listarMediasPublicas,
@@ -90,6 +91,26 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     const dono = await resolverEstudio(estudio);
     if (dono?.ehAntigo) {
       permanentRedirect(`/g/${dono.slugAtual}/${galeriaSlug}`);
+    }
+    /*
+     * O ENDEREÇO ANTIGO DA GALERIA (05/09/2026, migração 030).
+     *
+     * A mesma história do estúdio, um nível abaixo: o fotógrafo trocou o
+     * endereço da galeria e o link que o casal tem no WhatsApp é o anterior.
+     * Sem isto, trocar o endereço mataria o link — que é exatamente por que o
+     * campo era travado.
+     *
+     * Vem DEPOIS da tentativa pelo endereço do estúdio porque as duas trocas
+     * podem ter acontecido: quem chega por `/g/<estudio-antigo>/<galeria-antiga>`
+     * é mandado primeiro para o estúdio de hoje, e a segunda passada resolve a
+     * galeria. Dois redirecionamentos permanentes em vez de um, e cada um deles
+     * é uma verdade que o navegador aprende.
+     */
+    if (dono) {
+      const antiga = await resolverGaleriaDoEstudio(dono.tenantId, galeriaSlug);
+      if (antiga?.ehAntigo) {
+        permanentRedirect(`/g/${dono.slugAtual}/${antiga.slugAtual}`);
+      }
     }
     notFound();
   }

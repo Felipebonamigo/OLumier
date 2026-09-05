@@ -50,8 +50,40 @@ export function PublicarNoCabecalho({
 
   if (publicada) {
     return (
-      <span className="rounded-full border border-ok/40 bg-ok/10 px-3 py-1 text-xs text-ok">
-        publicada
+      <span className="flex items-center gap-2">
+        <span className="rounded-full border border-ok/40 bg-ok/10 px-3 py-1 text-xs text-ok">
+          publicada
+        </span>
+        {/*
+          TIRAR DO AR fica aqui também, e de propósito com outro PESO.
+
+          O Juan pediu o atalho ("copiar link, tirar galeria do ar, etc"), e
+          negá-lo no cabeçalho seria mandá-lo procurar na Entrega justamente o
+          que ele reclamou de ter procurado. Mas um segundo botão grande no
+          mesmo pixel em que, um minuto antes, havia "Publicar galeria" é a
+          troca que faz a mão errar: um link é publicado e despublicado com o
+          mesmo gesto, e o segundo derruba a entrega de um casamento.
+
+          Por isso é um texto sublinhado e não um botão, e por isso pergunta
+          antes. A ação existe, e não se dá por acidente.
+        */}
+        <button
+          type="button"
+          disabled={salvando}
+          onClick={() => {
+            if (!confirm("Tirar a galeria do ar? O link do cliente para de abrir.")) return;
+            iniciar(async () => {
+              const f = new FormData();
+              f.set("galeria_id", galeriaId);
+              f.set("publicada", "0");
+              await salvarPublicacaoAction(f);
+              router.refresh();
+            });
+          }}
+          className="text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-50"
+        >
+          {salvando ? "tirando…" : "tirar do ar"}
+        </button>
       </span>
     );
   }

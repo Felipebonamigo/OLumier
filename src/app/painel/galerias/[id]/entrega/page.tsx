@@ -5,7 +5,7 @@ import { contarMediasProntas, galeriaDoPainel } from "@/lib/galeria-painel";
 import { fotosSemRosto, resumoDeRostos } from "@/lib/rostos";
 import { PublicarGaleria } from "@/components/publicar-galeria";
 import { EnderecoDaGaleria } from "@/components/endereco-da-galeria";
-import { podeTrocarEnderecoDaGaleria } from "@/lib/endereco-galeria";
+import { apelidosDaGaleria } from "@/lib/endereco-galeria";
 import { PrazoCofre } from "@/components/prazo-cofre";
 import { BuscaPorRosto } from "@/components/busca-por-rosto";
 import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
@@ -33,9 +33,10 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
   if (!galeria) notFound();
 
   const totalMedias = await contarMediasProntas(galeria.id);
-  /* Uma consulta boba (um `exists`) que decide se o campo do endereço abre ou
-     explica por que não. Ver `lib/endereco-galeria.ts`. */
-  const enderecoLivre = await podeTrocarEnderecoDaGaleria(galeria.id, tenantId);
+  /* Os endereços antigos, para a tela poder dizer quais links continuam
+     abrindo depois de uma troca — é a informação que transforma "trocar o
+     endereço" de aposta em decisão. Ver `lib/endereco-galeria.ts`. */
+  const apelidos = await apelidosDaGaleria(galeria.id);
 
   // Só pesa quando a busca está ligada; desligada, os dois números são zero.
   const rostos = galeria.rostos_ativos ? await resumoDeRostos(galeria.id) : { rostos: 0, fotos: 0 };
@@ -59,7 +60,7 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
       <EnderecoDaGaleria
         galeriaId={galeria.id}
         slug={galeria.slug}
-        podeTrocar={enderecoLivre}
+        apelidos={apelidos.map((a) => a.slug)}
       />
 
       {/*
