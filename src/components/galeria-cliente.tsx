@@ -673,7 +673,7 @@ export function GaleriaCliente({
                    */
                   if (it.tipo === "video") registrar("assistiu", it.id);
                 }}
-                className="block h-full w-full overflow-hidden rounded-md"
+                className="block h-full w-full overflow-hidden rounded-[var(--g-canto,6px)]"
                 aria-label={`Abrir ${it.nome}`}
               >
                 {it.tipo === "foto" ? (
@@ -882,7 +882,7 @@ export function GaleriaCliente({
                 src={urlGrandeAberta ?? item.url}
                 alt={item.nome}
                 fetchPriority="high"
-                className="max-h-full max-w-full rounded-lg object-contain"
+                className="max-h-full max-w-full rounded-[var(--g-canto,6px)] object-contain"
               />
             ) : urlGrandeAberta ? (
               <video
@@ -890,7 +890,7 @@ export function GaleriaCliente({
                 controls
                 autoPlay
                 playsInline
-                className="max-h-full max-w-full rounded-lg"
+                className="max-h-full max-w-full rounded-[var(--g-canto,6px)]"
               />
             ) : (
               <span className="text-sm" style={{ color: "var(--g-suave)" }}>

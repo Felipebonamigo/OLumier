@@ -108,7 +108,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa="imersa"
-        className="relative flex min-h-[78vh] items-end justify-center overflow-hidden"
+        className="relative flex min-h-[var(--g-capa-h,78vh)] items-end justify-center overflow-hidden"
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
         <img
@@ -185,9 +185,9 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa="convite"
-        className="grid gap-8 px-5 py-5 md:min-h-[94vh] md:grid-cols-[1.1fr_1fr] md:gap-14 md:px-10 md:py-10"
+        className="grid gap-8 px-5 py-5 md:min-h-[calc(var(--g-capa-h,78vh)*1.205)] md:grid-cols-[1.1fr_1fr] md:gap-14 md:px-10 md:py-10"
       >
-        <div className="relative min-h-[52vh] overflow-hidden md:min-h-full">
+        <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.667)] overflow-hidden md:min-h-full">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
           <img
             src={urlImagem}
@@ -221,8 +221,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   // --- DIVIDIDA: foto de um lado, texto do outro ----------------------------
   if (aparencia.capa === "dividida" && urlImagem) {
     return (
-      <header data-capa="dividida" className="grid min-h-[70vh] md:grid-cols-2">
-        <div className="relative min-h-[42vh] overflow-hidden md:min-h-full">
+      <header data-capa="dividida" className="grid min-h-[calc(var(--g-capa-h,78vh)*0.897)] md:grid-cols-2">
+        <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.538)] overflow-hidden md:min-h-full">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
           <img
             src={urlImagem}

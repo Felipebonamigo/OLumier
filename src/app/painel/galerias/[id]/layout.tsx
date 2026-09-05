@@ -63,6 +63,10 @@ export default async function GaleriaLayout({
   const noCofre = galeria.estado === "arquivada";
   const noAr = !noCofre && galeria.publicada;
 
+  /* Existe rascunho de aparência esperando publicação? A coluna é nula quando
+     não há — publicar limpa. Ver `lib/aparencia-galeria.ts`. */
+  const temAparenciaPendente = galeria.aparencia_rascunho !== null;
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <Link href="/painel" className="text-sm text-texto-soft hover:text-texto">
@@ -90,7 +94,33 @@ export default async function GaleriaLayout({
           arquivada com `publicada` true tem o link fora do ar do mesmo jeito.
           `scripts/testar-cofre.mjs` prende isto.
         */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/*
+            APARÊNCIA NÃO PUBLICADA — o aviso que faltava, em 04/09/2026.
+
+            Duas usuárias seguidas escolheram o tema claro, viram a prévia
+            clara e entregaram a galeria escura: a escolha ficou no rascunho e
+            ninguém apertou "Publicar aparência". A barra do editor dizia isso,
+            no rodapé, em letra miúda — e duas de duas não viram.
+
+            Aqui ele aparece nas QUATRO abas, inclusive em Entrega, que é onde a
+            pessoa está no instante em que aperta publicar. E é um link: quem vê
+            o aviso está a um clique de resolver, não de procurar.
+
+            Publicar a galeria também promove o rascunho (ver
+            `promoverRascunhoSePendente`) — este aviso é a segunda trava, para
+            quem publicou antes de desenhar.
+          */}
+          {temAparenciaPendente && (
+            <Link
+              href={`/painel/galerias/${galeria.id}/design`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-alerta/40 bg-alerta/10 px-3 py-1 text-xs text-alerta transition hover:bg-alerta/20"
+            >
+              <span aria-hidden="true">●</span>
+              aparência não publicada
+            </Link>
+          )}
+
           {/*
             VER COMO O CLIENTE VÊ — pedido do sócio em 04/09/2026, "um botão de
             visualização mais fácil de ver".
@@ -146,9 +176,23 @@ export default async function GaleriaLayout({
         </div>
       </header>
 
-      {/* Menu à esquerda no computador, fila que rola no celular. */}
-      <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:gap-10">
-        <MenuGaleria galeriaId={galeria.id} />
+      {/*
+        Menu à esquerda no computador, fila que rola no celular — e ELE NÃO
+        ACOMPANHA A ROLAGEM.
+
+        O Felipe: "continua a edição toda por scroll na mesma tela". As abas
+        existiam, mas o menu subia junto com o conteúdo: dois palmos de rolagem
+        dentro de Design e ele já não estava mais na tela. Sem o menu à vista,
+        não há abas — há uma página comprida que por acaso começou com links.
+
+        `sticky` resolve porque o menu é curto e o conteúdo é longo: ele
+        encosta no topo e fica. No celular a fila continua rolando com a
+        página, que é o certo numa tela de 390 px.
+      */}
+      <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
+        <div className="lg:sticky lg:top-6 lg:w-56 lg:shrink-0">
+          <MenuGaleria galeriaId={galeria.id} />
+        </div>
         <div className="flex min-w-0 flex-1 flex-col gap-8">{children}</div>
       </div>
     </main>

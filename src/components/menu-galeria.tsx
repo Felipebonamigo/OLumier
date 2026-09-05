@@ -55,7 +55,7 @@ export function MenuGaleria({ galeriaId }: { galeriaId: string }) {
   const caminhoAtual = usePathname();
 
   return (
-    <nav aria-label="Seções da galeria" className="lg:w-56 lg:shrink-0">
+    <nav aria-label="Seções da galeria">
       {/*
         Rolagem horizontal no celular, coluna no computador.
 

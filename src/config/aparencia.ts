@@ -61,6 +61,31 @@ export type TamanhoLogo = "discreta" | "media" | "grande" | "enorme";
 export type Peso = "leve" | "normal" | "forte";
 
 /**
+ * Quanto da tela a capa ocupa.
+ *
+ * Pedido do Felipe em 04/09/2026: "permita uma função de diminuir o tamanho da
+ * foto da capa". A capa imersa era `78vh` cravado — quase a tela inteira, e sem
+ * nada para mexer. Numa foto de detalhe (aliança, buquê) isso vira um recorte
+ * gigante de uma imagem que pedia respiro; e quem quer a galeria começando logo
+ * não tinha como encurtar a entrada.
+ *
+ * `cheia` é o valor de antes, para nenhuma galeria entregue mudar de cara.
+ */
+export type AlturaCapa = "baixa" | "media" | "cheia";
+
+/**
+ * O canto das fotos na grade.
+ *
+ * Pedido do Felipe: "deixe selecionar se o canto das fotos será ondulado ou
+ * quadrado e, se for ondulado, o quanto". Era `rounded-md` cravado no
+ * componente — 6 px, uma escolha que ninguém tomou e ninguém podia desfazer.
+ *
+ * `suave` é esse mesmo 6 px, para as galerias que já estão no ar continuarem
+ * idênticas ao pixel.
+ */
+export type CantoFoto = "reto" | "suave" | "redondo" | "muito";
+
+/**
  * Quantas fotos a prévia do editor desenha.
  *
  * A prévia é a galeria pública de verdade, renderizada no tamanho de uma tela
@@ -133,6 +158,8 @@ export interface Aparencia {
   densidade: Densidade;
   logo: TamanhoLogo;
   peso: Peso;
+  alturaCapa: AlturaCapa;
+  canto: CantoFoto;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
 }
@@ -169,6 +196,12 @@ export const APARENCIA_PADRAO: Aparencia = {
   densidade: "normal",
   logo: "media",
   peso: "normal",
+  /* Os dois nasceram em 04/09/2026 com o valor que o componente já cravava:
+     78vh de capa e 6 px de canto. Galeria entregue não muda de cara — ao
+     contrário da logo e do peso, aqui não havia queixa a corrigir, só falta
+     de escolha. */
+  alturaCapa: "cheia",
+  canto: "suave",
 };
 
 /**
@@ -220,6 +253,8 @@ export function lerAparencia(bruto: unknown): Aparencia {
     densidade: valida(o.densidade, OPCOES.densidade.map((x) => x.id), APARENCIA_PADRAO.densidade),
     logo: valida(o.logo, OPCOES.logo.map((x) => x.id), APARENCIA_PADRAO.logo),
     peso: valida(o.peso, OPCOES.peso.map((x) => x.id), APARENCIA_PADRAO.peso),
+    alturaCapa: valida(o.alturaCapa, OPCOES.alturaCapa.map((x) => x.id), APARENCIA_PADRAO.alturaCapa),
+    canto: valida(o.canto, OPCOES.canto.map((x) => x.id), APARENCIA_PADRAO.canto),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
        "sujo/publicado" do editor iguais ao que eram. */
@@ -255,6 +290,14 @@ function lerCores(bruto: unknown): CoresProprias | null {
   }
   return Object.keys(cores).length ? cores : null;
 }
+
+/** Altura da capa em vh — a capa é medida contra a tela, não contra a foto. */
+export const alturaCapaVh = (a: AlturaCapa): number =>
+  OPCOES.alturaCapa.find((o) => o.id === a)?.vh ?? OPCOES.alturaCapa[2].vh;
+
+/** Raio do canto das fotos, em pixels. Zero é canto vivo, e é uma escolha. */
+export const raioDoCantoPx = (c: CantoFoto): number =>
+  OPCOES.canto.find((o) => o.id === c)?.px ?? OPCOES.canto[1].px;
 
 /**
  * Altura máxima da logo na capa, em pixels.
@@ -359,6 +402,19 @@ export const OPCOES = {
     { id: "normal", nome: "Normal", desc: "O peso natural da fonte" },
     { id: "forte", nome: "Forte", desc: "Título encorpado — sem efeito nas manuscritas" },
   ],
+  /* Em vh: a capa é medida contra a TELA, não contra a foto. É o que faz a
+     escolha significar a mesma coisa num notebook e num celular. */
+  alturaCapa: [
+    { id: "baixa", nome: "Baixa", desc: "Uma faixa — a galeria começa logo", vh: 42 },
+    { id: "media", nome: "Média", desc: "Metade da tela", vh: 60 },
+    { id: "cheia", nome: "Cheia", desc: "Quase a tela inteira", vh: 78 },
+  ],
+  canto: [
+    { id: "reto", nome: "Reto", desc: "Canto vivo, ar de impresso", px: 0 },
+    { id: "suave", nome: "Suave", desc: "Só tira a ponta", px: 6 },
+    { id: "redondo", nome: "Redondo", desc: "Arredondado de verdade", px: 14 },
+    { id: "muito", nome: "Bem redondo", desc: "Cantos macios, ar de aplicativo", px: 24 },
+  ],
 } as const;
 
 // --- presets ------------------------------------------------------------------
@@ -370,6 +426,20 @@ export interface Preset {
   aparencia: Aparencia;
 }
 
+/*
+ * OS NOVE PRESETS USAM A MESMA ALTURA DE CAPA E O MESMO CANTO — de propósito.
+ *
+ * Os dois eixos nasceram em 04/09/2026 com o valor que o componente já cravava
+ * (78vh e 6 px). Quem já tem galeria no ar cai nesse mesmo par por
+ * `lerAparencia`, e é `presetEquivalente` que decide qual card aparece
+ * marcado: um preset que escolhesse `reto` ou `baixa` desmarcaria o card de
+ * toda galeria antiga que usava aquele preset, sem que ninguém tivesse mexido
+ * em nada.
+ *
+ * Quando o par deixar de ser novidade — digamos, quando a maioria das galerias
+ * já tiver escolha própria gravada —, dá para dar a cada preset o canto que
+ * combina com ele (Moda com `reto`, Papel com `redondo`) sem esse efeito.
+ */
 export const PRESETS: Preset[] = [
   {
     /* O estilo da casa. O id NAO e gravado no banco — `galerias.aparencia`
@@ -378,25 +448,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
   },
   {
     /*
@@ -413,7 +483,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -436,25 +506,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave" },
   },
 ];
 
@@ -480,7 +550,7 @@ export function presetEquivalente(a: Aparencia): string | null {
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
-    x.peso === y.peso;
+    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 
@@ -587,6 +657,29 @@ function luminancia(hex: string): number {
  * texto são escolha da pessoa; se ela pôr cinza sobre cinza, a galeria vai
  * ficar cinza sobre cinza, e a prévia vai mostrar isso antes de publicar.
  */
+/**
+ * As duas medidas de FORMA da galeria, como variáveis de CSS.
+ *
+ * Elas saem daqui em vez de virarem classe do Tailwind por um motivo simples:
+ * o Tailwind gera as classes lendo o código-fonte, e `min-h-[78vh]` só existe
+ * porque está escrito assim em algum arquivo. Uma altura escolhida em tempo de
+ * execução nunca teria classe gerada. Com variável, a classe é uma só —
+ * `min-h-[var(--g-capa-h)]` — e o VALOR muda por galeria.
+ *
+ * A segunda razão é o `md:`. As capas convite e dividida mudam de altura no
+ * breakpoint; `style` inline não tem breakpoint, variável tem — a classe
+ * continua sendo `md:` e só o número vem daqui.
+ *
+ * Ficam separadas de `variaveisDoTema` porque tema é COR: aquela função
+ * promete contraste medido, e um vh no meio dela não teria o que provar.
+ */
+export function variaveisDeForma(a: Aparencia): Record<string, string> {
+  return {
+    "--g-capa-h": `${alturaCapaVh(a.alturaCapa)}vh`,
+    "--g-canto": `${raioDoCantoPx(a.canto)}px`,
+  };
+}
+
 export function variaveisDoTema(a: Aparencia): Record<string, string> {
   const base = TEMAS[a.tema];
   const c = a.cores;

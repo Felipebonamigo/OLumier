@@ -72,3 +72,53 @@ export async function publicarAparencia(
   );
   return { ok: linhas.length > 0, aparencia: limpa };
 }
+
+/**
+ * Publicar a GALERIA leva a aparência pendente junto.
+ *
+ * ── O ERRO QUE ISTO CONSERTA, VISTO DUAS VEZES ─────────────────────────────
+ *
+ * A Carol em 31/08/2026 e a Ana em 04/09/2026 fizeram a mesma coisa: escolheram
+ * o tema claro, viram a prévia clara, saíram — e o cliente recebeu a galeria
+ * escura. Em produção a linha da Ana estava assim:
+ *
+ *   aparencia          {}                     → cai no padrão, que é noite
+ *   aparencia_rascunho {"tema":"claro", ...}
+ *
+ * O produto estava tecnicamente certo, e a barra do editor até dizia "o seu
+ * cliente ainda vê o anterior". Só que duas de duas usuárias não viram — e
+ * aviso que ninguém vê não é aviso.
+ *
+ * Quem aperta "publicar galeria" está dizendo "o cliente pode ver o que eu
+ * fiz". Deixar o desenho para trás nesse exato instante nunca é o que se quis.
+ *
+ * A separação rascunho/publicado NÃO acabou, e não podia: ela existe para
+ * experimentar sem mexer na galeria que o cliente já está vendo. O que mudou é
+ * que o ato de publicar a galeria também é um ato de publicar o que ela é.
+ *
+ * Devolve true quando havia rascunho e ele virou o publicado.
+ */
+export async function promoverRascunhoSePendente(
+  galeriaId: string,
+  tenantId: string,
+): Promise<boolean> {
+  /*
+   * Um UPDATE só, com a condição dentro: ler-e-depois-escrever abriria janela
+   * para o editor gravar um rascunho entre as duas consultas, e aí publicaríamos
+   * um estado que a pessoa não viu na prévia.
+   *
+   * `lerAparencia` não roda aqui de propósito — o rascunho já passou por ela em
+   * `gravarRascunho`, e revalidar exigiria trazer o JSON para o Node só para
+   * devolvê-lo igual.
+   */
+  const linhas = await consultar(
+    `update galerias
+        set aparencia = aparencia_rascunho,
+            aparencia_rascunho = null,
+            atualizado_em = now()
+      where id = $1 and tenant_id = $2 and aparencia_rascunho is not null
+      returning id`,
+    [galeriaId, tenantId],
+  );
+  return linhas.length > 0;
+}

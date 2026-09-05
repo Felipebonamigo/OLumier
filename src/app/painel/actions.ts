@@ -7,7 +7,11 @@ import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
 import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
-import { gravarRascunho, publicarAparencia } from "@/lib/aparencia-galeria";
+import {
+  gravarRascunho,
+  promoverRascunhoSePendente,
+  publicarAparencia,
+} from "@/lib/aparencia-galeria";
 import { presetPorId } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
@@ -123,6 +127,20 @@ export async function salvarPublicacaoAction(form: FormData) {
   if (publicada !== null) {
     valores.push(publicada === "1");
     campos.push(`publicada = $${valores.length}`);
+  }
+
+  /*
+   * PUBLICAR A GALERIA PUBLICA A APARÊNCIA PENDENTE JUNTO.
+   *
+   * Duas usuárias seguidas escolheram o tema claro, viram a prévia clara e
+   * entregaram a galeria escura — o rascunho nunca foi publicado. Ver
+   * `promoverRascunhoSePendente`, que explica por que isso não desfaz a
+   * separação rascunho/publicado.
+   *
+   * Só ao LIGAR: tirar do ar não é hora de mexer no desenho de nada.
+   */
+  if (publicada === "1") {
+    await promoverRascunhoSePendente(galeriaId, tenantId);
   }
 
   const permiteDownload = form.get("permite_download");

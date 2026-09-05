@@ -57,7 +57,7 @@ const ABAS = ["fotos", "design", "entrega", "atividade"];
 /** O que só pode aparecer na aba certa — um pedaço de texto de cada seção. */
 const MARCA_DA_ABA = {
   fotos: "Arraste a pasta do casamento aqui",
-  design: "Ajustar em detalhe",
+  design: "Aparência da galeria",
   entrega: "Entrega ao cliente",
   atividade: "Acessos do cliente",
 };

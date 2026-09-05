@@ -223,7 +223,22 @@ function Eixo<K extends keyof typeof OPCOES>({
  * arrumam. É a mesma divisão que o Pixieset usa, e ela casa com a pergunta que
  * o fotógrafo traz — "mudar a letra" é um lugar, não um item no meio de oito.
  */
+/*
+ * OS ESTILOS PRONTOS SÃO O PRIMEIRO GRUPO, E NÃO UM BLOCO ACIMA DE TUDO.
+ *
+ * Até 04/09/2026 os nove cartões ficavam empilhados no topo da aba Design, num
+ * grid de quatro colunas — três fileiras de cartão com miniatura, nome e
+ * descrição. Quem entrava para mudar a letra rolava a tela inteira antes de
+ * chegar no menu de ajuste, e foi essa a queixa do Felipe: "continua a edição
+ * toda por scroll na mesma tela". As abas existiam; o conteúdo delas é que
+ * começava depois de uma tela de outra coisa.
+ *
+ * Como quinto grupo, os cartões dividem o mesmo espaço dos eixos: um painel de
+ * cada vez, e o menu à vista. É também o que a ordem diz — escolher um estilo é
+ * a primeira decisão, e por isso ele abre selecionado.
+ */
 const GRUPOS = [
+  { id: "estilos", nome: "Estilos prontos" },
   { id: "capa", nome: "Capa" },
   { id: "tipografia", nome: "Tipografia" },
   { id: "cor", nome: "Cor" },
@@ -253,7 +268,7 @@ export function EditorAparencia({
 }) {
   /* Qual grupo do ajuste fino está aberto. Só desenho: não entra no rascunho
      nem na publicação — trocar de grupo não é mexer na galeria. */
-  const [grupo, setGrupo] = useState<Grupo>("capa");
+  const [grupo, setGrupo] = useState<Grupo>("estilos");
   const [ap, setAp] = useState<Aparencia>(inicial);
   /* O que está GRAVADO. Separado do que está na tela: é a diferença entre os
      dois que acende o botão e diz o que ainda não foi publicado. */
@@ -429,33 +444,6 @@ export function EditorAparencia({
         </span>
       </div>
 
-      {/* Presets */}
-      <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        {PRESETS.map((p) => {
-          const ativo = presetAtivo === p.id;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => mudar(p.aparencia)}
-              className={`rounded-lg border p-3 text-left transition ${
-                ativo
-                  ? "border-acento bg-acento/5"
-                  : "border-linha hover:border-linha-forte hover:bg-carbon-2"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                <MiniaturaPreset aparencia={p.aparencia} />
-                <span className="text-sm font-medium">{p.nome}</span>
-              </span>
-              <span className="mt-1.5 block text-[11px] leading-snug text-texto-faint">
-                {p.desc}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
       {/*
         AJUSTE FINO EM QUATRO GRUPOS (04/09/2026).
 
@@ -476,9 +464,9 @@ export function EditorAparencia({
         é trocar o que está desenhado, e nada mais.
       */}
       <div className="mt-5 border-t border-linha pt-4 sm:flex sm:gap-6">
-        <nav aria-label="Ajuste fino" className="sm:w-36 sm:shrink-0">
+        <nav aria-label="Partes do design" className="sm:w-36 sm:shrink-0">
           <span className="block text-[10px] font-mono uppercase tracking-widest text-texto-faint">
-            Ajustar em detalhe
+            Editar
           </span>
           <ul className="-mx-1 mt-2 flex gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex-col sm:overflow-visible sm:px-0">
             {GRUPOS.map((g) => {
@@ -504,11 +492,42 @@ export function EditorAparencia({
         </nav>
 
         <div className="mt-4 grid min-w-0 flex-1 gap-4 sm:mt-0">
+          {grupo === "estilos" && (
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {PRESETS.map((p) => {
+                const ativo = presetAtivo === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => mudar(p.aparencia)}
+                    className={`rounded-lg border p-3 text-left transition ${
+                      ativo
+                        ? "border-acento bg-acento/5"
+                        : "border-linha hover:border-linha-forte hover:bg-carbon-2"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <MiniaturaPreset aparencia={p.aparencia} />
+                      <span className="text-sm font-medium">{p.nome}</span>
+                    </span>
+                    <span className="mt-1.5 block text-[11px] leading-snug text-texto-faint">
+                      {p.desc}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {grupo === "capa" && (
             <>
               {slotCapa}
               <Eixo eixo="capa" titulo="Desenho da capa" ap={ap} mudar={mudar} />
               <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />
+              {/* Junto do desenho da capa porque é a MESMA decisão vista de
+                  outro lado: escolher "imersa" e depois "baixa" é dizer foto em
+                  tela cheia, mas não a tela inteira. */}
+              <Eixo eixo="alturaCapa" titulo="Altura da capa" ap={ap} mudar={mudar} />
             </>
           )}
           {grupo === "tipografia" && (
@@ -529,6 +548,7 @@ export function EditorAparencia({
             <>
               <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
               <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
+              <Eixo eixo="canto" titulo="Canto das fotos" ap={ap} mudar={mudar} />
             </>
           )}
         </div>

@@ -297,6 +297,102 @@ await etapa("publicar promove o rascunho e o apaga", async () => {
   return "publicado e rascunho limpo";
 });
 
+/*
+ * ── O RASCUNHO QUE NINGUÉM PUBLICOU (04/09/2026) ──────────────────────────
+ *
+ * Aconteceu duas vezes, com duas usuárias diferentes. A Carol em 31/08 e a
+ * Ana agora: escolheram o tema CLARO, viram a prévia clara, saíram — e o
+ * cliente recebeu a galeria ESCURA. Em produção a linha da Ana estava assim:
+ *
+ *   aparencia          {}                        → cai no padrão, que é noite
+ *   aparencia_rascunho {"tema":"claro", ...}
+ *
+ * O produto estava tecnicamente certo: o rascunho é dela, o publicado é do
+ * cliente, e a barra até dizia "o seu cliente ainda vê o anterior". Só que
+ * duas pessoas seguidas leram a prévia como o resultado — e um aviso que duas
+ * de duas pessoas não veem não é aviso, é decoração.
+ *
+ * Duas mudanças, e as duas seguram o mesmo erro em pontos diferentes:
+ *
+ *   1. o aviso sai do rodapé do editor e vai para o CABEÇALHO da galeria,
+ *      visível das quatro abas — inclusive de Entrega, que é onde a pessoa
+ *      está no momento em que aperta "publicar";
+ *   2. publicar a GALERIA passa a publicar a aparência pendente junto. Quem
+ *      aperta "publicar galeria" está dizendo "o cliente pode ver o que eu
+ *      fiz", e deixar o desenho para trás nesse instante nunca é o que se
+ *      quis. A separação rascunho/publicado continua valendo para experimentar
+ *      — ela existe para não mexer na galeria que o cliente JÁ está vendo.
+ */
+console.log("\no rascunho não some sem ninguém ver");
+
+await etapa("publicar a GALERIA leva a aparência pendente junto", async () => {
+  const { salvarPublicacaoAction } = await import("../src/app/painel/actions.ts").catch(() => ({}));
+  /* A action é do Next e não roda fora de uma requisição; a regra mora na lib,
+     e é ela que os dois caminhos chamam. */
+  const { promoverRascunhoSePendente } = await import("../src/lib/aparencia-galeria.ts");
+  void salvarPublicacaoAction;
+
+  await db.query("update galerias set aparencia = '{}'::jsonb, aparencia_rascunho = $1 where id = $2", [
+    JSON.stringify({ ...CREME, tema: "claro" }),
+    noAr.id,
+  ]);
+
+  const promovida = await promoverRascunhoSePendente(noAr.id, noAr.estudio.id);
+  if (!promovida) throw new Error("não promoveu nada");
+
+  const { rows } = await db.query(
+    "select aparencia, aparencia_rascunho from galerias where id = $1",
+    [noAr.id],
+  );
+  if (rows[0].aparencia?.tema !== "claro") {
+    throw new Error(`o cliente continuaria vendo ${rows[0].aparencia?.tema ?? "o padrão"}`);
+  }
+  if (rows[0].aparencia_rascunho !== null) throw new Error("o rascunho ficou para trás");
+  return "claro publicado, rascunho limpo";
+});
+
+await etapa("sem rascunho, publicar a galeria não mexe na aparência", async () => {
+  const { promoverRascunhoSePendente } = await import("../src/lib/aparencia-galeria.ts");
+  const antes = await db.query("select aparencia from galerias where id = $1", [noAr.id]);
+  const promovida = await promoverRascunhoSePendente(noAr.id, noAr.estudio.id);
+  if (promovida) throw new Error("promoveu um rascunho que não existia");
+  const depois = await db.query("select aparencia from galerias where id = $1", [noAr.id]);
+  if (JSON.stringify(antes.rows[0].aparencia) !== JSON.stringify(depois.rows[0].aparencia)) {
+    throw new Error("a aparência publicada mudou sozinha");
+  }
+});
+
+await etapa("rascunho de OUTRO estúdio não é promovido", async () => {
+  const { promoverRascunhoSePendente } = await import("../src/lib/aparencia-galeria.ts");
+  await db.query("update galerias set aparencia_rascunho = $1 where id = $2", [
+    JSON.stringify(CREME),
+    noAr.id,
+  ]);
+  const { randomUUID } = await import("node:crypto");
+  const promovida = await promoverRascunhoSePendente(noAr.id, randomUUID());
+  if (promovida) throw new Error("promoveu com o tenant errado");
+  await db.query("update galerias set aparencia_rascunho = null where id = $1", [noAr.id]);
+});
+
+await etapa("o cabeçalho da galeria avisa que há aparência não publicada", async () => {
+  await db.query("update galerias set aparencia_rascunho = $1 where id = $2", [
+    JSON.stringify({ ...CREME, tema: "claro" }),
+    noAr.id,
+  ]);
+  /* Em TODAS as abas: o aviso mora no layout justamente porque a pessoa está em
+     Entrega quando aperta publicar, e é ali que ele mais precisa aparecer. */
+  for (const aba of ["fotos", "design", "entrega", "atividade"]) {
+    const html = await (
+      await fetch(`${BASE}/painel/galerias/${noAr.id}/${aba}`, { cache: "no-store", headers: { cookie } })
+    ).text();
+    if (!/aparência não publicada/i.test(html)) {
+      throw new Error(`a aba "${aba}" não avisa do rascunho pendente`);
+    }
+  }
+  await db.query("update galerias set aparencia_rascunho = null where id = $1", [noAr.id]);
+  return "as quatro abas avisam";
+});
+
 console.log("\na permissão não afrouxou");
 
 /*
