@@ -6,6 +6,7 @@ import { paraCampoDeData } from "@/lib/datas";
 import { EditorGaleria } from "@/components/editor-galeria";
 import { MenuGaleria } from "@/components/menu-galeria";
 import { ProvedorDeEnvio } from "@/components/envio-em-curso";
+import { PublicarNoCabecalho } from "@/components/publicar-no-cabecalho";
 
 export const dynamic = "force-dynamic";
 
@@ -163,17 +164,13 @@ export default async function GaleriaLayout({
             Ver como o cliente vê
           </a>
 
-          <span
-            className={`rounded-full border px-3 py-1 text-xs ${
-              noAr
-                ? "border-ok/40 bg-ok/10 text-ok"
-                : noCofre
-                  ? "border-acento/40 bg-acento/10 text-acento-alto"
-                  : "border-linha text-texto-faint"
-            }`}
-          >
-            {noAr ? "publicada" : noCofre ? "no cofre" : "rascunho"}
-          </span>
+          {/*
+            O selo virou selo E botão em 05/09/2026, a pedido do Juan: "não
+            achei onde publica a galeria… seria ótimo se tivesse lá em cima, em
+            'rascunho', pra publicar independente de qual página estivesse".
+            Ver `components/publicar-no-cabecalho.tsx`.
+          */}
+          <PublicarNoCabecalho galeriaId={galeria.id} publicada={noAr} noCofre={noCofre} />
         </div>
       </header>
 

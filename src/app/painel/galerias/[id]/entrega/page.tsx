@@ -4,6 +4,8 @@ import { sessaoAtual } from "@/lib/auth";
 import { contarMediasProntas, galeriaDoPainel } from "@/lib/galeria-painel";
 import { fotosSemRosto, resumoDeRostos } from "@/lib/rostos";
 import { PublicarGaleria } from "@/components/publicar-galeria";
+import { EnderecoDaGaleria } from "@/components/endereco-da-galeria";
+import { podeTrocarEnderecoDaGaleria } from "@/lib/endereco-galeria";
 import { PrazoCofre } from "@/components/prazo-cofre";
 import { BuscaPorRosto } from "@/components/busca-por-rosto";
 import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
@@ -31,6 +33,9 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
   if (!galeria) notFound();
 
   const totalMedias = await contarMediasProntas(galeria.id);
+  /* Uma consulta boba (um `exists`) que decide se o campo do endereço abre ou
+     explica por que não. Ver `lib/endereco-galeria.ts`. */
+  const enderecoLivre = await podeTrocarEnderecoDaGaleria(galeria.id, tenantId);
 
   // Só pesa quando a busca está ligada; desligada, os dois números são zero.
   const rostos = galeria.rostos_ativos ? await resumoDeRostos(galeria.id) : { rostos: 0, fotos: 0 };
@@ -47,6 +52,14 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
         temSenha={Boolean(galeria.senha_hash)}
         permiteDownload={galeria.permite_download}
         semFotos={totalMedias === 0}
+      />
+
+      {/* Logo abaixo do link, porque é a segunda metade dele — e era ali que o
+          Juan clicava tentando arrumar o `-2` do endereço. */}
+      <EnderecoDaGaleria
+        galeriaId={galeria.id}
+        slug={galeria.slug}
+        podeTrocar={enderecoLivre}
       />
 
       {/*

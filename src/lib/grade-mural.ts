@@ -73,3 +73,25 @@ export function distribuirEmColunas(quantidade: number, colunas: number): number
 export function colunasDoItem(proporcao: number, colunasDisponiveis: number): number {
   return colunasDisponiveis >= 2 && ehDeitada(proporcao) ? 2 : 1;
 }
+
+/**
+ * Quantas colunas a grade usa — a largura-alvo, com piso e teto.
+ *
+ * `colunasQueCabem` responde "quantas cabem"; esta responde "quantas devem".
+ * A diferença é a tela real: num celular cabe uma foto arejada, e uma foto por
+ * vez não é galeria, é apresentação de slides. Num monitor de 1600 cabem oito
+ * compactas, e oito é parede.
+ *
+ * O piso vence o teto quando os dois brigam (piso 3, teto 2 num container
+ * minúsculo): melhor apertado do que abaixo do mínimo que a densidade promete.
+ */
+export function colunasDaGrade(
+  larguraDisponivel: number,
+  larguraAlvo: number,
+  gap: number,
+  minColunas: number,
+  maxColunas: number,
+): number {
+  const cabem = colunasQueCabem(larguraDisponivel, larguraAlvo, gap);
+  return Math.max(minColunas, Math.min(maxColunas, cabem));
+}

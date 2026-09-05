@@ -134,6 +134,25 @@ await etapa('"Ver como o cliente vê" aparece nas quatro abas, e abre a prévia 
   return esperado;
 });
 
+await etapa("publicar está no cabeçalho, nas quatro abas", async () => {
+  /* Juan: "não achei onde publica a galeria… achei, na sessão de entrega. Mas
+     seria ótimo se tivesse lá em cima, em 'rascunho', pra publicar independente
+     de qual página estivesse." A bancada nasce publicada; para ver o botão é
+     preciso ser rascunho. */
+  await db.query("update galerias set publicada = false where id = $1", [g.id]);
+  try {
+    for (const aba of ABAS) {
+      const html = await (await pegar(`/painel/galerias/${g.id}/${aba}`)).text();
+      if (!html.includes("Publicar galeria")) {
+        throw new Error(`"${aba}" não oferece publicar no cabeçalho`);
+      }
+    }
+  } finally {
+    await db.query("update galerias set publicada = true where id = $1", [g.id]);
+  }
+  return `${ABAS.length} abas`;
+});
+
 await etapa("cada aba mostra a SUA seção, e não as das outras", async () => {
   for (const aba of ABAS) {
     const html = await (await pegar(`/painel/galerias/${g.id}/${aba}`)).text();
@@ -177,6 +196,52 @@ await etapa("sem sessão, nenhuma aba abre", async () => {
       throw new Error(`aba ${aba} devolveu ${r.status} sem cookie`);
     }
   }
+});
+
+/*
+ * ── A LISTA DE GALERIAS (05/09/2026) ──────────────────────────────────────
+ *
+ * Juan, três pedidos seguidos sobre a mesma tela: "ter algum tipo de botão
+ * aqui, pois quero apagar a galeria que fiz errada. Ter outro botão que seja
+ * atalho: copiar link, tirar galeria do ar, etc. E adicionar também algum
+ * mecanismo de busca, para pesquisar entre as galerias".
+ *
+ * Ele tinha três galerias e duas se chamavam "Paula & Bruno" — a certa e a
+ * errada. Para apagar a errada era preciso abrir cada uma, ir até o fim da
+ * página e conferir. A busca, com três galerias, ainda não dói; com trinta
+ * casamentos por ano, dói em março.
+ */
+console.log("\nA lista de galerias:\n");
+
+/* Uma SEGUNDA galeria do mesmo estúdio: com uma só não há o que buscar, e o
+   campo some de propósito — ver o comentário em `lista-galerias.tsx`. */
+await galeriaDaRodada(db, { nome: "abas-2", medias: 1 });
+
+await etapa("a lista traz busca, atalhos e apagar", async () => {
+  const r = await fetch(`${BASE}/painel`, { headers: { cookie } });
+  const html = await r.text();
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const faltando = [
+    ["campo de busca", /placeholder="[^"]*[Bb]uscar/],
+    ["atalho de copiar link", /Copiar link/],
+    ["atalho de tirar do ar", /Tirar do ar|Publicar/],
+    ["apagar", /Apagar/],
+  ].filter(([, re]) => !re.test(html));
+  if (faltando.length) {
+    throw new Error(`a lista não oferece: ${faltando.map(([n]) => n).join(", ")}`);
+  }
+  return "busca · copiar link · publicar/tirar do ar · apagar";
+});
+
+/* O link que o atalho copia é o do CLIENTE, e o endereço do estúdio faz parte
+   dele. Sem o slug na página, o botão copiaria um link quebrado. */
+await etapa("a lista conhece o endereço público de cada galeria", async () => {
+  const r = await fetch(`${BASE}/painel`, { headers: { cookie } });
+  const html = await r.text();
+  if (!html.includes(`/g/${g.tslug}/${g.gslug}`)) {
+    throw new Error(`não achei /g/${g.tslug}/${g.gslug} na lista`);
+  }
+  return `/g/${g.tslug}/${g.gslug}`;
 });
 
 await db.query("delete from galerias where id = $1", [galeriaVizinha.id]);

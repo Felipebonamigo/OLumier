@@ -1177,3 +1177,28 @@ export async function moverSoltasAction(form: FormData) {
   await moverSoltasParaSecao(galeriaId, secaoId, tenantId);
   revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
 }
+
+/**
+ * Troca o endereço da galeria — quando ainda dá.
+ *
+ * A regra inteira mora em `lib/endereco-galeria.ts`, inclusive o "quando ainda
+ * dá": rascunho que ninguém nunca abriu. Aqui só há a sessão, a revalidação e o
+ * texto que a tela mostra.
+ */
+export async function trocarEnderecoGaleriaAction(
+  _estado: { ok?: string; erro?: string },
+  form: FormData,
+): Promise<{ ok?: string; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const pedido = String(form.get("slug") ?? "");
+  if (!galeriaId) return { erro: "Galeria não encontrada." };
+
+  const { trocarEnderecoDaGaleria } = await import("@/lib/endereco-galeria");
+  const r = await trocarEnderecoDaGaleria(galeriaId, tenantId, pedido);
+  if (!r.ok) return { erro: r.erro };
+
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  revalidatePath("/painel");
+  return { ok: `Endereço agora é /${r.slug}.` };
+}

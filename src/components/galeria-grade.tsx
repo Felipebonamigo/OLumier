@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { DENSIDADES, type Aparencia } from "@/config/aparencia";
-import { colunasDoItem, colunasQueCabem, distribuirEmColunas } from "@/lib/grade-mural";
+import { DENSIDADES, LARGURA_DA_FOTO, type Aparencia } from "@/config/aparencia";
+import { colunasDaGrade, colunasDoItem, distribuirEmColunas } from "@/lib/grade-mural";
 
 /**
  * As cinco grades.
@@ -15,13 +15,6 @@ import { colunasDoItem, colunasQueCabem, distribuirEmColunas } from "@/lib/grade
  * grade se adapta sozinha de um celular estreito a um monitor largo, e a
  * densidade escolhida só muda essa largura.
  */
-
-/** Largura-alvo de cada foto. Menor = mais fotos por tela. */
-const LARGURA: Record<Aparencia["densidade"], number> = {
-  compacta: 170,
-  normal: 230,
-  arejada: 320,
-};
 
 /**
  * `useLayoutEffect` no navegador, `useEffect` no servidor.
@@ -37,6 +30,14 @@ const LARGURA: Record<Aparencia["densidade"], number> = {
  * isomórfico de sempre, e a escolha é feita uma vez, no módulo, não a cada
  * render.
  */
+/** A densidade traduzida em números: largura-alvo, respiro, piso e teto. */
+interface LimitesDaGrade {
+  largura: number;
+  gap: number;
+  minColunas: number;
+  maxColunas: number;
+}
+
 const useEfeitoDeLayout = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /**
@@ -46,14 +47,15 @@ const useEfeitoDeLayout = typeof window === "undefined" ? useEffect : useLayoutE
  * em 1 de propósito: é o que o HTML do servidor desenha, então a hidratação
  * bate, e é o valor certo para o celular.
  */
-function useColunas(largura: number, gap: number) {
+function useColunas(largura: number, gap: number, minColunas: number, maxColunas: number) {
   const ref = useRef<HTMLDivElement>(null);
   const [colunas, setColunas] = useState(1);
 
   useEfeitoDeLayout(() => {
     const el = ref.current;
     if (!el) return;
-    const medir = () => setColunas(colunasQueCabem(el.clientWidth, largura, gap));
+    const medir = () =>
+      setColunas(colunasDaGrade(el.clientWidth, largura, gap, minColunas, maxColunas));
     medir();
     /* Redimensionar a janela, girar o celular, abrir o painel lateral — todos
        mudam a largura sem passar por nenhuma prop. */
@@ -83,11 +85,15 @@ interface PropsGrade {
  * como corrigir só com CSS, porque quem decide quantas fotos cabem por coluna é
  * o motor de multi-column, e ele não conta para ninguém. Ver `lib/grade-mural.ts`.
  */
-function Mural({ quantidade, render, largura, gap }: Omit<PropsGrade, "aparencia" | "proporcao"> & {
-  largura: number;
-  gap: number;
-}) {
-  const [ref, colunas] = useColunas(largura, gap);
+function Mural({
+  quantidade,
+  render,
+  largura,
+  gap,
+  minColunas,
+  maxColunas,
+}: Omit<PropsGrade, "aparencia" | "proporcao"> & LimitesDaGrade) {
+  const [ref, colunas] = useColunas(largura, gap, minColunas, maxColunas);
   const distribuicao = distribuirEmColunas(quantidade, colunas);
 
   return (
@@ -118,11 +124,16 @@ function Mural({ quantidade, render, largura, gap }: Omit<PropsGrade, "aparencia
  * duas, e duas fontes de verdade para o mesmo número acabariam discordando
  * justamente na largura em que o layout quebra.
  */
-function Panorama({ quantidade, render, proporcao, largura, gap }: Omit<PropsGrade, "aparencia"> & {
-  largura: number;
-  gap: number;
-}) {
-  const [ref, colunas] = useColunas(largura, gap);
+function Panorama({
+  quantidade,
+  render,
+  proporcao,
+  largura,
+  gap,
+  minColunas,
+  maxColunas,
+}: Omit<PropsGrade, "aparencia"> & LimitesDaGrade) {
+  const [ref, colunas] = useColunas(largura, gap, minColunas, maxColunas);
   const itens = Array.from({ length: quantidade }, (_, i) => i);
 
   return (
@@ -153,12 +164,21 @@ function Panorama({ quantidade, render, proporcao, largura, gap }: Omit<PropsGra
 }
 
 export function GaleriaGrade({ aparencia, quantidade, render, proporcao }: PropsGrade) {
-  const { gapPx: gap } = DENSIDADES[aparencia.densidade];
-  const largura = LARGURA[aparencia.densidade];
+  const { gapPx: gap, minColunas, maxColunas } = DENSIDADES[aparencia.densidade];
+  const largura = LARGURA_DA_FOTO[aparencia.densidade];
   const itens = Array.from({ length: quantidade }, (_, i) => i);
 
   if (aparencia.grade === "colunas") {
-    return <Mural quantidade={quantidade} render={render} largura={largura} gap={gap} />;
+    return (
+      <Mural
+        quantidade={quantidade}
+        render={render}
+        largura={largura}
+        gap={gap}
+        minColunas={minColunas}
+        maxColunas={maxColunas}
+      />
+    );
   }
 
   if (aparencia.grade === "panorama") {
@@ -169,6 +189,8 @@ export function GaleriaGrade({ aparencia, quantidade, render, proporcao }: Props
         proporcao={proporcao}
         largura={largura}
         gap={gap}
+        minColunas={minColunas}
+        maxColunas={maxColunas}
       />
     );
   }

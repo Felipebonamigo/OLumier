@@ -841,10 +841,51 @@ export const FONTES_TITULO: Record<Tipografia, string> = {
  * Os valores são os mesmos de antes: 0,25rem = 4px, 0,5rem = 8px, 1,25rem =
  * 20px, com a raiz em 16px. Nenhuma galeria muda de aparência.
  */
-export const DENSIDADES: Record<Densidade, { gapPx: number; colunas: number }> = {
-  compacta: { gapPx: 4, colunas: 5 },
-  normal: { gapPx: 8, colunas: 4 },
-  arejada: { gapPx: 20, colunas: 3 },
+/*
+ * ── PISO E TETO DE COLUNAS (05/09/2026) ──────────────────────────────────
+ *
+ * Juan: "achei ruim a visualização no celular só ficar boa quando está em
+ * 'compacta'. No pc fica MUITA informação e no celular fica só uma foto por
+ * vez."
+ *
+ * A grade escolhia as colunas por uma largura-alvo por foto, e só. A conta
+ * explica as duas queixas de uma vez. Num iPhone sobram ~366 px de largura
+ * útil:
+ *
+ *   compacta  (366+4)  / (170+4)  = 2 colunas
+ *   normal    (366+8)  / (230+8)  = 1 coluna
+ *   arejada   (366+20) / (320+20) = 1 coluna
+ *
+ * Num notebook de 1280 sobram ~1232, e a compacta dá SETE colunas.
+ *
+ * Uma largura-alvo só não serve para as duas pontas da tela. O piso salva o
+ * celular, o teto salva o monitor, e a largura-alvo continua mandando no meio —
+ * que é a faixa em que ela acerta. `colunasDaGrade` faz a conta;
+ * `testar-grade-mural.mjs` prende os dois extremos.
+ *
+ * O campo `colunas` que morava aqui não era lido por ninguém desde que a grade
+ * passou a medir a largura de verdade. Saiu.
+ */
+export const DENSIDADES: Record<
+  Densidade,
+  { gapPx: number; minColunas: number; maxColunas: number }
+> = {
+  compacta: { gapPx: 4, minColunas: 3, maxColunas: 6 },
+  normal: { gapPx: 8, minColunas: 2, maxColunas: 5 },
+  arejada: { gapPx: 20, minColunas: 2, maxColunas: 4 },
+};
+
+/**
+ * Largura-alvo de cada foto, por densidade. Menor = mais fotos por tela.
+ *
+ * Mora aqui, e não no componente, porque anda de mãos dadas com o piso e o teto
+ * acima: mexer num sem olhar o outro é como o celular acabou com uma foto por
+ * vez. Juntos, dá para ler a densidade inteira de um lugar só.
+ */
+export const LARGURA_DA_FOTO: Record<Densidade, number> = {
+  compacta: 170,
+  normal: 230,
+  arejada: 320,
 };
 
 /**

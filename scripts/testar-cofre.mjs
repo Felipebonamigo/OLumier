@@ -177,7 +177,12 @@ await etapa("o painel não chama de publicada uma galeria que está no cofre", a
 
   /* Só o selo interessa, não a página inteira: a palavra "publicada" aparece em
    * texto de ajuda ("enquanto não estiver publicada…") sem mentir sobre nada. */
-  const selo = html.match(/rounded-full border px-3 py-1 text-xs[^>]*>([^<]+)</);
+  /* O seletor procura a PASTILHA, e não uma classe exata: em 05/09/2026 o selo
+     virou selo-e-botão (`publicar-no-cabecalho.tsx`, a pedido do Juan) e ganhou
+     cores por estado, o que quebrou o casamento literal de antes sem que nada do
+     comportamento mudasse. `rounded-full` + o tamanho do texto é o que
+     identifica a pastilha em qualquer um dos três estados. */
+  const selo = html.match(/class="rounded-full[^"]*px-3 py-1 text-xs[^"]*"[^>]*>([^<]+)</);
   if (!selo) throw new Error("não achei o selo de estado no cabeçalho da galeria");
   const dito = selo[1].trim();
   if (dito === "publicada") {

@@ -26,13 +26,10 @@
  * arquivo prende: quando só cabe UMA coluna (celular), ninguém pode ocupar
  * duas — o item estouraria a largura da tela.
  */
-import {
-  PROPORCAO_DEITADA,
-  colunasDoItem,
-  colunasQueCabem,
-  distribuirEmColunas,
-  ehDeitada,
-} from "../src/lib/grade-mural.ts";
+import * as mod from "../src/lib/grade-mural.ts";
+import { DENSIDADES, LARGURA_DA_FOTO as LARGURA } from "../src/config/aparencia.ts";
+
+const { PROPORCAO_DEITADA, colunasDoItem, colunasQueCabem, distribuirEmColunas, ehDeitada } = mod;
 
 let falhou = false;
 function etapa(nome, fn) {
@@ -120,6 +117,56 @@ etapa("no panorama, a deitada ocupa duas colunas", () => {
 etapa("com UMA coluna, ninguém ocupa duas — senão estoura a tela do celular", () => {
   igual(colunasDoItem(16 / 9, 1), 1, "deitada no celular");
   igual(colunasDoItem(2 / 3, 1), 1, "retrato no celular");
+});
+
+/*
+ * ── O CELULAR E O MONITOR (05/09/2026) ────────────────────────────────────
+ *
+ * Juan: "achei ruim a visualização no celular só ficar boa quando está em
+ * 'compacta'. No pc fica MUITA informação e no celular fica 2 colunas de fotos.
+ * Daí se bota o tamanho do outro jeito, no celular fica só uma foto por vez."
+ *
+ * A conta explica os dois lados. A largura-alvo por foto era um número fixo por
+ * densidade (170 / 230 / 320 px), e num iPhone sobram ~366 px de largura útil:
+ *
+ *   compacta  (366+4)  / 174 = 2 colunas
+ *   normal    (366+8)  / 238 = 1 coluna
+ *   arejada   (366+20) / 340 = 1 coluna
+ *
+ * Do outro lado, num notebook de 1280 sobram ~1232, e a compacta dá SETE
+ * colunas — a "muita informação" que ele viu.
+ *
+ * Uma largura-alvo só não serve para as duas pontas. O piso e o teto de colunas
+ * servem: o piso salva o celular, o teto salva o monitor, e a largura-alvo
+ * continua mandando no meio, que é onde ela acerta.
+ */
+const { colunasDaGrade } = mod;
+const CELULAR = 366; // iPhone comum, descontada a margem da página
+const NOTEBOOK = 1232; // 1280 menos a margem
+
+etapa("no celular, nenhuma densidade cai para uma foto por vez", () => {
+  for (const [nome, { gapPx, minColunas, maxColunas }] of Object.entries(DENSIDADES)) {
+    const n = colunasDaGrade(CELULAR, LARGURA[nome], gapPx, minColunas, maxColunas);
+    if (n < 2) throw new Error(`${nome} deu ${n} coluna no celular`);
+  }
+});
+
+etapa("no notebook, a compacta para de virar parede de fotos", () => {
+  const n = colunasDaGrade(NOTEBOOK, LARGURA.compacta, DENSIDADES.compacta.gapPx, DENSIDADES.compacta.minColunas, DENSIDADES.compacta.maxColunas);
+  if (n > 6) throw new Error(`compacta deu ${n} colunas num notebook`);
+  if (n < 4) throw new Error(`compacta deu só ${n} colunas — deixou de ser compacta`);
+});
+
+etapa("a densidade continua significando algo: mais arejada, menos colunas", () => {
+  const cols = (nome, w) =>
+    colunasDaGrade(w, LARGURA[nome], DENSIDADES[nome].gapPx, DENSIDADES[nome].minColunas, DENSIDADES[nome].maxColunas);
+  for (const w of [CELULAR, 768, NOTEBOOK, 1600]) {
+    if (!(cols("compacta", w) >= cols("normal", w) && cols("normal", w) >= cols("arejada", w))) {
+      throw new Error(
+        `em ${w}px: compacta ${cols("compacta", w)}, normal ${cols("normal", w)}, arejada ${cols("arejada", w)}`,
+      );
+    }
+  }
 });
 
 console.log(falhou ? "\n✗ mural com falha\n" : "\n✓ mural ok\n");
