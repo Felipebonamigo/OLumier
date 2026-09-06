@@ -50,7 +50,7 @@ export function PublicarNoCabecalho({
 
   if (publicada) {
     return (
-      <span className="flex items-center gap-2">
+      <span className="flex shrink-0 items-center gap-2">
         <span className="rounded-full border border-ok/40 bg-ok/10 px-3 py-1 text-xs text-ok">
           publicada
         </span>
@@ -80,7 +80,10 @@ export function PublicarNoCabecalho({
               router.refresh();
             });
           }}
-          className="text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-50"
+          /* `whitespace-nowrap` porque o cabeçalho é um flex que quebra: sem
+             ele, num espaço apertado o texto quebrava LETRA por letra e o
+             botão virava uma coluna de 21 px de largura. */
+          className="whitespace-nowrap text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-50"
         >
           {salvando ? "tirando…" : "tirar do ar"}
         </button>
@@ -89,7 +92,7 @@ export function PublicarNoCabecalho({
   }
 
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex shrink-0 items-center gap-2">
       <span className="rounded-full border border-linha px-3 py-1 text-xs text-texto-faint">
         rascunho
       </span>
@@ -105,7 +108,16 @@ export function PublicarNoCabecalho({
             router.refresh();
           })
         }
-        className="rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:opacity-60"
+        /*
+          "TEM QUE TER UM BOTÃO BEM GRANDE DISSO" — as palavras dele.
+
+          A primeira versão saiu do tamanho de um botão comum, menor até que o
+          "Nova galeria" da lista. Botão do mesmo tamanho de todo o resto é
+          justamente o que ele não achou: numa tela com selo, link de prévia e
+          aviso de aparência, o que decide para onde o olho vai é o CONTRASTE de
+          tamanho, não a existência do botão.
+        */
+        className="rounded-lg bg-acento px-6 py-3 text-base font-semibold text-void shadow-[0_0_28px_-10px_var(--acento)] transition hover:bg-acento-alto disabled:opacity-60"
       >
         {salvando ? "Publicando…" : "Publicar galeria"}
       </button>
