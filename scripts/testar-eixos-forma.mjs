@@ -281,6 +281,62 @@ try {
     erro(`o nome do estúdio ainda pinta com --g-destaque: "${nomeDoEstudio.slice(0, 120)}"`);
   }
 
+  /*
+   * ── O NOME DO CAPÍTULO É TEXTO, NÃO BOTÃO (06/09/2026) ───────────────────
+   *
+   * Duas queixas do Juan atravessam a capa e continuam valendo ABAIXO dela, e
+   * eu tinha corrigido só a metade de cima:
+   *
+   *   "deixei os botões verdinhos e gostei, mas a logo também ficou verde"
+   *   "queria que TODOS os textos estivessem alinhados pra esse lado"
+   *
+   * O nome do capítulo — "Making Of", "Cerimônia" — pintava com `--g-destaque`
+   * e ficava `text-center` cravado. Com a cor do botão escolhida, ele virava
+   * verde junto; com o alinhamento à esquerda, a capa ia para a esquerda e ele
+   * continuava no meio. Ou seja, "cada coisa de um jeito", só que rolando a
+   * página para baixo.
+   */
+  const comCapitulo = await db.query(
+    "insert into secoes (galeria_id, nome, ordem) values ($1, 'Cerimônia', 0) returning id",
+    [bancada.id],
+  );
+  await db.query("update medias set secao_id = $2 where galeria_id = $1", [
+    bancada.id,
+    comCapitulo.rows[0].id,
+  ]);
+  try {
+    const tituloDoCapitulo = (corpo) =>
+      corpo.match(/<h2[^>]*>\s*Cerimônia\s*<\/h2>/)?.[0] ??
+      corpo.match(/<h2[^>]*class="[^"]*"[^>]*>[^<]*Cerim[^<]*<\/h2>/)?.[0] ??
+      "";
+
+    const pintado = await html({ ...base, cores: { destaque: "#22c55e" } });
+    const h2 = tituloDoCapitulo(pintado);
+    if (!h2) {
+      erro("não achei o título do capítulo no HTML — o teste não provaria nada");
+    } else if (!/--g-destaque/.test(h2)) {
+      ok("o nome do capítulo não usa a cor do botão");
+    } else {
+      erro(`o nome do capítulo ainda pinta com --g-destaque: ${h2.slice(0, 120)}`);
+    }
+
+    for (const [alinhamento, marca, ausente] of [
+      ["centro", "text-center", "text-left"],
+      ["esquerda", "text-left", "text-center"],
+    ]) {
+      const corpo = await html({ ...base, alinhamento });
+      const t = tituloDoCapitulo(corpo);
+      if (t.includes(marca) && !t.includes(ausente)) {
+        ok(`o nome do capítulo acompanha o alinhamento "${alinhamento}"`);
+      } else {
+        erro(`capítulo em "${alinhamento}" veio: ${t.slice(0, 120)}`);
+      }
+    }
+  } finally {
+    await db.query("update medias set secao_id = null where galeria_id = $1", [bancada.id]);
+    await db.query("delete from secoes where id = $1", [comCapitulo.rows[0].id]);
+  }
+
   /* Aparência de antes dos eixos: os campos simplesmente não existem. */
   const corpoAntigo = await html(base);
   if (corpoAntigo.includes("--g-capa-h:78vh") && corpoAntigo.includes("--g-canto:6px")) {

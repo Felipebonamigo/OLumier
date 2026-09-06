@@ -620,9 +620,28 @@ export function GaleriaCliente({
           return (
           <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
             {cap.nome && (
+              /*
+                O NOME DO CAPÍTULO SEGUE O ALINHAMENTO, E NÃO É DA COR DO BOTÃO.
+
+                Duas queixas do Juan atravessam a capa e continuavam valendo
+                aqui embaixo — e eu tinha corrigido só a metade de cima:
+
+                  "deixei os botões verdinhos e gostei, mas a logo também ficou
+                   verde"  → era `--g-destaque`, a mesma variável do botão. Com
+                   a cor escolhida, "Making Of" e "Cerimônia" ficavam verdes
+                   junto. `--g-suave` é o secundário do tema, com contraste
+                   medido em `variaveisDoTema`.
+
+                  "queria que TODOS os textos estivessem alinhados pra esse
+                   lado" → era `text-center` cravado. Com o eixo à esquerda, a
+                   capa ia para a esquerda e o capítulo ficava no meio: "cada
+                   coisa de um jeito", só que rolando a página para baixo.
+              */
               <h2
-                className="mb-4 text-center font-mono text-[11px] uppercase tracking-[0.3em]"
-                style={{ color: "var(--g-destaque)" }}
+                className={`mb-4 font-mono text-[11px] uppercase tracking-[0.3em] ${
+                  aparencia.alinhamento === "esquerda" ? "text-left" : "text-center"
+                }`}
+                style={{ color: "var(--g-suave)" }}
               >
                 {cap.nome}
               </h2>
