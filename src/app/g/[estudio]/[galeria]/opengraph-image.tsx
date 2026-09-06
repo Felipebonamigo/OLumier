@@ -1,7 +1,68 @@
 import { ImageResponse } from "next/og";
 import { marca } from "@/config/marca";
-import { armazemDe, urlDaDerivada } from "@/lib/armazem";
+import { lerAparencia, variaveisDoTema } from "@/config/aparencia";
+import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
 import { buscarGaleriaPublica, listarMediasPublicas } from "@/lib/galerias-publicas";
+
+/**
+ * ── O SATORI NÃO DESENHA WEBP (06/09/2026) ────────────────────────────────
+ *
+ * Alimentado com uma WebP, o renderizador do `ImageResponse` estoura com
+ * "u2 is not iterable" — a rota fecha a conexão e o robô do WhatsApp, que
+ * diante de erro desiste, mostra o LINK PELADO. Não é hipótese: rodei o
+ * `ImageResponse` à mão com a derivada de uma galeria real e ele estourou;
+ * com uma JPEG, desenhou.
+ *
+ * E TODA derivada de foto do produto é `.webp` — 1009 de 1009 no banco. Ou
+ * seja: este cartão só funcionava por acidente, nas poucas mídias antigas sem
+ * derivada, que caíam no original. O defeito ficou escondido porque a página
+ * da galeria nem chegava a pedir esta imagem: sem bloco `openGraph` próprio,
+ * o Next servia o cartão da RAIZ. Consertar o texto do cartão ligou esta rota
+ * pela primeira vez, e o primeiro efeito teria sido trocar "cartão da
+ * plataforma" por "cartão nenhum".
+ */
+const DESENHAVEIS = ["image/jpeg", "image/png"];
+
+/**
+ * Teto do que entra na memória para desenhar um quadro de 1200×630.
+ *
+ * A derivada tem centenas de KB; o ORIGINAL é o arquivo que saiu da câmera e
+ * pode passar de 30 MB — e o cartão roda no mesmo VPS que serve as galerias.
+ * Acima do teto, o cartão sai sem foto: quadro neutro com a cor e o nome da
+ * galeria é uma entrega digna; VPS sem memória não é.
+ */
+const TETO_DA_FOTO = 12 * 1024 * 1024;
+
+/** A imagem como `data:`, ou `null` quando não serve para desenhar. */
+async function embutirSeDesenhavel(url: string): Promise<string | null> {
+  const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  if (!r.ok) return null;
+  const tipo = (r.headers.get("content-type") ?? "").split(";")[0].trim();
+  if (!DESENHAVEIS.includes(tipo)) return null;
+  const anunciado = Number(r.headers.get("content-length") ?? 0);
+  if (anunciado > TETO_DA_FOTO) return null;
+  const bytes = Buffer.from(await r.arrayBuffer());
+  /* Confere o tamanho REAL também: `content-length` é o que o bucket diz. */
+  if (bytes.length > TETO_DA_FOTO) return null;
+  return `data:${tipo};base64,${bytes.toString("base64")}`;
+}
+
+/**
+ * `#rrggbb` com transparência, para o véu.
+ *
+ * As cores do tema são sempre hex de seis dígitos — as três dos temas prontos
+ * estão escritas assim em `TEMAS`, e as escolhidas à mão passam pelo filtro de
+ * `lerCores`, que não aceita outra forma. Então não há caso a tratar aqui: se
+ * um dia entrar `rgb()` ou `#fff` naquele arquivo, este parse devolve preto e o
+ * teste do cartão acusa antes de chegar em galeria de alguém.
+ */
+function comAlfa(hex: string, alfa: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r},${g},${b},${alfa})`;
+}
 
 /*
  * O CARTÃO QUE O WHATSAPP DESDOBRA — desta galeria, não da plataforma.
@@ -66,17 +127,24 @@ export default async function Image({ params }: Props) {
       if (capa) {
         /* Validade curta de propósito: o link só precisa viver o tempo desta
            requisição, aqui dentro, e nunca sai deste processo. */
-        const url = await urlDaDerivada(
-          capa.chave_preview,
-          capa.chave,
-          armazemDe(capa.armazem),
-          120,
-        );
-        const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
-        const tipo = r.headers.get("content-type") ?? "";
-        if (r.ok && tipo.startsWith("image/")) {
-          const bytes = Buffer.from(await r.arrayBuffer());
-          capaEmbutida = `data:${tipo};base64,${bytes.toString("base64")}`;
+        const armazem = armazemDe(capa.armazem);
+        const daDerivada = await urlDaDerivada(capa.chave_preview, capa.chave, armazem, 120);
+        capaEmbutida = await embutirSeDesenhavel(daDerivada);
+
+        /*
+         * A derivada é WebP, e o satori não a desenha (ver `DESENHAVEIS`).
+         * Então a segunda tentativa é o ORIGINAL, que é o arquivo que o
+         * fotógrafo enviou — JPEG, na prática. Custa uma segunda busca, e só
+         * na primeira vez que alguém desdobra o link: o que o WhatsApp guarda
+         * é o PNG pronto.
+         *
+         * `chave_preview` nulo já cai no original pela própria `urlDaDerivada`;
+         * o `if` evita repetir a mesma busca nesse caso.
+         */
+        if (!capaEmbutida && capa.chave_preview) {
+          capaEmbutida = await embutirSeDesenhavel(
+            await urlDoOriginal(capa.chave, armazem, 120),
+          );
         }
       }
     } catch {
@@ -89,6 +157,41 @@ export default async function Image({ params }: Props) {
   const titulo = galeria?.titulo ?? marca.nome;
   const estudioNome = galeria?.estudio_nome ?? marca.nome;
 
+  /*
+   * ── A COR DO CARTÃO É A COR DA GALERIA (06/09/2026) ─────────────────────
+   *
+   * A Carol: "coloquei cor branca lá na configuração e o link do WhatsApp tá
+   * indo escuro". A paleta daqui era cravada — gradiente quase preto, texto
+   * creme, assinatura dourada — e valia igual para a galeria branca dela e
+   * para uma galeria noturna. O cartão é a primeira coisa que o casal vê da
+   * entrega, e ele contradizia a galeria inteira.
+   *
+   * Vem de `variaveisDoTema`, a MESMA função que pinta a página. Não é só
+   * economia de código: enquanto forem a mesma fonte, cartão e galeria não têm
+   * como divergir de novo, e o contraste medido lá dentro (o `--g-suave` com
+   * piso de 4,5:1) vale aqui também.
+   *
+   * Sem galeria — link morto, robô batendo em endereço antigo — cai no tema
+   * padrão, que é o escuro da marca. Aí o cartão é NOSSO mesmo.
+   */
+  const tema = variaveisDoTema(lerAparencia(galeria?.aparencia));
+  const fundo = tema["--g-fundo"];
+  const corTexto = tema["--g-texto"];
+  const corAssinatura = tema["--g-suave"];
+
+  /*
+   * O gradiente do véu é montado AQUI, e não dentro do `style`.
+   *
+   * Não é gosto: `scripts/testar-seo.mjs` varre este arquivo atrás de todo
+   * bloco `style={{ ... position: "absolute" ... }}` e exige `width` e `height`
+   * em cada um — a trava do defeito do véu invisível. A varredura para na
+   * primeira chave de fechamento, então uma interpolação `${...}` dentro do
+   * bloco esconderia o elemento inteiro dela, e a trava cairia em silêncio.
+   */
+  const veu = `linear-gradient(to top, ${comAlfa(fundo, 0.96)} 0%, ${comAlfa(fundo, 0.9)} 24%, ${comAlfa(fundo, 0.6)} 46%, ${comAlfa(fundo, 0.16)} 74%, ${comAlfa(fundo, 0)} 100%)`;
+  const haloAssinatura = `0 2px 12px ${comAlfa(fundo, 0.85)}`;
+  const haloTitulo = `0 3px 18px ${comAlfa(fundo, 0.8)}`;
+
   return new ImageResponse(
     (
       <div
@@ -99,8 +202,8 @@ export default async function Image({ params }: Props) {
           flexDirection: "column",
           justifyContent: "flex-end",
           position: "relative",
-          background: "linear-gradient(160deg, #16130e 0%, #0d0c0a 55%, #050505 100%)",
-          color: "#f4efe6",
+          background: fundo,
+          color: corTexto,
         }}
       >
         {capaEmbutida && (
@@ -139,6 +242,19 @@ export default async function Image({ params }: Props) {
 
           Achado com um diagnóstico grosseiro: o véu pintado de vermelho sólido,
           que saiu invisível. Medir foi o que resolveu; olhar não resolveu.
+
+          ── E POR QUE ELE AGORA É DA COR DA GALERIA ──────────────────────
+
+          Era preto fixo, e com ele o cartão de uma galeria branca continuava
+          escuro por baixo da foto — metade da queixa da Carol. Agora o véu é o
+          FUNDO do tema, com as mesmas opacidades.
+
+          A promessa de legibilidade não se perde na troca; ela até fica mais
+          firme. Antes era "preto por baixo, texto creme por cima", combinação
+          que só funcionava porque as duas pontas eram fixas. Agora é o fundo do
+          tema por baixo e o texto do tema por cima — e esses dois já têm
+          contraste medido entre si, seja o tema claro, escuro ou uma cor que o
+          fotógrafo escolheu à mão.
         */}
         <div
           style={{
@@ -147,8 +263,7 @@ export default async function Image({ params }: Props) {
             left: 0,
             width: "100%",
             height: "100%",
-            background:
-              "linear-gradient(to top, rgba(5,5,5,.96) 0%, rgba(5,5,5,.90) 24%, rgba(5,5,5,.60) 46%, rgba(5,5,5,.16) 74%, rgba(5,5,5,0) 100%)",
+            background: veu,
           }}
         />
 
@@ -158,8 +273,18 @@ export default async function Image({ params }: Props) {
               fontSize: 26,
               letterSpacing: 6,
               textTransform: "uppercase",
-              color: "#f0c987",
-              textShadow: "0 2px 12px rgba(0,0,0,.85)",
+              /*
+               * A assinatura NÃO usa a cor do botão, e é a mesma regra da capa
+               * de verdade (ver `TextoEstudio` em galeria-capa.tsx). Juan,
+               * 05/09/2026: "deixei os botões verdinhos e gostei, mas a logo
+               * também ficou verde e isso ficou ruim". Aqui era dourado fixo,
+               * o que dava no mesmo por outro caminho.
+               */
+              color: corAssinatura,
+              /* O halo é da COR DO FUNDO, não preto: sobre um cartão branco uma
+                 sombra preta suja a letra em vez de destacá-la. O trabalho dele
+                 é o mesmo — segurar a borda onde a foto tem detalhe fino. */
+              textShadow: haloAssinatura,
             }}
           >
             {estudioNome}
@@ -170,7 +295,7 @@ export default async function Image({ params }: Props) {
               fontWeight: 700,
               lineHeight: 1.05,
               marginTop: 18,
-              textShadow: "0 3px 18px rgba(0,0,0,.8)",
+              textShadow: haloTitulo,
             }}
           >
             {titulo}

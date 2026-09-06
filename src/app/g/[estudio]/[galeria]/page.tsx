@@ -45,10 +45,46 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { estudio, galeria } = await params;
   const g = await buscarGaleriaPublica(estudio, galeria);
   if (!g) return { title: "Galeria" };
+
+  /*
+   * ── O CARTÃO DO WHATSAPP É DO FOTÓGRAFO, NÃO NOSSO (06/09/2026) ─────────
+   *
+   * Até aqui esta função definia só o `title` — o da aba do navegador. Sem um
+   * bloco `openGraph` próprio, o Next herda o da raiz, e o cartão que o casal
+   * recebia dizia "Galeria Átomo — Onde o instante permanece" com o subtítulo
+   * "Galerias inteligentes para fotógrafos". A entrega mais pessoal que o
+   * fotógrafo faz no ano chegava anunciando o fornecedor dele.
+   *
+   * A imagem já era da galeria desde 31/08/2026 (ver `opengraph-image.tsx`);
+   * faltava o texto ao lado dela. A Carol mandou o print em 06/09/2026 por
+   * outro motivo — a cor —, e os dois estavam no mesmo cartão.
+   *
+   * `siteName` também vira o nome do estúdio: em alguns aplicativos ele
+   * aparece por cima do título, e era mais um lugar dizendo a marca errada.
+   */
+  const dataEvento = g.data_evento
+    ? new Date(g.data_evento).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
+  const descricao = [g.subtitulo, dataEvento, `Fotos por ${g.estudio_nome}`]
+    .filter(Boolean)
+    .join(" · ");
+
   return {
     title: `${g.titulo} · ${g.estudio_nome}`,
     // Galeria é pessoal: nunca deve aparecer em busca, mesmo com o link vazado.
     robots: { index: false, follow: false },
+    description: descricao,
+    openGraph: {
+      type: "website",
+      siteName: g.estudio_nome,
+      title: g.titulo,
+      description: descricao,
+    },
+    twitter: { card: "summary_large_image", title: g.titulo, description: descricao },
   };
 }
 
