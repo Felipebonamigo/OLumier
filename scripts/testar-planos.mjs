@@ -26,6 +26,8 @@ import {
   SEGMENTOS,
   ESPACOS,
   TB_ADICIONAL_CENTAVOS,
+  ESPACO_MAXIMO_GB,
+  precoDoEspacoCentavos,
   montar,
   idDaMontagem,
   planoPorId,
@@ -645,14 +647,119 @@ await etapa("o TB adicional cobre o próprio custo com folga", () => {
   return `R$ ${(porTb / 100).toFixed(2)} contra R$ ${(custoTb / 100).toFixed(2)} de custo`;
 });
 
-await etapa("a vitrine mostra três planos, e a grade continua indo até 10 TB", () => {
+await etapa("a vitrine mostra três planos, e a tabela continua indo até 10 TB", () => {
   igual(planos.length, 3, "planos na vitrine");
   const gbs = planos.map((p) => p.quotaGb);
   igual(JSON.stringify(gbs), JSON.stringify([250, 500, 1000]), "quais");
-  /* A grade completa é o que o montador oferece — e é onde mora o dinheiro que
-     não tem concorrente. */
-  if (!ESPACOS.some((e) => e.gb === 10000)) throw new Error("a grade perdeu o topo de 10 TB");
-  return `vitrine ${gbs.join("/")} GB · grade até ${Math.max(...ESPACOS.map((e) => e.gb)) / 1000} TB`;
+  /* A tabela escrita à mão é o que o montador oferece antes do passo livre — e é
+     onde mora o dinheiro que não tem concorrente. */
+  if (!ESPACOS.some((e) => e.gb === 10000)) throw new Error("a tabela perdeu o topo de 10 TB");
+  return `vitrine ${gbs.join("/")} GB · tabela até ${Math.max(...ESPACOS.map((e) => e.gb)) / 1000} TB`;
+});
+
+/*
+ * ── A ESCADA NÃO TEM MAIS TOPO (06/09/2026) ───────────────────────────────
+ *
+ * O Felipe: "remova essa coisa do 10TB". Até aqui o "+1 TB" desabilitava no
+ * último degrau da tabela, e a home anunciava esse degrau como teto do produto.
+ * Acima de 1 TB a tabela sempre foi uma reta — preço(topo) + N × R$ 80 —, e a
+ * reta não tem por que parar onde a tabela para de estar escrita.
+ *
+ * A TABELA CONTINUA ESCRITA À MÃO até 10 TB, e é de propósito: é dinheiro, e o
+ * diff tem de mostrar preço por preço. A fórmula só assume ACIMA do topo, onde
+ * não há o que escrever à mão. A primeira etapa abaixo é o que amarra as duas:
+ * a fórmula tem de reproduzir EXATAMENTE cada degrau que já está escrito. No
+ * dia em que alguém reajustar uma faixa e esquecer da outra, é aqui que aparece.
+ */
+await etapa("a fórmula acima do topo reproduz todos os degraus escritos à mão", () => {
+  for (const e of ESPACOS) {
+    const pela = precoDoEspacoCentavos(e.gb);
+    if (pela !== e.precoCentavos) {
+      throw new Error(
+        `${e.gb} GB: a tabela diz ${e.precoCentavos} e a fórmula diz ${pela}`,
+      );
+    }
+  }
+  return `${ESPACOS.length} degraus conferidos`;
+});
+
+await etapa("acima do topo cada TB continua custando o mesmo", () => {
+  const topo = ESPACOS.at(-1);
+  for (const teras of [1, 2, 5, 10, 90]) {
+    const gb = topo.gb + teras * 1000;
+    const esperado = topo.precoCentavos + teras * TB_ADICIONAL_CENTAVOS;
+    igual(precoDoEspacoCentavos(gb), esperado, `preço de ${gb / 1000} TB`);
+  }
+  return `de ${topo.gb / 1000} TB para cima, R$ ${(TB_ADICIONAL_CENTAVOS / 100).toFixed(2)} por TB`;
+});
+
+await etapa("um espaço acima do topo vira plano de verdade", () => {
+  const p = planoPorId("g:foto:20000");
+  if (!p) throw new Error("planoPorId recusou 20 TB");
+  igual(p.quotaGb, 20000, "quota");
+  igual(p.precoCentavos, 163999, "preço mensal");
+  igual(montar({ segmento: "foto", espacoGb: 20000 }).id, "g:foto:20000", "id da montagem");
+  return `20 TB · R$ ${(p.precoCentavos / 100).toFixed(2)}/mês`;
+});
+
+/*
+ * ⚠️ A ETAPA QUE PROTEGE O DINHEIRO DE VERDADE.
+ *
+ * `reservaDoPlano` (socios.ts) resolve o id por `planoPorId`. Um id que ela não
+ * reconhece cai no chute de 35% do preço — e 35% é MUITO pouco para um plano
+ * grande, cujo custo de disco é o maior de todos. O efeito medido, com a grade
+ * aberta mas `planoPorId` ainda recusando: a razão do split SALTA de 26% para
+ * 65% acima de 10 TB, e o split despacha para as carteiras dos sócios dinheiro
+ * que é da fatura da Backblaze.
+ *
+ * Não daria erro, não apareceria em tela, e só seria notado na fatura. Por isso
+ * o teto de 30% aqui, e não uma comparação frouxa de "razão positiva".
+ */
+await etapa("acima do topo a reserva é a real, e não o chute de id desconhecido", () => {
+  for (const gb of [11000, 20000, 100000]) {
+    const preco = precoDoEspacoCentavos(gb);
+    const lucro = lucroCentavos(`g:foto:${gb}`, preco, "mensal");
+    const razao = lucro / preco;
+    if (razao > 0.3) {
+      throw new Error(
+        `${gb / 1000} TB devolve ${(razao * 100).toFixed(1)}% de lucro — é o fallback de 35%, não a reserva do plano`,
+      );
+    }
+    if (lucro <= 0) throw new Error(`${gb / 1000} TB não sobra nada depois da reserva`);
+  }
+  return "reserva calculada pelo espaço, não chutada";
+});
+
+await etapa("o anual acima do topo continua cobrindo doze meses de disco", () => {
+  for (const gb of [11000, 20000, 100000]) {
+    const preco = precoDoCicloCentavos(precoDoEspacoCentavos(gb), "anual");
+    const lucro = lucroCentavos(`g:foto:${gb}`, preco, "anual");
+    if (lucro <= 0) {
+      throw new Error(`${gb / 1000} TB anual não cobre a reserva de doze meses`);
+    }
+  }
+  return "anual positivo em todas as faixas provadas";
+});
+
+/*
+ * O QUE A ESCADA LIVRE NÃO PODE ACEITAR.
+ *
+ * O passo é de 1 TB, então 10.500 GB não é um espaço — é um id inventado, e
+ * aceitá-lo criaria preço que nenhum botão da tela produz. E `plano_id` chega
+ * de server action: sem um limite de sanidade, `g:foto:999999999` viraria plano
+ * válido de milhões de reais. O limite não é teto de venda e não aparece em
+ * tela nenhuma; é a guarda da fronteira de entrada.
+ */
+await etapa("meio tera e número absurdo continuam sendo recusados", () => {
+  if (planoPorId("g:foto:10500")) throw new Error("aceitou 10.500 GB — o passo é de 1 TB");
+  if (planoPorId(`g:foto:${ESPACO_MAXIMO_GB + 1000}`)) {
+    throw new Error("aceitou espaço acima do limite de sanidade");
+  }
+  if (planoPorId("g:foto:999999999")) throw new Error("aceitou 999.999.999 GB");
+  if (!planoPorId(`g:foto:${ESPACO_MAXIMO_GB}`)) {
+    throw new Error("recusou o próprio limite de sanidade");
+  }
+  return `limite em ${ESPACO_MAXIMO_GB / 1000} TB`;
 });
 
 await etapa("a entrada de 250 GB é o preço que o sócio pediu", () => {

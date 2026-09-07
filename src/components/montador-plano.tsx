@@ -5,6 +5,7 @@ import {
   SEGMENTOS,
   ESPACOS,
   TB_ADICIONAL_CENTAVOS,
+  ESPACO_MAXIMO_GB,
   montar,
   formatarGb,
   formatarReais,
@@ -28,7 +29,6 @@ const BASES = ESPACOS.filter((e) => e.gb <= 1000);
    repositório, não dado de fora. O compilador não sabe disso; um `?? 1000`
    aqui esconderia uma tabela quebrada atrás de um número plausível. */
 const TETO_BASE = BASES.at(-1)!.gb;
-const MAIOR = ESPACOS.at(-1)!;
 
 /**
  * O que vem em qualquer tamanho.
@@ -233,10 +233,11 @@ export function MontadorPlano({
         responde "não" mexe no passo — que é a mesma tabela, apresentada como o
         que ela sempre foi acima de 1 TB: um preço fixo por tera.
 
-        O passo NÃO é uma segunda estrutura de cobrança. Cada clique escolhe uma
-        faixa que existe em `ESPACOS`; o preço vem dela, não de uma conta feita
-        aqui. Foi para isso que os degraus de 4, 6, 7, 8 e 9 TB entraram na
-        tabela — sem eles, "+1 TB" a partir de 3 TB pousaria em 5.
+        O passo NÃO é uma segunda estrutura de cobrança. O preço de cada clique
+        sai de `montar`, que lê a tabela enquanto ela existe e segue a mesma reta
+        de R$ 80 acima do último degrau escrito — nunca de uma conta feita aqui.
+        Foi para isso que os degraus de 4, 6, 7, 8 e 9 TB entraram na tabela:
+        sem eles, "+1 TB" a partir de 3 TB pousaria em 5.
       */}
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         {BASES.map((e) => (
@@ -282,12 +283,17 @@ export function MontadorPlano({
               </>
             )}
           </span>
+          {/* Sem topo desde 06/09/2026: o passo não para no último degrau
+              escrito em `ESPACOS`, porque acima dele a escada continua pela
+              mesma reta de R$ 80. O `desabilitado` só encosta em
+              `ESPACO_MAXIMO_GB`, que é guarda de entrada e não teto de venda —
+              nenhum cliente real chega a 100 TB. */}
           <PassoTb
             rotulo="Mais um tera"
             sinal="+"
-            desabilitado={espacoGb >= MAIOR.gb}
+            desabilitado={espacoGb >= ESPACO_MAXIMO_GB}
             onClick={() =>
-              setEspacoGb(Math.max(TETO_BASE, espacoGb) + 1000 > MAIOR.gb ? MAIOR.gb : Math.max(TETO_BASE, espacoGb) + 1000)
+              setEspacoGb(Math.min(ESPACO_MAXIMO_GB, Math.max(TETO_BASE, espacoGb) + 1000))
             }
           />
         </div>

@@ -269,6 +269,74 @@ export const formatarGb = (gb: number) => (gb >= 1000 ? `${gb / 1000} TB` : `${g
 const faixa = (gb: number) => ESPACOS.find((f) => f.gb === gb);
 
 /**
+ * Quanto custa cada TB acima de 1 TB — o "TERA ADICIONAL" da vitrine.
+ *
+ * Derivado da grade, e não escrito à mão: é a diferença entre dois degraus
+ * vizinhos. Um número solto aqui viraria propaganda que a tabela desmente no
+ * dia em que alguém reajustar uma faixa e esquecer da outra.
+ * `testar-planos.mjs` exige que essa diferença seja a MESMA em todos os
+ * degraus acima de 1 TB — sem isso a frase "cada TB a mais custa X" seria falsa
+ * em algum ponto da tabela.
+ */
+export const TB_ADICIONAL_CENTAVOS = (() => {
+  const acima = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  return (acima[1].precoCentavos - acima[0].precoCentavos) / ((acima[1].gb - acima[0].gb) / 1000);
+})();
+
+/*
+ * ── A ESCADA NÃO PARA ONDE A TABELA PARA (06/09/2026) ─────────────────────
+ *
+ * O Felipe: "remova essa coisa do 10TB". Até aqui o último degrau escrito era
+ * também o teto do produto: o "+1 TB" desabilitava ali e a home anunciava o
+ * número como limite. Mas acima de 1 TB a tabela sempre foi uma RETA — cada
+ * degrau é o anterior mais R$ 80 —, e a reta não tem por que terminar onde
+ * alguém cansou de digitar linhas.
+ *
+ * A TABELA CONTINUA ESCRITA À MÃO, e isso não é contradição com o que está
+ * escrito lá em cima: é dinheiro, e o diff tem de mostrar preço por preço nas
+ * faixas que quase todo mundo compra. A fórmula só assume ACIMA do topo, onde
+ * não há o que escrever à mão — e `testar-planos.mjs` exige que ela reproduza
+ * EXATAMENTE cada degrau já escrito. Se um reajuste quebrar a reta, é lá que
+ * aparece, antes de virar preço na tela.
+ *
+ * O PASSO É DE 1 TB, sempre. Acima do topo só existe múltiplo exato de 1.000 GB
+ * — 10.500 GB não é um espaço mais barato, é um id que nenhum botão produz.
+ */
+const TOPO_ESCRITO = ESPACOS.at(-1)!;
+
+/**
+ * O limite de sanidade — NÃO é teto de venda, e não aparece em tela nenhuma.
+ *
+ * Ele existe porque `plano_id` atravessa uma server action: sem limite,
+ * `g:foto:999999999` viraria plano válido de milhões de reais, e o único
+ * lugar que notaria seria a fatura. 100 TB é folgado o bastante para nenhum
+ * cliente real encostar (o maior degrau que já vendemos é 10 TB) e apertado o
+ * bastante para que um número absurdo seja recusado na fronteira.
+ */
+export const ESPACO_MAXIMO_GB = 100_000;
+
+/** Um espaço é vendável se está na tabela, ou se é tera inteiro acima do topo. */
+export function espacoValido(gb: number): boolean {
+  if (!Number.isInteger(gb) || gb <= 0) return false;
+  if (faixa(gb)) return true;
+  if (gb <= TOPO_ESCRITO.gb || gb > ESPACO_MAXIMO_GB) return false;
+  return (gb - TOPO_ESCRITO.gb) % 1000 === 0;
+}
+
+/**
+ * O preço mensal de qualquer espaço vendável, em centavos.
+ *
+ * Dentro da tabela, lê a tabela — o preço continua vindo do que está escrito,
+ * nunca de conta feita na hora. Acima do topo, continua a reta.
+ */
+export function precoDoEspacoCentavos(gb: number): number {
+  const e = faixa(gb);
+  if (e) return e.precoCentavos;
+  if (!espacoValido(gb)) throw new Error(`espaço de ${gb} GB não existe`);
+  return TOPO_ESCRITO.precoCentavos + ((gb - TOPO_ESCRITO.gb) / 1000) * TB_ADICIONAL_CENTAVOS;
+}
+
+/**
  * Custo de ARMAZENAMENTO da montagem, com o espaço 100% ocupado, em centavos.
  *
  * ── O QUE ESTE NÚMERO É, E O QUE ELE NÃO É ────────────────────────────────
@@ -334,17 +402,18 @@ function nomeDaMontagem(m: Montagem): string {
 
 /** Monta o plano a partir das peças. Lança se a faixa não existir. */
 export function montar(m: Montagem): Plano {
-  const e = faixa(m.espacoGb);
-  if (!e) throw new Error(`espaço de ${m.espacoGb} GB não existe`);
   if (!SEGMENTOS.some((s) => s.id === m.segmento)) {
     throw new Error(`tipo de trabalho "${m.segmento}" não existe`);
   }
+  /* `precoDoEspacoCentavos` lança no espaço inválido — a mesma recusa de antes,
+     agora num lugar só, e valendo também acima do topo escrito. */
+  const precoCentavos = precoDoEspacoCentavos(m.espacoGb);
   return {
     id: idDaMontagem(m),
     segmento: m.segmento,
     nome: nomeDaMontagem(m),
     quotaGb: m.espacoGb,
-    precoCentavos: e.precoCentavos,
+    precoCentavos,
   };
 }
 
@@ -401,10 +470,18 @@ export function planoPorId(id: string): Plano | undefined {
   const [, segmento] = partes;
   if (!SEGMENTOS.some((s) => s.id === segmento)) return undefined;
 
-  /* Montagem atual: g:segmento:espaço */
+  /* Montagem atual: g:segmento:espaço.
+   *
+   * `espacoValido` no lugar de `faixa` desde 06/09/2026: acima do topo escrito
+   * a escada continua, e um id de 20 TB tem de resolver aqui. É esta linha que
+   * liga a RESERVA CERTA — `reservaDoPlano`, em socios.ts, pergunta o plano a
+   * esta função, e o id que ela não reconhece cai num chute de 35% do preço.
+   * Num plano grande, esse chute manda para as carteiras dos sócios o dinheiro
+   * da fatura da Backblaze, sem erro e sem nada em tela. Ver a etapa "acima do
+   * topo a reserva é a real" em `testar-planos.mjs`. */
   if (partes.length === 3) {
     const espacoGb = Number(partes[2]);
-    if (!Number.isInteger(espacoGb) || !faixa(espacoGb)) return undefined;
+    if (!espacoValido(espacoGb)) return undefined;
     return montar({ segmento: segmento as Segmento, espacoGb });
   }
 
@@ -465,20 +542,6 @@ export const planos: Plano[] = [
   { ...montar({ segmento: "foto", espacoGb: 1000 }) },
 ];
 
-/**
- * Quanto custa cada TB acima de 1 TB — o "TERA ADICIONAL" da vitrine.
- *
- * Derivado da grade, e não escrito à mão: é a diferença entre dois degraus
- * vizinhos. Um número solto aqui viraria propaganda que a tabela desmente no
- * dia em que alguém reajustar uma faixa e esquecer da outra.
- * `testar-planos.mjs` exige que essa diferença seja a MESMA em todos os
- * degraus acima de 1 TB — sem isso a frase "cada TB a mais custa X" seria falsa
- * em algum ponto da tabela.
- */
-export const TB_ADICIONAL_CENTAVOS = (() => {
-  const acima = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
-  return (acima[1].precoCentavos - acima[0].precoCentavos) / ((acima[1].gb - acima[0].gb) / 1000);
-})();
 
 /**
  * Plano com que uma conta nova nasce.

@@ -93,12 +93,34 @@ await etapa("o tamanho de entrada escrito na home é o da grade", () => {
   return escrito;
 });
 
-await etapa("o teto escrito na home é o da grade", () => {
+/*
+ * ── A HOME NÃO ANUNCIA TETO (06/09/2026) ──────────────────────────────────
+ *
+ * Esta etapa exigia o CONTRÁRIO até hoje: que o maior degrau de `ESPACOS`
+ * aparecesse escrito na home. Fazia sentido enquanto ele era teto de verdade —
+ * a home tinha de dizer o limite, e dizer o mesmo que a grade.
+ *
+ * Ele deixou de ser teto: acima do último degrau escrito a escada continua de
+ * tera em tera, pela mesma reta de R$ 80 (ver `precoDoEspacoCentavos`). Agora o
+ * degrau é só onde a tabela para de estar escrita à mão, e anunciá-lo seria a
+ * mentira ao contrário — a que faz o cliente grande achar que o produto não
+ * serve para ele e fechar a aba.
+ *
+ * A etapa inverte junto com a regra. Ela não some: o degrau do topo mudar de
+ * valor não pode voltar a vazar para a página, e é isso que ela agora prende.
+ */
+await etapa("a home NÃO anuncia o último degrau como teto", () => {
   const escrito = formatarGb(maior.gb);
-  if (!html.includes(escrito)) {
-    throw new Error(`a home não diz "${escrito}", que é o maior degrau de ESPACOS`);
+  /* Palavra inteira: "10 TB" não pode casar dentro de "100 TB" nem de "110 TB",
+     senão a etapa acusaria um número maior de ser o teto antigo. */
+  const solto = new RegExp(`(?<![\\d.,])${escrito.replace(" ", "\\s*")}(?![\\d.,])`, "i");
+  if (solto.test(html)) {
+    throw new Error(
+      `a home diz "${escrito}", que é só o último degrau escrito de ESPACOS — ` +
+        `acima dele a escada continua, e anunciar o degrau como teto afasta quem precisa de mais`,
+    );
   }
-  return escrito;
+  return `sem "${escrito}" na página`;
 });
 
 await etapa("nenhum concorrente é citado pelo nome", () => {

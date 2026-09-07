@@ -58,7 +58,20 @@ export const metadata: Metadata = {
  * escrito na página é o número da grade.
  */
 const MENOR_ESPACO = ESPACOS[0];
-const MAIOR_ESPACO = ESPACOS[ESPACOS.length - 1];
+/*
+ * O MAIOR NÃO SE ANUNCIA MAIS (06/09/2026).
+ *
+ * A frase era "de 250 GB a 10 TB", e o 10 TB vinha do último degrau escrito em
+ * `ESPACOS`. Ele deixou de ser teto: acima dele a escada continua de tera em
+ * tera, pela mesma reta de R$ 80 (ver `precoDoEspacoCentavos`). Anunciar o
+ * último degrau como limite passou a ser uma mentira calada na direção pior —
+ * a que faz o cliente grande achar que o produto não serve para ele.
+ *
+ * Continua sem a palavra "ilimitado", e isso é escolha do Felipe em 06/09/2026,
+ * não descuido: existe um limite de sanidade em `ESPACO_MAXIMO_GB`, e uma
+ * palavra que o contrato desmente é a que o cliente cobra. "Para cima" é
+ * verdade em qualquer tamanho que a gente venda.
+ */
 
 /*
  * A FAQ.
@@ -176,7 +189,7 @@ const FAQ_LD = {
 const PERGUNTAS = [
   {
     pergunta: "Quanto cabe, no total?",
-    aqui: `De ${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)} — e o número é seu, não do pacote.`,
+    aqui: `De ${formatarGb(MENOR_ESPACO.gb)} para cima, de tera em tera — e o número é seu, não do pacote.`,
     olhar:
       "Onde o espaço vem embutido num plano, o teto costuma estar na casa das dezenas de GB. Um casamento fotografado e filmado passa disso sozinho, e teto não se compra separado: quando enche, a saída é mudar de serviço no meio da temporada.",
   },
@@ -198,7 +211,7 @@ const PERGUNTAS = [
  * real (`ESPACOS`) — se ela mudar, a ficha acompanha sozinha. */
 const FICHA: [string, string][] = [
   ["mídia", "foto e filme 4K"],
-  ["espaço", `${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)}`],
+  ["espaço", `a partir de ${formatarGb(MENOR_ESPACO.gb)}`],
   ["downloads", "sem limite"],
   ["álbum", "escolha com trava"],
   ["endereço", "seu, com sua marca"],
