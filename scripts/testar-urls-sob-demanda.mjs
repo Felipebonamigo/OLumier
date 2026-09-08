@@ -140,6 +140,70 @@ await etapa("o card da grade tem botão de baixar, sem precisar abrir a foto", a
   return `${botoes} cards com botão`;
 });
 
+/*
+ * ── OS BOTÕES PARARAM DE MANCHAR A FOTO (08/09/2026) ──────────────────────
+ *
+ * O Felipe mandou o print da galeria no celular: "os botões de favorito e
+ * download poluíram muito a imagem". Estava certo, e eram duas causas somadas.
+ *
+ * A primeira é o DISCO. Cada botão desenhava um círculo de `--g-fundo` a 55%
+ * com desfoque atrás do ícone — num tema claro, uma bolha branca leitosa em
+ * cima do rosto. O ícone precisa se destacar da foto, mas para isso basta
+ * sombra no glifo; o disco era o jeito caro de resolver.
+ *
+ * A segunda é a QUANTIDADE. No computador os dois só aparecem no hover e não
+ * custam nada enquanto o ponteiro está longe. No celular não existe hover, e a
+ * consequência é que TODA foto carrega dois ícones o tempo todo — o dobro da
+ * mancha, na tela onde a foto é menor.
+ *
+ * Por isso o de baixar sai do card NO TOQUE, e só nele. O caminho continua
+ * existindo a um toque de distância (abrir a foto → "Salvar no celular") e o
+ * "Baixar tudo" segue no topo. No computador nada muda: os dois continuam
+ * aparecendo no hover, agora sem disco.
+ *
+ * O que NÃO pode acontecer é o botão sumir do celular e não sobrar caminho
+ * nenhum — é o que a terceira etapa confere.
+ */
+await etapa("os botões do card não desenham disco em cima da foto", async () => {
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`)).text();
+  const cartoes = html.match(/<button[^>]*aria-label="(?:Baixar|Marcar)[^"]*"[^>]*>/g) ?? [];
+  if (cartoes.length === 0) throw new Error("não achei os botões do card");
+  const comDisco = cartoes.filter((b) => /backdrop-blur|--g-fundo\) 55%/.test(b));
+  if (comDisco.length) {
+    throw new Error(`${comDisco.length} botão(ões) ainda com o disco: ${comDisco[0].slice(0, 140)}`);
+  }
+  return `${cartoes.length} botões, só glifo`;
+});
+
+await etapa("no toque, o card mostra só o coração", async () => {
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`)).text();
+  const baixar = html.match(/<button[^>]*aria-label="Baixar[^"]*"[^>]*>/)?.[0] ?? "";
+  if (!baixar) throw new Error("o botão de baixar sumiu do HTML — ele ainda vale no computador");
+  if (!/max-\[900px\]:hidden/.test(baixar)) {
+    throw new Error("o baixar do card continua visível no celular — é o dobro da mancha");
+  }
+  const coracao = html.match(/<button[^>]*aria-label="Marcar[^"]*"[^>]*>/)?.[0] ?? "";
+  if (/max-\[900px\]:hidden/.test(coracao)) {
+    throw new Error("o coração sumiu junto — ele é a ação que se pede ao convidado");
+  }
+  return "baixar só no computador, coração sempre";
+});
+
+await etapa("quem está no celular ainda consegue baixar uma foto", async () => {
+  /* Tirar o botão do card só é aceitável porque o caminho continua existindo.
+     Se o visualizador perder o download, o celular fica sem saída nenhuma. */
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const fonte = readFileSync(
+    path.join(path.resolve(import.meta.dirname, ".."), "src/components/galeria-cliente.tsx"),
+    "utf8",
+  );
+  if (!/Salvar no celular|↓ Baixar/.test(fonte)) {
+    throw new Error("o visualizador não oferece download — o celular ficou sem caminho");
+  }
+  return "abrir a foto → Salvar no celular";
+});
+
 await etapa("com download bloqueado, o botão de baixar some do card", async () => {
   await db.query("update galerias set permite_download = false where id = $1", [g.id]);
   const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`)).text();

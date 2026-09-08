@@ -42,6 +42,15 @@ export interface CapituloGaleria {
  * A galeria que o cliente final vê. Fotos em grade, lightbox com teclado,
  * vídeo com player, download individual e em lote.
  */
+/**
+ * A sombra que separa um glifo branco de QUALQUER foto.
+ *
+ * Duas camadas de propósito: a de baixo, curta e opaca, desenha o contorno
+ * imediato do ícone; a de cima, larga e fraca, escurece um halo maior para o
+ * caso da foto estourada de sol. Uma sozinha falha num dos dois extremos.
+ */
+const GLIFO_SOBRE_FOTO = "drop-shadow(0 1px 1.5px rgba(0,0,0,.85)) drop-shadow(0 0 6px rgba(0,0,0,.45))";
+
 export function GaleriaCliente({
   itens,
   permiteDownload,
@@ -747,13 +756,24 @@ export function GaleriaCliente({
                   type="button"
                   onClick={() => salvarUm(it)}
                   aria-label={`Baixar ${it.nome}`}
-                  /* Mesma régua de tamanho do coração ao lado: 44px no toque,
-                     36px no mouse. Ver o comentário dele logo abaixo. */
-                  className="grid h-9 w-9 place-items-center rounded-full opacity-0 backdrop-blur transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:h-11 max-[900px]:w-11 max-[900px]:opacity-100"
-                  style={{
-                    background: "color-mix(in srgb, var(--g-fundo) 55%, transparent)",
-                    color: "var(--g-texto)",
-                  }}
+                  /*
+                    NO TOQUE ELE NÃO APARECE — e é a metade do conserto de
+                    08/09/2026.
+
+                    No computador ele custa zero enquanto o ponteiro está longe:
+                    só existe no hover. No celular não existe hover, então ele
+                    ficava permanente em TODA foto, ao lado do coração — dois
+                    ícones por miniatura, na tela em que a miniatura é menor. O
+                    Felipe mandou o print: "os botões de favorito e download
+                    poluíram muito a imagem".
+
+                    Sai do card, não do produto: abrir a foto e tocar em "Salvar
+                    no celular" é um toque a mais, e o "Baixar tudo" continua no
+                    topo. `testar-urls-sob-demanda.mjs` confere que esse caminho
+                    existe — sem ele, tirar o botão deixaria o celular sem saída.
+                  */
+                  className="grid h-9 w-9 place-items-center rounded-full opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
+                  style={{ color: "#fff", filter: GLIFO_SOBRE_FOTO }}
                 >
                   <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
                     fill="none" stroke="currentColor" strokeWidth="1.8"
@@ -799,12 +819,30 @@ export function GaleriaCliente({
                 /* O posicionamento saiu daqui para o <span> que agrupa os dois
                    botões — senão o de baixar e o coração se sobreporiam no
                    mesmo canto. */
-                className={`grid h-9 w-9 place-items-center rounded-full backdrop-blur transition max-[900px]:h-11 max-[900px]:w-11
+                className={`grid h-9 w-9 place-items-center rounded-full transition max-[900px]:h-11 max-[900px]:w-11
                   ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}
                   ${!selecao.aberta && !ehFavorita ? "hidden" : ""}`}
+                /*
+                  GLIFO COM SOMBRA, E NÃO DISCO ATRÁS DO ÍCONE.
+
+                  O ícone precisa se destacar de qualquer foto — clara, escura,
+                  contrastada. O jeito antigo era desenhar um círculo de
+                  `--g-fundo` a 55% com desfoque atrás dele; num tema claro isso
+                  é uma bolha branca leitosa, e no print do Felipe elas caíam em
+                  cima dos rostos.
+                  
+                  A sombra faz o mesmo trabalho ocupando quase nenhuma área: o
+                  glifo branco se separa do fundo pela borda escura, não por uma
+                  mancha. O alvo de 44px no toque continua o mesmo — o que
+                  encolheu foi o que se VÊ, não o que se acerta com o dedo.
+
+                  Marcado, o coração fica na cor de destaque do estúdio; a
+                  sombra é o que garante que ele se leia mesmo quando a cor
+                  escolhida é clara (o verde pálido do Juan, por exemplo).
+                */
                 style={{
-                  background: "color-mix(in srgb, var(--g-fundo) 55%, transparent)",
-                  color: ehFavorita ? "var(--g-destaque)" : "var(--g-texto)",
+                  color: ehFavorita ? "var(--g-destaque)" : "#fff",
+                  filter: GLIFO_SOBRE_FOTO,
                 }}
               >
                 <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"
