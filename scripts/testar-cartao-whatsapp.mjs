@@ -57,6 +57,59 @@ const erro = (m) => {
  * tema de ponta a ponta — o canto superior esquerdo É a cor da galeria.
  */
 function primeiroPixel(png) {
+  return lerPixel(png, 0, 0);
+}
+
+/**
+ * Qualquer pixel do PNG — o que exige desfazer o filtro linha a linha.
+ *
+ * ── POR QUE A VERSÃO CURTA DEIXOU DE BASTAR (08/09/2026) ──────────────────
+ *
+ * Ler só a primeira linha respondia "de que cor é o cartão", que era a queixa
+ * de 06/09. A queixa nova é sobre a FAIXA DE BAIXO — o gradiente por cima da
+ * foto —, e essa mora na altura 600 de 630. Para chegar lá é preciso desfazer
+ * os filtros de todas as linhas acima, porque cada linha do PNG é codificada
+ * em relação à anterior.
+ *
+ * Continua sem biblioteca: o algoritmo são cinco casos e cabe em vinte linhas.
+ * A alternativa era instalar um decodificador de imagem para conferir uma cor.
+ */
+function lerPixel(png, x, y) {
+  const { largura, canais, cru } = desempacotar(png);
+  const porLinha = largura * canais;
+  let anterior = Buffer.alloc(porLinha);
+  let linha = anterior;
+
+  for (let i = 0; i <= y; i++) {
+    const inicio = i * (porLinha + 1);
+    const filtro = cru[inicio];
+    linha = Buffer.from(cru.subarray(inicio + 1, inicio + 1 + porLinha));
+
+    for (let j = 0; j < porLinha; j++) {
+      const a = j >= canais ? linha[j - canais] : 0; // à esquerda
+      const b = anterior[j]; // acima
+      const c = j >= canais ? anterior[j - canais] : 0; // acima e à esquerda
+      if (filtro === 1) linha[j] = (linha[j] + a) & 255;
+      else if (filtro === 2) linha[j] = (linha[j] + b) & 255;
+      else if (filtro === 3) linha[j] = (linha[j] + ((a + b) >> 1)) & 255;
+      else if (filtro === 4) {
+        /* Paeth: escolhe entre esquerda, acima e diagonal o mais próximo da
+           soma dos dois primeiros menos o terceiro. */
+        const p = a + b - c;
+        const pa = Math.abs(p - a);
+        const pb = Math.abs(p - b);
+        const pc = Math.abs(p - c);
+        linha[j] = (linha[j] + (pa <= pb && pa <= pc ? a : pb <= pc ? b : c)) & 255;
+      } else if (filtro !== 0) throw new Error(`filtro ${filtro} desconhecido`);
+    }
+    anterior = linha;
+  }
+
+  const p = x * canais;
+  return { r: linha[p], g: linha[p + 1], b: linha[p + 2] };
+}
+
+function desempacotar(png) {
   if (png.readUInt32BE(0) !== 0x89504e47) throw new Error("não é PNG");
 
   let pos = 8;
@@ -84,16 +137,7 @@ function primeiroPixel(png) {
     pos += 12 + tamanho; // tamanho + tipo(4) + dados + crc(4)
   }
 
-  const cru = zlib.inflateSync(Buffer.concat(idat));
-  const filtro = cru[0];
-  const linha = cru.subarray(1, 1 + largura * canais);
-
-  /* Filtros 0 (nenhum) e 2 (acima) devolvem o byte como está na primeira linha,
-     porque a linha de cima é zero. 1 (esquerda) e 4 (Paeth) também, no PRIMEIRO
-     pixel, pelo mesmo motivo: não há pixel à esquerda. 3 (média) idem. Ou seja:
-     o primeiro pixel de qualquer linha zero é literal, dê qual filtro der. */
-  if (filtro > 4) throw new Error(`filtro ${filtro} desconhecido`);
-  return { r: linha[0], g: linha[1], b: linha[2] };
+  return { largura, canais, cru: zlib.inflateSync(Buffer.concat(idat)) };
 }
 
 /** 0 (preto) a 1 (branco). Fórmula da luminância relativa, arredondada. */
@@ -289,6 +333,56 @@ try {
       }
     } catch (e) {
       erro(`sem foto desenhável a rota caiu — ${e.message} / ${e.cause?.message ?? ""}`);
+    }
+    /*
+     * ── "NÃO GOSTO DAQUELE GRADIENTE BRANCO" (08/09/2026) ─────────────────
+     *
+     * Carol, olhando o cartão já corrigido: "não acho bonita a prévia, não
+     * gosto daquele gradiente branco ali, queria que fosse mais clean".
+     *
+     * O véu existe para o texto ler sobre qualquer foto — e o argumento a
+     * favor de poder desligá-lo é que, sem ele, NADA se perde: o WhatsApp já
+     * escreve o título e a descrição ao lado da imagem, e desde 06/09/2026
+     * esses dois são o nome da galeria e o do estúdio. O texto sobre a foto
+     * era a segunda cópia da mesma informação, com um gradiente por cima da
+     * foto para pagá-la.
+     *
+     * `sobreposto` continua sendo o padrão — galeria entregue não muda de
+     * cara. A prova aqui é por cor, na faixa de baixo: com a foto magenta
+     * esticada, `foto` deixa magenta onde `sobreposto` deixa a cor do tema.
+     */
+    await enviar(chavesDeTeste[0], pngDeUmPixel(255, 0, 255), "image/png");
+    for (const [modo, esperado] of [
+      ["foto", "magenta"],
+      ["sobreposto", "cor do tema"],
+    ]) {
+      try {
+        const { png } = await cartaoDe({ ...base, tema: "claro", cartao: modo });
+        /* Onde o véu é mais forte: a faixa do texto, perto do rodapé. */
+        const p = lerPixel(png, 100, 560);
+        const ehMagenta = p.r > 200 && p.g < 80 && p.b > 200;
+        const veio = ehMagenta ? "magenta" : "cor do tema";
+        const detalhe = `rgb(${p.r},${p.g},${p.b})`;
+        if (veio === esperado) ok(`cartão "${modo}": o rodapé é ${esperado}`, detalhe);
+        else erro(`cartão "${modo}" devia ter rodapé ${esperado} e veio ${veio} — ${detalhe}`);
+      } catch (e) {
+        erro(`cartão "${modo}" derrubou a rota — ${e.message}`);
+      }
+    }
+
+    /* O modo limpo NÃO pode virar retângulo vazio quando não há foto: sem nada
+       para mostrar, o cartão volta a ter o fundo e o nome. */
+    await enviar(chavesDeTeste[0], Buffer.from("RIFF....WEBPnaoimporta"), "image/webp");
+    try {
+      const { png } = await cartaoDe({ ...base, tema: "claro", cartao: "foto" });
+      const p = lerPixel(png, 100, 560);
+      if (claridade(p) > 0.6) {
+        ok("modo limpo sem foto ainda desenha o cartão com o nome", `rgb(${p.r},${p.g},${p.b})`);
+      } else {
+        erro(`modo limpo sem foto saiu rgb(${p.r},${p.g},${p.b}) — esperava o fundo claro`);
+      }
+    } catch (e) {
+      erro(`modo limpo sem foto derrubou a rota — ${e.message}`);
     }
   } finally {
     /* Só as chaves que este teste criou. */

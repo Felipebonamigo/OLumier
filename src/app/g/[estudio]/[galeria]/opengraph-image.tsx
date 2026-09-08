@@ -174,7 +174,8 @@ export default async function Image({ params }: Props) {
    * Sem galeria — link morto, robô batendo em endereço antigo — cai no tema
    * padrão, que é o escuro da marca. Aí o cartão é NOSSO mesmo.
    */
-  const tema = variaveisDoTema(lerAparencia(galeria?.aparencia));
+  const aparencia = lerAparencia(galeria?.aparencia);
+  const tema = variaveisDoTema(aparencia);
   const fundo = tema["--g-fundo"];
   const corTexto = tema["--g-texto"];
   const corAssinatura = tema["--g-suave"];
@@ -191,6 +192,24 @@ export default async function Image({ params }: Props) {
   const veu = `linear-gradient(to top, ${comAlfa(fundo, 0.96)} 0%, ${comAlfa(fundo, 0.9)} 24%, ${comAlfa(fundo, 0.6)} 46%, ${comAlfa(fundo, 0.16)} 74%, ${comAlfa(fundo, 0)} 100%)`;
   const haloAssinatura = `0 2px 12px ${comAlfa(fundo, 0.85)}`;
   const haloTitulo = `0 3px 18px ${comAlfa(fundo, 0.8)}`;
+
+  /*
+   * ── O MODO LIMPO (08/09/2026) ───────────────────────────────────────────
+   *
+   * Carol: "não gosto daquele gradiente branco ali, queria que fosse mais
+   * clean". No modo `foto` saem o véu E o texto — os dois juntos, porque um
+   * sem o outro não faz sentido: texto sem véu é o que o véu existia para
+   * evitar, e véu sem texto é gradiente sem motivo.
+   *
+   * Nada se perde: o WhatsApp escreve o nome da galeria e o do estúdio ao lado
+   * da imagem (ver `generateMetadata` em page.tsx). O que sai da foto é a
+   * SEGUNDA cópia deles.
+   *
+   * A condição é `capaEmbutida`, e não só a escolha: sem foto o modo limpo
+   * seria um retângulo de uma cor só. Aí o cartão volta a ter fundo e nome, que
+   * é o mesmo caminho da galeria com senha.
+   */
+  const soAFoto = aparencia.cartao === "foto" && Boolean(capaEmbutida);
 
   return new ImageResponse(
     (
@@ -256,17 +275,20 @@ export default async function Image({ params }: Props) {
           contraste medido entre si, seja o tema claro, escuro ou uma cor que o
           fotógrafo escolheu à mão.
         */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            background: veu,
-          }}
-        />
+        {!soAFoto && (
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              height: "100%",
+              background: veu,
+            }}
+          />
+        )}
 
+        {!soAFoto && (
         <div style={{ position: "relative", display: "flex", flexDirection: "column", padding: "0 72px 68px" }}>
           <div
             style={{
@@ -301,6 +323,7 @@ export default async function Image({ params }: Props) {
             {titulo}
           </div>
         </div>
+        )}
       </div>
     ),
     size,

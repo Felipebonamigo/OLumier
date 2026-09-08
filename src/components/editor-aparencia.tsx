@@ -636,6 +636,24 @@ export function EditorAparencia({
                   tela cheia, mas não a tela inteira. */}
               <Eixo eixo="alturaCapa" titulo="Altura da capa" ap={ap} mudar={mudar} />
               <Eixo eixo="alinhamento" titulo="Alinhamento do texto" ap={ap} mudar={mudar} />
+              {/*
+                O CARTÃO DO WHATSAPP MORA AQUI porque é a capa vista de fora: a
+                foto que ele usa é a mesma, e quem acabou de escolher a capa é
+                quem quer saber como ela chega no celular do casal.
+
+                Carol, 08/09/2026: "não gosto daquele gradiente branco ali,
+                queria que fosse mais clean". A linha embaixo diz o que o modo
+                limpo faz com o nome, que é a pergunta imediata de quem lê "só a
+                foto" — e a resposta é que ele continua ali, escrito pelo próprio
+                WhatsApp ao lado da imagem.
+              */}
+              <div>
+                <Eixo eixo="cartao" titulo="Cartão do link no WhatsApp" ap={ap} mudar={mudar} />
+                <p className="mt-1.5 text-[11px] leading-snug text-texto-faint">
+                  O WhatsApp escreve o nome da galeria e o do estúdio ao lado da imagem — no
+                  modo limpo eles continuam aparecendo, só não vão por cima da foto.
+                </p>
+              </div>
             </>
           )}
           {grupo === "tipografia" && (
