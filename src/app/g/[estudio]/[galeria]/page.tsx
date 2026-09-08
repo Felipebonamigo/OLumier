@@ -506,6 +506,8 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           estudio: galeria.estudio_nome,
           logoUrl: urlLogo,
           urlImagem: urlCapa,
+          focoX: galeria.capa_foco_x,
+          focoY: galeria.capa_foco_y,
         }}
       />
 

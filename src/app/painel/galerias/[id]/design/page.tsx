@@ -67,6 +67,8 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
           galeriaId={galeria.id}
           urlCapaAtual={urlCapa}
           enviada={Boolean(capaEnviada)}
+          focoX={galeria.capa_foco_x}
+          focoY={galeria.capa_foco_y}
         />
       }
       caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}

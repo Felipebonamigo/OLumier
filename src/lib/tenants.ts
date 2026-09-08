@@ -69,6 +69,10 @@ export interface Galeria {
   /* Capa enviada como arquivo (migração 029). Vence capa_media_id, e não é uma
      linha em `medias`: não aparece na galeria nem conta como entrega. */
   capa_chave: string | null;
+  /* Onde a capa deve ser cortada, em porcentagem — 50/50 é o centro, que é o
+   * que o `object-cover` já fazia sozinho. Ver a migração 031. */
+  capa_foco_x: number;
+  capa_foco_y: number;
   /* Busca por rosto (migração 028). `rostos_ligados_em` é a prova do
      consentimento do fotógrafo; nula enquanto desligada. */
   rostos_ativos: boolean;

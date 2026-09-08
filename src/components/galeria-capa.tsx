@@ -8,6 +8,9 @@ export interface DadosCapa {
   /** Logo do estúdio; quando existe, substitui o nome em texto. */
   logoUrl?: string | null;
   urlImagem: string | null;
+  /** Onde cortar a foto, em porcentagem. 50/50 é o centro — ver migração 031. */
+  focoX: number;
+  focoY: number;
 }
 
 /**
@@ -44,6 +47,21 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    * `style` não tem esse problema.
    */
   const alturaLogo = alturaLogoPx(aparencia.logo);
+
+  /*
+   * O PONTO FOCAL — onde a foto deve ser cortada.
+   *
+   * Juan, 08/09/2026: "queria que aparecesse mais o corpo do noivo, mas o
+   * enquadramento foi automático". O automático é o `object-cover`, que
+   * preenche a caixa e descarta o excedente pelo CENTRO — e numa capa larga com
+   * uma foto retrato isso joga fora a metade de cima e a de baixo.
+   *
+   * Vai em `style` e não em classe pelo motivo de sempre neste arquivo: o
+   * Tailwind gera classe lendo o código, e `object-[30%_78%]` montado em tempo
+   * de execução não existe no CSS. Os dois números chegam validados de
+   * `lib/capa-galeria.ts` e do próprio banco (migração 031).
+   */
+  const foco = { objectPosition: `${dados.focoX}% ${dados.focoY}%` };
 
   /*
    * ── O ALINHAMENTO, EM TRÊS CLASSES ─────────────────────────────────────
@@ -150,6 +168,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
           src={urlImagem}
           alt=""
           fetchPriority="high"
+          style={foco}
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div
@@ -228,6 +247,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             src={urlImagem}
             alt=""
             fetchPriority="high"
+            style={foco}
             className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
@@ -263,6 +283,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             src={urlImagem}
             alt=""
             fetchPriority="high"
+            style={foco}
             className="absolute inset-0 h-full w-full object-cover"
           />
         </div>

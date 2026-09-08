@@ -8,6 +8,9 @@ import {
   galeriaParaCapa,
   recusaDaCapa,
   trocarCapaPropria,
+  definirFocoDaCapa,
+  definirCapaPorMedia,
+  FOCO_CENTRAL,
 } from "@/lib/capa-galeria";
 import { urlDeUpload, conferirObjeto, apagarObjeto, armazenamentoConfigurado } from "@/lib/r2";
 
@@ -109,6 +112,53 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const anterior = await trocarCapaPropria(id, dono.tenantId!, null);
   if (anterior) await apagarObjeto(anterior).catch(() => {});
+
+  revalidatePath(`/painel/galerias/${id}/design`);
+  return NextResponse.json({ ok: true });
+}
+
+/**
+ * PATCH — o enquadramento, e a troca da foto de capa.
+ *
+ * ── POR QUE AS DUAS COISAS NA MESMA ROTA ──────────────────────────────────
+ *
+ * Porque elas são a mesma decisão vista de perto: "qual foto, e mostrando o
+ * quê". E porque trocar a foto TEM de zerar o foco — um ponto calibrado para a
+ * foto A não quer dizer nada na foto B. Em rotas separadas, o dia em que
+ * alguém acrescentar um terceiro jeito de trocar a capa vai esquecer de zerar,
+ * e o fotógrafo recebe um enquadramento torto que não escolheu.
+ *
+ * `{ focoX, focoY }` move o ponto; `{ mediaId }` troca a foto e centraliza.
+ */
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const dono = await dona(request, id);
+  if (dono.erro) return dono.erro;
+
+  const corpo = await request.json().catch(() => null);
+  if (!corpo || typeof corpo !== "object") {
+    return NextResponse.json({ erro: "Pedido inválido." }, { status: 400 });
+  }
+
+  if ("mediaId" in corpo) {
+    const trocou = await definirCapaPorMedia(id, dono.tenantId!, String(corpo.mediaId ?? ""));
+    if (!trocou) {
+      return NextResponse.json({ erro: "Foto não encontrada nesta galeria." }, { status: 404 });
+    }
+    revalidatePath(`/painel/galerias/${id}/design`);
+    return NextResponse.json({ ok: true, foco: FOCO_CENTRAL });
+  }
+
+  const definiu = await definirFocoDaCapa(id, dono.tenantId!, corpo.focoX, corpo.focoY);
+  if (!definiu) {
+    /* 422 e não 400: o pedido está bem formado, o VALOR é que não serve. A
+       diferença importa para quem lê o log tentando entender se o cliente
+       mandou lixo ou se a galeria sumiu. */
+    return NextResponse.json(
+      { erro: "O ponto precisa ser dois inteiros de 0 a 100." },
+      { status: 422 },
+    );
+  }
 
   revalidatePath(`/painel/galerias/${id}/design`);
   return NextResponse.json({ ok: true });
