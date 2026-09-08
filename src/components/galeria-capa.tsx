@@ -11,6 +11,8 @@ export interface DadosCapa {
   /** Onde cortar a foto, em porcentagem. 50/50 é o centro — ver migração 031. */
   focoX: number;
   focoY: number;
+  /** O fotógrafo APONTOU uma capa (não é a primeira foto por falta de escolha). */
+  capaEscolhida: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ export interface DadosCapa {
  */
 export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia: Aparencia }) {
   const fonteTitulo = FONTES_TITULO[aparencia.tipografia];
-  const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl } = dados;
+  const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl, capaEscolhida } = dados;
   const legenda = [dataFormatada, subtitulo].filter(Boolean).join(" · ");
 
   /*
@@ -213,6 +215,39 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         >
           Ver galeria
         </a>
+
+        {/*
+          A FOTO DA JORNAL — a manchete em cima, a imagem embaixo (08/09/2026).
+
+          Felipe: "minha capa não aparece no formato jornal". O aviso da tela
+          estava certo — o desenho era só tipografia — mas a resposta certa não
+          era mandá-lo trocar de desenho: um jornal TEM foto. É a manchete e,
+          abaixo dela, a imagem grande. Era essa metade que faltava.
+
+          Só com capa ESCOLHIDA. A página sabe usar a primeira foto da galeria
+          quando ninguém escolheu nada, e se essa terceira via contasse aqui,
+          toda galeria que hoje usa o preset Revista ganharia uma foto que
+          ninguém pediu — incluindo as já entregues.
+
+          Mais baixa que as outras capas (60% da altura do eixo): aqui a foto
+          acompanha o texto em vez de substituí-lo, e ocupar a tela inteira
+          empurraria a manchete para fora antes de alguém lê-la.
+        */}
+        {capaEscolhida && urlImagem && (
+          <div
+            className={`mt-12 overflow-hidden ${alinharBloco}`}
+            style={{ maxWidth: "72rem" }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
+            <img
+              src={urlImagem}
+              alt=""
+              fetchPriority="high"
+              style={foco}
+              className="h-[calc(var(--g-capa-h,78vh)*0.6)] w-full object-cover"
+            />
+          </div>
+        )}
       </header>
     );
   }

@@ -506,6 +506,16 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           estudio: galeria.estudio_nome,
           logoUrl: urlLogo,
           urlImagem: urlCapa,
+          /*
+           * ESCOLHIDA, e não herdada.
+           *
+           * A capa jornal só mostra foto quando o fotógrafo apontou uma — o
+           * arquivo enviado ou a foto marcada. A terceira via desta página (a
+           * primeira foto da galeria, quando ninguém escolheu nada) NÃO conta:
+           * se contasse, toda galeria que hoje usa o preset Revista ganharia
+           * uma foto de capa da noite para o dia, incluindo as já entregues.
+           */
+          capaEscolhida: Boolean(galeria.capa_chave || galeria.capa_media_id),
           focoX: galeria.capa_foco_x,
           focoY: galeria.capa_foco_y,
         }}

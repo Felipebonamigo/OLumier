@@ -182,6 +182,86 @@ await etapa("tirar a capa limpa a coluna E apaga o arquivo do bucket", async () 
   igual(await objetoExiste(chave), false, "objeto no bucket");
 });
 
+/*
+ * ── A CAPA JORNAL PASSA A MOSTRAR A FOTO (08/09/2026) ─────────────────────
+ *
+ * Felipe: "minha capa não aparece no formato jornal". O aviso que a tela dá
+ * está correto — o desenho jornal era só tipografia — mas a resposta certa não
+ * é mandá-lo trocar de desenho: um jornal TEM foto. É a manchete em cima e a
+ * imagem grande embaixo; era essa a metade que faltava.
+ *
+ * ── A CONDIÇÃO, E POR QUE ELA NÃO É "TEM FOTO" ────────────────────────────
+ *
+ * A foto só entra quando o fotógrafo ESCOLHEU uma — arquivo enviado ou foto
+ * marcada como capa. Não vale a terceira via, a primeira foto da galeria que a
+ * página usa quando ninguém escolheu nada.
+ *
+ * Sem essa distinção, TODA galeria que hoje usa o preset Revista ganharia uma
+ * foto de capa que ninguém pediu, da noite para o dia, incluindo as já
+ * entregues. Com ela, quem escolheu recebe o que escolheu e quem não escolheu
+ * continua com a capa tipográfica que tem hoje.
+ */
+console.log("\nA capa jornal:\n");
+
+const comAparencia = async (capa) => {
+  await db.query(
+    `update galerias set aparencia = jsonb_set(coalesce(aparencia,'{}'::jsonb), '{capa}', $2::jsonb),
+            publicada = true, senha_hash = null
+      where id = $1`,
+    [g.id, JSON.stringify(capa)],
+  );
+  return (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+};
+/* `[^]` e não `[\s\S]`: dentro de um template literal as barras invertidas
+   somem antes de o RegExp ver a string, e o recorte casava com nada. */
+const capaDoHtml = (html, nome) =>
+  html.match(new RegExp(`<header[^>]*data-capa="${nome}"[^]*?</header>`))?.[0] ?? "";
+
+await etapa("sem capa escolhida, a jornal continua só tipografia", async () => {
+  await db.query("update galerias set capa_chave = null, capa_media_id = null where id = $1", [g.id]);
+  const bloco = capaDoHtml(await comAparencia("jornal"), "jornal");
+  if (!bloco) throw new Error("a capa jornal não foi desenhada");
+  if (/<img/.test(bloco)) {
+    throw new Error("apareceu foto numa galeria que nunca escolheu capa — muda entrega feita");
+  }
+  return "sem foto, como hoje";
+});
+
+await etapa("com capa escolhida, a jornal mostra a foto", async () => {
+  await db.query("update galerias set capa_media_id = $2 where id = $1", [g.id, g.midias[0].id]);
+  const bloco = capaDoHtml(await comAparencia("jornal"), "jornal");
+  if (!/<img/.test(bloco)) throw new Error("escolheu a capa e ela continua sem aparecer");
+  if (!/object-position/.test(bloco)) {
+    throw new Error("a foto da jornal ignora o ponto focal");
+  }
+  return "foto + ponto focal";
+});
+
+await etapa("a mínima continua sem foto, com capa escolhida ou não", async () => {
+  const bloco = capaDoHtml(await comAparencia("minima"), "minima");
+  if (/<img/.test(bloco)) throw new Error("a mínima ganhou foto — ela é só tipografia por definição");
+  return "só tipografia";
+});
+
+await etapa("o aviso da tela não acusa mais a jornal", async () => {
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const editor = readFileSync(
+    path.join(path.resolve(import.meta.dirname, ".."), "src/components/editor-aparencia.tsx"),
+    "utf8",
+  );
+  /* Do "[" do VALOR até o "]" dele — o `string[]` da anotação de tipo mora
+     antes do "=" e engoliria o recorte se a busca começasse no nome. */
+  const igual = editor.indexOf("=", editor.indexOf("CAPAS_SEM_FOTO"));
+  const abre = editor.indexOf("[", igual);
+  const lista = abre < 0 ? "" : editor.slice(abre, editor.indexOf("]", abre) + 1);
+  if (/jornal/.test(lista)) {
+    throw new Error("a tela ainda diz que a jornal não mostra foto");
+  }
+  if (!/minima/.test(lista)) throw new Error("a mínima saiu do aviso, e ela continua sem foto");
+  return "só a mínima";
+});
+
 await limparRodada(db);
 await db.end();
 

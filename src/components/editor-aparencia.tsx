@@ -304,7 +304,10 @@ function Eixo<K extends keyof typeof OPCOES>({
  * nova sem ninguém decidir nada. Capa nova entra aqui de propósito, ou não
  * entra de propósito.
  */
-const CAPAS_SEM_FOTO: string[] = ["jornal", "minima"];
+/* A jornal saiu daqui em 08/09/2026: ela passou a mostrar a foto abaixo da
+   manchete, desde que o fotógrafo tenha escolhido uma. Sobrou a mínima, que é
+   só tipografia por definição — é o que o nome dela promete. */
+const CAPAS_SEM_FOTO: string[] = ["minima"];
 const nomeDaCapa = (id: string) => OPCOES.capa.find((o) => o.id === id)?.nome ?? id;
 
 const GRUPOS = [
