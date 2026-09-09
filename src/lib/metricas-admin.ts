@@ -57,8 +57,15 @@ export interface EstudioParaMetrica {
 const ZERO = BigInt(0);
 const comoData = (d: Date | string | null): Date | null => (d ? new Date(d) : null);
 
-/** As quatro situações do `check` da coluna, na ordem em que interessam. */
-export const SITUACOES = ["trial", "ativo", "inadimplente", "cancelado"] as const;
+/**
+ * As situações do `check` da coluna, na ordem em que interessam.
+ *
+ * `cortesia` entrou em 09/09/2026 (migração 032) e fica ao lado de `ativo`
+ * porque é o que ela é do ponto de vista do ACESSO. Do ponto de vista do
+ * dinheiro é o oposto, e é `receitaMensalCentavos` quem diz isso — ela soma só
+ * `ativo`, então uma conta de cortesia nunca vira receita.
+ */
+export const SITUACOES = ["trial", "ativo", "cortesia", "inadimplente", "cancelado"] as const;
 export type Situacao = (typeof SITUACOES)[number];
 
 /**

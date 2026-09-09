@@ -87,6 +87,21 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
 
   if (tenant.status === "ativo") return { podeEnviar: true };
 
+  /*
+   * CORTESIA: acesso de pagante, receita de zero (migração 032).
+   *
+   * Escrito por extenso, e não deixado cair no `return` de status desconhecido
+   * lá embaixo — que é onde ele caía antes de existir esta linha, e onde
+   * funcionava por acidente. O dia em que alguém trocar aquele padrão
+   * permissivo por um bloqueio, as contas de cortesia parariam de enviar sem
+   * ninguém entender por quê.
+   *
+   * A metade "receita de zero" não mora aqui: `receitaMensalCentavos` soma só
+   * `ativo`, então a cortesia fica de fora por construção. Ver
+   * `lib/metricas-admin.ts`.
+   */
+  if (tenant.status === "cortesia") return { podeEnviar: true };
+
   if (tenant.status === "trial") {
     const venceu = tenant.trial_ate ? new Date(tenant.trial_ate).getTime() < Date.now() : false;
     if (!venceu) return { podeEnviar: true };
