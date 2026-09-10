@@ -14,6 +14,7 @@ import {
 } from "@/lib/salvar-client";
 import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
+import { MenusDaGaleria } from "./menus-da-galeria";
 
 export interface ItemGaleria {
   id: string;
@@ -498,22 +499,52 @@ export function GaleriaCliente({
 
   return (
     <>
-      {permiteDownload && itens.length > 0 && (
-        <div className="mt-8 flex flex-col items-center gap-2">
-          <button
-            type="button"
-            onClick={salvarTudo}
-            disabled={baixandoTudo}
-            className="rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85 disabled:opacity-60"
-            style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
-          >
-            {baixandoTudo
-              ? `${modoSalvar ? "Salvando" : "Baixando"} ${progressoLote} de ${itens.length}…`
-              : modoSalvar
-                ? `Salvar as ${itens.length} fotos no celular`
-                : `↓ Baixar tudo (${itens.length})`}
-          </button>
+      {/*
+        A BARRA DE MENUS (10/09/2026, pedido do Juan).
 
+        Os comandos que antes vinham empilhados aqui — baixar tudo, filtrar
+        favoritas, encerrar a escolha, pular de capítulo — moraram numa pilha de
+        cinco blocos que empurrava as fotos meia tela para baixo. Agora moram
+        atrás de dois nomes numa barra que acompanha a rolagem.
+
+        O que continua FORA dela é o que não é comando: o aviso do limite, o
+        recado de escolha encerrada, a busca por rosto e o botão do segundo
+        toque — este porque nasce no meio de uma entrega em curso e precisa
+        estar na frente dos olhos, não guardado.
+      */}
+      <MenusDaGaleria
+        capitulos={capitulos}
+        favoritas={
+          /* Sem escolha aberta e sem nenhuma marcada não há o que oferecer, e
+             um menu com só o recado "escolha encerrada" dentro é enfeite. */
+          selecao.aberta || favoritas.size > 0
+            ? {
+                quantas: favoritas.size,
+                soFavoritas,
+                alternarFiltro: () => setSoFavoritas((v) => !v),
+                selecaoAberta: selecao.aberta,
+                limite,
+                cheia,
+                encerrar: encerrarSelecao,
+                fechando,
+              }
+            : null
+        }
+        baixar={
+          permiteDownload && itens.length > 0
+            ? {
+                quantas: itens.length,
+                modoSalvar,
+                baixando: baixandoTudo,
+                progresso: progressoLote,
+                baixarTudo: salvarTudo,
+              }
+            : null
+        }
+      />
+
+      {permiteDownload && itens.length > 0 && (aguardandoToque || aviso) && (
+        <div className="mt-4 flex flex-col items-center gap-2">
           {/*
             O BOTÃO DO SEGUNDO TOQUE.
 
@@ -539,12 +570,15 @@ export function GaleriaCliente({
             </button>
           )}
 
-          <span className="text-center text-xs" style={{ color: "var(--g-tenue)" }}>
-            {aviso ??
-              (modoSalvar
-                ? "vai abrir o menu do seu celular — toque em “Salvar imagem”"
-                : "sem limite de downloads — baixe quantas vezes quiser")}
-          </span>
+          {/* Só o RECADO da vez. A ajuda permanente ("sem limite de
+              downloads…") virou o rodapé do menu de baixar: dita ali, ela chega
+              no momento em que a pessoa escolhe como baixar, e não como uma
+              linha cinza fixa embaixo de uma barra. */}
+          {aviso && (
+            <span className="text-center text-xs" style={{ color: "var(--g-tenue)" }}>
+              {aviso}
+            </span>
+          )}
         </div>
       )}
 
@@ -580,51 +614,26 @@ export function GaleriaCliente({
         />
       )}
 
-      {favoritas.size > 0 && (
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+      {/*
+        O FILTRO LIGADO, dito fora do menu.
+
+        Ligar "ver só as favoritas" esconde fotos, e quem esconde tem de avisar:
+        sem esta linha, o cliente que ligou o filtro e rolou a página encontra
+        uma galeria com um terço das fotos e nenhuma explicação à vista — o
+        menu que ele usou já fechou.
+      */}
+      {soFavoritas && (
+        <p className="mt-6 text-center text-sm" style={{ color: "var(--g-suave)" }}>
+          Mostrando {favoritas.size} {favoritas.size === 1 ? "favorita" : "favoritas"} ·{" "}
           <button
             type="button"
-            onClick={() => setSoFavoritas((v) => !v)}
-            aria-pressed={soFavoritas}
-            className="rounded-full px-4 py-2 text-sm transition hover:opacity-85"
-            style={
-              soFavoritas
-                ? { background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }
-                : { border: "1px solid var(--g-linha)", color: "var(--g-suave)" }
-            }
+            onClick={() => setSoFavoritas(false)}
+            className="underline transition hover:opacity-70"
+            style={{ color: "var(--g-destaque)" }}
           >
-            {soFavoritas
-              ? `Mostrando ${favoritas.size} ${favoritas.size === 1 ? "favorita" : "favoritas"} · ver todas`
-              : `♥ Ver só as favoritas (${favoritas.size})`}
+            ver todas
           </button>
-
-          {/*
-            O contador só existe quando há limite. Sem limite ele seria um número
-            crescendo sozinho, sem nada a dizer — e o botão ao lado já mostra
-            quantas foram escolhidas.
-          */}
-          {limite !== null && selecao.aberta && (
-            <span
-              className="text-sm"
-              style={{ color: cheia ? "var(--g-destaque)" : "var(--g-suave)" }}
-            >
-              {favoritas.size} de {limite}
-              {cheia && " · desmarque uma para trocar"}
-            </span>
-          )}
-
-          {selecao.aberta && (
-            <button
-              type="button"
-              onClick={encerrarSelecao}
-              disabled={fechando}
-              className="rounded-full px-4 py-2 text-sm transition hover:opacity-85 disabled:opacity-50"
-              style={{ border: "1px solid var(--g-linha)", color: "var(--g-suave)" }}
-            >
-              {fechando ? "Encerrando…" : "Terminei minha escolha"}
-            </button>
-          )}
-        </div>
+        </p>
       )}
 
       {/*
@@ -641,31 +650,9 @@ export function GaleriaCliente({
         </p>
       )}
 
-      {/* Menu de capítulos — o cliente pula direto ao momento que quer ver. */}
-      {capitulos.length > 1 && (
-        <nav
-          className="sticky top-0 z-20 -mx-4 mt-8 overflow-x-auto px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
-          style={{
-            background: "color-mix(in srgb, var(--g-fundo) 88%, transparent)",
-            borderBottom: "1px solid var(--g-linha)",
-          }}
-          aria-label="Capítulos da galeria"
-        >
-          <ul className="flex justify-center gap-1 whitespace-nowrap">
-            {capitulos.map((c) => (
-              <li key={c.id}>
-                <a
-                  href={`#cap-${c.id}`}
-                  className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
-                  style={{ color: "var(--g-suave)" }}
-                >
-                  {c.nome}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      )}
+      {/* Os capítulos mudaram de casa: agora são a segunda linha da barra de
+          menus, lá em cima. Duas faixas grudadas no topo brigariam pelo mesmo
+          lugar — ver `menus-da-galeria.tsx`. */}
 
       <div id="fotos" className="mt-8 scroll-mt-4">
         {capitulos.map((capOriginal) => {

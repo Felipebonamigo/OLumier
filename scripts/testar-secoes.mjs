@@ -94,17 +94,30 @@ await etapa("fotos movidas aparecem sob o capítulo", async () => {
   return "Cerimônia e Festa na página";
 });
 
+/*
+ * OS CAPÍTULOS MUDARAM DE CASA EM 10/09/2026. Eram uma barra própria, grudada
+ * no topo; hoje são a segunda linha da BARRA DE MENUS que o Juan pediu — duas
+ * faixas grudadas no mesmo lugar brigariam pelo topo da tela. O que este
+ * arquivo cobra continua igual: as âncoras existem e ficam na barra.
+ */
+const barraDeMenus = (html) =>
+  html.match(/<nav[^>]*aria-label="Menu da galeria"[^]*?<\/nav>/)?.[0] ?? "";
+
 await etapa("menu de navegação aparece com 2+ capítulos", async () => {
   const html = await (await fetch(url, { cache: "no-store" })).text();
   if (!html.includes(`#cap-${capA.id}`)) throw new Error("sem âncora para o capítulo");
-  if (!html.includes("Capítulos da galeria")) throw new Error("sem o menu de navegação");
+  const barra = barraDeMenus(html);
+  if (!barra) throw new Error("sem a barra de menus");
+  if (!barra.includes(`#cap-${capA.id}`)) throw new Error("a âncora ficou fora da barra");
   return "âncoras e menu presentes";
 });
 
 await etapa("ordem do fotógrafo é respeitada na página", async () => {
   const t = await texto(await fetch(url, { cache: "no-store" }));
-  const posCerimonia = t.indexOf("Cerimônia", t.indexOf("Capítulos da galeria") + 40);
-  const posFesta = t.indexOf("Festa", t.indexOf("Capítulos da galeria") + 40);
+  /* Basta a primeira ocorrência de cada nome: as duas primeiras são as pastilhas
+     da barra, na ordem em que a barra as desenha. */
+  const posCerimonia = t.indexOf("Cerimônia");
+  const posFesta = t.indexOf("Festa");
   if (posCerimonia === -1 || posFesta === -1) throw new Error("capítulos não localizados");
   if (posCerimonia > posFesta) throw new Error("ordem invertida");
 
@@ -112,8 +125,7 @@ await etapa("ordem do fotógrafo é respeitada na página", async () => {
   await db.query("update secoes set ordem = 1 where id = $1", [capA.id]);
   await db.query("update secoes set ordem = 0 where id = $1", [capB.id]);
   const t2 = await texto(await fetch(url, { cache: "no-store" }));
-  const base = t2.indexOf("Capítulos da galeria") + 40;
-  if (t2.indexOf("Festa", base) > t2.indexOf("Cerimônia", base)) {
+  if (t2.indexOf("Festa") > t2.indexOf("Cerimônia")) {
     throw new Error("não acompanhou a reordenação");
   }
   await db.query("update secoes set ordem = 0 where id = $1", [capA.id]);
@@ -148,7 +160,7 @@ await etapa("com capítulos, as fotos soltas ganham nome em vez de pastilha vazi
   /* Uma foto fora de qualquer capítulo, e pelo menos um capítulo existindo. */
   await db.query("update medias set secao_id = null where id = $1", [fotos[0].id]);
   const html = await (await fetch(url, { cache: "no-store" })).text();
-  const nav = html.match(/aria-label="Capítulos da galeria"[\s\S]*?<\/nav>/)?.[0] ?? "";
+  const nav = barraDeMenus(html);
   if (!nav) throw new Error("o menu de capítulos sumiu");
   /* `>​<` entre a abertura e o fechamento do link é a pastilha sem texto. */
   if (/>\s*<\/a>/.test(nav)) throw new Error("ainda há uma pastilha sem nome no menu");
