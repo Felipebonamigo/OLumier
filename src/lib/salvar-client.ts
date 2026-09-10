@@ -30,6 +30,27 @@ export const LOTE_MAXIMO = 20;
 export const ORCAMENTO_LOTE = 150 * 1024 * 1024;
 export const LIMITE_POR_ARQUIVO = 80 * 1024 * 1024;
 
+/**
+ * O QUE FICA REGISTRADO NA ATIVIDADE quando uma entrega em lote acontece.
+ *
+ * Nasceu com o download por pasta (10/09/2026). "Baixou tudo" é prova de
+ * entrega: é o que o fotógrafo lê quando o cliente diz que não recebeu. Se
+ * baixar UMA pasta contasse como baixar tudo, a Atividade afirmaria que o casal
+ * levou o casamento inteiro quando ele levou a cerimônia — a mesma família do
+ * defeito de 05/09, em que o clique contava como entrega.
+ *
+ * Decide pelo TAMANHO DO PEDIDO, e não pelo botão clicado: numa galeria de um
+ * capítulo só, baixar "Cerimônia" é baixar a galeria, e dizer o contrário seria
+ * a mesma imprecisão ao contrário.
+ *
+ * Uma pasta vira um "baixou" comum. É menos do que aconteceu — 42 fotos viram
+ * um evento — e é de propósito: número subestimado é lacuna, número inflado é
+ * mentira.
+ */
+export function acaoDeEntrega(pedidas: number, totalDaGaleria: number) {
+  return pedidas >= totalDaGaleria ? "baixou_tudo" : "baixou";
+}
+
 export interface ArquivoParaSalvar {
   url: string;
   nome: string;

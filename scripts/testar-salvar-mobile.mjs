@@ -296,7 +296,16 @@ console.log("\nBaixar tudo — o que conta como entregue:\n");
   );
   const fonte = readFileSync(arquivo, "utf8");
   const semComentarios = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
-  const registro = semComentarios.indexOf('registrar("baixou_tudo")');
+  /*
+   * O QUE SE PROCURA MUDOU EM 10/09/2026, A REGRA NÃO.
+   *
+   * Era o literal `registrar("baixou_tudo")`. Com o download por pasta, a ação
+   * deixou de ser fixa: quem decide é `acaoDeEntrega`, porque baixar UMA pasta
+   * não pode contar como baixar tudo (ver `testar-download-por-pasta.mjs`). O
+   * que este bloco prende continua sendo a ORDEM — registrar só depois de saber
+   * o desfecho.
+   */
+  const registro = semComentarios.indexOf("registrar(acaoDeEntrega(");
   /* A CHAMADA, e não o import: `entregarTudo` aparece primeiro na lista de
      imports, no topo do arquivo, e medir dali não diria nada sobre a ordem. */
   const desfecho = semComentarios.indexOf("entregarTudo(");

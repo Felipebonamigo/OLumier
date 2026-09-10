@@ -60,6 +60,8 @@ export type MenuBaixar = {
   baixando: boolean;
   progresso: number;
   baixarTudo: () => void;
+  /** Os capítulos, quando há mais de um. Vazio = não há pasta a escolher. */
+  pastas: { id: string; nome: string; quantas: number; baixar: () => void }[];
 };
 
 export function MenusDaGaleria({
@@ -104,6 +106,9 @@ export function MenusDaGaleria({
     <nav
       ref={barra}
       aria-label="Menu da galeria"
+      /* `sticky` já é posição não-estática, então a barra serve de âncora para o
+         painel dos menus no celular — ver o `max-[600px]:static` do `<details>`.
+         Um `relative` junto brigaria com ela pela mesma propriedade. */
       className="sticky top-0 z-30 -mx-4 mt-8 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6"
       style={{
         background: "color-mix(in srgb, var(--g-fundo) 88%, transparent)",
@@ -168,6 +173,25 @@ export function MenusDaGaleria({
                 : `Todas as fotos (${baixar.quantas})`}
             </ItemDoMenu>
 
+            {/* "…ou separado em pastas": os capítulos, um por linha. A contagem
+                no rótulo é o que vai vir — é ela que separa "a pasta inteira"
+                de "o que estou vendo agora". */}
+            {baixar.pastas.length > 0 && (
+              <>
+                <p
+                  className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-[0.14em]"
+                  style={{ color: "var(--g-tenue)" }}
+                >
+                  ou uma pasta
+                </p>
+                {baixar.pastas.map((p) => (
+                  <ItemDoMenu key={p.id} aoTocar={p.baixar} desligado={baixar.baixando}>
+                    {`${p.nome} (${p.quantas})`}
+                  </ItemDoMenu>
+                ))}
+              </>
+            )}
+
             <Rodape>
               {baixar.modoSalvar
                 ? "vai abrir o menu do seu celular — toque em “Salvar imagem”"
@@ -204,7 +228,16 @@ export function MenusDaGaleria({
 
 function Menu({ nome, children }: { nome: string; children: ReactNode }) {
   return (
-    <details className="relative">
+    /*
+     * O PAINEL SE PENDURA NO GATILHO NO COMPUTADOR E NA BARRA NO CELULAR.
+     *
+     * Centralizado sob o gatilho, ele é preciso — e num celular de 375 px o
+     * menu da direita ficava 90 px para fora da tela, criando rolagem
+     * horizontal na galeria inteira (medido em 10/09). Abaixo de 600 px o
+     * `static` tira o `<details>` de contexto de posicionamento e o painel
+     * passa a se centralizar na BARRA, que tem a largura da tela.
+     */
+    <details className="relative max-[600px]:static">
       <summary className={GATILHO} style={{ color: "var(--g-suave)" }}>
         {nome}
       </summary>

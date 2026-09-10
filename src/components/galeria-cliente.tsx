@@ -10,6 +10,7 @@ import {
   deveOferecerSalvar,
   salvarNoCelular,
   prepararLote,
+  acaoDeEntrega,
   compartilharPreparado,
 } from "@/lib/salvar-client";
 import { useSwipe } from "@/lib/usar-swipe";
@@ -431,7 +432,7 @@ export function GaleriaCliente({
   }
 
   /**
-   * Galeria inteira.
+   * Um lote de fotos: a galeria inteira, ou UMA PASTA dela.
    *
    * No celular, vai em lotes pelo menu nativo: a memória não aguenta 600 fotos
    * de uma vez, e cada lote termina nas Fotos em vez do app Arquivos.
@@ -439,8 +440,10 @@ export function GaleriaCliente({
    *
    * Não geramos ZIP no servidor de propósito: empacotar exigiria puxar a galeria
    * inteira para o nosso servidor antes — lento para o casal e caro para nós.
+   * É também por isso que "separado em pastas" (pedido do Juan em 10/09) não é
+   * um zip por capítulo: é o mesmo caminho, com a lista menor.
    */
-  async function salvarTudo() {
+  async function salvarLoteDeFotos(fotos: ItemGaleria[]) {
     setBaixandoTudo(true);
     setProgressoLote(0);
 
@@ -452,7 +455,7 @@ export function GaleriaCliente({
     let cache: Map<string, string>;
     try {
       cache = await assinar(
-        itens.map((it) => it.id),
+        fotos.map((it) => it.id),
         "download",
       );
     } catch {
@@ -464,7 +467,7 @@ export function GaleriaCliente({
 
     // Só o que tem link de verdade. Numa galeria bloqueada a rota não entrega
     // nada, a lista fica vazia e o laço não roda — nada a baixar, nenhuma exceção.
-    const baixaveis = itens
+    const baixaveis = fotos
       .map((it) => ({ url: cache.get(it.id), nome: it.nome, bytes: it.bytes }))
       .filter((x): x is { url: string; nome: string; bytes: number } => Boolean(x.url));
     if (baixaveis.length === 0) {
@@ -515,7 +518,8 @@ export function GaleriaCliente({
         aoProgredir: setProgressoLote,
       });
 
-      if (desfecho.entregues > 0) registrar("baixou_tudo");
+      /* Baixar uma pasta não é baixar tudo — ver `acaoDeEntrega`. */
+      if (desfecho.entregues > 0) registrar(acaoDeEntrega(fotos.length, itens.length));
 
       /* Cancelar é escolha da pessoa e não vira mensagem. O resto vira: quem
          batia em CORS via o contador chegar ao fim e nada acontecer, sem uma
@@ -535,6 +539,31 @@ export function GaleriaCliente({
       setBaixandoTudo(false);
     }
   }
+
+  /*
+   * AS PASTAS DO MENU DE BAIXAR (10/09/2026): "todas de uma única vez ou
+   * separado em pastas", nas palavras do Juan.
+   *
+   * As pastas já existiam — são os CAPÍTULOS, que o envio por pasta do
+   * Lightroom cria sozinho. Faltava poder baixar um só.
+   *
+   * Com UM capítulo apenas não há o que escolher: baixar a pasta é baixar a
+   * galeria, e o item repetiria o de cima com outro nome.
+   *
+   * Cada pasta leva a lista CHEIA do capítulo, e não a filtrada: este menu fala
+   * da galeria como o fotógrafo a organizou, e o número no rótulo é exatamente
+   * o que vai vir. Quem está com o filtro das favoritas ligado lê "Cerimônia
+   * (42)" e recebe 42.
+   */
+  const pastasParaBaixar =
+    capitulos.length > 1
+      ? capitulos.map((c) => ({
+          id: c.id,
+          nome: c.nome,
+          quantas: c.indices.length,
+          baixar: () => salvarLoteDeFotos(c.indices.map((i) => itens[i])),
+        }))
+      : [];
 
   // Arrastar para o lado troca de foto — o gesto que todo app de fotos tem.
   const swipe = useSwipe(proximo, anterior);
@@ -585,7 +614,8 @@ export function GaleriaCliente({
                 modoSalvar,
                 baixando: baixandoTudo,
                 progresso: progressoLote,
-                baixarTudo: salvarTudo,
+                baixarTudo: () => salvarLoteDeFotos(itens),
+                pastas: pastasParaBaixar,
               }
             : null
         }
