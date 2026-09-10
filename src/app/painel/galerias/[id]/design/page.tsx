@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
@@ -59,6 +60,32 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
         )
       : null;
 
+  /*
+   * A ASSINATURA DA CAPA — oito caracteres que mudam quando a capa muda.
+   *
+   * A prévia é um iframe, e iframe cujo `src` não mudou não recarrega. O `src`
+   * é feito da aparência pendente (`?ap=`), e a capa NÃO mora na aparência:
+   * mora nestas quatro colunas. Sem isto, escolher a foto de capa gravava,
+   * atualizava a área de escolha ao lado — e deixava a prévia desenhando o
+   * documento anterior até alguém recarregar a página na mão. Era o pedido do
+   * Juan em 10/09: "a pré visualização já ser a foto que eu escolhi".
+   *
+   * Só as colunas da capa, e não `atualizado_em`: qualquer gravação mexe na
+   * data, e a prévia recarregaria a cada rascunho de aparência salvo — um
+   * piscar a mais em cima do que o `?ap=` já faz sozinho.
+   *
+   * Resumo em vez das colunas cruas porque uma delas é a chave do objeto no
+   * armazém, e ela não tem o que fazer numa URL.
+   */
+  const versaoDaCapa = createHash("sha256")
+    .update(
+      [galeria.capa_chave, galeria.capa_media_id, galeria.capa_foco_x, galeria.capa_foco_y].join(
+        "|",
+      ),
+    )
+    .digest("hex")
+    .slice(0, 8);
+
   return (
     <EditorAparencia
       galeriaId={galeria.id}
@@ -72,6 +99,7 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
         />
       }
       caminhoPublico={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
+      versaoDaCapa={versaoDaCapa}
       /* Abre no RASCUNHO quando existe: é o trabalho que a pessoa deixou pela
          metade, e perdê-lo foi o defeito de 31/08. */
       inicial={lerAparencia(galeria.aparencia_rascunho ?? galeria.aparencia)}

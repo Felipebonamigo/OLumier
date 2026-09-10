@@ -38,7 +38,10 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ estudio: string; galeria: string }>;
-  searchParams: Promise<{ previa?: string; amostra?: string; ap?: string }>;
+  /* `capa` é declarado e NUNCA lido: a prévia da aba Design o carrega só para
+     que o endereço mude quando a capa muda, e o iframe recarregue. Está aqui
+     para que quem vir o parâmetro na URL saiba que ele não faz nada aqui. */
+  searchParams: Promise<{ previa?: string; amostra?: string; ap?: string; capa?: string }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -398,9 +401,17 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    *
    * A enviada não é uma `media`: não entra na grade, não conta como entrega e
    * não vai no "baixar tudo". Ver `lib/capa-galeria.ts`.
+   *
+   * A BUSCA É NA LISTA INTEIRA, e não em `medias` (10/09/2026). Na prévia da
+   * aba Design `medias` são só as 12 primeiras, e a capa da galeria do Juan é a
+   * foto 300 de 1400: procurá-la ali dentro não achava nada, caía no degrau 3 e
+   * desenhava a primeira foto. A prévia mostrava a foto errada exatamente na
+   * tela em que ele acabara de escolher a certa — e a galeria publicada, com a
+   * lista inteira, mostrava a certa. Assinar essa URL não desfaz a economia da
+   * amostra: é UMA foto, que a capa ia assinar de qualquer jeito.
    */
   const capa =
-    medias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
+    todasAsMedias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
     medias.find((m) => m.tipo === "foto");
   const urlCapa = galeria.capa_chave
     ? await urlDeLeitura(galeria.capa_chave, VALIDADE)

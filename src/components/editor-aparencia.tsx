@@ -322,6 +322,7 @@ type Grupo = (typeof GRUPOS)[number]["id"];
 export function EditorAparencia({
   galeriaId,
   caminhoPublico,
+  versaoDaCapa,
   inicial,
   publicado,
   temFontePropria,
@@ -329,6 +330,9 @@ export function EditorAparencia({
 }: {
   galeriaId: string;
   caminhoPublico: string;
+  /** Resumo curto da capa GRAVADA. Muda quando ela muda, e é o que faz a
+      prévia recarregar — a capa não viaja no `?ap=` porque não é aparência. */
+  versaoDaCapa: string;
   /** A área de escolher a capa. Vem montada do servidor: a URL da imagem é
       assinada lá, e este componente é de cliente. Fica no grupo "Capa". */
   slotCapa?: ReactNode;
@@ -788,9 +792,13 @@ export function EditorAparencia({
               marginInline: viewport === "celular" ? "auto" : undefined,
             }}
           >
+            {/* `versaoDaCapa` entra no ENDEREÇO, não só na `key`: remontar o
+                elemento pediria a mesma URL de novo, e a mesma URL pode vir do
+                cache do navegador — a prévia recarregaria para mostrar a capa
+                velha outra vez. Ver o porquê da assinatura na página do Design. */}
             <iframe
-              key={JSON.stringify(apPrevia)}
-              src={`${caminhoPublico}&amostra=1&ap=${encodeURIComponent(JSON.stringify(apPrevia))}`}
+              key={`${versaoDaCapa}:${JSON.stringify(apPrevia)}`}
+              src={`${caminhoPublico}&amostra=1&capa=${versaoDaCapa}&ap=${encodeURIComponent(JSON.stringify(apPrevia))}`}
               title="Prévia da galeria"
               width={vp.largura}
               height={vp.altura}
