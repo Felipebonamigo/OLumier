@@ -9,6 +9,8 @@ import {
   baixarNoComputador,
   deveOferecerSalvar,
   salvarNoCelular,
+  prepararLote,
+  compartilharPreparado,
 } from "@/lib/salvar-client";
 import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
@@ -91,6 +93,17 @@ export function GaleriaCliente({
   const [aberto, setAberto] = useState<number | null>(null);
   const [baixandoTudo, setBaixandoTudo] = useState(false);
   const [progressoLote, setProgressoLote] = useState(0);
+  /*
+   * O SEGUNDO TOQUE.
+   *
+   * `null` quando não há nada esperando. Com valor, a tela desenha um botão e
+   * a entrega fica parada até a pessoa tocar nele — porque é DENTRO desse
+   * toque que `share()` pode ser chamado. Ver `lib/salvar-client.ts`.
+   */
+  const [aguardandoToque, setAguardandoToque] = useState<{
+    quantas: number;
+    seguir: () => void;
+  } | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   /* O servidor chuta pelo user-agent para a primeira pintura já sair certa; ao
      montar, a detecção de recurso (canShare) corrige o palpite. Sem o chute, o
@@ -428,7 +441,27 @@ export function GaleriaCliente({
     try {
       const desfecho = await entregarTudo(baixaveis, {
         peloMenu: modoSalvar,
-        salvarLote: (lote) => salvarNoCelular(lote),
+        /*
+         * PREPARAR, PEDIR O TOQUE, COMPARTILHAR — nesta ordem, e é a correção
+         * de 10/09/2026.
+         *
+         * `salvarNoCelular` fazia as três coisas de uma vez, e o Safari
+         * recusava o menu porque a busca das fotos passava da janela do gesto.
+         * O resultado era cair no download um a um: um diálogo de confirmação
+         * por foto, que o Juan teve de clicar doze vezes.
+         *
+         * Aqui a parte lenta acontece primeiro e a tela mostra um botão. O
+         * toque nele é um gesto NOVO, e os arquivos já estão na memória.
+         */
+        salvarLote: async (lote) => {
+          const prontos = await prepararLote(lote, setProgressoLote);
+          if (!prontos) return "sem-acesso";
+          await new Promise<void>((seguir) =>
+            setAguardandoToque({ quantas: prontos.length, seguir }),
+          );
+          setAguardandoToque(null);
+          return compartilharPreparado(prontos);
+        },
         baixar: baixarNoComputador,
         esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
         aoProgredir: setProgressoLote,
@@ -480,6 +513,31 @@ export function GaleriaCliente({
                 ? `Salvar as ${itens.length} fotos no celular`
                 : `↓ Baixar tudo (${itens.length})`}
           </button>
+
+          {/*
+            O BOTÃO DO SEGUNDO TOQUE.
+
+            Aparece quando as fotos já estão na memória e só falta abrir o menu
+            do celular. Existe porque o Safari exige que `share()` seja chamado
+            de dentro de um gesto, e a busca das fotos passa dessa janela — sem
+            este toque, a entrega caía no download um a um, com um diálogo de
+            confirmação por foto (doze toques, no caso do Juan).
+
+            Fica ACIMA do texto de ajuda e com a cor de ação: é o único lugar da
+            tela que importa enquanto ele está lá, e a pessoa acabou de ver um
+            contador andando — ela precisa entender na hora que a vez é dela.
+          */}
+          {aguardandoToque && (
+            <button
+              type="button"
+              onClick={aguardandoToque.seguir}
+              className="rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85"
+              style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+            >
+              Salvar {aguardandoToque.quantas}{" "}
+              {aguardandoToque.quantas === 1 ? "foto" : "fotos"} no celular
+            </button>
+          )}
 
           <span className="text-center text-xs" style={{ color: "var(--g-tenue)" }}>
             {aviso ??

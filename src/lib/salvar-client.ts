@@ -111,12 +111,34 @@ export type ResultadoSalvar = "salvou" | "cancelou" | "sem-suporte" | "expirou" 
  * Devolve "cancelou" quando a pessoa fecha o menu — que NÃO é erro e não deve
  * virar mensagem vermelha na tela.
  */
-export async function salvarNoCelular(
+/**
+ * ── AS DUAS METADES, E POR QUE ELAS SE SEPARARAM (10/09/2026) ─────────────
+ *
+ * Juan, com o print do iPhone: "cada um desses pop ups que eu cliquei em
+ * 'baixar' vieram direto pra galeria. Mas tive que fazer manualmente esse
+ * clique. Pra altas quantidades não tem como."
+ *
+ * Ele viu o plano B funcionando como escrito: o Safari recusou o menu por
+ * gesto expirado e a entrega caiu no download um a um — um diálogo por foto.
+ * Com 12 fotos são 12 toques; com 200, ele tem razão, não tem como.
+ *
+ * A causa não é o menu, é o RELÓGIO: `share()` precisa ser chamado logo depois
+ * do toque, e buscar vinte fotos numa rede de celular passa dessa janela. O
+ * comentário aqui embaixo concluía "não há como segurar o gesto durante um
+ * await" — verdade — e parava aí. A saída é não segurar o gesto: é pedir OUTRO.
+ *
+ * `prepararLote` faz a parte lenta (buscar) e `compartilharPreparado` faz a
+ * parte que exige gesto (abrir o menu). Entre as duas, a tela mostra um botão;
+ * o toque nele é um gesto novo, e os arquivos já estão na memória. Doze toques
+ * viram dois.
+ *
+ * `salvarNoCelular` continua existindo e faz as duas em sequência — é o caminho
+ * de UMA foto, onde a busca é rápida e o gesto costuma sobreviver.
+ */
+export async function prepararLote(
   arquivos: { url: string; nome: string }[],
   aoProgredir?: (baixados: number) => void,
-): Promise<ResultadoSalvar> {
-  if (!podeCompartilharArquivos()) return "sem-suporte";
-
+): Promise<File[] | null> {
   const prontos: File[] = [];
   try {
     for (const a of arquivos) {
@@ -124,16 +146,19 @@ export async function salvarNoCelular(
       aoProgredir?.(prontos.length);
     }
   } catch {
-    /*
-     * Buscar o arquivo falhou. A causa mais provável não é rede: é CORS.
-     * O bucket precisa autorizar a origem que está pedindo, e o endereço do
-     * estúdio (siriusfotografia.olumier.com.br) é uma origem diferente do
-     * domínio principal. Quem chama cai no download comum — que funciona,
-     * porque é navegação e não passa por CORS.
-     */
-    return "sem-acesso";
+    /* Ver o comentário de `salvarNoCelular`: a causa provável é CORS, e quem
+       chama cai no download comum, que é navegação e não passa por CORS. */
+    return null;
   }
+  return prontos;
+}
 
+/**
+ * Abre o menu com o que JÁ está na memória. Precisa ser chamada de dentro de um
+ * gesto do usuário — é essa a regra que a separação existe para respeitar.
+ */
+export async function compartilharPreparado(prontos: File[]): Promise<ResultadoSalvar> {
+  if (!podeCompartilharArquivos()) return "sem-suporte";
   // Alguns navegadores só aceitam a lista depois de montada; confere de novo.
   if (!navigator.canShare({ files: prontos })) return "sem-suporte";
 
@@ -144,18 +169,30 @@ export async function salvarNoCelular(
     if (e instanceof DOMException) {
       // AbortError = a pessoa fechou o menu. Silêncio é a resposta certa.
       if (e.name === "AbortError") return "cancelou";
-      /*
-       * NotAllowedError = o navegador não considera mais que houve um gesto do
-       * usuário. Acontece no iPhone: o Safari exige que `share()` seja chamado
-       * logo depois do toque, e baixar vinte fotos numa rede de celular leva
-       * mais tempo que essa janela. Não há como segurar o gesto durante um
-       * await — então o certo é reconhecer, cair no download comum e dizer a
-       * verdade em vez de mostrar um erro sem explicação.
-       */
       if (e.name === "NotAllowedError") return "expirou";
     }
     throw e;
   }
+}
+
+export async function salvarNoCelular(
+  arquivos: { url: string; nome: string }[],
+  aoProgredir?: (baixados: number) => void,
+): Promise<ResultadoSalvar> {
+  if (!podeCompartilharArquivos()) return "sem-suporte";
+
+  const prontos = await prepararLote(arquivos, aoProgredir);
+  if (prontos === null) {
+    /*
+     * Buscar o arquivo falhou. A causa mais provável não é rede: é CORS.
+     * O bucket precisa autorizar a origem que está pedindo, e o endereço do
+     * estúdio é uma origem diferente do domínio principal. Quem chama cai no
+     * download comum — que funciona, porque é navegação e não passa por CORS.
+     */
+    return "sem-acesso";
+  }
+
+  return compartilharPreparado(prontos);
 }
 
 /**

@@ -307,7 +307,14 @@ console.log("\nBaixar tudo — o que conta como entregue:\n");
   );
 
   /* E só quando alguma coisa saiu. Sem esta condição, cancelar contaria. */
-  const trecho = semComentarios.slice(desfecho, desfecho + 400);
+  /*
+   * O recorte vai de `entregarTudo(` até a PRÓPRIA chamada de registro, e não
+   * até uma distância fixa em caracteres. A versão antiga media 400 caracteres
+   * e ficou vermelha em 10/09/2026 quando o `salvarLote` cresceu entre as duas
+   * — sem que nada da regra tivesse mudado. Distância em bytes não é a relação
+   * que este teste quer prender; "entre uma coisa e a outra" é.
+   */
+  const trecho = semComentarios.slice(desfecho, registro);
   const okCondicao = /entregues\s*>\s*0/.test(trecho);
   if (!okCondicao) falhou = true;
   console.log(
@@ -323,6 +330,75 @@ console.log("\nBaixar tudo — o que conta como entregue:\n");
   console.log(
     `  ${okUma ? "✓" : "✗"} baixar UMA foto também só conta depois de saber o desfecho`,
   );
+}
+
+/*
+ * ── O SEGUNDO TOQUE (10/09/2026) ──────────────────────────────────────────
+ *
+ * Juan, com o print do iPhone: "cada um desses pop ups que eu cliquei em
+ * 'baixar' vieram direto pra galeria. Mas tive que fazer manualmente esse
+ * clique. Pra altas quantidades não tem como."
+ *
+ * O que ele viu foi o PLANO B funcionando exatamente como escrito: o Safari
+ * recusou o menu nativo por gesto expirado, e a entrega caiu no download um a
+ * um — um diálogo de confirmação por foto. Com 12 fotos são 12 toques; com 200,
+ * não tem como, e ele está certo.
+ *
+ * A causa não é o menu: é o RELÓGIO. O Safari exige que `share()` seja chamado
+ * logo depois do toque, e buscar vinte fotos numa rede de celular passa dessa
+ * janela. O comentário antigo concluía "não há como segurar o gesto durante um
+ * await", e isso continua verdade — mas a conclusão seguinte não: em vez de
+ * segurar o gesto, dá para pedir OUTRO.
+ *
+ * Buscar primeiro, e só então oferecer um botão. O toque nesse botão é um gesto
+ * novo, e `share()` acontece dentro dele com os arquivos já na memória. Doze
+ * toques viram dois.
+ *
+ * As duas etapas abaixo são as duas metades: preparar não compartilha, e
+ * compartilhar não busca.
+ */
+console.log("\nO segundo toque:\n");
+
+montarAmbiente(cenarios[0]);
+globalThis.fetch = async () => ({ ok: true, blob: async () => ({ type: "image/jpeg" }) });
+
+{
+  let compartilhou = 0;
+  globalThis.navigator.share = async () => void compartilhou++;
+
+  const lista = [
+    { url: "http://x/a.jpg", nome: "a.jpg" },
+    { url: "http://x/b.jpg", nome: "b.jpg" },
+  ];
+  const vistos = [];
+  const prontos = await mod.prepararLote(lista, (n) => vistos.push(n));
+
+  const okPrep =
+    Array.isArray(prontos) && prontos.length === 2 && compartilhou === 0 && vistos.length === 2;
+  if (!okPrep) falhou = true;
+  console.log(
+    `  ${okPrep ? "✓" : "✗"} preparar busca os arquivos e NÃO abre o menu (${compartilhou} chamadas a share)`,
+  );
+
+  const r = await mod.compartilharPreparado(prontos);
+  const okShare = r === "salvou" && compartilhou === 1;
+  if (!okShare) falhou = true;
+  console.log(
+    `  ${okShare ? "✓" : "✗"} compartilhar o que já está pronto abre o menu uma vez — devolveu "${r}"`,
+  );
+}
+
+{
+  /* E o desfecho ruim continua sendo desfecho, não exceção: se mesmo com o
+     gesto novo o navegador recusar, quem chama precisa poder cair no download
+     em vez de mostrar vermelho. */
+  globalThis.navigator.share = async () => {
+    throw Object.assign(new globalThis.DOMException("sem gesto"), { name: "NotAllowedError" });
+  };
+  const r = await mod.compartilharPreparado([{ nome: "a.jpg" }]);
+  const ok = r === "expirou";
+  if (!ok) falhou = true;
+  console.log(`  ${ok ? "✓" : "✗"} recusa no segundo toque ainda devolve "expirou", sem estourar`);
 }
 
 if (falhou) {
