@@ -66,12 +66,15 @@ export function MenusDaGaleria({
   capitulos,
   favoritas,
   baixar,
+  tocarSlideshow,
 }: {
   capitulos: CapituloGaleria[];
   /** Null quando não há o que oferecer: escolha encerrada e nenhuma marcada. */
   favoritas: MenuFavoritas | null;
   /** Null quando o fotógrafo não liberou download. */
   baixar: MenuBaixar | null;
+  /** Null com menos de duas fotos à vista — tocar uma foto só é abri-la. */
+  tocarSlideshow: (() => void) | null;
 }) {
   const barra = useRef<HTMLElement | null>(null);
 
@@ -95,7 +98,7 @@ export function MenusDaGaleria({
     };
   }, []);
 
-  if (!favoritas && !baixar && capitulos.length < 2) return null;
+  if (!favoritas && !baixar && !tocarSlideshow && capitulos.length < 2) return null;
 
   return (
     <nav
@@ -108,6 +111,20 @@ export function MenusDaGaleria({
       }}
     >
       <div className="flex flex-wrap items-center justify-center gap-1">
+        {/* Botão, e não menu: o slideshow tem uma escolha só — começar. Um
+            `<details>` com um item dentro seria um clique a mais para chegar
+            no mesmo lugar. */}
+        {tocarSlideshow && (
+          <button
+            type="button"
+            onClick={tocarSlideshow}
+            className={GATILHO}
+            style={{ color: "var(--g-suave)" }}
+          >
+            ▶ Slideshow
+          </button>
+        )}
+
         {favoritas && (
           <Menu nome={`♥ Favoritas${favoritas.quantas > 0 ? ` (${favoritas.quantas})` : ""}`}>
             {/* Desligado, e não ausente, com zero marcadas: um menu cujos itens

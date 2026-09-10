@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -15,6 +15,7 @@ import {
 import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
+import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-visiveis";
 
 export interface ItemGaleria {
   id: string;
@@ -255,15 +256,61 @@ export function GaleriaCliente({
     }
   }, [galeriaId, favoritas.size]);
 
-  const fechar = useCallback(() => setAberto(null), []);
-  const anterior = useCallback(
-    () => setAberto((i) => (i === null ? null : (i - 1 + itens.length) % itens.length)),
-    [itens.length],
+  /*
+   * ── O SLIDESHOW (10/09/2026, pedido do Juan) ─────────────────────────────
+   *
+   * "Criar um sistema de SLIDESHOW com as fotos. Também pode ter nesse menu da
+   * galeria." Não é tela nova: é o visualizador que já existe com um relógio em
+   * cima. Ele já abre em tela cheia, já guarda a vizinha em cache, já anda de
+   * seta e já fecha no Esc — o slideshow só decide QUANDO virar a página.
+   *
+   * Anda pelas fotos VISÍVEIS, e não por todas: com o filtro das favoritas
+   * ligado, tocar a galeria inteira seria desfazer o filtro sem avisar.
+   *
+   * QUALQUER comando manual desliga o automático — seta, arrastar, fechar. Duas
+   * mãos no mesmo volante é o defeito clássico deste recurso: a pessoa avança
+   * uma foto, o relógio avança outra meio segundo depois, e ela perde a que
+   * queria ver.
+   */
+  const [slideshow, setSlideshow] = useState(false);
+  const filtros = useMemo(
+    () => ({ soFavoritas, favoritas, encontradas }),
+    [soFavoritas, favoritas, encontradas],
   );
-  const proximo = useCallback(
-    () => setAberto((i) => (i === null ? null : (i + 1) % itens.length)),
-    [itens.length],
-  );
+  const ordemVisivel = useMemo(() => indicesVisiveis(itens, filtros), [itens, filtros]);
+
+  const fechar = useCallback(() => {
+    setSlideshow(false);
+    setAberto(null);
+  }, []);
+  const anterior = useCallback(() => {
+    setSlideshow(false);
+    setAberto((i) => (i === null ? null : (i - 1 + itens.length) % itens.length));
+  }, [itens.length]);
+  const proximo = useCallback(() => {
+    setSlideshow(false);
+    setAberto((i) => (i === null ? null : (i + 1) % itens.length));
+  }, [itens.length]);
+
+  const tocarSlideshow = useCallback(() => {
+    if (ordemVisivel.length < 2) return;
+    setAberto(ordemVisivel[0]);
+    setSlideshow(true);
+  }, [ordemVisivel]);
+
+  useEffect(() => {
+    if (!slideshow || aberto === null) return;
+    const relogio = setTimeout(() => {
+      /* `indexOf` e não um contador próprio: a foto na tela é a verdade, e ela
+         pode ter mudado por fora (o cliente marcou favorita e o filtro mexeu na
+         lista). Quem sumiu da lista devolve -1, e a próxima é a primeira. */
+      const posicao = ordemVisivel.indexOf(aberto);
+      const proxima = ordemVisivel[(posicao + 1) % ordemVisivel.length];
+      if (proxima === undefined) setSlideshow(false);
+      else setAberto(proxima);
+    }, SEGUNDOS_POR_FOTO * 1000);
+    return () => clearTimeout(relogio);
+  }, [slideshow, aberto, ordemVisivel]);
 
   // Setas e Esc: quem abre uma galeria de casamento navega no teclado.
   useEffect(() => {
@@ -514,6 +561,7 @@ export function GaleriaCliente({
       */}
       <MenusDaGaleria
         capitulos={capitulos}
+        tocarSlideshow={ordemVisivel.length > 1 ? tocarSlideshow : null}
         favoritas={
           /* Sem escolha aberta e sem nenhuma marcada não há o que oferecer, e
              um menu com só o recado "escolha encerrada" dentro é enfeite. */
@@ -662,13 +710,10 @@ export function GaleriaCliente({
            * tela faria parecer que as fotos sumiram.
            */
           /* Os dois filtros somam: "só as favoritas" E "só onde eu apareço"
-             podem estar ligados ao mesmo tempo, e o resultado é a interseção. */
-          const indices = capOriginal.indices.filter((i) => {
-            const id = itens[i].id;
-            if (soFavoritas && !favoritas.has(id)) return false;
-            if (encontradas && !encontradas.has(id)) return false;
-            return true;
-          });
+             podem estar ligados ao mesmo tempo, e o resultado é a interseção.
+             A regra mora em `lib/fotos-visiveis.ts` porque o slideshow precisa
+             da mesma resposta — duas cópias dela é como filtros discordam. */
+          const indices = capOriginal.indices.filter((i) => fotoVisivel(itens[i].id, filtros));
           if (indices.length === 0) return null;
           const cap = { ...capOriginal, indices };
           return (
@@ -944,8 +989,12 @@ export function GaleriaCliente({
             >
               ✕ Fechar
             </button>
+            {/* Com o automático ligado, o contador diz também POR QUE a foto
+                troca sozinha — sem isso, a primeira virada parece defeito. */}
             <span className="truncate" style={{ color: "var(--g-suave)" }}>
+              {slideshow && "▶ "}
               {aberto! + 1} de {itens.length}
+              {slideshow && " · as setas assumem o controle"}
             </span>
             {permiteDownload ? (
               <button
