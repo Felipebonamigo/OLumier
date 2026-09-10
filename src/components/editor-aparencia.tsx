@@ -636,6 +636,34 @@ export function EditorAparencia({
                   tela cheia, mas não a tela inteira. */}
               <Eixo eixo="alturaCapa" titulo="Altura da capa" ap={ap} mudar={mudar} />
               <Eixo eixo="alinhamento" titulo="Alinhamento do texto" ap={ap} mudar={mudar} />
+
+              {/*
+                O RÓTULO DO EVENTO — campo de texto, e não um eixo de pastilhas.
+
+                Juan pediu "casamento, aniversário, prewedding, etc", e é o
+                "etc" que decide o formato: não existe lista certa. Uma lista de
+                botões atenderia os três exemplos e deixaria de fora "chá de
+                bebê", "15 anos", "ensaio de família" — e quem precisasse de um
+                desses acharia que o produto não serve.
+
+                As sugestões ficam no `placeholder`, que ensina sem limitar.
+              */}
+              <div>
+                <span className="block text-xs font-medium text-texto-soft">
+                  Rótulo do evento
+                </span>
+                <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+                  Aparece pequeno, acima do título. Deixe vazio para não mostrar nada.
+                </p>
+                <input
+                  value={ap.rotulo}
+                  onChange={(e) => mudar({ ...ap, rotulo: e.target.value.slice(0, 40) })}
+                  maxLength={40}
+                  placeholder="Casamento, Prewedding, 15 anos…"
+                  aria-label="Rótulo do evento"
+                  className="mt-2 w-full max-w-xs rounded-lg border border-linha bg-void px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+                />
+              </div>
               {/*
                 O CARTÃO DO WHATSAPP MORA AQUI porque é a capa vista de fora: a
                 foto que ele usa é a mesma, e quem acabou de escolher a capa é

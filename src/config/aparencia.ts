@@ -8,7 +8,17 @@
  * não quer escolher: um clique e está pronto, e ainda dá para ajustar depois.
  */
 
-export type Capa = "imersa" | "jornal" | "dividida" | "minima" | "convite";
+export type Capa =
+  | "imersa"
+  | "jornal"
+  | "dividida"
+  | "minima"
+  | "convite"
+  /* As duas de 10/09/2026, a pedido do Juan: "foto redonda com título embaixo,
+   * mais minimalista. Foto em formato de arco, reta na parte inferior
+   * horizontal, título embaixo." Ver `galeria-capa.tsx`. */
+  | "redonda"
+  | "arco";
 export type Tema = "noite" | "claro" | "creme";
 export type Tipografia =
   | "serifada"
@@ -221,6 +231,22 @@ export interface Aparencia {
   canto: CantoFoto;
   fonteTexto: FonteDoTexto;
   alinhamento: Alinhamento;
+  /**
+   * O QUE é o evento, antes de dizer de QUEM ele é.
+   *
+   * Juan, 10/09/2026: "adicionar a opção de subtítulo para a capa: por exemplo,
+   * casamento, aniversário, prewedding. Para não ocupar tanto espaço visual se
+   * estivesse no título em si."
+   *
+   * NÃO é o `subtitulo` da galeria, que já tem dono: ali mora o LOCAL ("Casa na
+   * Chácara"), e ele sai na legenda junto da data. Enfiar "Casamento" lá
+   * empurraria o local para uma terceira informação na mesma linha — que é
+   * exatamente o "ocupar espaço visual" de que ele reclamou.
+   *
+   * Vazio é o normal, e é o que toda galeria existente tem: a capa que não
+   * recebe rótulo desenha exatamente o que desenhava antes.
+   */
+  rotulo: string;
   cartao: CartaoDoLink;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
@@ -272,6 +298,7 @@ export const APARENCIA_PADRAO: Aparencia = {
   /* `sobreposto` é o cartão de sempre. Ver o comentário de `CartaoDoLink`:
      o modo limpo é escolha, não correção. */
   cartao: "sobreposto",
+  rotulo: "",
 };
 
 /**
@@ -327,6 +354,16 @@ export function lerAparencia(bruto: unknown): Aparencia {
     canto: valida(o.canto, OPCOES.canto.map((x) => x.id), APARENCIA_PADRAO.canto),
     fonteTexto: valida(o.fonteTexto, OPCOES.fonteTexto.map((x) => x.id), APARENCIA_PADRAO.fonteTexto),
     alinhamento: valida(o.alinhamento, OPCOES.alinhamento.map((x) => x.id), APARENCIA_PADRAO.alinhamento),
+    /*
+     * O rótulo é TEXTO LIVRE, e por isso não passa por `valida` — não há lista
+     * de valores certos para "aniversário de 15 anos". O que existe é um teto:
+     * 40 caracteres é o que cabe numa sobrancelha sem virar parágrafo em cima
+     * do nome do casal. Apara em vez de recusar, porque recusar apagaria o
+     * rótulo inteiro por causa de um caractere a mais.
+     *
+     * O que NÃO é texto vira vazio, pela mesma regra de todo eixo.
+     */
+    rotulo: typeof o.rotulo === "string" ? o.rotulo.trim().slice(0, 40) : APARENCIA_PADRAO.rotulo,
     cartao: valida(o.cartao, OPCOES.cartao.map((x) => x.id), APARENCIA_PADRAO.cartao),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
@@ -392,6 +429,8 @@ export const OPCOES = {
     { id: "dividida", nome: "Dividida", desc: "Foto de um lado, texto do outro" },
     { id: "minima", nome: "Mínima", desc: "Só tipografia, sem foto de capa" },
     { id: "convite", nome: "Convite", desc: "Foto emoldurada, título no pé e botão de entrada" },
+    { id: "redonda", nome: "Redonda", desc: "Foto em círculo, título embaixo — a mais discreta" },
+    { id: "arco", nome: "Arco", desc: "Foto com topo arredondado e base reta, título embaixo" },
   ],
   tema: [
     { id: "noite", nome: "Noite", desc: "Fundo escuro — as fotos brilham" },
@@ -533,25 +572,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   {
     /*
@@ -568,7 +607,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -591,25 +630,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
   },
 ];
 
@@ -635,7 +674,7 @@ export function presetEquivalente(a: Aparencia): string | null {
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
-    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento && x.cartao === y.cartao;
+    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento && x.rotulo === y.rotulo && x.cartao === y.cartao;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 

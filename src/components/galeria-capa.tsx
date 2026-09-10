@@ -146,6 +146,26 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     </h1>
   );
 
+  /**
+   * A SOBRANCELHA: o que é o evento, acima do título.
+   *
+   * Juan pediu "casamento, aniversário, prewedding… para não ocupar tanto
+   * espaço visual se estivesse no título em si". Por isso é pequena, em
+   * maiúsculas e com muito espaçamento entre letras: o olho a lê como etiqueta
+   * e segue para o nome, em vez de disputar com ele.
+   *
+   * Some quando vazia, que é o caso de toda galeria feita antes de 10/09/2026.
+   */
+  const Rotulo = () =>
+    aparencia.rotulo ? (
+      <p
+        className="font-mono text-[10px] uppercase tracking-[0.32em]"
+        style={{ color: "var(--g-tenue)" }}
+      >
+        {aparencia.rotulo}
+      </p>
+    ) : null;
+
   const Legenda = () =>
     legenda ? (
       <p
@@ -183,6 +203,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         <div className={`relative z-10 w-full max-w-3xl px-6 pb-16 ${alinharTexto}`}>
           <Estudio />
           <div className="mt-5">
+            <Rotulo />
             <Titulo tamanho="text-5xl sm:text-7xl" />
           </div>
           <div className="mt-4">
@@ -203,6 +224,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
       >
         <Estudio />
         <div className={`mt-8 max-w-[16ch] ${alinharBloco}`}>
+          <Rotulo />
           <Titulo tamanho="text-5xl sm:text-7xl" />
         </div>
         <div className="mt-6">
@@ -294,6 +316,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             {/* Peso normal, e não negrito: a serifada de contraste alto (Bodoni,
                 Playfair) vive do traço fino, e o negrito fecha justamente o que
                 faz ela parecer papel de convite. */}
+            <Rotulo />
             <Titulo tamanho="text-4xl sm:text-6xl" />
             <a
               href="#fotos"
@@ -327,11 +350,70 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         >
           <Estudio />
           <div className="mt-6">
+            <Rotulo />
             <Titulo tamanho="text-4xl sm:text-6xl" />
           </div>
           <div className="mt-5">
             <Legenda />
           </div>
+        </div>
+      </header>
+    );
+  }
+
+  /* --- REDONDA e ARCO: a foto em cima, o texto embaixo ----------------------
+   *
+   * Juan, 10/09/2026: "foto redonda com título embaixo, mais minimalista. Foto
+   * em formato de arco, reta na parte inferior horizontal, título embaixo."
+   *
+   * São a MESMA capa com uma moldura diferente, e por isso moram no mesmo
+   * ramo: o que muda entre elas é uma classe de arredondamento. Separá-las em
+   * dois blocos quase idênticos garantiria que um dia uma ganhasse um conserto
+   * que a outra não recebe.
+   *
+   * ── POR QUE A PROPORÇÃO É DIFERENTE NAS DUAS ────────────────────────────
+   *
+   * O círculo é 1:1 por definição — qualquer outra coisa vira elipse. O arco é
+   * 3:4 em pé, que é a forma de um portal: alto o bastante para o topo
+   * arredondado ser lido como arco, e não como um canto amassado.
+   *
+   * As duas caem na mínima sem foto, como as outras capas com foto fazem.
+   */
+  if ((aparencia.capa === "redonda" || aparencia.capa === "arco") && urlImagem) {
+    const ehRedonda = aparencia.capa === "redonda";
+    return (
+      <header
+        data-capa={aparencia.capa}
+        className={`px-6 py-14 sm:py-20 ${alinharTexto}`}
+        style={{ borderBottom: "1px solid var(--g-linha)" }}
+      >
+        <div
+          className={`overflow-hidden ${alinharBloco} ${
+            ehRedonda ? "aspect-square rounded-full" : "aspect-[3/4] rounded-t-full"
+          }`}
+          style={{ maxWidth: ehRedonda ? "22rem" : "20rem" }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
+          <img
+            src={urlImagem}
+            alt=""
+            fetchPriority="high"
+            style={foco}
+            className="h-full w-full object-cover"
+          />
+        </div>
+
+        <div className="mt-8">
+          <Rotulo />
+        </div>
+        <div className={`mt-2 max-w-[18ch] ${alinharBloco}`}>
+          <Titulo tamanho="text-4xl sm:text-5xl" />
+        </div>
+        <div className="mt-4">
+          <Legenda />
+        </div>
+        <div className="mt-6">
+          <Estudio />
         </div>
       </header>
     );
@@ -346,6 +428,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     >
       <Estudio />
       <div className={`mt-6 max-w-[18ch] ${alinharBloco}`}>
+        <Rotulo />
         <Titulo tamanho="text-4xl sm:text-5xl" />
       </div>
       <div className="mt-4">
