@@ -17,6 +17,7 @@ import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
 import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-visiveis";
+import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
 export interface ItemGaleria {
   id: string;
@@ -382,6 +383,37 @@ export function GaleriaCliente({
    * Uma foto: no celular abre o menu nativo (onde existe "Salvar imagem", que
    * grava nas Fotos); no computador baixa direto.
    */
+  /*
+   * O NOME COM QUE O ARQUIVO CHEGA — a metade do celular (10/09/2026).
+   *
+   * No computador quem decide é o `Content-Disposition` assinado pela rota (a
+   * URL é do armazém, outra origem, e aí o atributo `download` é ignorado). No
+   * celular é o contrário: o arquivo vira `new File([blob], nome)` aqui dentro,
+   * e o servidor não tem voz. São dois lugares decidindo o mesmo nome, e a
+   * defesa contra divergirem é chamarem a MESMA função — ver
+   * `lib/nome-de-arquivo.ts`.
+   *
+   * Só o nome do ARQUIVO. O nome de tela — legenda, `alt`, rótulo do botão —
+   * continua sendo o que o fotógrafo enviou: prefixo ali seria ruído na
+   * interface para resolver um problema que é da pasta de downloads.
+   */
+  const capituloDaFoto = useMemo(() => {
+    const mapa = new Map<string, string>();
+    /* Um grupo só não separa nada: todas levariam o mesmo prefixo. Mesma régua
+       do menu de baixar e da rota que assina. */
+    if (capitulos.length > 1) {
+      for (const c of capitulos) {
+        for (const i of c.indices) mapa.set(itens[i].id, c.nome || GRUPO_SEM_CAPITULO);
+      }
+    }
+    return mapa;
+  }, [capitulos, itens]);
+
+  const nomeDeArquivo = useCallback(
+    (it: ItemGaleria) => nomeComCapitulo(it.nome, capituloDaFoto.get(it.id) ?? null),
+    [capituloDaFoto],
+  );
+
   async function salvarUm(it: ItemGaleria) {
     /*
      * O link do original nasce AGORA, pedido à rota — que recusa quando o
@@ -402,7 +434,7 @@ export function GaleriaCliente({
 
     if (!modoSalvar) {
       registrar("baixou", it.id);
-      baixarNoComputador(url, it.nome);
+      baixarNoComputador(url, nomeDeArquivo(it));
       return;
     }
     setAviso("preparando…");
@@ -410,7 +442,7 @@ export function GaleriaCliente({
       /* O registro espera o desfecho pelo mesmo motivo do "baixar tudo": até
          05/09/2026 ele vinha antes de abrir o menu, então fechar o menu
          contava um download que nunca aconteceu. Ver `entregouUmaFoto`. */
-      const r = await salvarNoCelular([{ url, nome: it.nome }]);
+      const r = await salvarNoCelular([{ url, nome: nomeDeArquivo(it) }]);
       if (entregouUmaFoto(r)) registrar("baixou", it.id);
       if (r === "salvou") {
         setAviso("salvo ✓");
@@ -419,13 +451,13 @@ export function GaleriaCliente({
       } else {
         // sem-suporte, expirou ou sem-acesso: o menu nativo não rolou, mas a
         // foto não pode simplesmente não vir. Cai no download comum.
-        baixarNoComputador(url, it.nome);
+        baixarNoComputador(url, nomeDeArquivo(it));
         setAviso("baixada — procure em Arquivos ou Downloads");
       }
     } catch {
       setAviso(null);
       registrar("baixou", it.id);
-      baixarNoComputador(url, it.nome);
+      baixarNoComputador(url, nomeDeArquivo(it));
     } finally {
       setTimeout(() => setAviso(null), 2500);
     }
@@ -468,7 +500,7 @@ export function GaleriaCliente({
     // Só o que tem link de verdade. Numa galeria bloqueada a rota não entrega
     // nada, a lista fica vazia e o laço não roda — nada a baixar, nenhuma exceção.
     const baixaveis = fotos
-      .map((it) => ({ url: cache.get(it.id), nome: it.nome, bytes: it.bytes }))
+      .map((it) => ({ url: cache.get(it.id), nome: nomeDeArquivo(it), bytes: it.bytes }))
       .filter((x): x is { url: string; nome: string; bytes: number } => Boolean(x.url));
     if (baixaveis.length === 0) {
       setBaixandoTudo(false);

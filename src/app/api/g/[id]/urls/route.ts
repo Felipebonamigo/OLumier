@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { consultar, consultarUm } from "@/lib/db";
 import { temAcessoLiberado } from "@/lib/galerias-publicas";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { nomeComCapitulo, vaiPrefixar, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
 /**
  * URLs do lightbox e do download, assinadas SOB DEMANDA.
@@ -77,12 +78,44 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     chave_preview: string | null;
     nome_original: string;
     armazem: string;
+    capitulo: string | null;
   }>(
-    `select id, chave, chave_preview, nome_original, armazem
-       from medias
-      where galeria_id = $1 and pronto and id = any($2::uuid[])`,
+    `select m.id, m.chave, m.chave_preview, m.nome_original, m.armazem,
+            s.nome as capitulo
+       from medias m
+       left join secoes s on s.id = m.secao_id
+      where m.galeria_id = $1 and m.pronto and m.id = any($2::uuid[])`,
     [id, ids],
   );
+
+  /*
+   * O CAPÍTULO VAI NO NOME DO ARQUIVO, E A DECISÃO É AQUI (10/09/2026).
+   *
+   * Não no componente: a URL do arquivo é do armazém, ou seja, outra origem — e
+   * nessa condição o navegador IGNORA o atributo `download` do nosso link e
+   * obedece ao `Content-Disposition` que sai assinado daqui. Prefixo posto só no
+   * cliente não mudaria uma letra no computador, que é onde o Juan disse estar
+   * pensando quando pediu "separado em pastas".
+   *
+   * UMA consulta a mais, e só no download: conta os GRUPOS da galeria (cada
+   * capítulo com foto, mais as fotos soltas como um grupo). Com um grupo só,
+   * todas as fotos levariam o mesmo prefixo — que não separa nada e só alonga o
+   * nome. É a mesma régua do menu de baixar, que também não oferece pasta
+   * quando só existe uma.
+   */
+  const grupos =
+    tipo === "download"
+      ? ((
+          await consultarUm<{ n: number }>(
+            `select count(*)::int as n
+               from (select secao_id from medias
+                      where galeria_id = $1 and pronto
+                      group by secao_id) g`,
+            [id],
+          )
+        )?.n ?? 1)
+      : 1;
+  const prefixar = vaiPrefixar(grupos);
 
   const pares = await Promise.all(
     medias.map(async (m) => {
@@ -90,7 +123,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const url =
         tipo === "preview"
           ? await urlDaDerivada(m.chave_preview, m.chave, armazem, VALIDADE)
-          : await urlDoOriginal(m.chave, armazem, VALIDADE, m.nome_original);
+          : await urlDoOriginal(
+              m.chave,
+              armazem,
+              VALIDADE,
+              prefixar
+                ? nomeComCapitulo(m.nome_original, m.capitulo ?? GRUPO_SEM_CAPITULO)
+                : m.nome_original,
+            );
       return [m.id, url] as const;
     }),
   );
