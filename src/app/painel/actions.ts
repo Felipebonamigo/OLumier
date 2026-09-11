@@ -43,6 +43,7 @@ import {
   moverMediasParaSecao,
   moverSoltasParaSecao,
   moverSecao,
+  reordenarSecoes,
   renomearSecao,
 } from "@/lib/secoes";
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
@@ -353,6 +354,27 @@ export async function moverSecaoAction(form: FormData) {
   const direcao = form.get("direcao") === "cima" ? "cima" : "baixo";
   await moverSecao(String(form.get("secao_id") ?? ""), tenantId, direcao);
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+/**
+ * A ordem inteira dos capítulos, como ficou depois de arrastar.
+ *
+ * Carol pediu em 11/09/2026: com sete capítulos, subir a "Festa" ao topo eram
+ * seis cliques na seta e seis recarregamentos. A lista chega separada por
+ * vírgula porque é o que cabe num FormData sem inventar formato.
+ *
+ * Nada do que vem aqui é usado sem passar pelo banco — `reordenarSecoes`
+ * amarra cada id à galeria e ao tenant antes de gravar.
+ */
+export async function reordenarSecoesAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const ids = String(form.get("ordem") ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  await reordenarSecoes(galeriaId, tenantId, ids);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
 }
 
 export async function moverMediasAction(form: FormData) {

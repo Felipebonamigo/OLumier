@@ -139,6 +139,78 @@ export async function apagarSecao(secaoId: string, tenantId: string) {
   );
 }
 
+/**
+ * Grava a ordem inteira dos capítulos de uma vez.
+ *
+ * ── POR QUE ISTO EXISTE AO LADO DE `moverSecao` (11/09/2026) ──────────────
+ *
+ * Carol: "tem que clicar na flechinha e ir subindo um por um pra organizar,
+ * não tem como fazer algo tipo pra segurar e arrastar? Quero subir a pasta da
+ * festa lá pra cima". Sete capítulos, "Festa" no fim: seis cliques, seis idas
+ * ao servidor, a página recarregando embaixo do dedo a cada uma.
+ *
+ * `moverSecao` continua — é a operação de um passo, e é o que as setas fazem;
+ * elas ficam para quem usa teclado e para o toque, onde `draggable` do HTML
+ * não existe. Arrastar, porém, não é um passo: é uma ordem nova inteira, e
+ * pedir seis trocas de vizinho para descrever um gesto seria reimplementar o
+ * gesto em cima da peça errada.
+ *
+ * ── A LISTA VEM DO NAVEGADOR ──────────────────────────────────────────────
+ *
+ * E por isso nada dela é usado antes de passar pelo banco. O `where` amarra
+ * cada id à galeria E ao tenant numa consulta só: id de capítulo de outro
+ * estúdio simplesmente não aparece no resultado, e o que não aparece não é
+ * gravado. Sem isso, "reordene esta lista" seria "reordene a galeria de quem
+ * eu quiser" — `scripts/testar-ordem-capitulos.mjs` tenta exatamente isso.
+ *
+ * Capítulo que a lista não mencionou não some nem embaralha: vai para depois
+ * dos enviados, na ordem que já tinha. É o que mantém a tela coerente quando o
+ * navegador manda uma lista defasada — alguém criou um capítulo noutra aba
+ * enquanto esta arrastava.
+ */
+export async function reordenarSecoes(galeriaId: string, tenantId: string, ids: string[]) {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+
+  /* As que EXISTEM e são desta galeria deste tenant. A lista de fora serve
+     só para ordenar o que o banco confirmou. */
+  const minhas = await consultar<Secao>(
+    `select s.id, s.ordem from secoes s
+       join galerias g on g.id = s.galeria_id
+      where s.galeria_id = $1 and g.tenant_id = $2
+      order by s.ordem, s.criado_em`,
+    [galeriaId, tenantId],
+  );
+  if (minhas.length === 0) return;
+
+  const validos = new Set(minhas.map((s) => s.id));
+  const pedidos: string[] = [];
+  for (const id of ids) {
+    /* `Set` de ida e volta resolve o id repetido sem um passo à parte: a
+       segunda aparição não acha mais o id em `validos`. */
+    if (validos.has(id)) {
+      pedidos.push(id);
+      validos.delete(id);
+    }
+  }
+  if (pedidos.length === 0) return;
+
+  /* Os que sobraram mantêm a ordem antiga entre si, atrás dos pedidos. */
+  const finais = [...pedidos, ...minhas.filter((s) => validos.has(s.id)).map((s) => s.id)];
+
+  /*
+   * Uma consulta só, e não uma por capítulo: sete UPDATEs em sequência abrem
+   * sete janelas em que a galeria tem duas seções com a mesma `ordem`, e a
+   * página do cliente pode ser montada no meio delas.
+   */
+  await consultar(
+    `update secoes s set ordem = novo.ordem
+       from (select unnest($3::uuid[]) as id, generate_subscripts($3::uuid[], 1) - 1 as ordem) novo
+      where s.id = novo.id and s.galeria_id = $1
+        and exists (select 1 from galerias g where g.id = s.galeria_id and g.tenant_id = $2)`,
+    [galeriaId, tenantId, finais],
+  );
+}
+
 export async function moverSecao(secaoId: string, tenantId: string, direcao: "cima" | "baixo") {
   const atual = await consultarUm<Secao>(
     `select s.* from secoes s join galerias g on g.id = s.galeria_id

@@ -8,6 +8,7 @@ import {
   renomearSecaoAction,
   apagarSecaoAction,
   moverSecaoAction,
+  reordenarSecoesAction,
   moverSoltasAction,
 } from "@/app/painel/actions";
 
@@ -39,12 +40,65 @@ export function EditorSecoes({
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
 
+  /*
+   * ── ARRASTAR PARA REORDENAR (11/09/2026) ────────────────────────────────
+   *
+   * Carol: "tem que clicar na flechinha e ir subindo um por um. Quero subir a
+   * pasta da festa lá pra cima". Com sete capítulos isso eram seis cliques e
+   * seis recarregamentos.
+   *
+   * `ordem` é a lista DESENHADA. Durante o arrasto ela é reordenada a cada
+   * item que o cursor cruza, então a linha acompanha o dedo em vez de saltar
+   * no fim; ao soltar, ela vai inteira para o servidor. Enquanto for `null`,
+   * quem manda é a lista que veio do servidor — é o que faz a tela voltar
+   * sozinha ao certo depois do `router.refresh()`.
+   *
+   * As SETAS FICAM. `draggable` do HTML não existe no toque, e elas também são
+   * o caminho de quem usa teclado; trocá-las por arrastar tiraria de uns para
+   * dar a outros.
+   */
+  const [ordem, setOrdem] = useState<string[] | null>(null);
+  const [arrastando, setArrastando] = useState<string | null>(null);
+
+  const lista = ordem
+    ? (ordem.map((id) => secoes.find((s) => s.id === id)).filter(Boolean) as SecaoResumo[])
+    : secoes;
+
+  function aoCruzar(alvoId: string) {
+    if (!arrastando || arrastando === alvoId) return;
+    const atual = (ordem ?? secoes.map((s) => s.id)).slice();
+    const de = atual.indexOf(arrastando);
+    const para = atual.indexOf(alvoId);
+    if (de < 0 || para < 0) return;
+    atual.splice(para, 0, ...atual.splice(de, 1));
+    setOrdem(atual);
+  }
+
+  function aoSoltar() {
+    setArrastando(null);
+    if (!ordem) return;
+    /* Mesma ordem de antes: não vale uma ida ao servidor. */
+    if (ordem.join() === secoes.map((s) => s.id).join()) return setOrdem(null);
+    /*
+     * `ordem` vale até a lista do servidor chegar — zerar antes faria a linha
+     * piscar de volta ao lugar antigo. Zerar DEPOIS não é detalhe: enquanto ela
+     * existir, é ela que a tela desenha, e as setas passam a mexer no banco sem
+     * mudar nada na frente de quem clica. Foi o que aconteceu aqui antes de
+     * este `aoTerminar` existir.
+     */
+    executar(reordenarSecoesAction, { ordem: ordem.join(",") }, () => setOrdem(null));
+  }
+
   /* Uma ação pode devolver `{ erro }` — hoje só a de criar, quando o nome já
    * existe. As outras devolvem void e caem no `?.erro` como undefined, então
    * nenhuma delas precisou mudar de assinatura por causa desta. */
   const executar = (
     acao: (f: FormData) => Promise<{ erro?: string } | void>,
     campos: Record<string, string>,
+    /* Roda DEPOIS do `router.refresh()`. Existe por causa do arrasto: a lista
+       desenhada à mão precisa ser descartada quando a do servidor chega, e só
+       aqui dá para saber que ela já chegou. */
+    aoTerminar?: () => void,
   ) =>
     iniciar(async () => {
       const f = new FormData();
@@ -53,6 +107,7 @@ export function EditorSecoes({
       const r = await acao(f);
       setErro(r?.erro ?? null);
       router.refresh();
+      aoTerminar?.();
     });
 
   return (
@@ -82,8 +137,31 @@ export function EditorSecoes({
         </div>
       ) : (
         <ul className="mt-4 divide-y divide-linha rounded-lg border border-linha">
-          {secoes.map((s, i) => (
-            <li key={s.id} className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+          {lista.map((s, i) => (
+            <li
+              key={s.id}
+              draggable={!ocupado && editando !== s.id}
+              onDragStart={(e) => {
+                setArrastando(s.id);
+                setOrdem(lista.map((x) => x.id));
+                /* Sem `setData` o Firefox não inicia o arrasto. */
+                e.dataTransfer.setData("text/plain", s.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                aoCruzar(s.id);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                aoSoltar();
+              }}
+              onDragEnd={aoSoltar}
+              className={`flex flex-wrap items-center gap-2 px-3 py-2.5 ${
+                arrastando === s.id ? "opacity-40" : ""
+              } ${editando === s.id ? "" : "cursor-grab active:cursor-grabbing"}`}
+            >
               {editando === s.id ? (
                 <>
                   <input
@@ -113,6 +191,16 @@ export function EditorSecoes({
                 </>
               ) : (
                 <>
+                  {/* O punho não é o que arrasta — a linha inteira é. Ele está
+                      aqui para DIZER que dá, que é o que faltava na tela da
+                      Carol: nada indicava que a linha podia ser pegada. */}
+                  <span
+                    aria-hidden="true"
+                    className="select-none text-texto-faint"
+                    title="Arraste para reordenar"
+                  >
+                    ⠿
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{s.nome}</span>
                     <span className="text-[11px] text-texto-faint">
@@ -132,7 +220,7 @@ export function EditorSecoes({
                     </button>
                     <button
                       type="button"
-                      disabled={ocupado || i === secoes.length - 1}
+                      disabled={ocupado || i === lista.length - 1}
                       onClick={() => executar(moverSecaoAction, { secao_id: s.id, direcao: "baixo" })}
                       aria-label={`Mover ${s.nome} para baixo`}
                       className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-30"
