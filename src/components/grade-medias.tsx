@@ -272,9 +272,32 @@ export function GradeMedias({
           const capitulo = nomeSecao(m.secaoId);
           return (
             <li key={m.id} className="group relative">
+              {/*
+                A MOLDURA ACENDE SOB O PONTEIRO (pedido do Juan em 05/09/2026).
+
+                "Senti falta de eu passar a seta aqui e a bordinha ficar
+                piscando pra mim conforme eu vou passando a seta." Havia reação
+                ao ponteiro — os botões capa/remover surgindo no canto —, mas em
+                CIMA da foto, e não em volta dela: quem varre uma grade de 600
+                fotos com o mouse não acompanha um botão de 11 px aparecendo,
+                acompanha a moldura.
+
+                `group-hover` e não `hover`: quem recebe o ponteiro é o ladrilho
+                inteiro, então passar pelo nome do arquivo, embaixo da foto,
+                também acende.
+
+                Acende MENOS forte que a selecionada (a cor pela metade, sem
+                anel): se os dois desenhassem a mesma borda, varrer a grade
+                pareceria ir selecionando foto por foto. E o `hover` do Tailwind
+                já vem dentro de `@media (hover: hover)`, então no celular nada
+                fica preso aceso depois do toque — `testar-hover-da-grade.mjs`
+                confere isso no CSS compilado, não na intenção.
+              */}
               <div
                 className={`aspect-[4/5] overflow-hidden rounded-lg border bg-carbon-2 transition ${
-                  selecionada ? "border-acento ring-2 ring-acento/40" : "border-linha"
+                  selecionada
+                    ? "border-acento ring-2 ring-acento/40"
+                    : "border-linha group-hover:border-acento/60"
                 }`}
               >
                 {m.tipo === "foto" ? (
