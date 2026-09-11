@@ -434,6 +434,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       id: "sem-capitulo",
       nome: temCapitulo ? "Outras fotos" : "",
       indices: semCapitulo,
+      total: fatiada ? todasAsMedias.filter((m) => !m.secao_id).length : semCapitulo.length,
     });
   }
   for (const s of secoes) {
@@ -456,9 +457,12 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
      * `indices` vazio é o sinal para o cliente não desenhar a seção e ainda
      * assim oferecer a pastilha. Ver `menus-da-galeria.tsx`.
      */
-    const temFotoNaGaleria = todasAsMedias.some((m) => m.secao_id === s.id);
-    if (indices.length > 0 || (fatiada && temFotoNaGaleria)) {
-      capitulos.push({ id: s.id, nome: s.nome, indices });
+    /* `total` é o tamanho do capítulo na GALERIA, não nesta fatia: é ele que
+       o menu de baixar mostra, e mostrar `indices.length` fazia o capítulo que
+       não veio aparecer como "(0)". */
+    const total = todasAsMedias.filter((m) => m.secao_id === s.id).length;
+    if (indices.length > 0 || (fatiada && total > 0)) {
+      capitulos.push({ id: s.id, nome: s.nome, indices, total });
     }
   }
 

@@ -41,8 +41,18 @@ export interface ItemGaleria {
 export interface CapituloGaleria {
   id: string;
   nome: string;
-  /** índices em `itens` — o lightbox continua percorrendo a galeria inteira */
+  /**
+   * Índices em `itens`, ou seja: as fotos deste capítulo QUE ESTÃO NESTA TELA.
+   *
+   * Vem vazio nos capítulos que não couberam na fatia (ver
+   * `config/fatia-galeria.ts`) — o menu precisa deles para navegar, a grade
+   * não os desenha. Até 11/09/2026 o visualizador percorria a galeria inteira
+   * de ponta a ponta; hoje ele percorre a FATIA, e esta linha existe para a
+   * próxima pessoa não confiar na promessa antiga.
+   */
   indices: number[];
+  /** Quantas fotos o capítulo tem na GALERIA — não nesta fatia. */
+  total: number;
 }
 
 /**
@@ -618,13 +628,29 @@ export function GaleriaCliente({
    * o que vai vir. Quem está com o filtro das favoritas ligado lê "Cerimônia
    * (42)" e recebe 42.
    */
+  /*
+   * ── A PASTA QUE NÃO ESTÁ NESTA FATIA (11/09/2026) ───────────────────────
+   *
+   * Numa galeria fatiada, `capitulos` traz também os que não vieram — o menu
+   * precisa deles para navegar. Mapear a lista inteira usando `indices.length`
+   * como contagem punha seis entradas "(0)" no menu de baixar, com nome certo
+   * e nada por trás: o convidado toca a pasta "Festa" e não acontece nada.
+   *
+   * Agora a contagem é a da GALERIA (`total`), que é o que vai vir, e a ação
+   * depende de a pasta estar carregada: se está, baixa; se não, leva até ela,
+   * e de lá o "baixar esta parte" entrega o capítulo inteiro. Dois toques, e
+   * os dois fazem o que dizem.
+   */
   const pastasParaBaixar =
     capitulos.length > 1
       ? capitulos.map((c) => ({
           id: c.id,
           nome: c.nome,
-          quantas: c.indices.length,
-          baixar: () => salvarLoteDeFotos(c.indices.map((i) => itens[i])),
+          quantas: c.total,
+          baixar: () =>
+            c.indices.length > 0
+              ? salvarLoteDeFotos(c.indices.map((i) => itens[i]))
+              : router.push(`${caminho}?cap=${encodeURIComponent(c.id)}`),
         }))
       : [];
 
@@ -1136,7 +1162,11 @@ export function GaleriaCliente({
                 troca sozinha — sem isso, a primeira virada parece defeito. */}
             <span className="truncate" style={{ color: "var(--g-suave)" }}>
               {slideshow && "▶ "}
+              {/* "de {itens.length}" sozinho passa a fatia por total: numa
+                  galeria de 2108 o convidado lia "3 de 600" e concluía que já
+                  tinha visto quase tudo. */}
               {aberto! + 1} de {itens.length}
+              {fatia ? " desta parte" : ""}
               {slideshow && " · as setas assumem o controle"}
             </span>
             <span className="flex items-center gap-2">
