@@ -66,11 +66,14 @@ export type MenuBaixar = {
 
 export function MenusDaGaleria({
   capitulos,
+  fatia = null,
   favoritas,
   baixar,
   tocarSlideshow,
 }: {
   capitulos: CapituloGaleria[];
+  /** Só numa galeria que não coube inteira — ver `config/fatia-galeria.ts`. */
+  fatia?: { total: number; capituloAtivo: string | null } | null;
   /** Null quando não há o que oferecer: escolha encerrada e nenhuma marcada. */
   favoritas: MenuFavoritas | null;
   /** Null quando o fotógrafo não liberou download. */
@@ -209,17 +212,35 @@ export function MenusDaGaleria({
       */}
       {capitulos.length > 1 && (
         <ul className="mt-1 flex justify-center gap-1 overflow-x-auto whitespace-nowrap">
-          {capitulos.map((c) => (
-            <li key={c.id}>
-              <a
-                href={`#cap-${c.id}`}
-                className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
-                style={{ color: "var(--g-suave)" }}
-              >
-                {c.nome}
-              </a>
-            </li>
-          ))}
+          {capitulos.map((c) => {
+            /*
+              ── ÂNCORA OU ENDEREÇO, E QUEM DECIDE É O TAMANHO (11/09/2026) ──
+
+              Abaixo do teto a galeria vem inteira e a âncora continua sendo a
+              melhor coisa: rolar até o capítulo é o que o navegador faz melhor
+              do que qualquer script, e nada recarrega.
+
+              Acima do teto o capítulo não ESTÁ na página — é justamente o que
+              tirou 6,35 MB do documento que estourava o iPhone. Aí a pastilha
+              precisa ir buscá-lo, e vira um link de verdade.
+            */
+            const ativo = fatia ? (fatia.capituloAtivo ?? capitulos[0]?.id) === c.id : false;
+            return (
+              <li key={c.id}>
+                <a
+                  href={fatia ? `?cap=${encodeURIComponent(c.id)}` : `#cap-${c.id}`}
+                  aria-current={ativo ? "page" : undefined}
+                  className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
+                  style={{
+                    color: ativo ? "var(--g-texto)" : "var(--g-suave)",
+                    background: ativo ? "var(--g-superficie)" : undefined,
+                  }}
+                >
+                  {c.nome}
+                </a>
+              </li>
+            );
+          })}
         </ul>
       )}
     </nav>

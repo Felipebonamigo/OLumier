@@ -16,6 +16,7 @@ import {
   registrarAcesso,
 } from "@/lib/galerias-publicas";
 import { listarSecoes } from "@/lib/secoes";
+import { fatiarGaleria, TETO_DE_ESCOLHIDAS } from "@/config/fatia-galeria";
 import { sessaoAtual } from "@/lib/auth";
 import {
   GaleriaCliente,
@@ -41,7 +42,25 @@ type Props = {
   /* `capa` é declarado e NUNCA lido: a prévia da aba Design o carrega só para
      que o endereço mude quando a capa muda, e o iframe recarregue. Está aqui
      para que quem vir o parâmetro na URL saiba que ele não faz nada aqui. */
-  searchParams: Promise<{ previa?: string; amostra?: string; ap?: string; capa?: string }>;
+  /*
+   * `cap` e `fotos` existem por causa do defeito de 11/09/2026 — ver
+   * `config/fatia-galeria.ts`. Galeria acima do teto não cabe num documento
+   * só, e o corte tem de ser AQUI: mandar tudo e esconder no cliente não tira
+   * um byte do que estourou o Safari da Carol.
+   *
+   *   cap    o capítulo escolhido no menu
+   *   fotos  uma lista de ids — é como a busca por rosto entrega o resultado
+   *          numa galeria fatiada, sem depender de a foto estar no capítulo
+   *          que por acaso está carregado
+   */
+  searchParams: Promise<{
+    previa?: string;
+    amostra?: string;
+    ap?: string;
+    capa?: string;
+    cap?: string;
+    fotos?: string;
+  }>;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -93,7 +112,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GaleriaPublicaPage({ params, searchParams }: Props) {
   const { estudio, galeria: galeriaSlug } = await params;
-  const { previa, amostra, ap } = await searchParams;
+  const { previa, amostra, ap, cap, fotos } = await searchParams;
 
   /*
    * PRÉVIA DO DONO.
@@ -235,7 +254,41 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * diferença.
    */
   const amostrando = ehDono && Boolean(amostra);
-  const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : todasAsMedias;
+
+  /*
+   * ── A GALERIA QUE NÃO CABE NUM DOCUMENTO SÓ (11/09/2026) ─────────────────
+   *
+   * Ver `config/fatia-galeria.ts` para a medida. Resumo: ~3,2 KB de documento
+   * por foto, e as 2108 fotos da galeria da Ana & Kaio davam 6,35 MB — o
+   * suficiente para o Safari do iPhone estourar e desistir de recarregar.
+   *
+   * `fotos=` vem ANTES do capítulo porque é a busca por rosto entregando o
+   * resultado dela: o convidado tirou uma selfie, o servidor achou 37 fotos, e
+   * elas não têm por que estar todas no capítulo que por acaso está aberto.
+   * Sem isto, a tela diria "você aparece em 37 fotos" e mostraria nove — a
+   * fatia virando mentira em vez de economia.
+   */
+  const pedidas = (fotos ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, TETO_DE_ESCOLHIDAS);
+  const escolhidas = new Set(pedidas);
+
+  const fatia = escolhidas.size
+    ? {
+        itens: todasAsMedias.filter((m) => escolhidas.has(m.id)),
+        total: todasAsMedias.length,
+        fatiada: true,
+        restantes: 0,
+      }
+    : fatiarGaleria(todasAsMedias, cap);
+
+  const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : fatia.itens;
+
+  /* A amostra da prévia já é um corte próprio, e menor: ali a fatia não tem o
+     que fazer, e dizer que a galeria está fatiada mudaria o menu do editor. */
+  const fatiada = !amostrando && fatia.fatiada;
 
   /*
    * Três tamanhos por foto, cada um no seu lugar:
@@ -371,10 +424,12 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * grupo quando ele precisa de um. Quem quiser arrumar tem, no painel, o
    * botão de mover todas de uma vez.
    */
-  if (semCapitulo.length > 0) {
-    const temCapitulo = secoes.some((s) =>
-      medias.some((m) => m.secao_id === s.id),
-    );
+  /* Numa galeria fatiada a pergunta "há fotos soltas?" é sobre a GALERIA, não
+     sobre a fatia: senão a pastilha "Outras fotos" apareceria e sumiria
+     conforme o capítulo aberto. */
+  const haSoltasNaGaleria = todasAsMedias.some((m) => !m.secao_id);
+  if (semCapitulo.length > 0 || (fatiada && haSoltasNaGaleria)) {
+    const temCapitulo = (fatiada ? todasAsMedias : medias).some((m) => m.secao_id);
     capitulos.push({
       id: "sem-capitulo",
       nome: temCapitulo ? "Outras fotos" : "",
@@ -386,8 +441,25 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       .filter((m) => m.secao_id === s.id)
       .map((m) => indicePorId.get(m.id)!)
       .filter((i) => i !== undefined);
-    // Capítulo vazio não vira seção em branco na página do cliente.
-    if (indices.length > 0) capitulos.push({ id: s.id, nome: s.nome, indices });
+
+    /*
+     * ── NUMA GALERIA FATIADA O MENU PRECISA DOS CAPÍTULOS VAZIOS ───────────
+     *
+     * Sem fatia, capítulo sem foto é capítulo que não existe, e desenhá-lo
+     * seria uma seção em branco — a regra de sempre, e ela continua valendo
+     * abaixo do teto.
+     *
+     * Acima do teto ela se inverte: os capítulos que NÃO vieram nesta fatia
+     * são exatamente os que o convidado precisa poder escolher. Um menu que
+     * só mostra o capítulo já aberto é um menu com um item.
+     *
+     * `indices` vazio é o sinal para o cliente não desenhar a seção e ainda
+     * assim oferecer a pastilha. Ver `menus-da-galeria.tsx`.
+     */
+    const temFotoNaGaleria = todasAsMedias.some((m) => m.secao_id === s.id);
+    if (indices.length > 0 || (fatiada && temFotoNaGaleria)) {
+      capitulos.push({ id: s.id, nome: s.nome, indices });
+    }
   }
 
   /*
@@ -581,6 +653,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             capitulos={capitulos}
             celularProvavel={celularProvavel}
             buscaPorRosto={buscaPorRosto}
+            fatia={fatiada ? { total: fatia.total, capituloAtivo: cap ?? null } : null}
           />
         )}
       </div>

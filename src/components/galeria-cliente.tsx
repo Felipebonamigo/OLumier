@@ -67,6 +67,7 @@ export function GaleriaCliente({
   favoritasIniciais,
   selecaoInicial,
   buscaPorRosto = null,
+  fatia = null,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
@@ -80,6 +81,12 @@ export function GaleriaCliente({
    * O contato é do estúdio: é com ele que o convidado fala sobre as fotos.
    */
   buscaPorRosto?: { nomeEstudio: string; contato: string | null } | null;
+  /**
+   * Preenchido só quando a galeria não coube num documento — ver
+   * `config/fatia-galeria.ts`. `null` quer dizer "veio inteira", e é o caso
+   * de quase toda galeria: nada muda de comportamento.
+   */
+  fatia?: { total: number; capituloAtivo: string | null } | null;
   /**
    * Ids das fotos já escolhidas NESTA galeria. Desde a migração 019 a lista é
    * uma só, compartilhada: a noiva no celular e o noivo no notebook veem a mesma
@@ -622,6 +629,7 @@ export function GaleriaCliente({
       */}
       <MenusDaGaleria
         capitulos={capitulos}
+        fatia={fatia}
         tocarSlideshow={ordemVisivel.length > 1 ? tocarSlideshow : null}
         favoritas={
           /* Sem escolha aberta e sem nenhuma marcada não há o que oferecer, e
@@ -720,7 +728,21 @@ export function GaleriaCliente({
           nomeEstudio={buscaPorRosto.nomeEstudio}
           contatoEstudio={buscaPorRosto.contato}
           encontradas={encontradas}
-          aoEncontrar={setEncontradas}
+          /*
+           * NUMA GALERIA FATIADA O RESULTADO VIRA ENDEREÇO.
+           *
+           * O servidor procura no acervo inteiro e devolve, digamos, 37 fotos.
+           * Filtrar a fatia carregada mostraria as nove que por acaso estão
+           * nela, embaixo de um texto dizendo 37 — a fatia virando mentira.
+           * Levando os ids na URL, a página volta com exatamente as 37.
+           */
+          aoEncontrar={(ids) => {
+            if (!fatia) return setEncontradas(ids);
+            const base = window.location.pathname;
+            window.location.href = ids?.size
+              ? `${base}?fotos=${[...ids].join(",")}`
+              : base;
+          }}
         />
       )}
 
