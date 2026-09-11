@@ -13,8 +13,36 @@
  * Roda no cliente; não importar em código de servidor.
  */
 
-/** Quantas fotos cabem num único menu de compartilhamento sem travar o celular. */
-export const LOTE_MAXIMO = 20;
+/**
+ * Quantas fotos cabem num único menu de compartilhamento sem travar o celular.
+ *
+ * ── DE 20 PARA 40, COM MEDIÇÃO (10/09/2026) ──────────────────────────────
+ *
+ * O 20 nasceu com este arquivo, antes de existir orçamento de memória, e nunca
+ * foi medido em aparelho nenhum — o documento de design de antes dizia "~30",
+ * o código entregou 20, e ninguém escreveu por quê. Enquanto isso, era ELE quem
+ * cortava o lote na quase totalidade das galerias reais, e não a memória.
+ *
+ * A medição, no banco de produção em 10/09/2026 (3.929 fotos de galerias
+ * publicadas): média 3,05 MB por foto, mediana 1,95 MB, p90 7,08 MB, p99
+ * 14,13 MB, maior arquivo 21,41 MB, zero vídeos. Com 20 por lote, a média real
+ * ocupa 61 MB de um orçamento de 150 MB — 41% dele. O limite era de mentira.
+ *
+ * O que isso custava ao cliente: a maior galeria em produção (1.401 fotos)
+ * pedia 71 toques para vir inteira pelo menu nativo. Com 40, são 36 — e o pico
+ * de memória NÃO muda, porque quem manda continua sendo `ORCAMENTO_LOTE`: uma
+ * galeria de fotos pesadas é cortada antes de chegar a 40, como sempre foi.
+ *
+ * O teto de 40 não é redondo por acaso: `testar-salvar-mobile.mjs` prende a
+ * regra de que 40 × 3,05 MB tem de caber nos 150 MB do orçamento. Subir mais
+ * exige medir de novo o acervo, ou o teto volta a prometer memória que não há.
+ *
+ * O que ainda não foi medido é quantos arquivos o menu nativo aceita de uma vez
+ * — e por isso `compartilharPreparado` parte a lista ao meio quando o aparelho
+ * recusa, em vez de desistir do menu. É o que torna este número seguro sem um
+ * celular na mão.
+ */
+export const LOTE_MAXIMO = 40;
 
 /**
  * Teto de MEMÓRIA por lote, e por arquivo.
@@ -180,11 +208,50 @@ export async function prepararLote(
  */
 export async function compartilharPreparado(prontos: File[]): Promise<ResultadoSalvar> {
   if (!podeCompartilharArquivos()) return "sem-suporte";
+  return compartilharPartindoSePreciso(prontos);
+}
+
+/**
+ * O MENU QUE RECUSA LISTA LONGA, E O LOTE QUE SE AJUSTA SOZINHO (10/09/2026).
+ *
+ * Quantos arquivos o `share` do celular aceita é o único elo desta corrente sem
+ * número conhecido: `LOTE_MAXIMO` e `ORCAMENTO_LOTE` têm conta escrita, este
+ * não — nem aqui, nem no documento de design, nem em aparelho nenhum. Enquanto
+ * o lote era 20 dava para conviver; ao subir o teto, ele passaria a ser o que
+ * decide, no escuro. E a recusa é silenciosa e cara: `canShare` devolve false,
+ * a entrega desiste do menu e cai em um download por foto — com um diálogo de
+ * confirmação cada, que é exatamente a queixa que originou o segundo toque —
+ * depois de já ter buscado o lote inteiro e ocupado a memória.
+ *
+ * A saída não é adivinhar melhor: é PARTIR AO MEIO e tentar de novo. Os
+ * arquivos já estão na memória, então partir não custa uma busca sequer, e o
+ * mesmo código serve o aparelho que aceita 40 e o que aceita 8.
+ *
+ * Duas recusas que NÃO se resolvem partindo, e por isso param na hora:
+ *   AbortError      a pessoa fechou o menu — reabrir com a metade é insistir;
+ *   NotAllowedError o gesto expirou, e a janela do Safari não volta com uma
+ *                   lista menor: seriam recusas em série gastando os toques dela.
+ *
+ * Quando a segunda metade falha depois de a primeira ter ido, o desfecho ruim
+ * vence e quem chamou cai no download comum da lista inteira. A primeira metade
+ * chega duas vezes — que é o lado seguro de errar numa entrega de fotos.
+ */
+async function compartilharPartindoSePreciso(files: File[]): Promise<ResultadoSalvar> {
+  if (files.length === 0) return "salvou";
+
   // Alguns navegadores só aceitam a lista depois de montada; confere de novo.
-  if (!navigator.canShare({ files: prontos })) return "sem-suporte";
+  if (!navigator.canShare({ files })) {
+    /* Um arquivo só recusado não é lista longa: é o aparelho não compartilhar
+       arquivo nenhum. Partir de novo seria laço infinito. */
+    if (files.length === 1) return "sem-suporte";
+    const meio = Math.ceil(files.length / 2);
+    const primeira = await compartilharPartindoSePreciso(files.slice(0, meio));
+    if (primeira !== "salvou") return primeira;
+    return compartilharPartindoSePreciso(files.slice(meio));
+  }
 
   try {
-    await navigator.share({ files: prontos });
+    await navigator.share({ files });
     return "salvou";
   } catch (e) {
     if (e instanceof DOMException) {

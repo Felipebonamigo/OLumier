@@ -164,10 +164,149 @@ const arq = (nome, mb) => ({ url: `http://x/${nome}`, nome, bytes: mb * MB });
   ok("lista vazia não gera lote vazio", mod.montarLotes([]).lotes.length === 0);
 }
 
-// Lote respeita o máximo
-const okLote = mod.LOTE_MAXIMO > 0 && mod.LOTE_MAXIMO <= 30;
-if (!okLote) falhou = true;
-console.log(`  ${okLote ? "✓" : "✗"} lote de ${mod.LOTE_MAXIMO} fotos por vez (memória do celular)`);
+/*
+ * ── O TETO DE CONTAGEM, MEDIDO CONTRA O ACERVO REAL (10/09/2026) ──────────
+ *
+ * Aqui havia `LOTE_MAXIMO > 0 && LOTE_MAXIMO <= 30`. O 30 não vinha de lugar
+ * nenhum: era o número que o documento de design escrevera antes de o código
+ * existir, e o código entregou 20. Nenhum dos dois foi medido em aparelho
+ * algum. Pior: a asserção não prendia NADA — as outras etapas usam fotos de
+ * 8 MB, onde quem corta o lote é o ORÇAMENTO (18 por lote), então dava para
+ * mexer em LOTE_MAXIMO com a suíte inteira verde e nenhum sinal.
+ *
+ * As duas etapas abaixo trocam o número mágico por regras.
+ *
+ * A medição que as sustenta (banco de produção, 10/09/2026, 3.929 fotos de
+ * galerias publicadas): média 3,05 MB por foto, mediana 1,95 MB, p90 7,08 MB,
+ * p99 14,13 MB, maior arquivo 21,41 MB. Zero vídeos, zero arquivos acima do
+ * teto individual de 80 MB.
+ */
+const MB_TIPICO = 3.05; // média medida em produção, 10/09/2026
+
+{
+  const ok = (nome, cond) => {
+    if (!cond) falhou = true;
+    console.log(`  ${cond ? "✓" : "✗"} ${nome}`);
+  };
+
+  /* A REGRA, no lugar do número: o teto de contagem não pode PROMETER mais
+     memória do que o orçamento aguenta para uma foto típica. É isto que
+     transforma "quantas fotos" numa consequência da medição, e não num palpite
+     redondo — e é o que impede a próxima pessoa de dobrar o número sem medir. */
+  const promessa = mod.LOTE_MAXIMO * MB_TIPICO * 1024 * 1024;
+  ok(
+    `${mod.LOTE_MAXIMO} fotos típicas de ${MB_TIPICO} MB = ${Math.round(promessa / 1048576)} MB, dentro do orçamento de ${Math.round(mod.ORCAMENTO_LOTE / 1048576)} MB`,
+    mod.LOTE_MAXIMO > 0 && promessa <= mod.ORCAMENTO_LOTE,
+  );
+
+  /* A etapa que faltava: um caso onde quem corta é a CONTAGEM. Sem ela,
+     LOTE_MAXIMO pode ser qualquer número sem que um teste reaja. */
+  const pequenas = Array.from({ length: mod.LOTE_MAXIMO + 5 }, (_, i) => arq(`p${i}.jpg`, 1));
+  const rp = mod.montarLotes(pequenas);
+  ok(
+    `com foto pequena quem corta é a contagem: ${mod.LOTE_MAXIMO + 5} fotos de 1 MB viram lotes de ${rp.lotes[0].length}`,
+    rp.lotes[0].length === mod.LOTE_MAXIMO && rp.lotes.length === 2,
+  );
+
+  /* E o contrário continua valendo: foto pesada é cortada pela memória ANTES
+     de chegar ao teto de contagem. */
+  const pesadas = Array.from({ length: mod.LOTE_MAXIMO }, (_, i) => arq(`g${i}.jpg`, 20));
+  const rg = mod.montarLotes(pesadas);
+  ok(
+    `com foto de 20 MB quem corta é a memória: lotes de ${rg.lotes[0].length}, não de ${mod.LOTE_MAXIMO}`,
+    rg.lotes[0].length < mod.LOTE_MAXIMO &&
+      rg.lotes[0].reduce((s, a) => s + a.bytes, 0) <= mod.ORCAMENTO_LOTE,
+  );
+}
+
+/*
+ * ── QUANDO O MENU NATIVO RECUSA A LISTA POR SER LONGA (10/09/2026) ────────
+ *
+ * Ninguém nunca mediu quantos arquivos o `navigator.share` aceita — nem aqui
+ * nem no documento de design. Enquanto o lote era 20 isso não incomodava; ao
+ * subir o teto, vira a única trava da corrente sem número conhecido, e a falha
+ * dela é silenciosa e cara: `canShare` devolve false, a entrega desiste do menu
+ * e cai em um download por foto, DEPOIS de já ter buscado o lote inteiro e
+ * gasto a memória.
+ *
+ * A saída não é adivinhar melhor o número: é o lote se ajustar sozinho. Quando
+ * a lista é recusada, ela é partida ao meio e tentada de novo — os arquivos já
+ * estão na memória, então partir não custa busca nenhuma. Assim o mesmo código
+ * serve o aparelho que aceita 40 e o que aceita 8, sem ninguém medir.
+ */
+console.log("\nMenu nativo que recusa lista longa:\n");
+
+{
+  const ok = (nome, cond) => {
+    if (!cond) falhou = true;
+    console.log(`  ${cond ? "✓" : "✗"} ${nome}`);
+  };
+  const arquivos = (n) => Array.from({ length: n }, (_, i) => ({ name: `f${i}.jpg` }));
+
+  /** Um celular que só aceita `teto` arquivos por vez. */
+  const celularQueAceitaAte = (teto) => {
+    const abertos = [];
+    montarAmbiente(cenarios[0]);
+    globalThis.navigator.canShare = (d) => Boolean(d?.files?.length) && d.files.length <= teto;
+    globalThis.navigator.share = async (d) => {
+      abertos.push(d.files.length);
+    };
+    return abertos;
+  };
+
+  {
+    const abertos = celularQueAceitaAte(10);
+    const r = await mod.compartilharPreparado(arquivos(40));
+    ok(
+      `40 arquivos num aparelho que aceita 10: ${abertos.length} menus de ${abertos.join("+")} = ${abertos.reduce((s, n) => s + n, 0)}`,
+      r === "salvou" && abertos.reduce((s, n) => s + n, 0) === 40,
+    );
+    ok("nenhum menu passou do que o aparelho aceita", abertos.every((n) => n <= 10));
+  }
+
+  {
+    const abertos = celularQueAceitaAte(1000);
+    const r = await mod.compartilharPreparado(arquivos(40));
+    ok(
+      "aparelho que aceita tudo abre UM menu só (não parte por precaução)",
+      r === "salvou" && abertos.length === 1 && abertos[0] === 40,
+    );
+  }
+
+  {
+    /* Recusar UM arquivo não é questão de tamanho da lista — é o aparelho não
+       compartilhar arquivo. Partir de novo seria laço infinito. */
+    celularQueAceitaAte(0);
+    const r = await mod.compartilharPreparado(arquivos(1));
+    ok("um arquivo recusado devolve sem-suporte, não fica dividindo", r === "sem-suporte");
+  }
+
+  {
+    /* Fechar o menu é decisão da pessoa. Reabrir com a metade seria insistir. */
+    const abertos = celularQueAceitaAte(10);
+    globalThis.navigator.share = async (d) => {
+      abertos.push(d.files.length);
+      throw Object.assign(new globalThis.DOMException("fechou"), { name: "AbortError" });
+    };
+    const r = await mod.compartilharPreparado(arquivos(40));
+    ok(
+      "quem fecha o menu na primeira parte não vê a segunda",
+      r === "cancelou" && abertos.length === 1,
+    );
+  }
+
+  {
+    /* Gesto expirado não melhora com lista menor: a janela do Safari já passou.
+       Insistir gastaria os toques da pessoa em recusas seguidas. */
+    const abertos = celularQueAceitaAte(10);
+    globalThis.navigator.share = async (d) => {
+      abertos.push(d.files.length);
+      throw Object.assign(new globalThis.DOMException("expirou"), { name: "NotAllowedError" });
+    };
+    const r = await mod.compartilharPreparado(arquivos(40));
+    ok("gesto expirado para na hora, sem tentar as outras partes", r === "expirou" && abertos.length === 1);
+  }
+}
 
 /*
  * ── "BAIXAR TUDO" NO CELULAR (05/09/2026) ─────────────────────────────────
