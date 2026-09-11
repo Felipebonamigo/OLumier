@@ -62,6 +62,9 @@ export type MenuBaixar = {
   baixarTudo: () => void;
   /** Os capítulos, quando há mais de um. Vazio = não há pasta a escolher. */
   pastas: { id: string; nome: string; quantas: number; baixar: () => void }[];
+  /** Quantas o casal marcou. Zero = a linha das favoritas não aparece. */
+  favoritas: number;
+  baixarFavoritas: () => void;
 };
 
 export function MenusDaGaleria({
@@ -170,11 +173,50 @@ export function MenusDaGaleria({
                 : "↓ Baixar"
             }
           >
+            {/*
+              "TODAS" SÓ QUANDO É TODAS (11/09/2026).
+
+              Numa galeria que não coube inteira, o que está na tela é um pedaço
+              — 600 de 2.108, no casamento da Carol — e o menu oferecia "Todas
+              as fotos (600)". O cliente levava 28% e fechava a aba achando que
+              tinha o casamento inteiro. Mentir para o cliente é pior do que o
+              número errado no painel do fotógrafo, que é a outra metade do
+              mesmo defeito (ver `acaoDeEntrega`).
+
+              Com fatia, o item diz o que entrega, e o rodapé diz o tamanho
+              real e para onde ir buscar o resto: as pastas, logo abaixo, são o
+              caminho inteiro da galeria, um capítulo por vez.
+            */}
             <ItemDoMenu aoTocar={baixar.baixarTudo} desligado={baixar.baixando}>
               {baixar.modoSalvar
                 ? `Salvar as ${baixar.quantas} fotos no celular`
-                : `Todas as fotos (${baixar.quantas})`}
+                : fatia
+                  ? `As ${baixar.quantas} desta parte`
+                  : `Todas as fotos (${baixar.quantas})`}
             </ItemDoMenu>
+
+            {/*
+              AS FAVORITAS LOGO DEPOIS DE "TUDO", e antes das pastas.
+
+              É a segunda coisa que o casal quer baixar — muitas vezes a
+              primeira — porque é a lista que ELES montaram. As pastas são a
+              organização do fotógrafo; esta é a deles, e por isso vem antes.
+
+              Some quando não há nenhuma marcada: um item "As favoritas (0)" é
+              um botão que não faz nada.
+            */}
+            {baixar.favoritas > 0 && (
+              <ItemDoMenu aoTocar={baixar.baixarFavoritas} desligado={baixar.baixando}>
+                {`${baixar.modoSalvar ? "Salvar" : "Baixar"} as favoritas (${baixar.favoritas})`}
+              </ItemDoMenu>
+            )}
+
+            {fatia && (
+              <Rodape>
+                Esta galeria tem {fatia.total} fotos e vem em partes — baixe pasta por pasta para
+                levar tudo.
+              </Rodape>
+            )}
 
             {/* "…ou separado em pastas": os capítulos, um por linha. A contagem
                 no rótulo é o que vai vir — é ela que separa "a pasta inteira"

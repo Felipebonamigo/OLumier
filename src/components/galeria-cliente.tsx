@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -101,6 +102,12 @@ export function GaleriaCliente({
     motivo: "fechada" | "prazo" | null;
   };
 }) {
+  /* Navegar é como a galeria fatiada mostra um recorte — capítulo, favoritas,
+     resultado da selfie. `router.push` e não `location.href`: o Next troca só
+     o que mudou, e é o caminho que o próprio framework pede. */
+  const router = useRouter();
+  const caminho = usePathname();
+
   const [aberto, setAberto] = useState<number | null>(null);
   const [baixandoTudo, setBaixandoTudo] = useState(false);
   const [progressoLote, setProgressoLote] = useState(0);
@@ -137,6 +144,15 @@ export function GaleriaCliente({
 
   const limite = selecao.limite;
   const cheia = limite !== null && favoritas.size >= limite;
+
+  /**
+   * Quantas fotos a GALERIA tem — que desde 11/09/2026 não é `itens.length`.
+   *
+   * Com o corte por fatia, `itens` virou "o pedaço que coube nesta tela". Quem
+   * precisa do número inteiro é a prova de entrega: baixar as 600 de uma
+   * galeria de 2.108 não pode contar como ter levado o casamento.
+   */
+  const totalDaGaleria = fatia?.total ?? itens.length;
 
   /*
    * URLs assinadas SOB DEMANDA (03/09/2026).
@@ -557,8 +573,16 @@ export function GaleriaCliente({
         aoProgredir: setProgressoLote,
       });
 
-      /* Baixar uma pasta não é baixar tudo — ver `acaoDeEntrega`. */
-      if (desfecho.entregues > 0) registrar(acaoDeEntrega(fotos.length, itens.length));
+      /*
+       * Baixar uma pasta não é baixar tudo — ver `acaoDeEntrega`.
+       *
+       * E o total é o da GALERIA, não o de `itens` (11/09/2026). Desde o corte
+       * por fatia, `itens` é só o pedaço que coube na tela: na galeria de 2.108
+       * fotos da Carol são 600, e comparar 600 com 600 registrava BAIXOU TUDO —
+       * a Atividade jurando ao fotógrafo que o casal levou o casamento inteiro,
+       * tendo levado 28%. Mesma prova falsa de 05/09, por outra porta.
+       */
+      if (desfecho.entregues > 0) registrar(acaoDeEntrega(fotos.length, totalDaGaleria));
 
       /* Cancelar é escolha da pessoa e não vira mensagem. O resto vira: quem
          batia em CORS via o contador chegar ao fim e nada acontecer, sem uma
@@ -627,6 +651,23 @@ export function GaleriaCliente({
         toque — este porque nasce no meio de uma entrega em curso e precisa
         estar na frente dos olhos, não guardado.
       */}
+      {/*
+        ── BAIXAR SÓ AS FAVORITAS (11/09/2026) ──────────────────────────────
+
+        Pedido do Felipe junto com o coração no visualizador. Numa galeria
+        inteira é filtrar `itens` e pronto.
+
+        Numa galeria FATIADA não é: `itens` é o capítulo carregado, e as
+        favoritas do casal estão espalhadas pela entrega toda. Filtrar aqui
+        entregaria "as favoritas" que por acaso estão nesta parte — o número
+        certo no rótulo e as fotos erradas no telefone, a mesma mentira que a
+        busca por rosto quase virou em 11/09.
+
+        A saída é a mesma de lá: os ids vão no endereço e a página volta com
+        exatamente elas. Como o `?fotos=` já desenha só as escolhidas, o botão
+        de baixar tudo daquela tela JÁ é "baixar as favoritas" — por isso aqui
+        a ação é navegar, não montar lote.
+      */}
       <MenusDaGaleria
         capitulos={capitulos}
         fatia={fatia}
@@ -638,7 +679,18 @@ export function GaleriaCliente({
             ? {
                 quantas: favoritas.size,
                 soFavoritas,
-                alternarFiltro: () => setSoFavoritas((v) => !v),
+                /* Fatiada, "ver só as favoritas" não pode ser um filtro da
+                   tela: ele esconderia as favoritas dos outros capítulos em vez
+                   de mostrá-las. Vai buscar pelo endereço, como o `?fotos=` da
+                   busca por rosto. */
+                alternarFiltro: () => {
+                  if (!fatia) return setSoFavoritas((v) => !v);
+                  router.push(
+                    soFavoritas || favoritas.size === 0
+                      ? caminho
+                      : `${caminho}?fotos=${[...favoritas].join(",")}`,
+                  );
+                },
                 selecaoAberta: selecao.aberta,
                 limite,
                 cheia,
@@ -656,6 +708,16 @@ export function GaleriaCliente({
                 progresso: progressoLote,
                 baixarTudo: () => salvarLoteDeFotos(itens),
                 pastas: pastasParaBaixar,
+                favoritas: favoritas.size,
+                baixarFavoritas: () => {
+                  const escolhidas = itens.filter((it) => favoritas.has(it.id));
+                  /* Todas as favoritas estão nesta tela: entrega direta. */
+                  if (!fatia || escolhidas.length === favoritas.size) {
+                    return salvarLoteDeFotos(escolhidas);
+                  }
+                  /* Faltam favoritas de outros capítulos: busca todas primeiro. */
+                  router.push(`${caminho}?fotos=${[...favoritas].join(",")}`);
+                },
               }
             : null
         }
@@ -738,10 +800,7 @@ export function GaleriaCliente({
            */
           aoEncontrar={(ids) => {
             if (!fatia) return setEncontradas(ids);
-            const base = window.location.pathname;
-            window.location.href = ids?.size
-              ? `${base}?fotos=${[...ids].join(",")}`
-              : base;
+            router.push(ids?.size ? `${caminho}?fotos=${[...ids].join(",")}` : caminho);
           }}
         />
       )}
@@ -1080,6 +1139,48 @@ export function GaleriaCliente({
               {aberto! + 1} de {itens.length}
               {slideshow && " · as setas assumem o controle"}
             </span>
+            <span className="flex items-center gap-2">
+            {/*
+              ── O CORAÇÃO COM A FOTO ABERTA (11/09/2026) ────────────────────
+
+              Felipe: "na galeria, quando abre a foto, não estamos conseguindo
+              marcar como favorito". Não era defeito de gravação — o coração
+              nunca existiu aqui dentro. Ele estava só no canto da miniatura, e
+              é ABRINDO a foto que se decide se ela entra no álbum: na grade a
+              pessoa vê um selo, aberta ela vê a foto.
+
+              Fica ao lado de "Baixar" e não sobre a imagem: a foto ocupa a
+              tela inteira e qualquer botão em cima dela tapa justamente o que
+              está sendo julgado. Com rótulo escrito, porque aqui há espaço — e
+              porque "Escolher" diz o que o coração sozinho só sugere.
+            */}
+            {(selecao.aberta || favoritas.has(item.id)) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  alternarFavorita(item.id, favoritas.has(item.id));
+                }}
+                disabled={!selecao.aberta}
+                aria-pressed={favoritas.has(item.id)}
+                aria-label={
+                  favoritas.has(item.id) ? `Desmarcar ${item.nome}` : `Escolher ${item.nome}`
+                }
+                className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition hover:opacity-70 disabled:opacity-60"
+                style={{
+                  borderColor: favoritas.has(item.id) ? "var(--g-destaque)" : "var(--g-linha)",
+                  color: favoritas.has(item.id) ? "var(--g-destaque)" : "var(--g-texto)",
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"
+                  fill={favoritas.has(item.id) ? "currentColor" : "none"}
+                  stroke="currentColor" strokeWidth="1.8"
+                  strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20s-7-4.6-7-9.3A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.7c0 4.7-7 9.3-7 9.3Z" />
+                </svg>
+                {favoritas.has(item.id) ? "Escolhida" : "Escolher"}
+              </button>
+            )}
             {permiteDownload ? (
               <button
                 type="button"
@@ -1098,7 +1199,27 @@ export function GaleriaCliente({
                  conforme a galeria permitir download ou não. */
               <span aria-hidden="true" className="w-16" />
             )}
+            </span>
           </div>
+
+          {/*
+            O RECADO DA ESCOLHA, POR CIMA DA FOTO.
+
+            `aviso` é onde a regra fala — "você já escolheu 30 fotos, que é o
+            combinado". Ele é desenhado acima da grade, que fica ATRÁS desta
+            tela cheia: quem batesse no limite com a foto aberta tocaria o
+            coração, veria nada acontecer e não saberia por quê. O botão ganhou
+            um lugar aqui dentro, e o motivo dele ter recusado também precisa.
+          */}
+          {aviso && (
+            <p
+              className="px-5 pb-1 text-center text-xs"
+              style={{ color: "var(--g-tenue)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {aviso}
+            </p>
+          )}
 
           <div
             className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4"

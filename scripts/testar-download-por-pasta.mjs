@@ -31,6 +31,7 @@ import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { acaoDeEntrega } from "../src/lib/salvar-client.ts";
+import { FOTOS_POR_TELA } from "../src/config/fatia-galeria.ts";
 
 await exigirBancoDeTeste();
 
@@ -69,6 +70,51 @@ await etapa("uma pasta que por acaso tem tudo conta como tudo", () => {
   const a = acaoDeEntrega(30, 30);
   if (a !== "baixou_tudo") throw new Error(`veio ${a}`);
   return a;
+});
+
+/*
+ * ── A GALERIA QUE NÃO COUBE INTEIRA (11/09/2026) ──────────────────────────
+ *
+ * No mesmo dia em que o corte por fatia entrou (ver `config/fatia-galeria.ts`),
+ * ele criou um caso que esta função não conhecia: `itens` deixou de ser "a
+ * galeria" e passou a ser "o pedaço que coube na tela".
+ *
+ * Na galeria de 2.108 fotos da Carol, o pedaço são 600. Baixar esses 600
+ * comparava 600 com 600 e registrava BAIXOU TUDO — a Atividade jurando ao
+ * fotógrafo que o casal levou o casamento inteiro, tendo levado 28%. É a mesma
+ * prova falsa de 05/09, por outra porta.
+ *
+ * A regra não muda: quem decide é o tamanho do pedido contra o tamanho da
+ * GALERIA. O que mudou foi quem sabe esse total — e é por isso que ele precisa
+ * ser passado de fora, em vez de deduzido da lista que está na mão.
+ */
+await etapa("baixar a fatia de uma galeria grande NÃO é baixar tudo", () => {
+  const a = acaoDeEntrega(600, 2108);
+  if (a !== "baixou") {
+    throw new Error(`600 de 2108 viraram ${a} — a Atividade contaria entrega que não houve`);
+  }
+  return a;
+});
+
+await etapa("e a galeria passa o total DELA, não o da fatia", async () => {
+  /* A etapa acima prova a regra; esta prova que ela é chamada com o número
+     certo. Sem as duas, a função devolve "baixou" para 600 de 2108 e o
+     componente segue perguntando "600 de 600?" — cada uma certa sozinha, e a
+     Atividade errada mesmo assim. */
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const fonte = readFileSync(
+    path.join(path.resolve(import.meta.dirname, ".."), "src/components/galeria-cliente.tsx"),
+    "utf8",
+  );
+  const chamada = fonte.match(/acaoDeEntrega\([^)]*\)/)?.[0] ?? "";
+  if (!chamada) throw new Error("ninguém registra a entrega");
+  if (/itens\.length/.test(chamada)) {
+    throw new Error(
+      `${chamada} — numa galeria fatiada \`itens\` é só o pedaço na tela, e 600 de 600 vira "baixou tudo"`,
+    );
+  }
+  return chamada;
 });
 
 console.log("\nOs itens do menu:\n");
@@ -132,6 +178,56 @@ await etapa("com UM capítulo só, não há pasta a escolher", async () => {
     await db.query("update medias set secao_id = null where galeria_id = $1", [g.id]);
     await db.query("delete from secoes where galeria_id = $1", [g.id]);
   }
+});
+
+console.log("\nA galeria que não coube inteira:\n");
+
+/*
+ * O outro lado da mesma mentira. Corrigir só o registro deixaria a Atividade
+ * honesta e a TELA mentindo: o menu continuaria oferecendo "Todas as fotos
+ * (600)" numa galeria de 2.108 — e o cliente fecharia a aba achando que levou
+ * tudo, que é pior do que o número errado no painel do fotógrafo.
+ */
+const grande = await galeriaDaRodada(db, {
+  nome: "fatiada",
+  medias: FOTOS_POR_TELA + 1,
+  publicada: true,
+});
+await db.query(
+  "update galerias set senha_hash = null, permite_download = true where id = $1",
+  [grande.id],
+);
+
+const menuDaGrande = async () => {
+  const html = await (
+    await fetch(`${BASE}/g/${grande.tslug}/${grande.gslug}`, { cache: "no-store" })
+  ).text();
+  const barra = html.match(/<nav[^>]*aria-label="Menu da galeria"[^]*?<\/nav>/)?.[0] ?? "";
+  if (!barra) throw new Error("não achei a barra de menus");
+  const menu = barra.match(/<details[^]*?<summary[^>]*>[^]*?Baixar[^]*?<\/details>/)?.[0];
+  if (!menu) throw new Error("não achei o menu Baixar");
+  return menu;
+};
+
+await etapa("o menu NÃO chama de “todas” o pedaço que está na tela", async () => {
+  const m = await menuDaGrande();
+  if (/Todas as fotos/.test(m)) {
+    throw new Error(
+      `a galeria tem ${FOTOS_POR_TELA + 1} fotos e o menu oferece "Todas as fotos" sobre ${FOTOS_POR_TELA}`,
+    );
+  }
+  return "não promete o que não entrega";
+});
+
+await etapa("e diz quantas a galeria tem de verdade", async () => {
+  /* Sem o número real, "esta parte" é honesto e inútil: a pessoa não sabe se
+     falta uma foto ou mil, nem que existe outro caminho para o resto. */
+  const m = await menuDaGrande();
+  const total = String(FOTOS_POR_TELA + 1);
+  if (!m.includes(total)) {
+    throw new Error(`o menu não diz em lugar nenhum que a galeria tem ${total} fotos`);
+  }
+  return `${total} ditas`;
 });
 
 await limparRodada(db);
