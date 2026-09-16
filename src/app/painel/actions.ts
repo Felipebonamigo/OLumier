@@ -1322,11 +1322,11 @@ export async function moverSoltasAction(form: FormData) {
 }
 
 /**
- * Troca o endereço da galeria — quando ainda dá.
+ * Troca o endereço da galeria. O anterior deixa de abrir.
  *
- * A regra inteira mora em `lib/endereco-galeria.ts`, inclusive o "quando ainda
- * dá": rascunho que ninguém nunca abriu. Aqui só há a sessão, a revalidação e o
- * texto que a tela mostra.
+ * A regra inteira mora em `lib/endereco-galeria.ts`, inclusive o que acontece
+ * com o endereço que sai — nada, ele morre ali. Aqui só há a sessão, a
+ * revalidação e o texto que a tela mostra.
  */
 export async function trocarEnderecoGaleriaAction(
   _estado: { ok?: string; erro?: string },
@@ -1349,11 +1349,10 @@ export async function trocarEnderecoGaleriaAction(
 /**
  * Apaga um endereço antigo da galeria: ele deixa de abrir.
  *
- * Felipe, 16/09/2026: "quando alterar o endereço da galeria, apagar o antigo".
- * A troca em si já não guarda apelido quando não há link em circulação (ver
- * `jaCirculou`); esta ação é para os apelidos que JÁ existem, e para o caso em
- * que apagar é o objetivo — trocar de endereço para revogar um link que vazou
- * não revogava nada enquanto o anterior continuasse abrindo.
+ * Felipe, 16/09/2026: "quando alterar o endereço da galeria, apagar o antigo" e
+ * "pode apagar sempre o endereço antigo". A troca em si já não guarda apelido
+ * nenhum; esta ação é para os que ficaram das trocas anteriores, e serve agora
+ * em vez de esperar a próxima troca — o que importa quando o link vazou.
  */
 export async function esquecerApelidoGaleriaAction(
   _estado: { ok?: string; erro?: string },
