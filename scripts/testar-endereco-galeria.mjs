@@ -57,14 +57,31 @@ const etapa = async (nome, fn) => {
 const g = await galeriaDaRodada(db, { nome: "endereco", medias: 1, publicada: false });
 const cookie = cookieDeSessao(g.tenant_id);
 
-const { trocarEnderecoDaGaleria, resolverGaleriaDoEstudio, apelidosDaGaleria, LIMITE_TROCAS_GALERIA } =
-  await import("../src/lib/endereco-galeria.ts");
+const {
+  trocarEnderecoDaGaleria,
+  resolverGaleriaDoEstudio,
+  apelidosDaGaleria,
+  esquecerApelidoDaGaleria,
+  LIMITE_TROCAS_GALERIA,
+} = await import("../src/lib/endereco-galeria.ts");
 
 const limparApelidos = () =>
   db.query("delete from enderecos_antigos_galeria where galeria_id = $1", [g.id]);
 const noAr = (v) => db.query("update galerias set publicada = $2 where id = $1", [g.id, v]);
 const slugAgora = async () =>
   (await db.query("select slug from galerias where id = $1", [g.id])).rows[0].slug;
+
+/*
+ * ── A BANCADA NASCE PUBLICADA (16/09/2026) ───────────────────────────────
+ *
+ * Desde hoje o apelido só é guardado quando há link EM CIRCULAÇÃO — ver
+ * `jaCirculou` em `lib/endereco-galeria.ts`. Galeria que nunca esteve no ar
+ * troca de endereço e o anterior some, porque não há o que proteger.
+ *
+ * As etapas deste arquivo testam justamente a sobrevivência do apelido, então a
+ * bancada tem de estar no ar. A regra nova ganhou etapas próprias no fim.
+ */
+await noAr(true);
 
 console.log("O endereço da galeria:\n");
 
@@ -181,18 +198,14 @@ await etapa("passar do limite de trocas é recusado, com o número no texto", as
 
 await etapa("galeria publicada TAMBÉM pode trocar — é o caso do pedido", async () => {
   await limparApelidos();
-  await noAr(true);
-  try {
-    const r = await trocarEnderecoDaGaleria(g.id, g.tenant_id, "ja-entregue");
-    if (!r.ok) throw new Error(`recusou: ${r.erro}`);
-    const achado = await resolverGaleriaDoEstudio(g.tenant_id, "troca-2");
-    if (achado?.slugAtual !== "ja-entregue") {
-      throw new Error("o link entregue antes da troca não leva para o endereço novo");
-    }
-    return "trocou, e o link antigo continua abrindo";
-  } finally {
-    await noAr(false);
+  const antes = await slugAgora();
+  const r = await trocarEnderecoDaGaleria(g.id, g.tenant_id, "ja-entregue");
+  if (!r.ok) throw new Error(`recusou: ${r.erro}`);
+  const achado = await resolverGaleriaDoEstudio(g.tenant_id, antes);
+  if (achado?.slugAtual !== "ja-entregue") {
+    throw new Error("o link entregue antes da troca não leva para o endereço novo");
   }
+  return "trocou, e o link antigo continua abrindo";
 });
 
 await etapa("galeria de outro estúdio não é alcançada pelo id", async () => {
@@ -217,6 +230,90 @@ await etapa("galeria de outro estúdio não é alcançada pelo id", async () => 
     await db.query("delete from galerias where id = $1", [gv[0].id]);
     await db.query("delete from tenants where id = $1", [t[0].id]);
   }
+});
+
+/*
+ * ── O APELIDO SÓ PROTEGE QUEM TEM O QUE PROTEGER (16/09/2026) ────────────
+ *
+ * Felipe: "quando alterar o endereço da galeria, apagar o antigo".
+ *
+ * O apelido nasceu para um risco real — o link vai para o WhatsApp do casal e é
+ * repassado para a família — e continua valendo ali. Só que ele era criado
+ * SEMPRE, inclusive na galeria que nunca foi publicada, onde não existe link
+ * nenhum em circulação. Ali ele não protegia nada: ocupava o endereço, gastava
+ * uma das três trocas e ainda aparecia na tela dizendo "também continua
+ * abrindo". É exatamente o caso do `paula-bruno-2` que originou o recurso —
+ * galeria criada por engano, corrigida antes de qualquer entrega.
+ */
+console.log("\nO endereço antigo que não precisa existir:\n");
+
+await etapa("galeria que nunca foi publicada NÃO deixa apelido para trás", async () => {
+  const nova = await galeriaDaRodada(db, { nome: "endereco-3", medias: 0, publicada: false });
+  const antes = nova.slug;
+  const r = await trocarEnderecoDaGaleria(nova.id, nova.tenant_id, "endereco-corrigido");
+  if (!r.ok) throw new Error(`recusou: ${r.erro}`);
+
+  const sobrou = await apelidosDaGaleria(nova.id);
+  if (sobrou.length > 0) {
+    throw new Error(`guardou ${JSON.stringify(sobrou.map((a) => a.slug))} sem ninguém ter o link`);
+  }
+  const achado = await resolverGaleriaDoEstudio(nova.tenant_id, antes);
+  if (achado) throw new Error("o endereço anterior continua abrindo uma galeria nunca entregue");
+  return "o anterior deixou de existir";
+});
+
+await etapa("a partir da SEGUNDA troca, o anterior é guardado", async () => {
+  /* A primeira troca não deixou rastro, mas a segunda sim: a existência de um
+     apelido é ela própria sinal de que a galeria já andou por aí. É o que
+     impede a regra de apagar um endereço que já foi divulgado por outro
+     caminho que não a publicação. */
+  const nova = await galeriaDaRodada(db, { nome: "endereco-3", medias: 0, publicada: false });
+  await db.query(
+    "insert into enderecos_antigos_galeria (tenant_id, slug, galeria_id) values ($1,$2,$3) on conflict do nothing",
+    [nova.tenant_id, `rastro-${nova.id.slice(0, 8)}`, nova.id],
+  );
+  const antes = (await db.query("select slug from galerias where id = $1", [nova.id])).rows[0].slug;
+  const r = await trocarEnderecoDaGaleria(nova.id, nova.tenant_id, "com-rastro-anterior");
+  if (!r.ok) throw new Error(`recusou: ${r.erro}`);
+  const achado = await resolverGaleriaDoEstudio(nova.tenant_id, antes);
+  if (achado?.slugAtual !== "com-rastro-anterior") {
+    throw new Error("com rastro anterior, o endereço de saída deveria ter sido guardado");
+  }
+  return "guardado";
+});
+
+await etapa("apagar um endereço antigo faz ele parar de abrir", async () => {
+  /* O caso oposto ao do typo: o link foi entregue, vazou, e trocar o endereço
+     era justamente para revogá-lo. Enquanto o anterior continuasse abrindo, a
+     troca não revogava nada. */
+  await limparApelidos();
+  const antes = await slugAgora();
+  await trocarEnderecoDaGaleria(g.id, g.tenant_id, "endereco-para-revogar");
+  if (!(await resolverGaleriaDoEstudio(g.tenant_id, antes))) {
+    throw new Error("o apelido nem chegou a existir");
+  }
+
+  const r = await esquecerApelidoDaGaleria(g.id, g.tenant_id, antes);
+  if (!r.ok) throw new Error("não apagou");
+  if (await resolverGaleriaDoEstudio(g.tenant_id, antes)) {
+    throw new Error("apagou e o endereço continua abrindo");
+  }
+  return `/${antes} parou de abrir`;
+});
+
+await etapa("apagar apelido de OUTRO estúdio não acontece", async () => {
+  const outro = await galeriaDaRodada(db, { nome: "endereco-2", medias: 0, publicada: false });
+  await db.query(
+    "insert into enderecos_antigos_galeria (tenant_id, slug, galeria_id) values ($1,$2,$3) on conflict do nothing",
+    [outro.tenant_id, "nao-e-meu", outro.id],
+  );
+  /* Mesmo estúdio na bancada, então o que separa é o `galeria_id`: apagar
+     pedindo pela galeria errada não pode alcançar a linha da outra. */
+  const r = await esquecerApelidoDaGaleria(g.id, g.tenant_id, "nao-e-meu");
+  if (r.ok) throw new Error("apagou o apelido de outra galeria");
+  const ainda = await resolverGaleriaDoEstudio(outro.tenant_id, "nao-e-meu");
+  if (!ainda) throw new Error("o apelido da outra galeria sumiu mesmo assim");
+  return "recusado";
 });
 
 console.log("\nNo link do cliente:\n");

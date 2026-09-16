@@ -1224,3 +1224,29 @@ export async function trocarEnderecoGaleriaAction(
   revalidatePath("/painel");
   return { ok: `Endereço agora é /${r.slug}.` };
 }
+
+/**
+ * Apaga um endereço antigo da galeria: ele deixa de abrir.
+ *
+ * Felipe, 16/09/2026: "quando alterar o endereço da galeria, apagar o antigo".
+ * A troca em si já não guarda apelido quando não há link em circulação (ver
+ * `jaCirculou`); esta ação é para os apelidos que JÁ existem, e para o caso em
+ * que apagar é o objetivo — trocar de endereço para revogar um link que vazou
+ * não revogava nada enquanto o anterior continuasse abrindo.
+ */
+export async function esquecerApelidoGaleriaAction(
+  _estado: { ok?: string; erro?: string },
+  form: FormData,
+): Promise<{ ok?: string; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const slug = String(form.get("slug") ?? "");
+  if (!galeriaId || !slug) return { erro: "Endereço não identificado." };
+
+  const { esquecerApelidoDaGaleria } = await import("@/lib/endereco-galeria");
+  const r = await esquecerApelidoDaGaleria(galeriaId, tenantId, slug);
+  if (!r.ok) return { erro: "Este endereço já não estava guardado." };
+
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return { ok: `/${slug} deixou de abrir esta galeria.` };
+}
