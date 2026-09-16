@@ -211,6 +211,45 @@ if ! npx tsc --noEmit; then
 fi
 echo "  tipos ok"
 
+# ── A BANCADA EM DIA, ANTES DA SUITE (16/09/2026) ───────────────────────────
+#
+# O portao de migracao la em cima pergunta ao banco de PRODUCAO. Ninguem
+# perguntava ao banco LOCAL -- e e contra ele que a suite inteira roda, dali a
+# tres linhas.
+#
+# Felipe publicou os 29 ajustes em 16/09 e o portao devolveu quarenta suites
+# vermelhas: `column "slug" does not exist` na 034, e a rota de upload
+# respondendo 500 sem JSON porque `medias.tirada_em` (035) nao existia. O codigo
+# estava certo; a bancada e que estava atrasada. Uma rodada inteira do portao
+# gasta para descobrir isso.
+#
+# E a mesma etapa que o .github/workflows/publicar.yml faz antes de chamar este
+# script: o runner nasce com o banco vazio e migra antes de conferir qualquer
+# coisa. Aqui a bancada e velha em vez de vazia, e o efeito e igual.
+#
+# DEPOIS DO TSC, de proposito: se o codigo nem compila, nao ha por que mexer no
+# banco de ninguem. E ANTES do servidor do portao, porque o `/api/healthz` que
+# ele espera responder ja consulta o banco.
+#
+# O GUARDA DE PRODUCAO RODA PRIMEIRO, e nao e zelo excessivo. Este passo aplica
+# migracao no que a DATABASE_URL apontar; um `.env.local` copiado do servidor
+# faria o deploy migrar PRODUCAO aqui -- antes do portao, que e exatamente o
+# estado que a secao "A migracao, agora que o codigo passou" existe para
+# impedir. O guarda e o mesmo `scripts/guarda-producao.mjs` que toda suite usa:
+# uma regra de "banco de teste" no repositorio, nao duas.
+echo "→ atualizando o banco da bancada"
+if ! node --env-file=.env.local \
+     -e "import('./scripts/guarda-producao.mjs').then(g => g.exigirBancoDeTeste())"; then
+	echo "✗ a bancada aponta para um banco que nao e de teste — nada foi publicado."
+	exit 1
+fi
+if ! node --env-file=.env.local scripts/migrar.mjs --aplicar; then
+	echo "✗ não consegui pôr a bancada em dia — nada foi publicado."
+	echo "  A suíte roda contra este banco; com ele atrasado, o portão reprova por"
+	echo "  coluna que falta e não por defeito do código."
+	exit 1
+fi
+
 # ── O servidor do portao ────────────────────────────────────────────────────
 #
 # A suite fala HTTP. Ate 27/08/2026 ela falava com o servidor de desenvolvimento
