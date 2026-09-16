@@ -33,9 +33,9 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
   if (!galeria) notFound();
 
   const totalMedias = await contarMediasProntas(galeria.id);
-  /* Os endereços antigos, para a tela poder dizer quais links continuam
-     abrindo depois de uma troca — é a informação que transforma "trocar o
-     endereço" de aposta em decisão. Ver `lib/endereco-galeria.ts`. */
+  /* O que sobrou das trocas feitas antes de 16/09/2026: desde então trocar o
+     endereço apaga o anterior, mas estes ainda abrem, e a tela não pode
+     escondê-los de quem precisa apagá-los. Ver `lib/endereco-galeria.ts`. */
   const apelidos = await apelidosDaGaleria(galeria.id);
 
   // Só pesa quando a busca está ligada; desligada, os dois números são zero.
@@ -60,6 +60,7 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
       <EnderecoDaGaleria
         galeriaId={galeria.id}
         slug={galeria.slug}
+        publicada={galeria.publicada}
         apelidos={apelidos.map((a) => a.slug)}
       />
 

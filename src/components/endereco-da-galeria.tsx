@@ -8,29 +8,35 @@ import {
 } from "@/app/painel/actions";
 
 /**
- * O endereço da galeria, editável — e a lista dos que continuam abrindo.
+ * O endereço da galeria, editável — e o aviso de que trocar mata o anterior.
  *
  * Juan, 05/09/2026: "to tentando trocar o url e não consigo, clico e a área não
  * é clicável" — e depois, sobre `paula-bruno-2`, "não consegui arrumar o 2".
  *
- * O campo era travado com razão (o link vai para o WhatsApp do casal), e a
- * trava caiu quando o endereço anterior passou a virar apelido: ele continua
- * abrindo, com redirecionamento permanente. Ver `lib/endereco-galeria.ts`.
+ * O campo era travado com razão (o link vai para o WhatsApp do casal). A trava
+ * caiu primeiro guardando o endereço de saída como apelido; desde 16/09/2026,
+ * não: Felipe pediu "quando alterar o endereço da galeria, apagar o antigo" e,
+ * perguntado sobre a galeria já entregue, "pode apagar sempre o endereço
+ * antigo". Ver `lib/endereco-galeria.ts`.
  *
- * ── OS APELIDOS APARECEM, E É ISSO QUE FAZ A TROCA SER UMA DECISÃO ────────
+ * ── O AVISO É O QUE FAZ A TROCA SER UMA DECISÃO ───────────────────────────
  *
- * Sem a lista, "o endereço anterior continua funcionando" é uma promessa que a
- * pessoa tem de acreditar. Com ela, é uma coisa que ela vê — e no dia em que
- * alguém perguntar "aquele link antigo ainda abre?", a resposta está na tela em
- * vez de num comentário de código.
+ * Antes, a tela listava os endereços que continuavam abrindo, e essa lista era
+ * a prova de uma promessa boa. Agora a notícia é a oposta, e esconder notícia
+ * ruim é pior que não ter tido a boa: o texto embaixo do campo diz o que
+ * acontece, e a galeria NO AR ainda pergunta antes — é a única tela em que
+ * salvar um campo pode matar um link que está na mão de alguém.
  */
 export function EnderecoDaGaleria({
   galeriaId,
   slug,
+  publicada,
   apelidos,
 }: {
   galeriaId: string;
   slug: string;
+  /** No ar = pode haver link entregue, e aí a troca pergunta antes. */
+  publicada: boolean;
   /** Endereços anteriores que ainda levam para cá, do mais novo ao mais velho. */
   apelidos: string[];
 }) {
@@ -56,9 +62,8 @@ export function EnderecoDaGaleria({
     <div className="rounded-xl border border-linha bg-carbon p-4">
       <span className="block text-sm font-medium">Endereço da galeria</span>
       <p className="mt-0.5 text-xs text-texto-faint">
-        É a parte final do link do cliente. Depois de publicada, trocar o endereço mantém o
-        anterior abrindo, para os links que você já entregou não quebrarem. Antes disso, o
-        anterior simplesmente deixa de existir.
+        É a parte final do link do cliente. Trocar o endereço apaga o anterior: quem já tiver o link
+        antigo vai ver uma página de endereço não encontrado.
       </p>
 
       <form action={agir} className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -74,6 +79,21 @@ export function EnderecoDaGaleria({
         <button
           type="submit"
           disabled={ocupado}
+          onClick={(e) => {
+            /* Só com a galeria no ar: em rascunho não existe link entregue, e
+               perguntar ali seria o susto sem a notícia — justamente o caso do
+               `paula-bruno-2`, endereço corrigido antes de qualquer entrega. */
+            if (!publicada) return;
+            if (
+              !confirm(
+                `Trocar o endereço de /${slug}?\n\n` +
+                  `Esta galeria está no ar. O endereço atual para de abrir na hora, e quem já ` +
+                  `tiver esse link vai ver uma página de endereço não encontrado.`,
+              )
+            ) {
+              e.preventDefault();
+            }
+          }}
           className="rounded-lg border border-linha-forte px-3 py-2 text-sm transition hover:bg-carbon-2 disabled:opacity-50"
         >
           {ocupado ? "Salvando…" : "Salvar"}
@@ -81,22 +101,18 @@ export function EnderecoDaGaleria({
       </form>
 
       {/*
-        ── APAGAR UM ENDEREÇO ANTIGO (16/09/2026) ──────────────────────────
+        ── O QUE SOBROU DAS TROCAS ANTIGAS (16/09/2026) ────────────────────
  
-        Felipe: "quando alterar o endereço da galeria, apagar o antigo".
+        A troca não guarda mais apelido, mas as galerias que trocaram ANTES
+        disso carregam os seus, e eles continuam abrindo. Some da tela sozinho:
+        a próxima troca leva todos junto, e o "apagar" leva um agora — que é o
+        que importa quando o link vazou e a pressa é essa.
  
-        A troca já não guarda apelido quando não há link em circulação — ver
-        `jaCirculou`. O que sobra é o caso em que apagar é o OBJETIVO: o link
-        foi entregue, vazou para quem não devia, e trocar o endereço era
-        justamente para revogá-lo. Enquanto o anterior continuasse abrindo, a
-        troca não revogava nada.
- 
-        Pergunta antes, e a pergunta diz a consequência pelo nome: é a única
-        ação desta tela que pode matar um link que está na mão de alguém.
+        Pergunta antes, e a pergunta diz a consequência pelo nome.
       */}
       {apelidos.length > 0 && (
         <div className="mt-2 text-xs text-texto-faint">
-          <span>Também continuam abrindo:</span>
+          <span>De trocas anteriores, ainda abrem:</span>
           <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
             {apelidos.map((a) => (
               <li key={a} className="flex items-center gap-1.5">
@@ -126,6 +142,7 @@ export function EnderecoDaGaleria({
               </li>
             ))}
           </ul>
+          <p className="mt-1">Salvar um endereço novo também apaga estes.</p>
         </div>
       )}
 

@@ -3,10 +3,7 @@ import { consultar, consultarUm, emTransacao } from "./db";
 import { gerarSlug } from "./tenants";
 
 /**
- * O ENDEREÇO DA GALERIA, E O APELIDO QUE SOBREVIVE À TROCA.
- *
- * Irmão de `lib/endereco.ts`, que faz isto para o endereço do ESTÚDIO. Mesmo
- * problema, mesma forma, uma diferença que muda tudo — ver "o escopo" abaixo.
+ * O ENDEREÇO DA GALERIA, E O QUE SOBRA DO ANTERIOR: NADA.
  *
  * ── O PEDIDO ──────────────────────────────────────────────────────────────
  *
@@ -15,45 +12,49 @@ import { gerarSlug } from "./tenants";
  * consegui arrumar o 2". A galeria nasceu com o 2 porque ele já tinha criado
  * uma `paula-bruno` por engano.
  *
- * ── POR QUE O CAMPO ERA TRAVADO, E POR QUE A TRAVA CAIU ───────────────────
+ * ── POR QUE O CAMPO ERA TRAVADO ───────────────────────────────────────────
  *
  * `galerias.slug` é a metade final do link que vai para o WhatsApp do casal e é
  * repassado para a família inteira. Trocá-lo transformava em erro um link em
  * circulação — e link de casamento não se reenvia.
  *
  * A primeira resposta foi permitir a troca só enquanto a galeria não tivesse
- * sido publicada nem aberta. Era seguro e era metade: quem errou o endereço e
- * só percebeu depois de entregar continuava preso a ele, que é justamente
- * quando a pessoa percebe — o casal responde "que 2 é esse?".
+ * sido publicada nem aberta: seguro e pela metade, porque quem errou o endereço
+ * e só percebeu depois de entregar continuava preso a ele. A segunda foi guardar
+ * o endereço de saída como APELIDO, que continuava abrindo e redirecionava para
+ * o novo (migração 030).
  *
- * Agora troca sempre, e o endereço anterior vira APELIDO: continua abrindo, com
- * redirecionamento permanente para o novo (migração 030). O casal não percebe
- * nada.
+ * ── A REGRA DE HOJE: TROCAR APAGA (16/09/2026) ────────────────────────────
+ *
+ * Felipe: "quando alterar o endereço da galeria, apagar o antigo". Perguntei se
+ * valia também para a galeria já entregue, onde o apelido é o que segura o link
+ * do casal: "pode apagar sempre o endereço antigo".
+ *
+ * Então o apelido acabou, e a consequência tem nome: trocar o endereço de uma
+ * galeria entregue MATA o link que está no WhatsApp do casal. A escolha se
+ * defende sozinha nos dois motivos reais de trocar — consertar um engano, e aí
+ * não há link nenhum em circulação; ou revogar um link que vazou, e aí o apelido
+ * era justamente o defeito, porque a troca não revogava coisa alguma.
+ *
+ * O que não se defende é descobrir isso depois. Por isso a tela diz antes, e a
+ * galeria no ar ainda pergunta — ver `components/endereco-da-galeria.tsx`.
+ *
+ * ── A TABELA CONTINUA, E SÓ ESVAZIA ───────────────────────────────────────
+ *
+ * `enderecos_antigos_galeria` (030) não recebe mais nenhuma linha. As que já
+ * existem continuam sendo lidas, e isso é decisão, não esquecimento: apagar
+ * todas na subida mataria de uma vez, sem aviso e sem volta, links que hoje
+ * funcionam. Cada linha some quando a galeria dela trocar de endereço de novo,
+ * ou quando alguém apertar "apagar" na tela de Entrega.
  *
  * ── O ESCOPO: DENTRO DO ESTÚDIO, NÃO NO MUNDO ─────────────────────────────
  *
- * Apelido de estúdio é global — dois estúdios não podem reivindicar o mesmo,
- * senão o link de um passa a abrir a galeria do outro. Apelido de galeria não:
- * ele vive dentro de `/g/<estudio>/<galeria>`, e duas fotógrafas podem ter,
- * cada uma, uma `paula-bruno` sem conflito nenhum. Tornar global aqui
- * inventaria uma escassez que o endereço não tem — a primeira `casamento` do
- * sistema tomaria a palavra de todo mundo.
- *
- * O que NÃO pode é outra galeria DO MESMO ESTÚDIO tomar um apelido: aí o link
- * entregue ao casal A passaria a abrir as fotos do casamento B, funcionando e
- * errado. É a recusa que `testar-endereco-galeria.mjs` mais insiste.
+ * Vale para o que restou de apelido: ele vive dentro de `/g/<estudio>/<galeria>`
+ * e é único por estúdio, não global. Duas fotógrafas podem ter, cada uma, uma
+ * `paula-bruno` sem conflito nenhum. O que não pode é outra galeria DO MESMO
+ * ESTÚDIO tomar um apelido vivo: aí o link entregue ao casal A passaria a abrir
+ * as fotos do casamento B, funcionando e errado.
  */
-
-/**
- * Quantas vezes uma galeria pode trocar de endereço.
- *
- * Mesmo número e mesmo raciocínio do estúdio (`LIMITE_TROCAS`): a tabela de
- * apelidos cresce para sempre e é consultada em toda visita que erra o
- * endereço. Trocar é consertar um erro, não rotina — e quem precisar da quarta
- * fala com a gente, conversa barata; descobrir que a tabela virou depósito não
- * é.
- */
-export const LIMITE_TROCAS_GALERIA = 3;
 
 export interface GaleriaResolvida {
   galeriaId: string;
@@ -68,6 +69,10 @@ export interface GaleriaResolvida {
  *
  * Só é chamada quando a busca normal já não achou a galeria: o caminho comum é
  * o do endereço certo, e ele não pode pagar a consulta de quem errou.
+ *
+ * A segunda consulta só encontra apelidos ANTERIORES a 16/09/2026 — desde então
+ * a troca não guarda nenhum. Ela fica porque esses links estão na mão de gente
+ * que não tem como saber disso.
  */
 export async function resolverGaleriaDoEstudio(
   tenantId: string,
@@ -91,7 +96,7 @@ export async function resolverGaleriaDoEstudio(
   return { galeriaId: antigo.galeria_id, slugAtual: antigo.slug_atual, ehAntigo: true };
 }
 
-/** Os endereços antigos desta galeria, do mais recente para o mais velho. */
+/** Os endereços antigos que esta galeria ainda carrega, do mais novo ao mais velho. */
 export async function apelidosDaGaleria(galeriaId: string) {
   return consultar<{ slug: string; criado_em: Date }>(
     "select slug, criado_em from enderecos_antigos_galeria where galeria_id = $1 order by criado_em desc",
@@ -102,45 +107,11 @@ export async function apelidosDaGaleria(galeriaId: string) {
 export type ResultadoDoEndereco = { ok: true; slug: string } | { ok: false; erro: string };
 
 /**
- * ── O APELIDO SÓ EXISTE PARA PROTEGER LINK QUE CIRCULOU (16/09/2026) ──────
- *
- * Felipe: "quando alterar o endereço da galeria, apagar o antigo".
- *
- * O apelido nasceu de um risco real e continua valendo: o endereço vai para o
- * WhatsApp do casal e é repassado para a família inteira, e link de casamento
- * não se reenvia. Só que ele estava sendo criado SEMPRE — inclusive na galeria
- * que nunca foi publicada, onde não existe link nenhum em circulação para
- * proteger. Ali o apelido não protege nada: é lixo que ocupa o endereço, conta
- * contra o limite de três trocas e ainda aparece na tela dizendo "também
- * continua abrindo".
- *
- * É exatamente o caso do `paula-bruno-2` que deu origem ao recurso — galeria
- * criada por engano, endereço corrigido antes de qualquer entrega.
- *
- * A regra passa a ser: guarda apelido quem TEM o que proteger. Galeria que
- * nunca esteve no ar troca de endereço e o anterior simplesmente deixa de
- * existir. Publicada, o apelido continua nascendo — e para apagá-lo há
- * `esquecerApelidoDaGaleria`, que é uma decisão consciente e não um efeito
- * colateral de corrigir um typo.
- */
-async function jaCirculou(galeriaId: string): Promise<boolean> {
-  const linha = await consultarUm<{ circulou: boolean }>(
-    `select (g.publicada
-             or exists (select 1 from enderecos_antigos_galeria a where a.galeria_id = g.id)
-             or exists (select 1 from acessos ac where ac.galeria_id = g.id)) as circulou
-       from galerias g where g.id = $1`,
-    [galeriaId],
-  );
-  return Boolean(linha?.circulou);
-}
-
-/**
  * Apaga um endereço antigo: ele deixa de abrir a galeria.
  *
- * Existe para quem trocou de endereço DEPOIS de entregar e, mais tarde, quer o
- * anterior fora do ar — o caso mais provável é o oposto do typo: o link vazou e
- * trocar o endereço era justamente para revogá-lo. Enquanto o apelido existisse,
- * a troca não revogava nada.
+ * Desde 16/09/2026 a troca já não guarda apelido nenhum, então isto serve ao que
+ * ficou das trocas anteriores — e serve AGORA, sem esperar a próxima troca, que
+ * é o que interessa quando o link vazou e a pressa é justamente essa.
  *
  * É destrutivo e não tem volta pelo produto (o apelido pode ser reivindicado por
  * outra galeria depois), então quem chama pergunta antes.
@@ -158,15 +129,16 @@ export async function esquecerApelidoDaGaleria(
 }
 
 /**
- * Troca o endereço, guardando o anterior como apelido.
+ * Troca o endereço. O anterior deixa de existir.
  *
  * O texto pedido passa por `gerarSlug` — a MESMA função que nomeia a galeria na
  * criação. Duas regras de endereço divergiriam: a pessoa digitaria algo que a
  * criação aceita e a troca recusa, sem entender a diferença.
  *
- * As duas escritas — gravar o apelido e trocar o slug — vão numa transação. Sem
- * ela, uma falha entre as duas deixa o pior estado possível: o endereço novo no
- * ar e o antigo sem apelido, ou seja, o link do casal morto e ninguém sabendo.
+ * As duas escritas — largar os endereços antigos e trocar o slug — vão numa
+ * transação. Sem ela, uma falha entre as duas apagaria os apelidos de uma troca
+ * que não aconteceu: a galeria ficaria no endereço velho e sem o que ainda a
+ * protegia.
  */
 export async function trocarEnderecoDaGaleria(
   galeriaId: string,
@@ -196,11 +168,12 @@ export async function trocarEnderecoDaGaleria(
   if (ocupado) return { ok: false, erro: `Você já tem uma galeria em /${slug}.` };
 
   /*
-   * O apelido é de OUTRA galeria do mesmo estúdio.
+   * O endereço pedido é apelido vivo de OUTRA galeria do mesmo estúdio — dos que
+   * ficaram de antes de 16/09/2026. Enquanto aquele link abrir a galeria dela,
+   * este estúdio não pode entregá-lo a esta aqui.
    *
-   * `galeria_id <> $3` é o que permite RETOMAR o próprio apelido: quem trocou
-   * por engano precisa poder voltar, e recusar a volta a prenderia no endereço
-   * novo exatamente pelo motivo que a prendia no antigo.
+   * `galeria_id <> $3` deixa de fora os apelidos da própria galeria: retomar um
+   * endereço que já foi seu é permitido, e a troca apaga a linha logo abaixo.
    */
   const apelidoAlheio = await consultarUm(
     "select 1 from enderecos_antigos_galeria where tenant_id = $1 and slug = $2 and galeria_id <> $3",
@@ -209,53 +182,27 @@ export async function trocarEnderecoDaGaleria(
   if (apelidoAlheio) {
     return {
       ok: false,
-      erro: `/${slug} foi o endereço de outra galeria sua e continua abrindo aquela. Escolha outro.`,
+      erro: `/${slug} foi o endereço de outra galeria sua e continua abrindo aquela. Apague-o na Entrega dela para poder usá-lo aqui.`,
     };
   }
-
-  /* O limite conta os apelidos QUE VÃO SOBRAR. Retomar um endereço anterior
-     REMOVE um apelido em vez de somar, e não pode gastar cota por isso — senão
-     desfazer um engano custa o mesmo que cometê-lo. */
-  const retomando = await consultarUm(
-    "select 1 from enderecos_antigos_galeria where tenant_id = $1 and slug = $2 and galeria_id = $3",
-    [tenantId, slug, galeriaId],
-  );
-  const trocas = await consultarUm<{ n: number }>(
-    "select count(*)::int as n from enderecos_antigos_galeria where galeria_id = $1",
-    [galeriaId],
-  );
-  if (!retomando && (trocas?.n ?? 0) >= LIMITE_TROCAS_GALERIA) {
-    return {
-      ok: false,
-      erro: `Esta galeria já trocou de endereço ${LIMITE_TROCAS_GALERIA} vezes, que é o limite. Fale com a gente se precisar de mais uma.`,
-    };
-  }
-
-  const guardarApelido = await jaCirculou(galeriaId);
 
   try {
     return await emTransacao(async (q) => {
-      /* O endereço que sai vira apelido — SE houver link a proteger. Ver
-         `jaCirculou`: galeria que nunca esteve no ar não deixa rastro, e o
-         endereço anterior some de vez, que foi o pedido do Felipe.
-
-         `on conflict do nothing` cobre o vaivém — trocar para A, para B e de
-         volta para A deixaria o apelido A já gravado, e isso não é erro. */
-      if (guardarApelido) {
-        await q(
-          `insert into enderecos_antigos_galeria (tenant_id, slug, galeria_id)
-                values ($1, $2, $3)
-           on conflict (tenant_id, slug) do nothing`,
-          [tenantId, galeria.slug, galeriaId],
-        );
-      }
-      /* O apelido que a galeria está retomando deixa de ser apelido: ele volta
-         a ser o endereço vigente, e uma linha dizendo "este endereço é antigo"
-         mandaria o visitante para si mesmo, em laço. */
-      await q(
-        "delete from enderecos_antigos_galeria where tenant_id = $1 and slug = $2 and galeria_id = $3",
-        [tenantId, slug, galeriaId],
-      );
+      /*
+       * O endereço que sai não vira apelido, e os que já eram apelido vão junto:
+       * TODOS, não só o que está saindo agora.
+       *
+       * "Trocar o endereço apaga o antigo" não conviveria com um apelido de três
+       * trocas atrás continuando no ar — a pessoa acabou de ler que o anterior
+       * morre, e a tela seguiria listando endereços vivos.
+       *
+       * É também o que permite RETOMAR um endereço anterior sem laço: a linha
+       * dizendo "este endereço é antigo" mandaria o visitante para si mesmo.
+       */
+      await q("delete from enderecos_antigos_galeria where tenant_id = $1 and galeria_id = $2", [
+        tenantId,
+        galeriaId,
+      ]);
       const linhas = await q<{ slug: string }>(
         "update galerias set slug = $1, atualizado_em = now() where id = $2 and tenant_id = $3 returning slug",
         [slug, galeriaId, tenantId],
