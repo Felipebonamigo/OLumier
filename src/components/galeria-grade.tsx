@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { DENSIDADES, LARGURA_DA_FOTO, type Aparencia } from "@/config/aparencia";
-import { colunasDaGrade, colunasDoItem, distribuirEmColunas } from "@/lib/grade-mural";
+import { agruparEmFileiras, colunasDaGrade, distribuirEmColunas } from "@/lib/grade-mural";
 
 /**
  * As cinco grades.
@@ -50,21 +50,33 @@ const useEfeitoDeLayout = typeof window === "undefined" ? useEffect : useLayoutE
 function useColunas(largura: number, gap: number, minColunas: number, maxColunas: number) {
   const ref = useRef<HTMLDivElement>(null);
   const [colunas, setColunas] = useState(1);
+  /*
+   * A LARGURA MEDIDA sai junto desde 16/09/2026, para o panorama.
+   *
+   * O mural só precisa do NÚMERO de colunas — o flex reparte a largura sozinho.
+   * A fileira justificada precisa da largura em pixels: a altura de cada
+   * fileira é `largura útil ÷ soma das proporções`, e sem o número não há
+   * conta. Zero é o valor antes da medição, e quem lê trata como "ainda não
+   * sei" em vez de dividir por ele.
+   */
+  const [larguraMedida, setLarguraMedida] = useState(0);
 
   useEfeitoDeLayout(() => {
     const el = ref.current;
     if (!el) return;
-    const medir = () =>
+    const medir = () => {
       setColunas(colunasDaGrade(el.clientWidth, largura, gap, minColunas, maxColunas));
+      setLarguraMedida(el.clientWidth);
+    };
     medir();
     /* Redimensionar a janela, girar o celular, abrir o painel lateral — todos
        mudam a largura sem passar por nenhuma prop. */
     const observador = new ResizeObserver(medir);
     observador.observe(el);
     return () => observador.disconnect();
-  }, [largura, gap]);
+  }, [largura, gap, minColunas, maxColunas]);
 
-  return [ref, colunas] as const;
+  return [ref, colunas, larguraMedida] as const;
 }
 
 interface PropsGrade {
@@ -88,13 +100,24 @@ interface PropsGrade {
 function Mural({
   quantidade,
   render,
+  proporcao,
   largura,
   gap,
   minColunas,
   maxColunas,
-}: Omit<PropsGrade, "aparencia" | "proporcao"> & LimitesDaGrade) {
+}: Omit<PropsGrade, "aparencia"> & LimitesDaGrade) {
   const [ref, colunas] = useColunas(largura, gap, minColunas, maxColunas);
-  const distribuicao = distribuirEmColunas(quantidade, colunas);
+  /*
+   * A ALTURA ENTRA NA CONTA (16/09/2026).
+   *
+   * Repartir por contagem (`i % colunas`) deixava uma coluna com os retratos e
+   * a vizinha com as deitadas: mesmo número de fotos, quase o dobro de altura —
+   * "umas partes vazias e outra comprida", nas palavras do Felipe. A altura de
+   * uma foto numa coluna de largura 1 é `1 / proporção`; com ela,
+   * `distribuirEmColunas` fecha as colunas quase no mesmo rodapé sem mexer na
+   * ordem. Ver `lib/grade-mural.ts`.
+   */
+  const distribuicao = distribuirEmColunas(quantidade, colunas, (i) => 1 / proporcao(i));
 
   return (
     <div ref={ref} style={{ display: "flex", gap, alignItems: "flex-start" }}>
@@ -113,16 +136,32 @@ function Mural({
 }
 
 /**
- * PANORAMA — a foto deitada ocupa o dobro da largura.
+ * PANORAMA — fileiras justificadas, com a foto deitada valendo por duas.
  *
  * Diferente do editorial, que promove uma a cada cinco sem olhar para a foto:
- * aqui quem decide é a própria imagem. Paisagem, mesa de festa, foto de drone
- * — o enquadramento que o fotógrafo escolheu horizontal aparece horizontal.
+ * aqui quem decide é a própria imagem. Paisagem, mesa de festa, foto de drone —
+ * o enquadramento que o fotógrafo escolheu horizontal aparece horizontal.
  *
- * As colunas são declaradas com número EXATO (`repeat(n, ...)`) e não com
- * `auto-fill`: o JavaScript precisa saber quantas são para decidir quem ocupa
- * duas, e duas fontes de verdade para o mesmo número acabariam discordando
- * justamente na largura em que o layout quebra.
+ * ── POR QUE DEIXOU DE SER UMA GRADE DE CSS (16/09/2026) ──────────────────
+ *
+ * Felipe: "na panorama, a foto não está bem encaixada nos limites, a segunda
+ * foto da esquerda pra direita fica um espaço grande em branco".
+ *
+ * Era `grid` com linhas de altura fixa e cada foto ocupando duas. Essa caixa só
+ * fecha certo para UMA proporção — retrato 2:3. Foto quadrada desenhava a
+ * largura inteira e dois terços da altura, e o terço restante era o branco da
+ * foto dele. Pior: quando a deitada pedia duas colunas com só uma sobrando, o
+ * CSS a empurrava para a fileira seguinte e deixava o vão para trás.
+ *
+ * A fileira justificada resolve os dois de uma vez, e é a matemática que todo
+ * mural de fotografia usa: dada a largura da tela, a altura da fileira é
+ * `largura útil ÷ soma das proporções`. Nessa altura, as larguras naturais das
+ * fotos somam exatamente a largura disponível — não sobra vão, e nada é
+ * cortado, que é a promessa desta grade.
+ *
+ * A ÚLTIMA FILEIRA é a exceção e continua com a altura das anteriores: uma
+ * fileira com duas fotos esticadas até a borda desenharia duas fotos gigantes
+ * no fim da galeria. Ela fica alinhada à esquerda, como num texto.
  */
 function Panorama({
   quantidade,
@@ -133,32 +172,53 @@ function Panorama({
   minColunas,
   maxColunas,
 }: Omit<PropsGrade, "aparencia"> & LimitesDaGrade) {
-  const [ref, colunas] = useColunas(largura, gap, minColunas, maxColunas);
-  const itens = Array.from({ length: quantidade }, (_, i) => i);
+  const [ref, colunas, larguraMedida] = useColunas(largura, gap, minColunas, maxColunas);
+  const proporcoes = Array.from({ length: quantidade }, (_, i) => {
+    const p = proporcao(i);
+    /* Proporção inválida viraria divisão por zero e uma fileira de altura
+       infinita. 4/5 é o mesmo palpite que a galeria usa quando o banco não sabe
+       o tamanho da foto. */
+    return Number.isFinite(p) && p > 0 ? p : 4 / 5;
+  });
+  const fileiras = agruparEmFileiras(proporcoes, colunas);
+
+  /* Antes de medir, a largura é 0 e não há conta a fazer: o primeiro quadro
+     desenha uma coluna, que é o que o servidor manda e o que o celular recebe.
+     `alturaBase` é a reserva para esse instante e para a última fileira. */
+  const alturaBase = Math.round(largura * 1.25);
 
   return (
-    <div
-      ref={ref}
-      style={{
-        display: "grid",
-        gap,
-        gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))`,
-        /* Duas fileiras por foto: a altura fica ~1,5× a largura de uma coluna,
-           que é a caixa de um retrato 2:3. A deitada usa a mesma altura e o
-           dobro da largura. */
-        gridAutoRows: `${Math.round(largura * 0.75)}px`,
-      }}
-    >
-      {itens.map((i) =>
-        render(
-          i,
-          {
-            gridColumn: `span ${colunasDoItem(proporcao(i), colunas)}`,
-            gridRow: "span 2",
-          },
-          "block h-full w-full",
-        ),
-      )}
+    <div ref={ref} style={{ display: "flex", flexDirection: "column", gap }}>
+      {fileiras.map((indices, f) => {
+        const soma = indices.reduce((t, i) => t + proporcoes[i], 0);
+        const util = larguraMedida - gap * (indices.length - 1);
+        /* A última fileira quase nunca tem fotos suficientes para preencher a
+           largura. Esticá-la até a borda é o erro clássico do mural
+           justificado: as duas últimas fotos da galeria saem do tamanho de um
+           pôster. Ela mantém a altura das outras e sobra espaço à direita. */
+        const ultimaIncompleta = f === fileiras.length - 1 && fileiras.length > 1;
+        const alturaDaFileira =
+          larguraMedida > 0 && !ultimaIncompleta ? util / soma : alturaBase;
+
+        return (
+          <div key={f} style={{ display: "flex", gap }}>
+            {indices.map((i) =>
+              render(
+                i,
+                {
+                  width: `${proporcoes[i] * alturaDaFileira}px`,
+                  height: `${alturaDaFileira}px`,
+                  /* Arredondamento de subpixel sobra ou falta um pixel na
+                     ponta; encolher é invisível, transbordar quebra a fileira. */
+                  flexShrink: 1,
+                  minWidth: 0,
+                },
+                "block h-full w-full",
+              ),
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -173,6 +233,7 @@ export function GaleriaGrade({ aparencia, quantidade, render, proporcao }: Props
       <Mural
         quantidade={quantidade}
         render={render}
+        proporcao={proporcao}
         largura={largura}
         gap={gap}
         minColunas={minColunas}

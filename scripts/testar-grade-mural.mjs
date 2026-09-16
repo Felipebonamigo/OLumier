@@ -29,7 +29,8 @@
 import * as mod from "../src/lib/grade-mural.ts";
 import { DENSIDADES, LARGURA_DA_FOTO as LARGURA } from "../src/config/aparencia.ts";
 
-const { PROPORCAO_DEITADA, colunasDoItem, colunasQueCabem, distribuirEmColunas, ehDeitada } = mod;
+const { PROPORCAO_DEITADA, agruparEmFileiras, colunasDoItem, colunasQueCabem, distribuirEmColunas, ehDeitada } =
+  mod;
 
 let falhou = false;
 function etapa(nome, fn) {
@@ -167,6 +168,108 @@ etapa("a densidade continua significando algo: mais arejada, menos colunas", () 
       );
     }
   }
+});
+
+/* ── O RODAPÉ DAS COLUNAS (16/09/2026) ────────────────────────────────────
+ *
+ * Felipe, com a foto do fim da galeria: "ficou estranho, umas partes vazias e
+ * outra comprida". Repartir por CONTAGEM dá a cada coluna o mesmo número de
+ * fotos e ignora que retrato é quase o dobro da altura de uma deitada — basta
+ * a ordem das fotos conspirar para uma coluna esticar.
+ *
+ * O teste usa a pior ordem para a repartição por contagem, e ela não é rara:
+ * uma deitada a cada quatro fotos, com quatro colunas na tela. `i % colunas`
+ * manda TODAS as deitadas para a coluna 0 e deixa as outras três só com
+ * retratos — uma coluna curta ao lado de três compridas, que é a foto que o
+ * Felipe mandou. Pela altura isso não tem como acontecer.
+ */
+console.log("\nO rodapé das colunas\n");
+
+/** Altura de cada coluna, somando `1/proporção` de cada foto que caiu nela. */
+const alturasDasColunas = (cols, proporcoes) =>
+  cols.map((c) => c.reduce((t, i) => t + 1 / proporcoes[i], 0));
+
+etapa("a repartição pela altura fecha as colunas quase no mesmo rodapé", () => {
+  /* 24 fotos, uma deitada (3:2) a cada quatro; o resto retrato (2:3). */
+  const proporcoes = Array.from({ length: 24 }, (_, i) => (i % 4 === 0 ? 3 / 2 : 2 / 3));
+  const alturaDe = (i) => 1 / proporcoes[i];
+
+  const porContagem = alturasDasColunas(distribuirEmColunas(24, 4), proporcoes);
+  const porAltura = alturasDasColunas(distribuirEmColunas(24, 4, alturaDe), proporcoes);
+
+  const vao = (a) => Math.max(...a) - Math.min(...a);
+  if (!(vao(porAltura) < vao(porContagem))) {
+    throw new Error(
+      `por altura o vão é ${vao(porAltura).toFixed(2)} e por contagem ${vao(porContagem).toFixed(2)}`,
+    );
+  }
+  /* O vão que sobra não pode passar da altura de UMA foto: é o mínimo teórico
+     de qualquer repartição que não corte nem reordene nada. */
+  const maisAlta = Math.max(...proporcoes.map((p) => 1 / p));
+  if (vao(porAltura) > maisAlta) {
+    throw new Error(`sobrou um vão de ${vao(porAltura).toFixed(2)}, maior que uma foto (${maisAlta.toFixed(2)})`);
+  }
+  return `vão: ${vao(porContagem).toFixed(1)} → ${vao(porAltura).toFixed(1)}`;
+});
+
+etapa("repartir pela altura não mexe na ordem de leitura", () => {
+  const proporcoes = Array.from({ length: 30 }, (_, i) => (i % 3 === 0 ? 3 / 2 : 2 / 3));
+  const cols = distribuirEmColunas(30, 4, (i) => 1 / proporcoes[i]);
+  igual(cols.map((c) => c[0]), [0, 1, 2, 3], "topo das colunas");
+  for (const c of cols) {
+    for (let k = 1; k < c.length; k++) {
+      if (c[k] <= c[k - 1]) throw new Error(`coluna fora de ordem: ${c}`);
+    }
+  }
+  igual(cols.flat().sort((a, b) => a - b), Array.from({ length: 30 }, (_, i) => i), "todas uma vez");
+});
+
+etapa("proporção inválida não contamina a repartição", () => {
+  /* Foto sem largura/altura no banco. Um NaN na soma faria a coluna nunca mais
+     ser escolhida, e tudo cairia numa só. */
+  const cols = distribuirEmColunas(9, 3, (i) => (i === 0 ? NaN : 1));
+  for (const c of cols) {
+    if (c.length === 0) throw new Error(`coluna vazia: ${JSON.stringify(cols)}`);
+  }
+  return cols.map((c) => c.length).join(" · ");
+});
+
+/* ── AS FILEIRAS DO PANORAMA ─────────────────────────────────────────────── */
+console.log("\nPanorama: fileiras cheias\n");
+
+etapa("nenhuma fileira passa da largura da tela", () => {
+  const proporcoes = Array.from({ length: 40 }, (_, i) => (i % 4 === 0 ? 16 / 9 : 2 / 3));
+  for (const colunas of [1, 2, 3, 4, 5]) {
+    for (const fileira of agruparEmFileiras(proporcoes, colunas)) {
+      const unidades = fileira.reduce((t, i) => t + colunasDoItem(proporcoes[i], colunas), 0);
+      if (unidades > colunas) {
+        throw new Error(`fileira de ${unidades} unidades com ${colunas} colunas`);
+      }
+    }
+  }
+  return "conferido de 1 a 5 colunas";
+});
+
+etapa("toda foto entra em exatamente uma fileira, na ordem", () => {
+  const proporcoes = Array.from({ length: 37 }, (_, i) => (i % 3 === 0 ? 3 / 2 : 2 / 3));
+  const plano = agruparEmFileiras(proporcoes, 4).flat();
+  igual(plano, Array.from({ length: 37 }, (_, i) => i), "ordem preservada");
+});
+
+etapa("só a última fileira pode vir incompleta", () => {
+  /* É o que impede o vão no meio da galeria — a deitada que não cabia era
+     empurrada para a fileira seguinte e deixava o buraco para trás. */
+  const proporcoes = Array.from({ length: 21 }, (_, i) => (i % 5 === 0 ? 16 / 9 : 2 / 3));
+  const fileiras = agruparEmFileiras(proporcoes, 4);
+  fileiras.slice(0, -1).forEach((fileira, f) => {
+    const unidades = fileira.reduce((t, i) => t + colunasDoItem(proporcoes[i], 4), 0);
+    if (unidades !== 4) throw new Error(`fileira ${f} fechou com ${unidades} de 4 unidades`);
+  });
+  return `${fileiras.length} fileiras`;
+});
+
+etapa("galeria vazia não inventa fileira", () => {
+  igual(agruparEmFileiras([], 4), [], "nenhuma foto");
 });
 
 console.log(falhou ? "\n✗ mural com falha\n" : "\n✓ mural ok\n");
