@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
+import { useFecharMenuAoClicarFora } from "@/lib/fechar-menu-client";
 import type { CapituloGaleria } from "@/components/galeria-cliente";
 import type { ModoDeEntrega } from "@/lib/modo-de-entrega";
 import { tamanhoLegivel, toquesPrevistos } from "@/lib/salvar-client";
@@ -102,25 +103,7 @@ export function MenusDaGaleria({
   const barra = useRef<HTMLElement | null>(null);
   const busca = useSearchParams();
 
-  useEffect(() => {
-    const fechar = (menosEste?: Node) => {
-      const abertos = barra.current?.querySelectorAll("details[open]") ?? [];
-      for (const d of Array.from(abertos)) {
-        if (menosEste && d.contains(menosEste)) continue;
-        d.removeAttribute("open");
-      }
-    };
-    const noPonteiro = (e: PointerEvent) => fechar(e.target as Node);
-    const naTecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") fechar();
-    };
-    document.addEventListener("pointerdown", noPonteiro);
-    document.addEventListener("keydown", naTecla);
-    return () => {
-      document.removeEventListener("pointerdown", noPonteiro);
-      document.removeEventListener("keydown", naTecla);
-    };
-  }, []);
+  useFecharMenuAoClicarFora(barra);
 
   if (!favoritas && !baixar && !tocarSlideshow && capitulos.length < 2) return null;
 

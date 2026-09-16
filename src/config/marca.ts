@@ -49,7 +49,17 @@ export const marca = {
   tagline: "Onde o instante permanece.",
   /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
   dominio: "galeriaatomo.com.br",
-  descricao: "Galerias inteligentes para fotógrafos.",
+  /*
+   * A descrição vai no `<meta name="description">` e no cartão do link. Felipe,
+   * 16/09/2026, escolheu a frase: "colocar: galerias inteligentes de alto
+   * padrão visual".
+   *
+   * "Para fotógrafos" saiu porque o público deixou de ser só ele — o mesmo
+   * pedido do mesmo dia pede a página falando também com filmmakers e
+   * storymakers, e um título que nomeia um deles exclui os outros. O que ficou
+   * é o que os três querem ouvir.
+   */
+  descricao: "Galerias inteligentes de alto padrão visual.",
   email: "contato@galeriaatomo.com.br",
 
   /*

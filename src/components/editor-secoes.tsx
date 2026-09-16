@@ -118,7 +118,23 @@ export function EditorSecoes({
       </p>
 
       {secoes.length === 0 ? (
-        <div className="mt-4 rounded-lg border border-dashed border-linha-forte px-4 py-6 text-center">
+        /*
+         * BORDA SÓLIDA, E FUNDO PRÓPRIO — a tracejada é da área de SOLTAR.
+         *
+         * Felipe, 16/09/2026: "essa parte dos capítulos ficou semelhante
+         * visualmente com a área de 'arrastar fotos para cá'. Eu até tentei
+         * jogar as fotos ali, mas vi que ali é a área dos capítulos."
+         *
+         * As duas caixas tinham exatamente as mesmas classes
+         * (`border-dashed border-linha-forte`), e a tracejada é uma convenção
+         * forte: em todo lugar da web ela quer dizer "arraste aqui". Aqui ela
+         * não aceita nada — o arrasto some no vazio, sem erro e sem resposta.
+         *
+         * A regra que fica: TRACEJADA É EXCLUSIVA DE ALVO DE ARRASTO. Esta
+         * caixa é um estado vazio, então ganha borda contínua e a superfície
+         * um degrau acima do painel — lê-se como cartão, não como buraco.
+         */
+        <div className="mt-4 rounded-lg border border-linha bg-carbon-2 px-4 py-6 text-center">
           <p className="text-sm text-texto-soft">Nenhum capítulo ainda</p>
           <p className="mx-auto mt-1 max-w-[42ch] text-xs text-texto-faint">
             Sem capítulos, a galeria mostra tudo numa sequência só — o que também funciona bem.
