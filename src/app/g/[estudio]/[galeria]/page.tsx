@@ -20,7 +20,7 @@ import {
   temAcessoLiberado,
   registrarAcesso,
 } from "@/lib/galerias-publicas";
-import { listarSecoes } from "@/lib/secoes";
+import { listarSecoes, secaoPeloApelido } from "@/lib/secoes";
 import { fatiarGaleria, FOTOS_POR_TELA, TETO_DE_ESCOLHIDAS } from "@/config/fatia-galeria";
 import { sessaoAtual } from "@/lib/auth";
 import {
@@ -283,6 +283,19 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     .slice(0, TETO_DE_ESCOLHIDAS);
   const escolhidas = new Set(pedidas);
 
+  /*
+   * ── O `?cap=` ACEITA O APELIDO E O ID (16/09/2026) ─────────────────────
+   *
+   * O link de hoje leva `cap=cerimonia`; o de ontem leva o UUID da seção. Os
+   * dois têm de abrir o mesmo capítulo — link de capítulo já mandado para o
+   * casal não se reenvia, que é a mesma razão dos apelidos de endereço das
+   * migrações 025 e 030. `secaoPeloApelido` tenta o apelido primeiro.
+   *
+   * Só consulta quando há `cap`: a galeria sem parâmetro é o caminho comum e
+   * não paga nada por isto.
+   */
+  const capSecaoId = cap ? await secaoPeloApelido(galeria.id, cap) : undefined;
+
   const fatia = escolhidas.size
     ? {
         itens: todasAsMedias.filter((m) => escolhidas.has(m.id)),
@@ -292,7 +305,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         parte: 1,
         partes: 1,
       }
-    : fatiarGaleria(todasAsMedias, cap, FOTOS_POR_TELA, Number(parte) || 1);
+    : fatiarGaleria(todasAsMedias, capSecaoId, FOTOS_POR_TELA, Number(parte) || 1);
 
   const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : fatia.itens;
 
@@ -479,6 +492,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     const temCapitulo = (fatiada ? todasAsMedias : medias).some((m) => m.secao_id);
     capitulos.push({
       id: "sem-capitulo",
+      /* Já é curto e legível — este grupo nunca teve UUID, porque não é uma
+         linha do banco: é um nome que esta página inventa. */
+      apelido: "sem-capitulo",
       nome: temCapitulo ? "Outras fotos" : "",
       indices: semCapitulo,
       total: fatiada ? todasAsMedias.filter((m) => !m.secao_id).length : semCapitulo.length,
@@ -509,7 +525,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        não veio aparecer como "(0)". */
     const total = todasAsMedias.filter((m) => m.secao_id === s.id).length;
     if (indices.length > 0 || (fatiada && total > 0)) {
-      capitulos.push({ id: s.id, nome: s.nome, indices, total });
+      capitulos.push({ id: s.id, apelido: s.slug, nome: s.nome, indices, total });
     }
   }
 
@@ -707,7 +723,19 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             buscaPorRosto={buscaPorRosto}
             bytesDaGaleria={bytesDaGaleria}
             recorte={escolhidas.size > 0 && !amostrando}
-            fatia={fatiada ? { total: fatia.total, capituloAtivo: cap ?? null, parte: fatia.parte, partes: fatia.partes } : null}
+            fatia={
+              fatiada
+                ? {
+                    total: fatia.total,
+                    /* O ID resolvido, e não o texto da URL: quem compara com
+                       ele é `capitulos[].id`, e um link com apelido nunca
+                       casaria. */
+                    capituloAtivo: capSecaoId ?? null,
+                    parte: fatia.parte,
+                    partes: fatia.partes,
+                  }
+                : null
+            }
           />
         )}
       </div>

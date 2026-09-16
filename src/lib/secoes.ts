@@ -1,10 +1,24 @@
 import "server-only";
 import { consultar, consultarUm } from "./db";
+import { gerarSlug } from "./tenants";
 
 export interface Secao {
   id: string;
   galeria_id: string;
   nome: string;
+  /**
+   * O APELIDO DO CAPÍTULO — a parte que vai no link (`?cap=cerimonia`).
+   *
+   * Felipe, 16/09/2026: "o link do capítulo está muito extenso, temos que
+   * diminuir e ficar mais simples, para quando mandar". Era o id da seção, 36
+   * caracteres de UUID para dizer "Cerimônia" — e um UUID no meio de uma
+   * mensagem de WhatsApp parece link de rastreamento.
+   *
+   * Coluna e não derivação do nome na hora, por dois motivos escritos na
+   * migração 034: dois nomes podem gerar o mesmo apelido, e renomear o capítulo
+   * mudaria o link já entregue em silêncio.
+   */
+  slug: string;
   ordem: number;
   total?: number;
 }
@@ -66,9 +80,60 @@ export async function criarSecao(galeriaId: string, tenantId: string, nome: stri
     [galeriaId],
   );
   return consultarUm<Secao>(
-    "insert into secoes (galeria_id, nome, ordem) values ($1, $2, $3) returning *",
-    [galeriaId, limpo, prox?.n ?? 0],
+    "insert into secoes (galeria_id, nome, slug, ordem) values ($1, $2, $3, $4) returning *",
+    [galeriaId, limpo, await apelidoLivre(galeriaId, limpo), prox?.n ?? 0],
   );
+}
+
+/**
+ * Um apelido que ainda não existe nesta galeria.
+ *
+ * O nome já foi recusado se repetido, mas o APELIDO ainda pode colidir: "Making
+ * Of" e "Making-of" são nomes diferentes e dão o mesmo `making-of`. O índice
+ * único da migração 034 recusaria a segunda inserção, e o fotógrafo veria o
+ * capítulo simplesmente não ser criado — por causa de um hífen que ele não
+ * digitou.
+ *
+ * O sufixo numérico é o mesmo desempate do endereço do estúdio (`gerarSlug` +
+ * `-2`, `-3`): feio de ler e melhor que a criação falhar.
+ *
+ * Sem letra nenhuma no nome (um capítulo chamado só "🎉") o apelido sai do id,
+ * como no backfill da migração.
+ */
+async function apelidoLivre(galeriaId: string, nome: string): Promise<string> {
+  const base = gerarSlug(nome);
+  if (!base) return `cap-${Date.now().toString(36)}`;
+  let tentativa = base;
+  for (let i = 2; ; i++) {
+    const ocupado = await consultarUm(
+      "select 1 from secoes where galeria_id = $1 and slug = $2",
+      [galeriaId, tentativa],
+    );
+    if (!ocupado) return tentativa;
+    tentativa = `${base}-${i}`;
+  }
+}
+
+/**
+ * De quem é este `?cap=` — apelido ou id.
+ *
+ * O apelido vem primeiro porque é o link de hoje. O id continua sendo aceito
+ * porque os links de ontem o carregam, e link de capítulo entregue ao casal não
+ * se reenvia — mesma razão dos apelidos de endereço (migrações 025 e 030).
+ *
+ * `sem-capitulo` atravessa intocado: é um nome que a página inventa para o
+ * grupo das fotos soltas, não um capítulo do banco.
+ */
+export async function secaoPeloApelido(
+  galeriaId: string,
+  pedido: string,
+): Promise<string | null> {
+  if (!pedido || pedido === "sem-capitulo") return pedido || null;
+  const achada = await consultarUm<{ id: string }>(
+    "select id from secoes where galeria_id = $1 and (slug = $2 or id::text = $2) limit 1",
+    [galeriaId, pedido],
+  );
+  return achada?.id ?? null;
 }
 
 /**
@@ -118,6 +183,12 @@ export async function garantirSecoes(
   return saida;
 }
 
+/*
+ * Renomear NÃO mexe no apelido, e isso é a promessa da migração 034: o
+ * fotógrafo troca "Festa" por "Festa 🎉" e o link que ele mandou ontem para o
+ * casal continua abrindo. O apelido é do capítulo, não do texto que por acaso
+ * está nele hoje.
+ */
 export async function renomearSecao(secaoId: string, tenantId: string, nome: string) {
   const limpo = nome.trim().slice(0, 60);
   if (!limpo) return;

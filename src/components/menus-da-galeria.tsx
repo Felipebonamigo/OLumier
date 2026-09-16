@@ -417,7 +417,14 @@ export function MenusDaGaleria({
             return (
               <li key={c.id}>
                 <a
-                  href={fatia ? enderecoNaGaleria(busca.toString(), { cap: c.id }) : `#cap-${c.id}`}
+                  /* O APELIDO no link, o ID na âncora. O link é o que a
+                     pessoa copia e manda; a âncora é interna. Ver
+                     `CapituloGaleria.apelido` e a migração 034. */
+                  href={
+                    fatia
+                      ? enderecoNaGaleria(busca.toString(), { cap: c.apelido })
+                      : `#cap-${c.id}`
+                  }
                   aria-current={ativo ? "page" : undefined}
                   data-ativo={ativo ? "sim" : undefined}
                   className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
