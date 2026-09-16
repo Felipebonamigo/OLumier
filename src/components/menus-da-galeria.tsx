@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { useFecharMenuAoClicarFora } from "@/lib/fechar-menu-client";
@@ -104,6 +104,90 @@ export function MenusDaGaleria({
   const busca = useSearchParams();
 
   useFecharMenuAoClicarFora(barra);
+
+  /*
+   * ── O CAPÍTULO EM QUE A PESSOA ESTÁ (16/09/2026) ────────────────────────
+   *
+   * Felipe: "o primeiro capítulo (que está aparecendo) ele está sumido. Só
+   * aparece a partir do próximo. Talvez possa aparecer o capítulo que está no
+   * momento, com a marcação mais definida de capítulo selecionado".
+   *
+   * Até aqui a pastilha só acendia na galeria FATIADA, onde o capítulo aberto é
+   * um parâmetro da URL. Na galeria que cabe inteira — que é a maioria — as
+   * pastilhas são âncoras, ninguém troca de endereço ao rolar, e portanto
+   * nenhuma delas acendia nunca: a barra dizia onde dava para ir e não dizia
+   * onde a pessoa estava.
+   *
+   * O observador responde isso sem custo de rolagem: o navegador avisa quando
+   * uma seção entra ou sai, em vez de a gente medir posição a cada quadro.
+   *
+   * `rootMargin` de -45% embaixo põe a "linha de leitura" no terço superior da
+   * tela, e não no meio: com a barra grudada no topo, o capítulo que vale é o
+   * que está logo abaixo dela. Empate vai para o que está mais acima, que é o
+   * que a pessoa acabou de começar a ler.
+   */
+  const [capituloVisivel, setCapituloVisivel] = useState<string | null>(null);
+
+  /*
+   * A PASTILHA ATIVA ENTRA NA FAIXA VISÍVEL — só ela, e só na horizontal.
+   *
+   * O `safe center` da lista garante que o começo SEJA alcançável; não garante
+   * que a pastilha do capítulo atual esteja à vista. Quem abre o link de um
+   * capítulo do fim ainda cairia com a barra mostrando o começo dela.
+   *
+   * Mexe em `scrollLeft` da própria lista, e não em `scrollIntoView`: aquele
+   * rola o ANCESTRAL mais próximo que rolar — e o ancestral aqui é a página. A
+   * barra é `sticky`, então a pessoa que está rolando a galeria veria a página
+   * dar um pulinho a cada troca de capítulo, causado pela barra que só queria
+   * se ajeitar por dentro.
+   *
+   * Só age quando a pastilha está FORA: dentro da faixa, mexer em `scrollLeft`
+   * seria movimento sem motivo no meio da leitura.
+   */
+  const listaDeCapitulos = useRef<HTMLUListElement | null>(null);
+  const ativoNaBarra = fatia ? (fatia.capituloAtivo ?? null) : capituloVisivel;
+  useEffect(() => {
+    const lista = listaDeCapitulos.current;
+    if (!lista || !ativoNaBarra) return;
+    const pastilha = lista.querySelector<HTMLElement>('[data-ativo="sim"]');
+    if (!pastilha) return;
+
+    const folga = 16;
+    const esquerdaDela = pastilha.offsetLeft;
+    const direitaDela = esquerdaDela + pastilha.offsetWidth;
+    const esquerdaVisivel = lista.scrollLeft;
+    const direitaVisivel = esquerdaVisivel + lista.clientWidth;
+
+    if (esquerdaDela < esquerdaVisivel + folga) {
+      lista.scrollTo({ left: Math.max(0, esquerdaDela - folga), behavior: "smooth" });
+    } else if (direitaDela > direitaVisivel - folga) {
+      lista.scrollTo({ left: direitaDela - lista.clientWidth + folga, behavior: "smooth" });
+    }
+  }, [ativoNaBarra]);
+  useEffect(() => {
+    if (fatia || capitulos.length < 2) return;
+    const secoes = capitulos
+      .map((c) => document.getElementById(`cap-${c.id}`))
+      .filter((el): el is HTMLElement => el !== null);
+    if (secoes.length === 0) return;
+
+    const visiveis = new Set<string>();
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        for (const e of entradas) {
+          if (e.isIntersecting) visiveis.add(e.target.id);
+          else visiveis.delete(e.target.id);
+        }
+        /* A ordem da barra é a ordem da galeria: o primeiro capítulo visível na
+           lista é o de cima da tela. */
+        const primeiro = capitulos.find((c) => visiveis.has(`cap-${c.id}`));
+        setCapituloVisivel(primeiro?.id ?? null);
+      },
+      { rootMargin: "-10% 0px -45% 0px" },
+    );
+    for (const el of secoes) observador.observe(el);
+    return () => observador.disconnect();
+  }, [capitulos, fatia]);
 
   if (!favoritas && !baixar && !tocarSlideshow && capitulos.length < 2) return null;
 
@@ -293,7 +377,24 @@ export function MenusDaGaleria({
         o capítulo é o que o navegador faz melhor do que qualquer script.
       */}
       {capitulos.length > 1 && (
-        <ul className="mt-1 flex justify-center gap-1 overflow-x-auto whitespace-nowrap">
+        /*
+         * `safe center` — e é ele que devolve o primeiro capítulo.
+         *
+         * Com `justify-content: center` numa lista que ROLA, o que transborda
+         * some dos DOIS lados, e o excedente do lado de início fica fora da área
+         * rolável: não há como alcançá-lo nem arrastando. Com seis capítulos num
+         * notebook é exatamente o que o Felipe viu — "AKING OF NOIVO" cortado na
+         * borda esquerda, e a lista começando no segundo.
+         *
+         * `safe` manda o navegador desistir da centralização assim que ela
+         * causaria esse corte, caindo em `flex-start`. Enquanto tudo couber, a
+         * barra continua centralizada como sempre esteve.
+         */
+        <ul
+          ref={listaDeCapitulos}
+          className="mt-1 flex gap-1 overflow-x-auto whitespace-nowrap"
+          style={{ justifyContent: "safe center" }}
+        >
           {capitulos.map((c) => {
             /*
               ── ÂNCORA OU ENDEREÇO, E QUEM DECIDE É O TAMANHO (11/09/2026) ──
@@ -312,16 +413,34 @@ export function MenusDaGaleria({
             const aberto = fatia
               ? (fatia.capituloAtivo ?? (fatia.parte > 1 ? null : capitulos[0]?.id))
               : null;
-            const ativo = fatia ? aberto === c.id : false;
+            const ativo = fatia ? aberto === c.id : capituloVisivel === c.id;
             return (
               <li key={c.id}>
                 <a
                   href={fatia ? enderecoNaGaleria(busca.toString(), { cap: c.id }) : `#cap-${c.id}`}
                   aria-current={ativo ? "page" : undefined}
+                  data-ativo={ativo ? "sim" : undefined}
                   className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
+                  /*
+                   * ── A MARCAÇÃO DE SELECIONADO, EM TRÊS SINAIS ──────────────
+                   *
+                   * Era só o fundo em `--g-superficie`, que nos temas claros fica
+                   * a um passo do branco da página — Felipe pediu "a marcação
+                   * mais definida", e "talvez o fundo mais escuro ainda".
+                   *
+                   * O fundo agora mistura o texto no fundo: escurece no tema
+                   * claro e clareia no escuro, então a pastilha se destaca nos
+                   * três temas sem cada um precisar de uma cor própria. A borda
+                   * dá contorno onde a mistura ficar sutil, e o texto sobe para
+                   * a cor cheia. Cor de AÇÃO (`--g-destaque`) fica de fora de
+                   * propósito: ela é dos botões, e a barra não é um botão.
+                   */
                   style={{
                     color: ativo ? "var(--g-texto)" : "var(--g-suave)",
-                    background: ativo ? "var(--g-superficie)" : undefined,
+                    background: ativo
+                      ? "color-mix(in srgb, var(--g-texto) 12%, transparent)"
+                      : undefined,
+                    border: `1px solid ${ativo ? "var(--g-linha)" : "transparent"}`,
                   }}
                 >
                   {c.nome}
