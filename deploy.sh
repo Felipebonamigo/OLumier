@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Publica o Fotonio no VPS em um comando.
 #
-#   bash deploy.sh
+#   bash deploy.sh          # perguntando o que precisa ser perguntado
+#   bash deploy.sh --sim    # sem ninguem na frente (GitHub Actions)
 #
 # COMO FUNCIONA: cada publicacao vira uma RELEASE nova em /opt/fotonio-releases,
 # construida ao lado enquanto a versao atual continua servindo. So no fim o link
@@ -16,6 +17,34 @@
 # .env.production, que so existe no servidor e nunca entra no git).
 set -euo pipefail
 
+# ── PUBLICAR SEM NINGUEM NA FRENTE (16/09/2026) ─────────────────────────────
+#
+# Felipe pediu que publicar deixasse de depender de alguem com um terminal
+# aberto: o merge no master publica. Quem faz isso e o GitHub Actions
+# (.github/workflows/publicar.yml), e runner nao tem TTY -- os tres `read`
+# deste script recebem EOF, o `set -e` ve um comando falhando e a publicacao
+# aborta antes de comecar.
+#
+# `--sim` responde "s" nos tres, e so isso. Nenhum portao e pulado: os tipos, a
+# suite com --exigir-tudo e o dump antes da migracao acontecem igual, e todos
+# continuam podendo dizer nao. O que a bandeira dispensa e a pessoa que
+# digitaria "s" -- nao a conferencia que a faria digitar "n".
+#
+# Sem a bandeira, NADA muda: o caminho interativo e o mesmo de sempre.
+AUTO=0
+[ "${1:-}" = "--sim" ] && AUTO=1
+
+# Pergunta, ou responde sozinho quando ninguem esta olhando.
+confirmar() { # confirmar "Pergunta? [s/N]"
+	if [ "$AUTO" = 1 ]; then
+		echo "  $1 s (--sim)"
+		return 0
+	fi
+	local r
+	read -rp "  $1 " r
+	[[ "$r" =~ ^[sS]$ ]]
+}
+
 VPS="root@179.197.233.184"
 ATUAL="/opt/fotonio"
 RELEASES="/opt/fotonio-releases"
@@ -28,8 +57,7 @@ cd "$(dirname "$0")"
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "! Ha mudancas nao commitadas. O deploy publica so o que esta no commit."
-  read -rp "  Continuar mesmo assim? [s/N] " r
-  [[ "$r" =~ ^[sS]$ ]] || exit 1
+  confirmar "Continuar mesmo assim? [s/N]" || exit 1
 fi
 
 # O portao do origin vem ANTES de tudo que custa tempo: conferir e um fetch, e
@@ -126,8 +154,7 @@ if [ -n "$PENDENTES" ]; then
   echo
   echo "  Aplicar agora? Faço dump antes (com cópia fora do servidor), envio os"
   echo "  arquivos e aplico pelo controle de migrações."
-  read -rp "  Aplicar? [s/N] " r
-  if [[ ! "$r" =~ ^[sS]$ ]]; then
+  if ! confirmar "Aplicar? [s/N]"; then
     echo
     echo "  Nada foi aplicado. Para fazer na mão:"
     echo "    ssh $VPS '/opt/fotonio-backup.sh'"
@@ -207,16 +234,30 @@ PORTA_PORTAO=$(node -e "const n=require('net');const s=n.createServer();s.listen
 LOG_PORTAO="/tmp/portao-servidor-$$.log"
 echo "  → subindo servidor do portão na porta $PORTA_PORTAO"
 node node_modules/next/dist/bin/next dev --port "$PORTA_PORTAO" > "$LOG_PORTAO" 2>&1 &
+PID_PORTAO=$!
 
 # Derruba PELA PORTA e nunca por nome: a porta foi sorteada livre e e so deste
 # processo, entao nao ha como acertar o servidor de outra sessao por engano.
 # O `$!` do git-bash NAO e o PID do Windows -- taskkill com ele diz "processo nao
 # encontrado" e o servidor fica de pe. Custou um teste para descobrir.
+#
+# NO LINUX (o runner do GitHub Actions) nao ha powershell nem taskkill, e o
+# bloco acima vira um no-op silencioso: o `next dev` fica de pe segurando o
+# stdout do passo, e a publicacao termina com o job pendurado esperando um
+# processo que ninguem vai matar. La o `$!` E o PID de verdade, entao da para
+# matar pelo caminho simples -- que e justamente o que nao funciona no git-bash.
 derrubar_portao() {
 	[ -n "${PORTA_PORTAO:-}" ] || return 0
-	local pid
-	pid=$(powershell -NoProfile -Command "(Get-NetTCPConnection -LocalPort $PORTA_PORTAO -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess" 2>/dev/null | tr -d '\r')
-	[ -n "$pid" ] && taskkill //T //F //PID "$pid" >/dev/null 2>&1
+	case "${OSTYPE:-}" in
+		msys* | cygwin* | win32*)
+			local pid
+			pid=$(powershell -NoProfile -Command "(Get-NetTCPConnection -LocalPort $PORTA_PORTAO -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess" 2>/dev/null | tr -d '\r')
+			[ -n "$pid" ] && taskkill //T //F //PID "$pid" >/dev/null 2>&1
+			;;
+		*)
+			[ -n "${PID_PORTAO:-}" ] && kill "$PID_PORTAO" 2>/dev/null || true
+			;;
+	esac
 	rm -f "$LOG_PORTAO"
 }
 # `trap` na saida: sem ele, o `exit 1` de uma suite reprovada deixa um `next dev`
@@ -271,8 +312,7 @@ fi
 LINT=$( (npx eslint --format json 2>/dev/null || true) | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let e=0;for(const f of JSON.parse(s||"[]"))e+=f.errorCount;console.log(e)})' )
 if [ "${LINT:-0}" != "0" ]; then
   echo "  ! eslint: $LINT erro(s)"
-  read -rp "  Publicar mesmo assim? [s/N] " r
-  [[ "$r" =~ ^[sS]$ ]] || exit 1
+  confirmar "Publicar mesmo assim? [s/N]" || exit 1
 else
   echo "  lint ok"
 fi
