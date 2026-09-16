@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { EditorAparencia } from "@/components/editor-aparencia";
+import { padraoDoEstudio } from "@/lib/aparencia-galeria";
 import { CapaGaleriaEditor } from "@/components/capa-galeria-editor";
 import { lerAparencia } from "@/config/aparencia";
 import { consultarUm } from "@/lib/db";
@@ -105,6 +106,8 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       inicial={lerAparencia(galeria.aparencia_rascunho ?? galeria.aparencia)}
       publicado={lerAparencia(galeria.aparencia)}
       temFontePropria={Boolean(galeria.estudio_fonte)}
+      /* Só para a tela saber qual recado dar — o que vale é o tenant. */
+      temPadraoDoEstudio={Boolean(await padraoDoEstudio(galeria.tenant_id))}
     />
   );
 }

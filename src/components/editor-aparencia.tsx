@@ -15,7 +15,12 @@ import {
   type Aparencia,
   type ViewportPrevia,
 } from "@/config/aparencia";
-import { salvarAparenciaAction, salvarRascunhoAparenciaAction } from "@/app/painel/actions";
+import {
+  salvarAparenciaAction,
+  salvarRascunhoAparenciaAction,
+  salvarPadraoDoEstudioAction,
+  esquecerPadraoDoEstudioAction,
+} from "@/app/painel/actions";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 
 /**
@@ -378,6 +383,7 @@ export function EditorAparencia({
   inicial,
   publicado,
   temFontePropria,
+  temPadraoDoEstudio = false,
   slotCapa,
 }: {
   galeriaId: string;
@@ -394,6 +400,8 @@ export function EditorAparencia({
   publicado: Aparencia;
   /** O estúdio enviou uma fonte? Decide se a opção aparece no seletor. */
   temFontePropria: boolean;
+  /** Já existe um padrão de design salvo neste estúdio. Ver `padraoDoEstudio`. */
+  temPadraoDoEstudio?: boolean;
 }) {
   /* Qual grupo do ajuste fino está aberto. Só desenho: não entra no rascunho
      nem na publicação — trocar de grupo não é mexer na galeria. */
@@ -472,6 +480,18 @@ export function EditorAparencia({
      cortado por um instante e assenta na hidratação. Chutar uma escala aqui
      seria acertar num tamanho de tela e errar em todos os outros. */
   const escala = larguraColuna > 0 ? Math.min(1, larguraColuna / vp.largura) : 1;
+
+  /*
+   * ── SALVAR COMO PADRÃO DO ESTÚDIO (16/09/2026) ─────────────────────────
+   *
+   * Felipe: "adicionar algum método de 'salvar padrão criado', para sempre se
+   * repetir na hora do design da capa".
+   *
+   * O estado local existe só para o recado da tela. O que vale é o que está no
+   * tenant, e ele não mexe em galeria nenhuma — nem nesta: é uma decisão sobre
+   * o que vem DEPOIS. Ver `salvarPadraoDoEstudioAction`.
+   */
+  const [padrao, setPadrao] = useState({ salvo: temPadraoDoEstudio, recado: "" });
 
   const presetAtivo = presetEquivalente(ap);
   const sujo = JSON.stringify(ap) !== JSON.stringify(salvo);
@@ -804,6 +824,66 @@ export function EditorAparencia({
               <Eixo eixo="canto" titulo="Canto das fotos" ap={ap} mudar={mudar} />
             </>
           )}
+        </div>
+      </div>
+
+      {/*
+        ── O PADRÃO DO ESTÚDIO ──────────────────────────────────────────────
+
+        Felipe: "adicionar algum método de salvar padrão criado, para sempre se
+        repetir na hora do design da capa".
+
+        Fica DEPOIS dos eixos e ANTES da prévia, e o lugar é a leitura: a pessoa
+        acabou de montar a combinação, está olhando para ela, e é aí que faz
+        sentido dizer "é esta, sempre". No topo seria uma promessa sobre algo
+        que ela ainda não escolheu.
+
+        O texto é explícito sobre o que NÃO acontece — nenhuma galeria muda,
+        nem esta. Um botão chamado "salvar" ao lado de doze controles de
+        aparência é lido como "aplicar", e aplicar em entregas já feitas seria
+        reescrever o trabalho de alguém a partir de um clique.
+      */}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-4">
+        <div className="min-w-0">
+          <span className="block text-xs font-medium text-texto-soft">Padrão do estúdio</span>
+          <p className="mt-0.5 max-w-[60ch] text-[11px] leading-snug text-texto-faint">
+            {padrao.recado ||
+              (padrao.salvo
+                ? "Toda galeria nova nasce com o seu design salvo. Salvar de novo substitui o anterior; nenhuma galeria existente muda."
+                : "Guarde esta combinação e toda galeria nova já nasce assim. Nenhuma galeria existente muda — nem esta.")}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {padrao.salvo && (
+            <button
+              type="button"
+              disabled={salvando}
+              onClick={() =>
+                iniciar(async () => {
+                  const r = await esquecerPadraoDoEstudioAction();
+                  setPadrao({ salvo: false, recado: r.ok ?? "" });
+                })
+              }
+              className="rounded-lg px-3 py-2 text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
+            >
+              esquecer
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={salvando}
+            onClick={() =>
+              iniciar(async () => {
+                const f = new FormData();
+                f.set("aparencia", JSON.stringify(ap));
+                const r = await salvarPadraoDoEstudioAction(f);
+                setPadrao({ salvo: !r.erro, recado: r.erro ?? r.ok ?? "" });
+              })
+            }
+            className="rounded-lg border border-linha-forte px-4 py-2 text-xs transition hover:bg-carbon-2 disabled:opacity-40"
+          >
+            {padrao.salvo ? "Salvar de novo como padrão" : "Salvar como meu padrão"}
+          </button>
         </div>
       </div>
 

@@ -10,6 +10,9 @@ import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 import {
   gravarRascunho,
   promoverRascunhoSePendente,
+  salvarPadraoDoEstudio,
+  esquecerPadraoDoEstudio,
+  padraoDoEstudio,
   publicarAparencia,
 } from "@/lib/aparencia-galeria";
 import { presetPorId } from "@/config/aparencia";
@@ -92,10 +95,23 @@ export async function criarGaleriaAction(
    * em Design; recusar a criação inteira por causa de um preset inválido não
    * tem conserto nenhum — ela perderia o nome, a data e a vontade.
    */
+  /*
+   * ── O ESTILO ESCOLHIDO VENCE O PADRÃO DO ESTÚDIO ──────────────────────
+   *
+   * A ordem importa e é a única leitura possível: se a pessoa parou na etapa de
+   * estilo e apontou um cartão, foi uma decisão TOMADA AGORA, sobre esta
+   * galeria. O padrão do estúdio é a decisão de sempre, e serve para quem
+   * passou direto — que é o caminho de quem já salvou o próprio padrão
+   * justamente para não escolher de novo.
+   *
+   * Sem nenhum dos dois, a coluna fica no `'{}'` de sempre e `lerAparencia`
+   * completa com o padrão do código.
+   */
   const preset = presetPorId(String(form.get("preset") ?? ""));
-  if (preset) {
+  const aparenciaInicial = preset?.aparencia ?? (await padraoDoEstudio(tenantId));
+  if (aparenciaInicial) {
     await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
-      JSON.stringify(preset.aparencia),
+      JSON.stringify(aparenciaInicial),
       galeria!.id,
       tenantId,
     ]).catch(() => {});
@@ -230,6 +246,35 @@ export async function salvarAparenciaAction(form: FormData): Promise<{ erro?: st
  * O caminho pelo Design existia e continua existindo; o que faltava era ele
  * existir de onde a pessoa está quando vê o aviso.
  */
+/**
+ * Guarda a aparência de agora como o padrão do estúdio.
+ *
+ * Felipe, 16/09/2026: "adicionar algum método de 'salvar padrão criado', para
+ * sempre se repetir na hora do design da capa".
+ *
+ * Não mexe em galeria nenhuma — nem nesta. É uma decisão sobre o que vem
+ * DEPOIS: a próxima galeria nasce assim. Mexer nas existentes seria reescrever
+ * entregas já feitas a partir de um botão que diz "salvar".
+ */
+export async function salvarPadraoDoEstudioAction(form: FormData): Promise<{ ok?: string; erro?: string }> {
+  const tenantId = await exigirTenant();
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(String(form.get("aparencia") ?? "{}"));
+  } catch {
+    return { erro: "Não consegui ler a aparência escolhida." };
+  }
+  await salvarPadraoDoEstudio(tenantId, bruto);
+  return { ok: "Toda galeria nova vai nascer com este design." };
+}
+
+/** Esquece o padrão: a galeria nova volta a nascer com o desenho da casa. */
+export async function esquecerPadraoDoEstudioAction(): Promise<{ ok?: string }> {
+  const tenantId = await exigirTenant();
+  await esquecerPadraoDoEstudio(tenantId);
+  return { ok: "As galerias novas voltam a nascer com o design padrão." };
+}
+
 export async function publicarAlteracoesAction(form: FormData): Promise<{ erro?: string }> {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");
