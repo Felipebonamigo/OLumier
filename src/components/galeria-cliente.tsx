@@ -41,6 +41,18 @@ export interface ItemGaleria {
   /** miniatura da grade (~50 KB) */
   url: string;
   /**
+   * `url` é uma IMAGEM, e não o arquivo original servindo de reserva.
+   *
+   * Só importa para vídeo, e importa muito: sem derivada, `url` é o próprio
+   * filme — e pendurar isso num `<img>` faz o navegador baixar o arquivo
+   * inteiro para descobrir que não sabe desenhá-lo. Num filme de 4K isso é
+   * dezenas de gigabytes no 4G do convidado, para mostrar nada.
+   *
+   * Vídeo enviado antes de 16/09/2026 não tem pôster e cai em `false`, onde a
+   * grade volta ao bloco da cor do tema com o círculo de play.
+   */
+  temPoster: boolean;
+  /**
    * Versão do lightbox (~400 KB). Só vem preenchida quando já é conhecida —
    * fotos de demonstração e a amostra da prévia. Nas outras, o lightbox pede à
    * rota `/api/g/<id>/urls` ao abrir e mostra a miniatura até chegar. O
@@ -1430,13 +1442,49 @@ export function GaleriaCliente({
                     }`}
                   />
                 ) : (
+                  /*
+                   * O VÍDEO MOSTRA UM QUADRO DELE MESMO (16/09/2026).
+                   *
+                   * Era um retângulo da cor do tema com um círculo de play no
+                   * meio — Felipe: "aperto play e ele já abre uma tela
+                   * estranha". Metade do estranho estava aqui: o casal via um
+                   * bloco cinza onde a grade inteira mostra fotografia, e não
+                   * dava para saber qual filme era aquele.
+                   *
+                   * Desde que o envio extrai um quadro do arquivo
+                   * (`derivadas-client.ts`), `it.url` é uma imagem de verdade,
+                   * e o círculo passa a ser o que sempre deveria ter sido: um
+                   * selo POR CIMA da imagem, dizendo que aquilo se assiste.
+                   *
+                   * O vídeo enviado antes desta data não tem quadro nenhum, e
+                   * ali `it.url` é o PRÓPRIO FILME. Por isso `temPoster` e não
+                   * um `onError`: pendurar o original num `<img>` faria o
+                   * navegador baixar o arquivo inteiro para descobrir que não
+                   * sabe desenhá-lo. Sem pôster, a galeria já entregue volta ao
+                   * bloco de antes, sem baixar nada.
+                   */
                   <span
-                    className="grid h-full min-h-[180px] w-full place-items-center"
+                    className="relative grid h-full min-h-[180px] w-full place-items-center overflow-hidden"
                     style={{ background: "var(--g-superficie)" }}
                   >
+                    {it.temPoster && (
+                      // eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária
+                      <img
+                        src={it.url}
+                        alt={it.nome}
+                        loading={i < 8 ? "eager" : "lazy"}
+                        decoding="async"
+                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                      />
+                    )}
                     <span
-                      className="grid h-14 w-14 place-items-center rounded-full"
-                      style={{ border: "1px solid var(--g-destaque)" }}
+                      className="relative grid h-14 w-14 place-items-center rounded-full"
+                      style={{
+                        border: "1px solid var(--g-destaque)",
+                        /* Sobre foto o círculo vazado some. O véu escuro é o
+                           mesmo recurso do botão de baixar logo abaixo. */
+                        background: "color-mix(in srgb, var(--g-fundo) 55%, transparent)",
+                      }}
                     >
                       <span
                         className="ml-1 border-y-[9px] border-y-transparent border-l-[15px]"
@@ -1721,9 +1769,26 @@ export function GaleriaCliente({
             ) : urlGrandeAberta ? (
               <video
                 src={urlGrandeAberta}
+                /*
+                 * O PÔSTER É A OUTRA METADE DO CONSERTO (16/09/2026).
+                 *
+                 * `autoPlay` com som é BLOQUEADO por todo navegador desde 2018,
+                 * e o resultado era o que o Sirius descreveu — "clicou para
+                 * abrir e o sistema não roda": a tela ficava preta, parada, com
+                 * uma barra de controles em cima. Parecia player quebrado, e
+                 * era política de autoplay.
+                 *
+                 * Com `poster`, a tela abre no quadro do filme e o play fica
+                 * evidente. O `autoPlay` continua: quando o navegador permite
+                 * (e ele costuma permitir logo depois de um clique), o filme
+                 * começa sozinho; quando não, a pessoa vê a imagem certa e um
+                 * botão, em vez de um retângulo preto.
+                 */
+                poster={item.temPoster ? item.url : undefined}
                 controls
                 autoPlay
                 playsInline
+                preload="metadata"
                 className="max-h-full max-w-full rounded-[var(--g-canto,6px)]"
               />
             ) : (

@@ -16,6 +16,7 @@ import {
   type ViewportPrevia,
 } from "@/config/aparencia";
 import { salvarAparenciaAction, salvarRascunhoAparenciaAction } from "@/app/painel/actions";
+import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -529,18 +530,23 @@ export function EditorAparencia({
   }
 
   /*
-   * Fechar a aba com mudança não publicada AVISA.
+   * Sair com aparência não publicada AVISA.
    *
    * Não substitui o botão, e nem tenta: é a rede para o gesto que ninguém
-   * planeja. Navegação dentro do painel não dispara este evento — ali quem
-   * segura é a barra fixa, que fica na tela enquanto houver o que publicar.
+   * planeja.
+   *
+   * Até 16/09/2026 valia só para fechar a aba, e o comentário aqui dizia que a
+   * navegação dentro do painel ficava por conta da barra fixa. Duas usuárias já
+   * tinham provado que a barra não basta (ver `testar-previa.mjs`), e o Felipe
+   * pediu o aviso para as duas telas — esta e a de envio. A escolha continua
+   * gravada no rascunho, então o que se perde não é o trabalho: é a publicação,
+   * e é isso que a frase diz.
    */
-  useEffect(() => {
-    if (!sujo) return;
-    const avisar = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", avisar);
-    return () => window.removeEventListener("beforeunload", avisar);
-  }, [sujo]);
+  useAvisoDeSaida(
+    sujo,
+    "Você tem mudanças de aparência que ainda não foram publicadas. " +
+      "Elas ficam guardadas, mas o seu cliente continua vendo a galeria anterior. Sair assim mesmo?",
+  );
 
   useEffect(() => () => void (agendado.current && clearTimeout(agendado.current)), []);
 

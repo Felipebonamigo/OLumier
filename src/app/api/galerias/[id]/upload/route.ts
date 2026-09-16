@@ -74,6 +74,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     mime?: string;
     bytes?: number;
     comDerivadas?: boolean;
+    comPreview?: boolean;
     formatoDerivadas?: string;
     secaoId?: string;
     largura?: number;
@@ -169,9 +170,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const chaves = montarChaves(tenantId, galeriaId, nome, formato);
 
-  // O navegador avisa se conseguiu gerar as derivadas. Quando não conseguir
-  // (vídeo, HEIC que ele não decodifica), gravamos null e a grade usa o original.
-  const comDerivadas = tipo === "foto" && corpo.comDerivadas === true;
+  /*
+   * O navegador avisa se conseguiu gerar as derivadas. Quando não conseguir
+   * (HEIC que ele não decodifica, arquivo corrompido), gravamos null e a grade
+   * usa o original.
+   *
+   * ── VÍDEO TEM PÔSTER, E SÓ PÔSTER (16/09/2026) ─────────────────────────
+   *
+   * Era `tipo === "foto"`, e a consequência estava na galeria: vídeo sem
+   * nenhuma derivada virava um retângulo cinza na grade e um lightbox preto —
+   * "aperto play e ele já abre uma tela estranha". Desde que o navegador passou
+   * a extrair um quadro do filme (`derivadas-client.ts`), há miniatura para
+   * gravar, e a proporção real vem junto.
+   *
+   * O PREVIEW continua nulo em vídeo, e isso não é economia: `urlDaDerivada`
+   * devolve a derivada de preview quando ela existe, então um pôster gravado
+   * ali seria entregue ao `<video>` no lugar do filme. Sem ela, a rota cai no
+   * original — que é o arquivo que o player quer. Quem decide é o navegador,
+   * que diz em `comPreview` o que de fato gerou.
+   */
+  const comDerivadas = corpo.comDerivadas === true;
+  const comPreview = comDerivadas && corpo.comPreview !== false && tipo === "foto";
 
   /*
    * O ORIGINAL nasce onde a credencial disser (B2 quando as ARQUIVOS_*
@@ -190,7 +209,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     tenantId,
     chave: chaves.original,
     chaveThumb: comDerivadas ? chaves.thumb : null,
-    chavePreview: comDerivadas ? chaves.preview : null,
+    chavePreview: comPreview ? chaves.preview : null,
     nomeOriginal: nome,
     tipo,
     mime,
@@ -204,7 +223,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const [urlThumb, urlPreview] = await Promise.all([
     comDerivadas ? urlDeUpload(chaves.thumb, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
-    comDerivadas ? urlDeUpload(chaves.preview, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
+    comPreview ? urlDeUpload(chaves.preview, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
   ]);
 
   // Acima de 5 GB o PUT único não serve: abre o envio em partes e o navegador
