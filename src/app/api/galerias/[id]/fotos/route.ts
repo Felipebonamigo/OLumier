@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { listarMedias } from "@/lib/medias";
+import { listarSecoes } from "@/lib/secoes";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 
 /** Uma hora: o pop-up é aberto, usado e fechado em minutos. */
@@ -38,9 +39,29 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     medias.map(async (m) => ({
       id: m.id,
       nome: m.nome_original,
+      /*
+       * O CAPÍTULO VEM JUNTO (16/09/2026).
+       *
+       * Felipe: "aqui no selecionar foto da capa, permita escolher por
+       * capítulo, porque se quiser uma foto do final, terá que rolar até
+       * embaixo". Num casamento de 600 fotos, achar a do último capítulo custa
+       * a rolagem inteira.
+       *
+       * Vem no mesmo pedido, e não numa segunda chamada: a lista já está sendo
+       * montada aqui, e a coluna é uma que a consulta já traz.
+       */
+      secaoId: m.secao_id,
       url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), VALIDADE),
     })),
   );
 
-  return NextResponse.json({ fotos });
+  /* Os capítulos na ordem do fotógrafo, para o filtro sair na mesma ordem da
+     galeria. Só os que TÊM foto: um capítulo vazio no filtro é um botão que
+     leva a uma tela em branco. */
+  const comFoto = new Set(fotos.map((f) => f.secaoId).filter(Boolean));
+  const capitulos = (await listarSecoes(galeria.id))
+    .filter((s) => comFoto.has(s.id))
+    .map((s) => ({ id: s.id, nome: s.nome }));
+
+  return NextResponse.json({ fotos, capitulos });
 }
