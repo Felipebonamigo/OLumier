@@ -146,6 +146,23 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const alturaLogo = alturaLogoPx(aparencia.logo);
 
   /*
+   * ── A CAPA QUE FICA (16/09/2026) ────────────────────────────────────────
+   *
+   * Felipe: "permitir fixar o título da capa na galeria, ou seja, se for
+   * rolando a galeria, o título fica".
+   *
+   * `sticky` e não `fixed`: ver o comentário de `CapaFixa`. Resumo — `fixed`
+   * tiraria a capa do fluxo e as primeiras fotos nasceriam atrás dela, e o
+   * conserto seria um espaçador com a altura da capa, ou seja, dois lugares
+   * concordando sobre o mesmo número para sempre.
+   *
+   * `z-0` importa: sem ele a capa fica no mesmo nível da galeria e a ordem de
+   * quem cobre quem passa a depender da ordem do documento. A galeria se
+   * declara `z-10` na página; a capa se declara aqui.
+   */
+  const grudada = aparencia.capaFixa === "fixa" ? "sticky top-0 z-0" : "";
+
+  /*
    * O PONTO FOCAL — onde a foto deve ser cortada.
    *
    * Juan, 08/09/2026: "queria que aparecesse mais o corpo do noivo, mas o
@@ -327,7 +344,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa="imersa"
-        className={`relative flex min-h-[var(--g-capa-h,78vh)] items-end overflow-hidden ${
+        className={`relative flex min-h-[var(--g-capa-h,78vh)] items-end overflow-hidden ${grudada} ${
           aEsquerda ? "justify-start" : "justify-center"
         }`}
       >
@@ -365,8 +382,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa="jornal"
-        className={`px-6 py-20 sm:py-28 ${alinharTexto}`}
-        style={{ borderBottom: "1px solid var(--g-linha)" }}
+        className={`px-6 py-20 sm:py-28 ${grudada} ${alinharTexto}`}
+        style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
       >
         <Estudio />
         <div className="mt-8">
@@ -442,7 +459,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa="convite"
-        className="grid gap-8 px-5 py-5 md:min-h-[calc(var(--g-capa-h,78vh)*1.205)] md:grid-cols-[1.1fr_1fr] md:gap-14 md:px-10 md:py-10"
+        className={`grid gap-8 px-5 py-5 md:min-h-[calc(var(--g-capa-h,78vh)*1.205)] md:grid-cols-[1.1fr_1fr] md:gap-14 md:px-10 md:py-10 ${grudada}`}
       >
         <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.667)] overflow-hidden md:min-h-full">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
@@ -480,7 +497,10 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   // --- DIVIDIDA: foto de um lado, texto do outro ----------------------------
   if (aparencia.capa === "dividida" && urlImagem) {
     return (
-      <header data-capa="dividida" className="grid min-h-[calc(var(--g-capa-h,78vh)*0.897)] md:grid-cols-2">
+      <header
+        data-capa="dividida"
+        className={`grid min-h-[calc(var(--g-capa-h,78vh)*0.897)] md:grid-cols-2 ${grudada}`}
+      >
         <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.538)] overflow-hidden md:min-h-full">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
           <img
@@ -530,8 +550,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     return (
       <header
         data-capa={aparencia.capa}
-        className={`px-6 py-14 sm:py-20 ${alinharTexto}`}
-        style={{ borderBottom: "1px solid var(--g-linha)" }}
+        className={`px-6 py-14 sm:py-20 ${grudada} ${alinharTexto}`}
+        style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
       >
         <div
           className={`overflow-hidden ${alinharBloco} ${
@@ -569,8 +589,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   return (
     <header
       data-capa="minima"
-      className={`px-6 py-16 sm:py-20 ${alinharTexto}`}
-      style={{ borderBottom: "1px solid var(--g-linha)" }}
+      className={`px-6 py-16 sm:py-20 ${grudada} ${alinharTexto}`}
+      style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
     >
       <Estudio />
       <div className="mt-6">

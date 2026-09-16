@@ -157,6 +157,34 @@ export type Alinhamento = "centro" | "esquerda";
  * `auto` deixa o navegador quebrar onde couber, e é o padrão — mas agora com a
  * largura medida certo, o que na prática devolve a linha única para nome curto.
  */
+/**
+ * A CAPA FICA, E A GALERIA PASSA POR CIMA DELA.
+ *
+ * Felipe, 16/09/2026: "permitir fixar o título da capa na galeria, ou seja, se
+ * for rolando a galeria, o título fica".
+ *
+ * ── O QUE ACONTECE NA TELA ───────────────────────────────────────────────
+ *
+ * A capa deixa de subir junto com a rolagem: ela fica onde está e as fotos
+ * deslizam POR CIMA, cobrindo-a. É o efeito de revelação que se vê em site de
+ * fotógrafo — o nome do casal permanece enquanto a entrega começa, em vez de
+ * sumir no primeiro gesto.
+ *
+ * ── POR QUE `sticky` E NÃO `fixed` ──────────────────────────────────────
+ *
+ * `fixed` tira a capa do fluxo: a galeria subiria para o topo da página e as
+ * primeiras fotos nasceriam ATRÁS dela. Daria para compensar com um espaçador
+ * da altura da capa, que é a altura de um eixo (`--g-capa-h`) — ou seja, dois
+ * lugares tendo de concordar sobre o mesmo número para sempre.
+ *
+ * `sticky` guarda o espaço sozinho: a capa ocupa o lugar dela, gruda no topo
+ * quando a rolagem chega, e a galeria — que vem depois e tem fundo próprio —
+ * passa por cima. Nada a sincronizar.
+ *
+ * `rola` é o que toda capa faz desde sempre, e continua sendo o padrão.
+ */
+export type CapaFixa = "rola" | "fixa";
+
 export type LinhasTitulo = "auto" | "uma" | "duas" | "tres";
 
 /**
@@ -282,6 +310,8 @@ export interface Aparencia {
   alinhamento: Alinhamento;
   /** Em quantas linhas o nome cai. Ver `LinhasTitulo`. */
   linhasTitulo: LinhasTitulo;
+  /** A capa gruda no topo e a galeria passa por cima. Ver `CapaFixa`. */
+  capaFixa: CapaFixa;
   /** Porcentagem do tamanho próprio da capa: 100 é o de sempre. Ver `TAMANHO_TITULO`. */
   tamanhoTitulo: number;
   /**
@@ -354,6 +384,8 @@ export const APARENCIA_PADRAO: Aparencia = {
      a ser medida na fonte certa. Ver `LinhasTitulo`. */
   linhasTitulo: "auto",
   tamanhoTitulo: TAMANHO_TITULO.padrao,
+  /* `rola` é o que toda capa faz desde sempre. Ver `CapaFixa`. */
+  capaFixa: "rola",
   /* `sobreposto` é o cartão de sempre. Ver o comentário de `CartaoDoLink`:
      o modo limpo é escolha, não correção. */
   cartao: "sobreposto",
@@ -470,6 +502,7 @@ export function lerAparencia(bruto: unknown): Aparencia {
     fonteTexto: valida(o.fonteTexto, OPCOES.fonteTexto.map((x) => x.id), APARENCIA_PADRAO.fonteTexto),
     alinhamento: valida(o.alinhamento, OPCOES.alinhamento.map((x) => x.id), APARENCIA_PADRAO.alinhamento),
     linhasTitulo: valida(o.linhasTitulo, OPCOES.linhasTitulo.map((x) => x.id), APARENCIA_PADRAO.linhasTitulo),
+    capaFixa: valida(o.capaFixa, OPCOES.capaFixa.map((x) => x.id), APARENCIA_PADRAO.capaFixa),
     /*
      * A barrinha é NÚMERO, e por isso não passa por `valida` — não há lista de
      * valores certos entre 60 e 180. Apara para dentro da faixa em vez de
@@ -664,6 +697,12 @@ export const OPCOES = {
   /* "Automático" primeiro porque é o padrão, e os números depois em ordem: a
      lista se lê como uma frase — quebra sozinho, ou em 1, 2, 3. O texto de
      ajuda de cada um fala do RESULTADO na capa, não do mecanismo. */
+  /* Os rótulos falam do que a pessoa VÊ, não do CSS: "sobe junto" e "fica no
+     lugar" descrevem a rolagem, que é onde a diferença aparece. */
+  capaFixa: [
+    { id: "rola", nome: "Sobe junto", desc: "A capa sai da tela conforme você rola" },
+    { id: "fixa", nome: "Fica no lugar", desc: "As fotos passam por cima da capa" },
+  ],
   linhasTitulo: [
     { id: "auto", nome: "Automático", desc: "Quebra onde couber" },
     { id: "uma", nome: "1 linha", desc: "O nome inteiro numa linha só" },
@@ -707,25 +746,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     /*
@@ -742,7 +781,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -765,25 +804,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
 ];
 
@@ -810,7 +849,8 @@ export function presetEquivalente(a: Aparencia): string | null {
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
     x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento && x.rotulo === y.rotulo && x.cartao === y.cartao &&
-    x.linhasTitulo === y.linhasTitulo && x.tamanhoTitulo === y.tamanhoTitulo;
+    x.linhasTitulo === y.linhasTitulo && x.tamanhoTitulo === y.tamanhoTitulo &&
+    x.capaFixa === y.capaFixa;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 
