@@ -7,6 +7,7 @@ import { usoDoEstudio } from "@/lib/medias";
 import { MarcaLockup } from "@/components/marca-tile";
 import { SeletorTema } from "@/components/seletor-tema";
 import { ehAdmin } from "@/config/admin";
+import { SECAO_SITE_NO_AR } from "@/config/site-do-estudio";
 import { sairAction } from "../(auth)/actions";
 
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
@@ -47,8 +48,10 @@ export default async function PainelLayout({ children }: { children: React.React
     <div className="min-h-dvh">
       <header className="border-b border-linha">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-6 py-4">
+          {/* Sem o descritor: aqui ele repetia o título da tela — ver
+              `MarcaLockup`. */}
           <Link href="/painel">
-            <MarcaLockup tamanho={40} />
+            <MarcaLockup tamanho={40} descritor={false} />
           </Link>
 
           <nav className="ml-auto flex items-center gap-1 text-sm">
@@ -58,12 +61,17 @@ export default async function PainelLayout({ children }: { children: React.React
             >
               Galerias
             </Link>
-            <Link
-              href="/painel/site"
-              className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"
-            >
-              Site
-            </Link>
+            {/* Fora do ar a pedido do Juan em 16/09/2026 — ver
+                `config/site-do-estudio.ts`. A rota devolve 404 junto: link
+                escondido com rota aberta é segurança de fachada. */}
+            {SECAO_SITE_NO_AR && (
+              <Link
+                href="/painel/site"
+                className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"
+              >
+                Site
+              </Link>
+            )}
             <Link
               href="/painel/conta"
               className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"

@@ -3,7 +3,13 @@
 import { useActionState, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { criarGaleriaAction, type EstadoGaleria } from "../../actions";
-import { Campo, Erro, BotaoEnviar } from "@/components/form-ui";
+import {
+  Campo,
+  Erro,
+  BotaoEnviar,
+  BOTAO_PRIMARIO,
+  BOTAO_SECUNDARIO,
+} from "@/components/form-ui";
 import { FONTES_TITULO, PRESETS, TEMAS } from "@/config/aparencia";
 
 /**
@@ -31,7 +37,16 @@ const ETAPAS = ["Dados", "Estilo", "Capítulos"] as const;
 
 function Botao({ ultima }: { ultima: boolean }) {
   const { pending } = useFormStatus();
-  return <BotaoEnviar carregando={pending}>{ultima ? "Criar galeria" : "Criar mesmo assim"}</BotaoEnviar>;
+  /*
+   * Na última etapa "Criar galeria" É o caminho, e leva a ênfase. Antes dela,
+   * "Continuar" é o caminho e este botão é o atalho de quem não quer as duas
+   * etapas opcionais — secundário, e da mesma altura. Ver `BOTAO_BASE`.
+   */
+  return (
+    <BotaoEnviar carregando={pending} emLinha variante={ultima ? "primario" : "secundario"}>
+      {ultima ? "Criar galeria" : "Criar mesmo assim"}
+    </BotaoEnviar>
+  );
 }
 
 export function AssistenteNovaGaleria({
@@ -181,7 +196,7 @@ export function AssistenteNovaGaleria({
           <button
             type="button"
             onClick={() => setEtapa((e) => e - 1)}
-            className="rounded-lg border border-linha px-4 py-2 text-sm text-texto-soft transition hover:bg-carbon"
+            className={BOTAO_SECUNDARIO}
           >
             Voltar
           </button>
@@ -191,7 +206,7 @@ export function AssistenteNovaGaleria({
             type="button"
             disabled={semNome}
             onClick={() => setEtapa((e) => e + 1)}
-            className="rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:opacity-40"
+            className={BOTAO_PRIMARIO}
           >
             Continuar
           </button>

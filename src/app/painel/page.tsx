@@ -28,13 +28,30 @@ export default async function PainelPage() {
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
+        {/*
+          A CONTA AO LADO DO TÍTULO, e não numa linha embaixo.
+
+          Eram duas linhas dizendo quase a mesma palavra — "Galerias" e, logo
+          abaixo, "3 galerias" —, e acima delas o cabeçalho ainda escrevia
+          "galerias de entrega". Felipe: "repete duas vezes o galeria". A
+          contagem é um NÚMERO, não uma frase: ao lado do título ela informa o
+          mesmo e devolve a linha.
+
+          A tela vazia continua com frase, porque ali não há número a mostrar e
+          "0" seria um jeito seco de dar uma notícia que merece uma.
+        */}
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Galerias</h1>
-          <p className="mt-1 text-sm text-texto-soft">
-            {galerias.length === 0
-              ? "Nenhuma galeria ainda."
-              : `${galerias.length} ${galerias.length === 1 ? "galeria" : "galerias"}`}
-          </p>
+          <h1 className="flex items-baseline gap-2.5 text-2xl font-bold tracking-tight">
+            Galerias
+            {galerias.length > 0 && (
+              <span className="text-base font-normal tabular-nums text-texto-faint">
+                {galerias.length}
+              </span>
+            )}
+          </h1>
+          {galerias.length === 0 && (
+            <p className="mt-1 text-sm text-texto-soft">Nenhuma galeria ainda.</p>
+          )}
         </div>
         <Link
           href="/painel/galerias/nova"

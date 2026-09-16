@@ -177,12 +177,18 @@ await etapa("o painel não chama de publicada uma galeria que está no cofre", a
 
   /* Só o selo interessa, não a página inteira: a palavra "publicada" aparece em
    * texto de ajuda ("enquanto não estiver publicada…") sem mentir sobre nada. */
-  /* O seletor procura a PASTILHA, e não uma classe exata: em 05/09/2026 o selo
-     virou selo-e-botão (`publicar-no-cabecalho.tsx`, a pedido do Juan) e ganhou
-     cores por estado, o que quebrou o casamento literal de antes sem que nada do
-     comportamento mudasse. `rounded-full` + o tamanho do texto é o que
-     identifica a pastilha em qualquer um dos três estados. */
-  const selo = html.match(/class="rounded-full[^"]*px-3 py-1 text-xs[^"]*"[^>]*>([^<]+)</);
+  /* O seletor procura o ATRIBUTO, e não a classe.
+   *
+   * Duas vezes ele foi uma string de classes do Tailwind, e duas vezes quebrou
+   * sem nada do comportamento mudar: em 05/09/2026, quando o selo virou
+   * selo-e-botão a pedido do Juan, e em 16/09/2026, quando as pastilhas do
+   * cabeçalho foram uniformizadas. Teste que quebra com troca de padding não
+   * está guardando o que diz guardar.
+   *
+   * `data-selo="estado"` é a promessa que o componente assume: aqui está, por
+   * extenso, o que a tela afirma sobre o link do cliente. Cor, raio e espaço
+   * podem mudar à vontade. */
+  const selo = html.match(/data-selo="estado"[^>]*>\s*([^<]+?)\s*</);
   if (!selo) throw new Error("não achei o selo de estado no cabeçalho da galeria");
   const dito = selo[1].trim();
   if (dito === "publicada") {
