@@ -18,7 +18,7 @@ import {
   PARALELOS,
   type ArquivoComCaminho,
   comRetentativa,
-  emParalelo,
+  emParaleloDeFila,
   manterAcordado,
   ordenarNaturalPorCaminho,
   arquivoAceito,
@@ -199,6 +199,240 @@ export function ProvedorDeEnvio({
     "O envio ainda está em andamento. Se sair agora, os arquivos que faltam não sobem.",
   );
 
+  /*
+   * ── UMA FILA, VÁRIOS LOTES (16/09/2026) ─────────────────────────────────
+   *
+   * Felipe: "não consigo enviar simultaneamente fotos para making of,
+   * cerimônia, decoração, etc. Tenho que esperar subir as fotos de um dos
+   * capítulos pra depois conseguir continuar subindo nos outros." E depois:
+   * "não bloquear o 'enviar para capítulo'".
+   *
+   * O seletor de capítulo ficava desabilitado durante o envio, e a trava não
+   * era capricho: `enfileirar` era uma corrida FECHADA. Ele montava o array do
+   * lote, chamava `emParalelo` sobre ele e, no fim, desligava o "enviando".
+   * Chamá-lo duas vezes criava duas corridas independentes — seis envios
+   * simultâneos onde a rede comporta três, e a primeira a terminar apagando o
+   * estado da outra.
+   *
+   * Agora `enfileirar` só PREPARA e EMPURRA: resolve os capítulos da pasta,
+   * carrega o modelo de rosto se for o caso, monta as tarefas e as põe no fim
+   * de `pendentes`. Quem envia é um trabalhador só (`trabalhar`), que puxa da
+   * lista até ela secar. Um segundo lote no meio do primeiro entra na mesma
+   * fila, e o seletor pode ficar livre.
+   *
+   * `pendentes` é ref e não estado: quem lê é o laço de envio, a cada arquivo,
+   * e um estado daria a ele a lista congelada do render em que nasceu.
+   */
+  type Tarefa = {
+    item: ItemFila;
+    arquivo: File;
+    /** Já resolvido: a pasta vence o seletor da tela. */
+    secaoId?: string;
+    indice: number;
+    medidor?: (bitmap: ImageBitmap) => Promise<RostoMedido[]>;
+  };
+  const pendentes = useRef<Tarefa[]>([]);
+  const trabalhandoRef = useRef(false);
+  /*
+   * A ORDEM continua de onde parou entre lotes.
+   *
+   * O índice vira posição na galeria (ver `criarMediaPendente`). Se o segundo
+   * lote recomeçasse do zero enquanto o primeiro ainda sobe, as duas metades
+   * disputariam as mesmas posições e a narrativa do casamento sairia
+   * embaralhada. O contador só zera quando a fila seca.
+   */
+  const proximoIndice = useRef(0);
+
+  const enviarUm = useCallback(
+    async (tarefa: Tarefa) => {
+      /*
+       * O preparo acontece UMA vez, mesmo com várias tentativas.
+       *
+       * Antes ele estava dentro do `comRetentativa`: uma queda de rede durante
+       * o envio fazia a tentativa seguinte chamar /upload de novo e nascer uma
+       * SEGUNDA linha em `medias`. A primeira ficava pendente para sempre,
+       * segurando espaço da quota por um arquivo que nunca existiu.
+       */
+      type Preparo = { mediaId: string; urlThumb?: string; urlPreview?: string } & (
+        | { emPartes: true; tamanhoParte: number }
+        | { emPartes: false; url: string }
+      );
+      let preparado: Preparo | null = null;
+
+      try {
+        await comRetentativa(
+          async () => {
+            atualizar(tarefa.item.id, { situacao: "preparando", progresso: 0 });
+            const derivadas = await gerarDerivadas(tarefa.arquivo, { medirRostos: tarefa.medidor });
+
+            atualizar(tarefa.item.id, { situacao: "enviando" });
+
+            if (!preparado) {
+              const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  nome: tarefa.arquivo.name,
+                  mime: tarefa.arquivo.type,
+                  bytes: tarefa.arquivo.size,
+                  comDerivadas: Boolean(derivadas),
+                  /* Vídeo manda pôster e não manda preview: sem este aviso a
+                     rota reservaria a chave do preview e a mídia ficaria com um
+                     `chave_preview` apontando para um arquivo que nunca sobe —
+                     e o lightbox pediria esse arquivo em vez do filme. */
+                  comPreview: Boolean(derivadas?.preview),
+                  largura: derivadas?.largura,
+                  altura: derivadas?.altura,
+                  /* A pasta manda: o capítulo lido do disco vence o seletor
+                   * da tela, que é o palpite para arquivos soltos. */
+                  secaoId: tarefa.secaoId,
+                  // A ordem que o fotógrafo escolheu é a narrativa do casamento.
+                  indice: tarefa.indice,
+                }),
+              });
+              const corpo = await preparo.json();
+              if (!preparo.ok) {
+                // Sem espaço, tipo recusado ou grande demais: insistir não resolve.
+                if (
+                  preparo.status === 507 ||
+                  preparo.status === 415 ||
+                  preparo.status === 413
+                ) {
+                  throw Object.assign(new Error(corpo.erro), { definitivo: true });
+                }
+                throw new Error(corpo.erro ?? "não foi possível preparar o envio");
+              }
+              preparado = corpo;
+            }
+            const dados = preparado!;
+
+            /*
+             * As DERIVADAS sobem JUNTO com o original, não depois dele.
+             * Medido em 03/09/2026: enfileirá-las atrás do original custava
+             * 0,8 s por foto para 300 KB. Não é banda, é latência.
+             */
+            /*
+             * O PREVIEW PODE NÃO EXISTIR, e isso é vídeo (16/09/2026).
+             *
+             * Vídeo gera pôster e não gera arquivo de 2048 px — ver
+             * `Derivadas.preview`. As duas subidas viraram uma lista
+             * montada, em vez de um par fixo: com o par, um `urlPreview`
+             * nulo derrubava a miniatura do vídeo junto, e a grade voltava
+             * ao retângulo cinza que o Felipe fotografou.
+             */
+            const paraSubir: Array<Promise<unknown>> = [];
+            if (derivadas && dados.urlThumb) {
+              paraSubir.push(enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}));
+            }
+            if (derivadas?.preview && dados.urlPreview) {
+              paraSubir.push(enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}));
+            }
+            const derivadasSubindo = paraSubir.length
+              ? Promise.allSettled(paraSubir)
+              : Promise.resolve();
+
+            // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
+            if (dados.emPartes) {
+              await enviarEmPartes(dados.mediaId, tarefa.arquivo, dados.tamanhoParte, (pct) =>
+                atualizar(tarefa.item.id, { progresso: pct }),
+              );
+            } else {
+              await enviarComProgresso(dados.url, tarefa.arquivo, (pct) =>
+                atualizar(tarefa.item.id, { progresso: pct }),
+              );
+            }
+            await derivadasSubindo;
+
+            // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
+            if (!dados.emPartes) {
+              const conf = await fetch(`/api/medias/${dados.mediaId}/confirmar`, {
+                method: "POST",
+              });
+              if (!conf.ok) {
+                const c = await conf.json();
+                throw new Error(c.erro ?? "o arquivo não foi confirmado");
+              }
+            }
+
+            /*
+             * Os rostos sobem DEPOIS da confirmação e fora da retentativa: a
+             * foto já está entregue, e falhar aqui não pode desfazê-la.
+             */
+            if (tarefa.medidor && derivadas?.rostos) {
+              const rostos = await derivadas.rostos.catch(() => null);
+              if (rostos) {
+                const r = await fetch(`/api/medias/${dados.mediaId}/rostos`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ rostos }),
+                }).catch(() => null);
+                if (r?.ok) {
+                  const { salvos } = (await r.json()) as { salvos: number };
+                  atualizar(tarefa.item.id, { rostos: salvos });
+                }
+              }
+            }
+          },
+          (tentativa) => atualizar(tarefa.item.id, { tentativa, situacao: "esperando", progresso: 0 }),
+        );
+
+        atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100 });
+      } catch (e) {
+        /*
+         * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
+         * preso até a limpeza diária passar.
+         */
+        const p = preparado as { mediaId: string; emPartes: boolean } | null;
+        if (p?.mediaId) {
+          const rota = p.emPartes
+            ? `/api/medias/${p.mediaId}/partes`
+            : `/api/medias/${p.mediaId}/confirmar`;
+          await fetch(rota, { method: "DELETE" }).catch(() => {});
+        }
+        atualizar(tarefa.item.id, {
+          situacao: "erro",
+          erro: e instanceof Error ? e.message : "falhou",
+        });
+      }
+    },
+    [galeriaId],
+  );
+
+  const trabalhar = useCallback(async () => {
+    if (trabalhandoRef.current) return;
+    trabalhandoRef.current = true;
+    setRodando(true);
+    setInicio((atual) => atual ?? Date.now());
+    setAgora(Date.now()); // sem isto, o primeiro segundo mostraria tempo negativo
+
+    const soltar = await manterAcordado();
+    await emParaleloDeFila(
+      () => pendentes.current.shift() ?? null,
+      PARALELOS,
+      enviarUm,
+      async () => (paradoRef.current ? "parar" : pausadoRef.current ? "esperar" : "seguir"),
+    );
+    soltar();
+
+    trabalhandoRef.current = false;
+    setRodando(false);
+    setPausado(false);
+    proximoIndice.current = 0;
+    /* O que ficou em "esperando" quando alguém parou não vai subir: dizer isso
+       é melhor que deixar a linha girando para sempre. */
+    if (paradoRef.current) {
+      pendentes.current = [];
+      setFila((f) =>
+        f.map((i) =>
+          i.situacao === "esperando" || i.situacao === "preparando" || i.situacao === "enviando"
+            ? { ...i, situacao: "erro", erro: "parado por você" }
+            : i,
+        ),
+      );
+    }
+    router.refresh();
+  }, [enviarUm, router]);
+
   const enfileirar = useCallback(
     async (brutos: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => {
       const itens = ordenarNaturalPorCaminho(brutos.filter((b) => arquivoAceito(b.arquivo)));
@@ -235,22 +469,6 @@ export function ProvedorDeEnvio({
         }
       }
 
-      const arquivos = itens.map((i) => i.arquivo);
-      const novos: ItemFila[] = arquivos.map((a, i) => ({
-        id: `${Date.now()}-${i}-${a.name}`,
-        nome: a.name,
-        bytes: a.size,
-        progresso: 0,
-        situacao: "esperando",
-        tentativa: 0,
-      }));
-      setFila((f) => [...f, ...novos]);
-      setRodando(true);
-      setInicio((atual) => atual ?? Date.now());
-      setAgora(Date.now()); // sem isto, o primeiro segundo mostraria tempo negativo
-
-      const soltar = await manterAcordado();
-
       /*
        * A BUSCA POR ROSTO entra aqui, e só aqui: com ela ligada, cada foto é
        * medida no ORIGINAL enquanto está aberta para gerar as derivadas. É o
@@ -279,183 +497,36 @@ export function ProvedorDeEnvio({
         }
       }
 
-      // Vários ao mesmo tempo: um por vez faria 600 fotos levarem horas.
-      await emParalelo(
-        arquivos,
-        PARALELOS,
-        async (arquivo, i) => {
-          const item = novos[i];
+      const lote = itens.map((it, k) => {
+        const item: ItemFila = {
+          /* O `k` sozinho repetia entre lotes enfileirados no mesmo
+             milissegundo; o índice global não repete nunca. */
+          id: `${Date.now()}-${proximoIndice.current + k}-${it.arquivo.name}`,
+          nome: it.arquivo.name,
+          bytes: it.arquivo.size,
+          progresso: 0,
+          situacao: "esperando" as const,
+          tentativa: 0,
+        };
+        return {
+          item,
+          arquivo: it.arquivo,
+          /* A pasta manda: o capítulo lido do disco vence o seletor da tela,
+             que é o palpite para arquivos soltos. Resolvido AQUI e guardado na
+             tarefa — na hora do envio o seletor já pode estar em outro
+             capítulo, que é justamente o que esta mudança libera. */
+          secaoId: porCaminho.get(it.caminho) || opcoes.destino || undefined,
+          indice: proximoIndice.current + k,
+          medidor,
+        };
+      });
+      proximoIndice.current += lote.length;
 
-          /*
-           * O preparo acontece UMA vez, mesmo com várias tentativas.
-           *
-           * Antes ele estava dentro do `comRetentativa`: uma queda de rede durante
-           * o envio fazia a tentativa seguinte chamar /upload de novo e nascer uma
-           * SEGUNDA linha em `medias`. A primeira ficava pendente para sempre,
-           * segurando espaço da quota por um arquivo que nunca existiu.
-           */
-          type Preparo = { mediaId: string; urlThumb?: string; urlPreview?: string } & (
-            | { emPartes: true; tamanhoParte: number }
-            | { emPartes: false; url: string }
-          );
-          let preparado: Preparo | null = null;
-
-          try {
-            await comRetentativa(
-              async () => {
-                atualizar(item.id, { situacao: "preparando", progresso: 0 });
-                const derivadas = await gerarDerivadas(arquivo, { medirRostos: medidor });
-
-                atualizar(item.id, { situacao: "enviando" });
-
-                if (!preparado) {
-                  const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      nome: arquivo.name,
-                      mime: arquivo.type,
-                      bytes: arquivo.size,
-                      comDerivadas: Boolean(derivadas),
-                      /* Vídeo manda pôster e não manda preview: sem este aviso a
-                         rota reservaria a chave do preview e a mídia ficaria com um
-                         `chave_preview` apontando para um arquivo que nunca sobe —
-                         e o lightbox pediria esse arquivo em vez do filme. */
-                      comPreview: Boolean(derivadas?.preview),
-                      largura: derivadas?.largura,
-                      altura: derivadas?.altura,
-                      /* A pasta manda: o capítulo lido do disco vence o seletor
-                       * da tela, que é o palpite para arquivos soltos. */
-                      secaoId: porCaminho.get(itens[i].caminho) || opcoes.destino || undefined,
-                      // A ordem que o fotógrafo escolheu é a narrativa do casamento.
-                      indice: i,
-                    }),
-                  });
-                  const corpo = await preparo.json();
-                  if (!preparo.ok) {
-                    // Sem espaço, tipo recusado ou grande demais: insistir não resolve.
-                    if (
-                      preparo.status === 507 ||
-                      preparo.status === 415 ||
-                      preparo.status === 413
-                    ) {
-                      throw Object.assign(new Error(corpo.erro), { definitivo: true });
-                    }
-                    throw new Error(corpo.erro ?? "não foi possível preparar o envio");
-                  }
-                  preparado = corpo;
-                }
-                const dados = preparado!;
-
-                /*
-                 * As DERIVADAS sobem JUNTO com o original, não depois dele.
-                 * Medido em 03/09/2026: enfileirá-las atrás do original custava
-                 * 0,8 s por foto para 300 KB. Não é banda, é latência.
-                 */
-                /*
-                 * O PREVIEW PODE NÃO EXISTIR, e isso é vídeo (16/09/2026).
-                 *
-                 * Vídeo gera pôster e não gera arquivo de 2048 px — ver
-                 * `Derivadas.preview`. As duas subidas viraram uma lista
-                 * montada, em vez de um par fixo: com o par, um `urlPreview`
-                 * nulo derrubava a miniatura do vídeo junto, e a grade voltava
-                 * ao retângulo cinza que o Felipe fotografou.
-                 */
-                const paraSubir: Array<Promise<unknown>> = [];
-                if (derivadas && dados.urlThumb) {
-                  paraSubir.push(enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}));
-                }
-                if (derivadas?.preview && dados.urlPreview) {
-                  paraSubir.push(enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}));
-                }
-                const derivadasSubindo = paraSubir.length
-                  ? Promise.allSettled(paraSubir)
-                  : Promise.resolve();
-
-                // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
-                if (dados.emPartes) {
-                  await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
-                    atualizar(item.id, { progresso: pct }),
-                  );
-                } else {
-                  await enviarComProgresso(dados.url, arquivo, (pct) =>
-                    atualizar(item.id, { progresso: pct }),
-                  );
-                }
-                await derivadasSubindo;
-
-                // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
-                if (!dados.emPartes) {
-                  const conf = await fetch(`/api/medias/${dados.mediaId}/confirmar`, {
-                    method: "POST",
-                  });
-                  if (!conf.ok) {
-                    const c = await conf.json();
-                    throw new Error(c.erro ?? "o arquivo não foi confirmado");
-                  }
-                }
-
-                /*
-                 * Os rostos sobem DEPOIS da confirmação e fora da retentativa: a
-                 * foto já está entregue, e falhar aqui não pode desfazê-la.
-                 */
-                if (medidor && derivadas?.rostos) {
-                  const rostos = await derivadas.rostos.catch(() => null);
-                  if (rostos) {
-                    const r = await fetch(`/api/medias/${dados.mediaId}/rostos`, {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ rostos }),
-                    }).catch(() => null);
-                    if (r?.ok) {
-                      const { salvos } = (await r.json()) as { salvos: number };
-                      atualizar(item.id, { rostos: salvos });
-                    }
-                  }
-                }
-              },
-              (tentativa) => atualizar(item.id, { tentativa, situacao: "esperando", progresso: 0 }),
-            );
-
-            atualizar(item.id, { situacao: "pronto", progresso: 100 });
-          } catch (e) {
-            /*
-             * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
-             * preso até a limpeza diária passar.
-             */
-            const p = preparado as { mediaId: string; emPartes: boolean } | null;
-            if (p?.mediaId) {
-              const rota = p.emPartes
-                ? `/api/medias/${p.mediaId}/partes`
-                : `/api/medias/${p.mediaId}/confirmar`;
-              await fetch(rota, { method: "DELETE" }).catch(() => {});
-            }
-            atualizar(item.id, {
-              situacao: "erro",
-              erro: e instanceof Error ? e.message : "falhou",
-            });
-          }
-        },
-        async () => (paradoRef.current ? "parar" : pausadoRef.current ? "esperar" : "seguir"),
-      );
-
-      soltar();
-      setRodando(false);
-      setPausado(false);
-      /* O que ficou em "esperando" quando alguém parou não vai subir: dizer isso
-         é melhor que deixar a linha girando para sempre. */
-      if (paradoRef.current) {
-        setFila((f) =>
-          f.map((i) =>
-            i.situacao === "esperando" || i.situacao === "preparando" || i.situacao === "enviando"
-              ? { ...i, situacao: "erro", erro: "parado por você" }
-              : i,
-          ),
-        );
-      }
-      router.refresh();
+      pendentes.current.push(...lote);
+      setFila((f) => [...f, ...lote.map((t) => t.item)]);
+      void trabalhar();
     },
-    [galeriaId, router],
+    [galeriaId, trabalhar],
   );
 
   const valor = useMemo<Envio>(

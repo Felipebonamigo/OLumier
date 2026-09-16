@@ -114,6 +114,71 @@ export async function emParalelo<T>(
   if (falha) throw falha;
 }
 
+/**
+ * Como `emParalelo`, mas a lista pode CRESCER enquanto a fila corre.
+ *
+ * ── O PEDIDO (16/09/2026) ────────────────────────────────────────────────
+ *
+ * Felipe: "não consigo enviar simultaneamente fotos para making of, cerimônia,
+ * decoração, etc. Tenho que esperar subir as fotos de um dos capítulos pra
+ * depois conseguir continuar subindo nos outros."
+ *
+ * O seletor de capítulo ficava desabilitado durante o envio, e não era
+ * capricho: `emParalelo` recebe um ARRAY PRONTO. Chamar o envio duas vezes
+ * criava duas corridas independentes — o dobro dos envios simultâneos que a
+ * rede aguenta, e a primeira a terminar apagava o "enviando…" da outra.
+ *
+ * Aqui os trabalhadores pedem o próximo item a uma FUNÇÃO em vez de andar por
+ * um índice. Quem enfileira um segundo lote no meio do primeiro só empurra
+ * itens para o fim da lista: os mesmos três trabalhadores os pegam quando
+ * chegarem neles, e continua existindo uma corrida só.
+ *
+ * ── FALHA NÃO PARA OS OUTROS, AO CONTRÁRIO DE `emParalelo` ───────────────
+ *
+ * Lá, um erro derruba a corrida inteira — é o certo quando a lista é um lote
+ * indivisível. Aqui a lista é a fila do dia: uma foto corrompida no meio de 600
+ * não pode levar junto as 400 que faltam, e cada tarefa já marca o próprio erro
+ * na linha dela.
+ */
+export async function emParaleloDeFila<T>(
+  proximo: () => T | null,
+  limite: number,
+  tarefa: (item: T) => Promise<void>,
+  portao?: Portao,
+): Promise<void> {
+  let parado = false;
+
+  const trabalhadores = Array.from({ length: Math.max(1, limite) }, async () => {
+    for (;;) {
+      if (parado) return;
+      if (portao) {
+        let ordem = await portao();
+        while (ordem === "esperar") {
+          await new Promise((r) => setTimeout(r, 120));
+          ordem = await portao();
+        }
+        if (ordem === "parar") {
+          parado = true;
+          return;
+        }
+      }
+      /* `proximo()` é síncrono de propósito: entre perguntar e receber não pode
+         caber um await, senão dois trabalhadores levam o mesmo item. */
+      const item = proximo();
+      if (item === null) return;
+      try {
+        await tarefa(item);
+      } catch {
+        /* A tarefa é quem sabe marcar o próprio erro na linha da fila. Aqui só
+           não se pode deixar a rejeição solta, que no navegador vira erro no
+           console e derruba o trabalhador antes da hora. */
+      }
+    }
+  });
+
+  await Promise.allSettled(trabalhadores);
+}
+
 const EXTENSOES = /\.(jpe?g|png|webp|avif|heic|heif|mp4|mov|webm)$/i;
 
 /** Ignora o lixo que vem junto quando se arrasta uma pasta inteira. */

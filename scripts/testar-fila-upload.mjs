@@ -42,6 +42,102 @@ await etapa("envia em paralelo, respeitando o limite", async () => {
   return `12 arquivos, pico de ${pico} simultâneos`;
 });
 
+/*
+ * ── DOIS CAPÍTULOS AO MESMO TEMPO (16/09/2026) ───────────────────────────
+ *
+ * Felipe: "não consigo enviar simultaneamente fotos para making of, cerimônia,
+ * decoração, etc. Tenho que esperar subir as fotos de um dos capítulos."
+ *
+ * O seletor de capítulo ficava travado durante o envio porque a fila era uma
+ * corrida FECHADA por lote: `emParalelo` recebe um array pronto, e um segundo
+ * lote virava uma segunda corrida — o dobro dos envios simultâneos que a rede
+ * aguenta, e a primeira a acabar apagando o estado da outra.
+ *
+ * `emParaleloDeFila` troca o array por uma função que entrega o próximo item.
+ * As três etapas abaixo são a promessa disso: o lote novo entra na MESMA
+ * corrida, o limite continua valendo com a fila crescendo, e ninguém pega o
+ * mesmo item duas vezes.
+ */
+await etapa("um lote enfileirado NO MEIO do primeiro entra na mesma corrida", async () => {
+  const pendentes = [1, 2, 3, 4, 5, 6];
+  const feitos = [];
+  let simultaneos = 0;
+  let pico = 0;
+  let empurrou = false;
+
+  await mod.emParaleloDeFila(
+    () => pendentes.shift() ?? null,
+    mod.PARALELOS,
+    async (item) => {
+      simultaneos++;
+      pico = Math.max(pico, simultaneos);
+      await new Promise((r) => setTimeout(r, 20));
+      feitos.push(item);
+      /* O segundo lote chega com a corrida já andando — é o gesto do Felipe
+         trocando o capítulo e soltando outra pasta. */
+      if (!empurrou && feitos.length >= 3) {
+        empurrou = true;
+        pendentes.push(7, 8, 9);
+      }
+      simultaneos--;
+    },
+  );
+
+  if (feitos.length !== 9) throw new Error(`terminou com ${feitos.length} de 9`);
+  if (new Set(feitos).size !== 9) throw new Error("algum item foi processado duas vezes");
+  if (pico > mod.PARALELOS) throw new Error(`passou do limite com a fila crescendo: ${pico}`);
+  return `9 arquivos em dois lotes, pico de ${pico} simultâneos`;
+});
+
+await etapa("fila vazia não deixa trabalhador girando", async () => {
+  let chamou = 0;
+  await mod.emParaleloDeFila(
+    () => null,
+    mod.PARALELOS,
+    async () => {
+      chamou++;
+    },
+  );
+  if (chamou !== 0) throw new Error(`chamou a tarefa ${chamou} vezes sem item nenhum`);
+  return "voltou na hora";
+});
+
+await etapa("um arquivo com defeito não derruba os que faltam", async () => {
+  /* Diferença deliberada em relação a `emParalelo`: lá, um erro derruba a
+     corrida inteira, porque a lista é um lote indivisível. Aqui a lista é a
+     fila do dia — uma foto corrompida no meio de 600 não pode levar junto as
+     400 que faltam. */
+  const pendentes = [1, 2, 3, 4, 5];
+  const feitos = [];
+  await mod.emParaleloDeFila(
+    () => pendentes.shift() ?? null,
+    mod.PARALELOS,
+    async (item) => {
+      if (item === 2) throw new Error("arquivo corrompido");
+      feitos.push(item);
+    },
+  );
+  if (feitos.length !== 4) throw new Error(`só ${feitos.length} de 4 sobreviveram ao erro`);
+  return "4 de 5, e o erro ficou no arquivo";
+});
+
+await etapa("o portão para a fila crescente também", async () => {
+  const pendentes = [1, 2, 3, 4, 5, 6];
+  const feitos = [];
+  let parar = false;
+  await mod.emParaleloDeFila(
+    () => pendentes.shift() ?? null,
+    1,
+    async (item) => {
+      feitos.push(item);
+      if (feitos.length === 2) parar = true;
+    },
+    async () => (parar ? "parar" : "seguir"),
+  );
+  if (feitos.length !== 2) throw new Error(`parou em ${feitos.length}, esperava 2`);
+  return "parou onde mandaram";
+});
+
 await etapa("processa TODOS os itens da fila", async () => {
   const feitos = new Set();
   const itens = Array.from({ length: 25 }, (_, i) => i);
