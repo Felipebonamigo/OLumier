@@ -671,7 +671,21 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         }}
       />
 
-      <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
+      {/*
+        A GALERIA PASSA POR CIMA DA CAPA — quando a capa é fixa.
+
+        Felipe, 16/09/2026: "permitir fixar o título da capa na galeria". A capa
+        vira `sticky` (ver `CapaFixa`), e é ESTA camada que a cobre: sem
+        `z-10` a ordem de quem tapa quem passaria a depender da ordem do
+        documento, e sem fundo próprio a capa apareceria por trás das fotos.
+
+        Com a capa rolando — o padrão — as duas classes não mudam nada: `z-10`
+        sem ninguém disputando é só um número, e o fundo é o mesmo da página.
+      */}
+      <div
+        className="relative z-10 mx-auto max-w-[1500px] px-4 sm:px-6"
+        style={{ background: "var(--g-fundo)" }}
+      >
         {itens.length === 0 && ehDono ? (
           /*
            * A prévia com a galeria vazia mostrava só "as fotos estão sendo

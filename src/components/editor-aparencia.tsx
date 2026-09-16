@@ -696,6 +696,9 @@ export function EditorAparencia({
                   outro lado: escolher "imersa" e depois "baixa" é dizer foto em
                   tela cheia, mas não a tela inteira. */}
               <Eixo eixo="alturaCapa" titulo="Altura da capa" ap={ap} mudar={mudar} />
+              {/* Junto da altura porque as duas respondem à mesma pergunta —
+                  quanto da tela a capa ocupa, e por quanto tempo. */}
+              <Eixo eixo="capaFixa" titulo="Ao rolar a página" ap={ap} mudar={mudar} />
               <Eixo eixo="alinhamento" titulo="Alinhamento do texto" ap={ap} mudar={mudar} />
 
               {/*

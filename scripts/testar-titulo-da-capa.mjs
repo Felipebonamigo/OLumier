@@ -192,6 +192,51 @@ await etapa("o tamanho é contínuo entre celular e computador, não um degrau",
   return `${min}rem no celular → ${max}rem no computador`;
 });
 
+/* ── A CAPA QUE FICA ────────────────────────────────────────────────────── */
+
+/*
+ * Felipe, 16/09/2026: "permitir fixar o título da capa na galeria, ou seja, se
+ * for rolando a galeria, o título fica".
+ *
+ * O efeito é de CSS, e a prova de que funciona foi no navegador: com a capa
+ * rolando, o título sai da tela (topo em -796 px depois de rolar 1200);
+ * fixa, ele continua em 121 px. O que se guarda aqui é o que o HTML precisa
+ * carregar para isso acontecer — e, sobretudo, que o padrão não mudou.
+ */
+await etapa("a capa fixa gruda no topo", async () => {
+  const html = await tituloCom({ capaFixa: "fixa" });
+  void html;
+  const pagina = await (
+    await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })
+  ).text();
+  const cabecalho = pagina.match(/<header[^>]*data-capa[^>]*>/)?.[0] ?? "";
+  if (!/\bsticky\b/.test(cabecalho)) throw new Error(`o cabeçalho veio "${cabecalho.slice(0, 120)}"`);
+  return "sticky no cabeçalho";
+});
+
+await etapa("a galeria se declara por cima da capa fixa", async () => {
+  /* Sem esta camada, a capa grudada apareceria POR TRÁS das fotos e a rolagem
+     viraria uma sobreposição de duas imagens. */
+  const pagina = await (
+    await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })
+  ).text();
+  if (!/class="relative z-10 mx-auto/.test(pagina)) {
+    throw new Error("a camada da galeria perdeu o z-10");
+  }
+  return "z-10 sobre a capa";
+});
+
+await etapa("o padrão continua sendo a capa que sobe junto", async () => {
+  await tituloCom({ capaFixa: "rola" });
+  const pagina = await (
+    await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })
+  ).text();
+  const cabecalho = pagina.match(/<header[^>]*data-capa[^>]*>/)?.[0] ?? "";
+  if (/\bsticky\b/.test(cabecalho)) throw new Error("grudou sem ninguém pedir");
+  if (lerAparencia({}).capaFixa !== "rola") throw new Error("o padrão mudou");
+  return "rola, como sempre";
+});
+
 /* ── 5. O EIXO SE COMPORTA COMO OS OUTROS ────────────────────────────────── */
 
 await etapa("os dois eixos existem na interface", () => {
