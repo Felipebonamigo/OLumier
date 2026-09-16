@@ -182,7 +182,12 @@ export default async function GaleriaLayout({
             entre as duas ações e parecia um botão apagado. Ver
             `components/publicar-no-cabecalho.tsx`.
           */}
-          <AcaoDePublicar galeriaId={galeria.id} publicada={noAr} noCofre={noCofre} />
+          <AcaoDePublicar
+            galeriaId={galeria.id}
+            publicada={noAr}
+            noCofre={noCofre}
+            aparenciaPendente={temAparenciaPendente}
+          />
         </div>
       </header>
 

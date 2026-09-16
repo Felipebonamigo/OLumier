@@ -2,7 +2,7 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { salvarPublicacaoAction } from "@/app/painel/actions";
+import { publicarAlteracoesAction, salvarPublicacaoAction } from "@/app/painel/actions";
 
 /**
  * PUBLICAR DE QUALQUER ABA.
@@ -108,10 +108,13 @@ export function AcaoDePublicar({
   galeriaId,
   publicada,
   noCofre,
+  aparenciaPendente = false,
 }: {
   galeriaId: string;
   publicada: boolean;
   noCofre: boolean;
+  /** Há escolha de aparência gravada e ainda não publicada. */
+  aparenciaPendente?: boolean;
 }) {
   const [salvando, iniciar] = useTransition();
   const router = useRouter();
@@ -132,6 +135,45 @@ export function AcaoDePublicar({
 
   if (publicada) {
     /*
+      ── PUBLICAR AS ALTERAÇÕES (16/09/2026) ────────────────────────────────
+
+      Felipe: "aqui, para poder ver a galeria, estamos precisando tirar do ar e
+      publicar novamente. Talvez um botão republicar com as atualizações."
+
+      O buraco era real: "Publicar galeria" só existia enquanto a galeria fosse
+      rascunho, e era ele que promovia a aparência pendente. Publicada, o
+      cabeçalho só oferecia "tirar do ar" — então o caminho que sobrava para
+      pôr o desenho novo no ar era despublicar e publicar de novo, com o link
+      do casal fora do ar no meio.
+
+      Aparece SÓ com rascunho pendente. Um botão permanente chamado "publicar
+      alterações" numa galeria sem alteração nenhuma é um botão que não faz
+      nada — e ensina a ignorá-lo justamente no dia em que ele importa.
+    */
+    if (aparenciaPendente) {
+      return (
+        <span className="flex shrink-0 items-center gap-3">
+          <button
+            type="button"
+            disabled={salvando}
+            onClick={() =>
+              iniciar(async () => {
+                const f = new FormData();
+                f.set("galeria_id", galeriaId);
+                await publicarAlteracoesAction(f);
+                router.refresh();
+              })
+            }
+            className="rounded-lg bg-acento px-5 py-2.5 text-sm font-semibold text-void shadow-[0_0_28px_-10px_var(--acento)] transition hover:bg-acento-alto disabled:opacity-60"
+          >
+            {salvando ? "Publicando…" : "Publicar alterações"}
+          </button>
+          <BotaoTirarDoAr salvando={salvando} aoMudar={mudar} />
+        </span>
+      );
+    }
+
+    /*
       TIRAR DO AR fica aqui também, e de propósito com outro PESO.
 
       O Juan pediu o atalho ("copiar link, tirar galeria do ar, etc"), e
@@ -144,22 +186,7 @@ export function AcaoDePublicar({
       Por isso é um texto sublinhado e não um botão, e por isso pergunta antes.
       A ação existe, e não se dá por acidente.
     */
-    return (
-      <button
-        type="button"
-        disabled={salvando}
-        onClick={() => {
-          if (!confirm("Tirar a galeria do ar? O link do cliente para de abrir.")) return;
-          mudar("0");
-        }}
-        /* `whitespace-nowrap` porque o cabeçalho é um flex que quebra: sem ele,
-           num espaço apertado o texto quebrava LETRA por letra e o botão virava
-           uma coluna de 21 px de largura. */
-        className="whitespace-nowrap text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-50"
-      >
-        {salvando ? "tirando…" : "tirar do ar"}
-      </button>
-    );
+    return <BotaoTirarDoAr salvando={salvando} aoMudar={mudar} />;
   }
 
   return (
@@ -184,6 +211,39 @@ export function AcaoDePublicar({
       className="rounded-lg bg-acento px-5 py-2.5 text-sm font-semibold text-void shadow-[0_0_28px_-10px_var(--acento)] transition hover:bg-acento-alto disabled:opacity-60"
     >
       {salvando ? "Publicando…" : "Publicar galeria"}
+    </button>
+  );
+}
+
+/**
+ * Tirar do ar, em texto sublinhado.
+ *
+ * Peça própria porque aparece nos DOIS estados de uma galeria publicada: sozinha
+ * quando não há nada pendente, e ao lado de "Publicar alterações" quando há. Uma
+ * segunda cópia das classes envelheceria separada — foi assim que o cabeçalho
+ * virou uma amostra de raios e alturas em 16/09/2026.
+ */
+function BotaoTirarDoAr({
+  salvando,
+  aoMudar,
+}: {
+  salvando: boolean;
+  aoMudar: (para: "0" | "1") => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={salvando}
+      onClick={() => {
+        if (!confirm("Tirar a galeria do ar? O link do cliente para de abrir.")) return;
+        aoMudar("0");
+      }}
+      /* `whitespace-nowrap` porque o cabeçalho é um flex que quebra: sem ele,
+         num espaço apertado o texto quebrava LETRA por letra e o botão virava
+         uma coluna de 21 px de largura. */
+      className="whitespace-nowrap text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-50"
+    >
+      {salvando ? "tirando…" : "tirar do ar"}
     </button>
   );
 }

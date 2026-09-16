@@ -212,6 +212,40 @@ export async function salvarAparenciaAction(form: FormData): Promise<{ erro?: st
  * Não revalida caminho nenhum: rascunho não muda página que alguém esteja
  * vendo, e revalidar a cada tecla seria trabalho jogado fora.
  */
+/**
+ * PUBLICAR AS ALTERAÇÕES DE UMA GALERIA QUE JÁ ESTÁ NO AR.
+ *
+ * Felipe, 16/09/2026: "aqui, para poder ver a galeria, estamos precisando tirar
+ * do ar e publicar novamente. Talvez um botão republicar com as atualizações ou
+ * algo assim corrigiria."
+ *
+ * Ele descreveu o remédio junto com a queixa, e a queixa era de um buraco de
+ * verdade. O cabeçalho tinha "Publicar galeria" enquanto ela fosse RASCUNHO, e
+ * publicar promovia a aparência pendente junto (ver
+ * `promoverRascunhoSePendente`). Depois de publicada, aquele botão virava
+ * "tirar do ar" — e a única forma de promover um rascunho de aparência pelo
+ * cabeçalho passou a ser DESPUBLICAR e publicar de novo, que é literalmente o
+ * que eles estavam fazendo. Enquanto isso o link do casal ficava fora do ar.
+ *
+ * O caminho pelo Design existia e continua existindo; o que faltava era ele
+ * existir de onde a pessoa está quando vê o aviso.
+ */
+export async function publicarAlteracoesAction(form: FormData): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  const promoveu = await promoverRascunhoSePendente(galeriaId, tenantId);
+  /* Sem rascunho não há erro nenhum: alguém publicou pelo Design enquanto esta
+     aba estava aberta, e o resultado é o que a pessoa queria. O `refresh` do
+     cliente some com o aviso. */
+  if (promoveu) {
+    revalidatePath(`/painel/galerias/${galeriaId}`);
+    revalidatePath(`/painel/galerias/${galeriaId}/design`);
+  }
+  return {};
+}
+
 export async function salvarRascunhoAparenciaAction(
   form: FormData,
 ): Promise<{ erro?: string }> {
