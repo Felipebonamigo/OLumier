@@ -302,8 +302,6 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         total: todasAsMedias.length,
         fatiada: true,
         restantes: 0,
-        parte: 1,
-        partes: 1,
       }
     : /*
        * SEMPRE A PRIMEIRA PARTE (16/09/2026).
@@ -319,7 +317,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        * parâmetro é que seria o problema — o cliente conta quantas fotos já tem
        * para pedir as próximas, e ele nasceria contando errado.
        */
-      fatiarGaleria(todasAsMedias, capSecaoId, FOTOS_POR_TELA, 1);
+      fatiarGaleria(todasAsMedias, capSecaoId, FOTOS_POR_TELA);
 
   const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : fatia.itens;
 
@@ -759,8 +757,6 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
                        ele é `capitulos[].id`, e um link com apelido nunca
                        casaria. */
                     capituloAtivo: capSecaoId ?? null,
-                    parte: fatia.parte,
-                    partes: fatia.partes,
                   }
                 : null
             }

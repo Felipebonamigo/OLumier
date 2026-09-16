@@ -154,7 +154,7 @@ export function GaleriaCliente({
    * `config/fatia-galeria.ts`. `null` quer dizer "veio inteira", e é o caso
    * de quase toda galeria: nada muda de comportamento.
    */
-  fatia?: { total: number; capituloAtivo: string | null; parte: number; partes: number } | null;
+  fatia?: { total: number; capituloAtivo: string | null } | null;
   /**
    * A tela é um recorte por `?fotos=` — o resultado da busca por rosto numa
    * galeria fatiada. Aí `itens` são exatamente as fotos achadas, e o menu de

@@ -92,7 +92,7 @@ export function MenusDaGaleria({
 }: {
   capitulos: CapituloGaleria[];
   /** Só numa galeria que não coube inteira — ver `config/fatia-galeria.ts`. */
-  fatia?: { total: number; capituloAtivo: string | null; parte: number; partes: number } | null;
+  fatia?: { total: number; capituloAtivo: string | null } | null;
   /** Null quando não há o que oferecer: escolha encerrada e nenhuma marcada. */
   favoritas: MenuFavoritas | null;
   /** Null quando o fotógrafo não liberou download. */
@@ -407,12 +407,11 @@ export function MenusDaGaleria({
               tirou 6,35 MB do documento que estourava o iPhone. Aí a pastilha
               precisa ir buscá-lo, e vira um link de verdade.
             */
-            /* Sem `cap`, a parte 1 abre pelo primeiro capítulo; da parte 2 em
-               diante a tela mostra outros, e destacar o primeiro seria dizer
-               "você está no Making Of" sobre a Festa. */
-            const aberto = fatia
-              ? (fatia.capituloAtivo ?? (fatia.parte > 1 ? null : capitulos[0]?.id))
-              : null;
+            /* Sem `cap`, a galeria fatiada abre pelo primeiro capítulo — é o
+               que ela de fato mostra. A ressalva "da parte 2 em diante"
+               desapareceu junto com a paginação em 16/09/2026: agora existe
+               UMA tela por capítulo, e o resto chega rolando. */
+            const aberto = fatia ? (fatia.capituloAtivo ?? capitulos[0]?.id) : null;
             const ativo = fatia ? aberto === c.id : capituloVisivel === c.id;
             return (
               <li key={c.id}>
