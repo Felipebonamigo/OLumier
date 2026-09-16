@@ -76,6 +76,10 @@ function s3(): S3Client {
   cliente ??= new S3Client({
     region: regiao,
     endpoint,
+    /* Mesma chave do `r2.ts`, mesmo motivo: servidor local não tem DNS
+       curinga, e sem isto o cliente procura `originais.127.0.0.1`. Em
+       produção a variável não existe e o B2 segue no estilo virtual. */
+    forcePathStyle: process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1",
     credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
   });
   return cliente;
