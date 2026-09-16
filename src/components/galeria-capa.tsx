@@ -1,4 +1,11 @@
-import { FONTES_TITULO, alturaLogoPx, pesoDoTitulo, type Aparencia } from "@/config/aparencia";
+import type { CSSProperties } from "react";
+import {
+  FONTES_TITULO,
+  alturaLogoPx,
+  pesoDoTitulo,
+  type Aparencia,
+  type LinhasTitulo,
+} from "@/config/aparencia";
 
 export interface DadosCapa {
   titulo: string;
@@ -13,6 +20,94 @@ export interface DadosCapa {
   focoY: number;
   /** O fotógrafo APONTOU uma capa (não é a primeira foto por falta de escolha). */
   capaEscolhida: boolean;
+}
+
+/*
+ * ── O TAMANHO DO TÍTULO, EM TRÊS NÚMEROS ──────────────────────────────────
+ *
+ * `[mínimo, quanto cresce com a tela, máximo]`, e a capa escolhe o seu trio.
+ * Vira um `clamp()`: no celular vale o mínimo, no notebook o máximo, e entre os
+ * dois cresce junto com a janela.
+ *
+ * ── POR QUE SAIU DAS CLASSES DO TAILWIND ────────────────────────────────
+ *
+ * Era `text-4xl sm:text-5xl`: 36 px abaixo de 640 px de tela, 48 px acima —
+ * um degrau, e nada no meio. Felipe, 16/09/2026, olhando a prévia de celular:
+ * "ficou exageradamente grande, poderia ficar um pouco menor, mas delicado".
+ * Ele está certo, e o degrau é a causa: 36 px é o tamanho de manchete de um
+ * notebook aplicado a uma tela de 390 px, onde ele come metade da largura.
+ *
+ * Com o `clamp`, o mínimo cai para 28 px na capa redonda e o máximo continua
+ * 48 px — o computador desenha o que sempre desenhou, e o celular ganha um
+ * título proporcional à tela em vez de um tamanho emprestado de outra.
+ *
+ * Os máximos são exatamente os `text-*` de antes, para nenhuma galeria
+ * entregue encolher no computador.
+ */
+const TITULO_GRANDE = [2.25, 8, 4.5] as const; //  36 → 72 px (imersa, jornal)
+const TITULO_MEDIO = [2, 7, 3.75] as const; //     32 → 60 px (convite, dividida)
+const TITULO_MIUDO = [1.75, 7, 3] as const; //     28 → 48 px (redonda, arco, mínima)
+type BaseDoTitulo = typeof TITULO_GRANDE | typeof TITULO_MEDIO | typeof TITULO_MIUDO;
+
+/*
+ * ── QUANTO O NOME MEDE, EM `em` DA PRÓPRIA FONTE ──────────────────────────
+ *
+ * Uma estimativa, e ela existe para uma coisa só: garantir que "1 linha" caiba
+ * na tela. Com `white-space: nowrap` e um nome comprido, o navegador não
+ * quebra nem encolhe — ele transborda, e a galeria inteira ganha rolagem
+ * horizontal. Sabendo a largura aproximada do texto dá para pedir ao CSS o
+ * MENOR entre "o tamanho que a pessoa escolheu" e "o tamanho que cabe".
+ *
+ * Os números são médias de serifada e sem-serifa; nenhuma fonte bate exato, e
+ * não precisa — errar para menos só desenha um título um pouco menor do que
+ * caberia, enquanto errar para mais quebra a página. Daí a folga de 6% no fim.
+ */
+function larguraDoTituloEm(titulo: string): number {
+  let em = 0;
+  for (const c of titulo) {
+    if (c === " ") em += 0.26;
+    else if (c === "&") em += 0.7;
+    else if (c === c.toUpperCase() && c !== c.toLowerCase()) em += 0.72;
+    else if (/[0-9]/.test(c)) em += 0.5;
+    else if (/[ijltIl.,'’!|]/.test(c)) em += 0.28;
+    else em += 0.47;
+  }
+  return Math.max(1, em) * 1.06;
+}
+
+/*
+ * ── A LARGURA QUE FAZ O NOME CAIR EM N LINHAS ─────────────────────────────
+ *
+ * Duas linhas é uma caixa com metade dos caracteres; três, com um terço. O
+ * `text-wrap: balance` que o título já usa faz o resto — ele distribui as
+ * palavras para as linhas saírem parecidas, em vez de deixar uma sobra solta.
+ *
+ * O piso é a MAIOR PALAVRA. Sem ele, "Nathalia & Matheus" em três linhas
+ * pediria uma caixa de 6 caracteres, e "Nathalia" tem oito: a palavra não cabe,
+ * não pode quebrar, e transborda a caixa — três linhas tortas em vez de três
+ * linhas.
+ *
+ * Medido em `ch`, e o `ch` sai da fonte do elemento em que a regra está. Por
+ * isso ela vai no `h1`, e não na `div` de fora como estava até aqui: lá o `ch`
+ * era medido na fonte do CORPO, em 16 px, e um `max-w-[18ch]` que devia valer
+ * uns 430 px de título valia 145. É o defeito que empilhava o nome em três.
+ */
+function quebraDoTitulo(titulo: string, linhas: LinhasTitulo): CSSProperties {
+  const limpo = titulo.trim();
+  if (linhas === "uma") return { whiteSpace: "nowrap" };
+
+  /* `auto` continua sendo o navegador quebrando onde couber — só que agora
+     dentro de uma caixa medida na fonte certa. 22ch é o antigo 18ch corrigido
+     com folga: nome de casal cabe numa linha, e título longo vira bloco em vez
+     de uma linha de ponta a ponta da tela. */
+  if (linhas === "auto") return { maxWidth: "22ch" };
+
+  const n = linhas === "duas" ? 2 : 3;
+  const maiorPalavra = limpo.split(/\s+/).reduce((m, p) => Math.max(m, p.length), 0);
+  /* +1 de folga: o `ch` é a largura do "0", e letras de caixa alta são mais
+     largas que ele. Sem a folga, um nome no limite cai numa linha a mais. */
+  const porLinha = Math.max(Math.ceil(limpo.length / n), maiorPalavra) + 1;
+  return { maxWidth: `${porLinha}ch` };
 }
 
 /**
@@ -133,18 +228,69 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    */
   const peso = pesoDoTitulo(aparencia.tipografia, aparencia.peso);
 
-  const Titulo = ({ tamanho }: { tamanho: string }) => (
-    <h1
-      className={`text-balance ${tamanho}`}
-      style={{
-        fontFamily: fonteTitulo,
-        fontWeight: peso,
-        lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05,
-      }}
-    >
-      {titulo}
-    </h1>
-  );
+  /*
+   * ── A BARRINHA DE TAMANHO, E AS LINHAS ────────────────────────────────
+   *
+   * Pedido do Felipe em 16/09/2026, em duas partes que são a mesma decisão:
+   * uma barrinha para o tamanho ("se o texto ficaria tudo em uma única linha,
+   * ou se aumentando o tamanho do texto ele iria pra linhas de baixo") e a
+   * escolha de quantas linhas o nome ocupa ("na mesma linha, ou em 2 ou em 3").
+   *
+   * O tamanho é o `clamp` da capa multiplicado pela porcentagem do eixo. Em
+   * 100% a conta é o `clamp` puro, e a capa desenha o que sempre desenhou.
+   *
+   * ── O TETO QUE IMPEDE O TÍTULO DE VAZAR ─────────────────────────────────
+   *
+   * Em "1 linha" o navegador não quebra nem encolhe: um nome comprido
+   * simplesmente sai pela borda e a galeria inteira ganha rolagem horizontal —
+   * defeito que apareceria só no dia em que alguém digitasse um nome longo, ou
+   * abrisse no celular.
+   *
+   * O `min()` resolve por construção: o título desenha no tamanho pedido OU no
+   * maior que cabe na coluna, o que for menor. `cqw` é a largura do container
+   * (a `div` que embrulha o título, com `container-type: inline-size`), então a
+   * conta vale em qualquer capa e em qualquer tela sem medir nada em JavaScript.
+   *
+   * Vale só para "1 linha": nas outras o texto quebra sozinho, e um teto ali
+   * deixaria o título menor do que a pessoa pediu sem motivo.
+   */
+  const fator = aparencia.tamanhoTitulo / 100;
+  const umaLinha = aparencia.linhasTitulo === "uma";
+  const larguraEm = larguraDoTituloEm(titulo);
+
+  const Titulo = ({ base }: { base: BaseDoTitulo }) => {
+    const [min, cresce, max] = base;
+    const pedido = `clamp(${min}rem, ${cresce}vw, ${max}rem) * ${fator}`;
+    return (
+      /*
+       * O container de medida é uma `div` e não o `h1`: `container-type` só
+       * responde por quem está DENTRO do elemento, então o próprio `h1` não
+       * poderia se medir contra si mesmo.
+       *
+       * Ela não leva classe nenhuma de propósito. `text-align` é herdado, e a
+       * capa dividida escreve `md:text-left` no pai: repetir `alinharTexto`
+       * aqui venceria essa regra por estar fora de media query e viraria a capa
+       * do avesso no computador — uma capa entregue mudando de cara por causa
+       * de uma `div` de medição.
+       */
+      <div style={{ containerType: "inline-size" }}>
+        <h1
+          className={`text-balance ${alinharBloco}`}
+          style={{
+            fontFamily: fonteTitulo,
+            fontWeight: peso,
+            lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05,
+            fontSize: umaLinha
+              ? `min(calc(${pedido}), calc(100cqw / ${larguraEm.toFixed(2)}))`
+              : `calc(${pedido})`,
+            ...quebraDoTitulo(titulo, aparencia.linhasTitulo),
+          }}
+        >
+          {titulo}
+        </h1>
+      </div>
+    );
+  };
 
   /**
    * A SOBRANCELHA: o que é o evento, acima do título.
@@ -204,7 +350,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
           <Estudio />
           <div className="mt-5">
             <Rotulo />
-            <Titulo tamanho="text-5xl sm:text-7xl" />
+            <Titulo base={TITULO_GRANDE} />
           </div>
           <div className="mt-4">
             <Legenda />
@@ -223,9 +369,9 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         style={{ borderBottom: "1px solid var(--g-linha)" }}
       >
         <Estudio />
-        <div className={`mt-8 max-w-[16ch] ${alinharBloco}`}>
+        <div className="mt-8">
           <Rotulo />
-          <Titulo tamanho="text-5xl sm:text-7xl" />
+          <Titulo base={TITULO_GRANDE} />
         </div>
         <div className="mt-6">
           <Legenda />
@@ -317,7 +463,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
                 Playfair) vive do traço fino, e o negrito fecha justamente o que
                 faz ela parecer papel de convite. */}
             <Rotulo />
-            <Titulo tamanho="text-4xl sm:text-6xl" />
+            <Titulo base={TITULO_MEDIO} />
             <a
               href="#fotos"
               className="mt-2 inline-block px-8 py-3 font-mono text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85"
@@ -351,7 +497,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
           <Estudio />
           <div className="mt-6">
             <Rotulo />
-            <Titulo tamanho="text-4xl sm:text-6xl" />
+            <Titulo base={TITULO_MEDIO} />
           </div>
           <div className="mt-5">
             <Legenda />
@@ -406,8 +552,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         <div className="mt-8">
           <Rotulo />
         </div>
-        <div className={`mt-2 max-w-[18ch] ${alinharBloco}`}>
-          <Titulo tamanho="text-4xl sm:text-5xl" />
+        <div className="mt-2">
+          <Titulo base={TITULO_MIUDO} />
         </div>
         <div className="mt-4">
           <Legenda />
@@ -427,9 +573,9 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
       style={{ borderBottom: "1px solid var(--g-linha)" }}
     >
       <Estudio />
-      <div className={`mt-6 max-w-[18ch] ${alinharBloco}`}>
+      <div className="mt-6">
         <Rotulo />
-        <Titulo tamanho="text-4xl sm:text-5xl" />
+        <Titulo base={TITULO_MIUDO} />
       </div>
       <div className="mt-4">
         <Legenda />

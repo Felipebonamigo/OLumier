@@ -10,6 +10,7 @@ import {
   VIEWPORTS_PREVIA,
   PALETAS,
   TEMAS,
+  TAMANHO_TITULO,
   type Aparencia,
   type ViewportPrevia,
 } from "@/config/aparencia";
@@ -97,6 +98,55 @@ function SeletorDeFonte({ ap, mudar, temFontePropria }: PecaProps & { temFontePr
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * A BARRINHA DO TAMANHO DO TÍTULO.
+ *
+ * Felipe, 16/09/2026: "poderia ter um tipo de barrinha que a gente pudesse
+ * definir o tamanho do texto dentro do mesmo espaço de formatação".
+ *
+ * ── POR QUE NÃO É UM EIXO DE PASTILHAS COMO OS OUTROS ────────────────────
+ *
+ * Todo eixo desta tela é uma escolha entre coisas com NOME: capa imersa ou
+ * jornal, canto reto ou redondo. Tamanho não tem nome — tem mais e menos, e é
+ * a única pergunta desta tela cuja resposta a pessoa encontra ARRASTANDO até
+ * ficar bonito, olhando a prévia. Três pastilhas ("pequeno, médio, grande")
+ * dariam três respostas onde ele quer um contínuo, e foi exatamente isso que o
+ * pedido descartou: ele quer ver o nome passar de uma linha para duas enquanto
+ * puxa.
+ *
+ * O número aparece à direita porque um controle sem leitura é um controle que
+ * a pessoa não sabe desfazer — com ele dá para voltar a 100% de propósito.
+ *
+ * `onChange` grava a cada passo, e não só ao soltar: é o mesmo caminho dos
+ * outros eixos (`mudar`), que já segura a recarga da prévia por 400 ms. Sem
+ * isso a prévia só reagiria no fim do arrasto, e o arrasto é a informação.
+ */
+function BarraDoTitulo({ ap, mudar }: PecaProps) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <label htmlFor="tamanho-titulo" className="block text-xs font-medium text-texto-soft">
+          Tamanho do título
+        </label>
+        <span className="font-mono text-[11px] text-texto-faint">{ap.tamanhoTitulo}%</span>
+      </div>
+      <input
+        id="tamanho-titulo"
+        type="range"
+        min={TAMANHO_TITULO.min}
+        max={TAMANHO_TITULO.max}
+        step={TAMANHO_TITULO.passo}
+        value={ap.tamanhoTitulo}
+        onChange={(e) => mudar({ ...ap, tamanhoTitulo: Number(e.target.value) })}
+        className="mt-2 w-full accent-acento"
+      />
+      <p className="mt-1 text-[11px] leading-snug text-texto-faint">
+        Multiplica o tamanho que a capa escolhida já usa — 100% é o de sempre.
+      </p>
     </div>
   );
 }
@@ -694,6 +744,14 @@ export function EditorAparencia({
               {/* Junto da fonte, e não da logo: quem acha o título grosso está
                   olhando para a LETRA, e é ali que ele procura. */}
               <Eixo eixo="peso" titulo="Grossura do título" ap={ap} mudar={mudar} />
+              {/* As duas do tamanho vêm juntas porque respondem à mesma
+                  pergunta — "como o nome ocupa a capa" — e uma mexe na outra:
+                  puxar a barrinha para cima é o que faz o nome procurar a linha
+                  de baixo, e é para dar destino a essa quebra que a escolha de
+                  linhas existe ao lado. Separadas, a pessoa mexeria numa sem
+                  saber que a outra explica o resultado. */}
+              <BarraDoTitulo ap={ap} mudar={mudar} />
+              <Eixo eixo="linhasTitulo" titulo="Linhas do título" ap={ap} mudar={mudar} />
               {/* Logo abaixo da grossura porque a pergunta é a mesma escada: a
                   letra do título, o peso dela, e então a letra de todo o resto.
                   Marca de fotógrafo costuma ser display — por isso este eixo é
