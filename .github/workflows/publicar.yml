@@ -212,9 +212,42 @@ jobs:
           HOST_KEY_VPS: ${{ secrets.HOST_KEY_VPS }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$CHAVE_SSH_VPS" > ~/.ssh/id_deploy
+          # `tr -d '\r'`: a chave costuma ser copiada de um terminal no Windows,
+          # e os fins de linha vêm junto. O OpenSSH não perdoa — ele recusa o
+          # arquivo inteiro com "error in libcrypto", que não diz nada sobre
+          # fim de linha. Custou uma rodada para descobrir.
+          printf '%s\n' "$CHAVE_SSH_VPS" | tr -d '\r' > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
-          printf 'Host 179.197.233.184\n  IdentityFile ~/.ssh/id_deploy\n  IdentitiesOnly yes\n' > ~/.ssh/config
+
+          # LER A CHAVE ANTES DE USÁ-LA. Sem isto, chave ilegível vira
+          # "Permission denied (publickey)" lá adiante, que manda procurar no
+          # lugar errado — no servidor, nas autorizações — quando o problema
+          # está no arquivo aqui. `ssh-keygen -y` só deriva a pública: não fala
+          # com ninguém, e falha na hora se o formato ou a senha estiverem no
+          # caminho.
+          if ! ssh-keygen -y -f ~/.ssh/id_deploy > /dev/null 2>&1; then
+            echo "✗ o segredo CHAVE_SSH_VPS não é uma chave privada utilizável."
+            echo
+            echo "  Três causas, em ordem de probabilidade:"
+            echo "   1. faltou parte do texto — tem de ir da linha"
+            echo "      '-----BEGIN OPENSSH PRIVATE KEY-----' à '-----END ...-----',"
+            echo "      inclusive as duas, e com as quebras de linha preservadas;"
+            echo "   2. a chave tem senha (passphrase) — aqui não há quem a digite;"
+            echo "   3. é a chave PÚBLICA (.pub) em vez da privada."
+            exit 1
+          fi
+          echo "chave lida: $(ssh-keygen -lf ~/.ssh/id_deploy | awk '{print $1, $2, $4}')"
+
+          # Sem senha e sem interação: o servidor oferece autenticação por senha
+          # e o ssh fica tentando, o que no log vira "Permission denied, please
+          # try again" três vezes e esconde a causa real.
+          {
+            printf 'Host 179.197.233.184\n'
+            printf '  IdentityFile ~/.ssh/id_deploy\n'
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  PasswordAuthentication no\n'
+          } > ~/.ssh/config
           chmod 600 ~/.ssh/config
           if [ -n "$HOST_KEY_VPS" ]; then
             printf '%s\n' "$HOST_KEY_VPS" > ~/.ssh/known_hosts
