@@ -12,6 +12,7 @@ import {
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
+import { dataDaFoto } from "@/lib/exif-client";
 import type { RostoMedido } from "@/lib/rostos-client";
 import { enviarEmPartes } from "@/lib/multipart-client";
 import {
@@ -263,7 +264,19 @@ export function ProvedorDeEnvio({
         await comRetentativa(
           async () => {
             atualizar(tarefa.item.id, { situacao: "preparando", progresso: 0 });
-            const derivadas = await gerarDerivadas(tarefa.arquivo, { medirRostos: tarefa.medidor });
+            /*
+             * A data da câmera sai do EXIF junto com as derivadas — mesmo
+             * momento em que o arquivo já está aberto no navegador. Depois do
+             * envio ele mora no bucket, e ler o cabeçalho de volta custaria
+             * banda por foto. Ver `lib/exif-client.ts`.
+             *
+             * Em paralelo com a derivada porque são trabalhos independentes: um
+             * lê 128 KB do começo do arquivo, o outro decodifica a imagem.
+             */
+            const [derivadas, tiradaEm] = await Promise.all([
+              gerarDerivadas(tarefa.arquivo, { medirRostos: tarefa.medidor }),
+              dataDaFoto(tarefa.arquivo),
+            ]);
 
             atualizar(tarefa.item.id, { situacao: "enviando" });
 

@@ -1,6 +1,9 @@
 import "server-only";
 import { consultar, consultarUm } from "./db";
 import { gerarSlug } from "./tenants";
+import { ORDENS_DAS_FOTOS, type OrdemDasFotos } from "@/config/ordens-das-fotos";
+
+export { ORDENS_DAS_FOTOS, type OrdemDasFotos };
 
 export interface Secao {
   id: string;
@@ -198,6 +201,83 @@ export async function renomearSecao(secaoId: string, tenantId: string, nome: str
       where s.id = $2 and s.galeria_id = g.id and g.tenant_id = $3`,
     [limpo, secaoId, tenantId],
   );
+}
+
+/** Compara como o fotógrafo espera: foto_2 antes de foto_10. */
+const colador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
+
+/**
+ * Reordena as fotos de um capítulo (ou as sem capítulo) por um critério.
+ *
+ * ── POR QUE A ORDENAÇÃO ACONTECE EM JAVASCRIPT ───────────────────────────
+ *
+ * Por causa do A→Z. O fotógrafo espera `foto_2` antes de `foto_10`, e é isso
+ * que o `Intl.Collator` com `numeric` faz — a MESMA função que ordena os
+ * arquivos no envio (`ordenarNaturalPorCaminho`). O Postgres não tem ordenação
+ * natural: um `order by nome_original` põe `foto_10` antes de `foto_2`, e
+ * chegar perto disso em SQL exigiria uma função de chave que envelheceria
+ * separada da do envio. São algumas centenas de linhas por capítulo, já
+ * trazidas por `galeria_id`.
+ *
+ * ── A ESCRITA É UMA SÓ ───────────────────────────────────────────────────
+ *
+ * Um `update` por foto seriam 600 idas ao banco por clique. O `unnest` manda a
+ * lista inteira numa instrução: cada id recebe a posição que a ordenação lhe
+ * deu.
+ *
+ * Renumerar de 0 a N-1 é seguro porque a galeria ordena por capítulo ANTES de
+ * `ordem` (ver `listarMediasPublicas`): dentro do capítulo só a posição
+ * relativa importa, e entre capítulos quem manda é `secoes.ordem`.
+ */
+export async function ordenarFotosDaSecao(
+  galeriaId: string,
+  tenantId: string,
+  secaoId: string | null,
+  criterio: OrdemDasFotos,
+): Promise<{ ok: boolean; quantas: number; semData: number }> {
+  if (!(await galeriaDoTenant(galeriaId, tenantId))) return { ok: false, quantas: 0, semData: 0 };
+
+  const fotos = await consultar<{
+    id: string;
+    nome_original: string;
+    criado_em: Date;
+    tirada_em: Date | null;
+  }>(
+    `select id, nome_original, criado_em, tirada_em
+       from medias
+      where galeria_id = $1 and ${secaoId === null ? "secao_id is null" : "secao_id = $2"}`,
+    secaoId === null ? [galeriaId] : [galeriaId, secaoId],
+  );
+  if (fotos.length === 0) return { ok: true, quantas: 0, semData: 0 };
+
+  const quando = (f: (typeof fotos)[number]) =>
+    (criterio === "cronologica" ? (f.tirada_em ?? f.criado_em) : f.criado_em).getTime();
+
+  const ordenadas = [...fotos].sort((a, b) => {
+    if (criterio === "nome") return colador.compare(a.nome_original, b.nome_original);
+    if (criterio === "nome-invertido") return colador.compare(b.nome_original, a.nome_original);
+    /* Empate de horário — rajada de câmera grava várias no mesmo segundo — cai
+       no nome, que dentro de uma câmera é a sequência do disparo. */
+    const dif = quando(a) - quando(b);
+    return dif !== 0 ? dif : colador.compare(a.nome_original, b.nome_original);
+  });
+
+  await consultar(
+    `update medias m
+        set ordem = nova.posicao
+       from unnest($1::uuid[], $2::int[]) as nova(id, posicao)
+      where m.id = nova.id and m.galeria_id = $3`,
+    [ordenadas.map((f) => f.id), ordenadas.map((_, i) => i), galeriaId],
+  );
+
+  return {
+    ok: true,
+    quantas: ordenadas.length,
+    /* Quantas não tinham data da câmera. A tela usa este número para avisar
+       que aquelas caíram na data de envio, em vez de fingir que a ordem
+       cronológica valeu para todas. */
+    semData: criterio === "cronologica" ? fotos.filter((f) => !f.tirada_em).length : 0,
+  };
 }
 
 /** Apaga o capítulo; as fotos ficam (viram "sem capítulo") pelo on delete set null. */

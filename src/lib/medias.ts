@@ -19,6 +19,16 @@ export interface Media {
   pronto: boolean;
   criado_em: Date;
   /**
+   * Quando a CÂMERA gravou a foto (DateTimeOriginal do EXIF), ou null.
+   *
+   * Nulo é comum e não é falha: vídeo não tem, PNG normalmente não traz, foto
+   * exportada sem metadados também não, e nada que subiu antes da migração 035
+   * tem como ganhar — o original está no bucket, e baixá-lo de volta para ler o
+   * cabeçalho custaria banda por arquivo. Quem ordena por data cai em
+   * `criado_em` nesses casos, e a tela diz isso.
+   */
+  tirada_em: Date | null;
+  /**
    * Em qual fornecedor o ORIGINAL mora: 'r2' (padrão) ou 'b2'. As derivadas
    * ficam sempre no r2 — ver `lib/armazem.ts`, que é quem decide de onde ler.
    */
@@ -138,6 +148,8 @@ export async function criarMediaPendente(dados: {
   secaoId?: string | null;
   /** Posição do arquivo na lista que o fotógrafo ordenou. */
   indice?: number;
+  /** DateTimeOriginal do EXIF. Ver migração 035. */
+  tiradaEm?: Date | null;
   /**
    * Onde o ORIGINAL vai nascer. Gravado na linha na hora da criação, e não
    * consultado depois: um vídeo de 30 GB pode levar horas subindo, e se a
@@ -168,8 +180,8 @@ export async function criarMediaPendente(dados: {
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
                          nome_original, tipo, mime, bytes, largura, altura, secao_id, ordem, pronto,
-                         armazem)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14)
+                         armazem, tirada_em)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15)
      returning *`,
     [
       dados.galeriaId,
@@ -186,6 +198,7 @@ export async function criarMediaPendente(dados: {
       dados.secaoId ?? null,
       posicao,
       dados.armazem ?? "r2",
+      dados.tiradaEm ?? null,
     ],
   );
 }

@@ -10,7 +10,9 @@ import {
   moverSecaoAction,
   reordenarSecoesAction,
   moverSoltasAction,
+  ordenarFotosDaSecaoAction,
 } from "@/app/painel/actions";
+import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
 
 export interface SecaoResumo {
   id: string;
@@ -38,6 +40,7 @@ export function EditorSecoes({
   const [editando, setEditando] = useState<string | null>(null);
   const [nomeEditado, setNomeEditado] = useState("");
   const [ocupado, iniciar] = useTransition();
+  const [aviso, setAviso] = useState<string | null>(null);
   const router = useRouter();
 
   /*
@@ -93,7 +96,10 @@ export function EditorSecoes({
    * existe. As outras devolvem void e caem no `?.erro` como undefined, então
    * nenhuma delas precisou mudar de assinatura por causa desta. */
   const executar = (
-    acao: (f: FormData) => Promise<{ erro?: string } | void>,
+    /* `aviso` entrou em 16/09/2026 com a ordenação: a ação dá certo e ainda
+       tem um recado (quantas fotos não tinham data da câmera). É diferente de
+       `erro`, que é a ação não ter acontecido. */
+    acao: (f: FormData) => Promise<{ erro?: string; aviso?: string } | void>,
     campos: Record<string, string>,
     /* Roda DEPOIS do `router.refresh()`. Existe por causa do arrasto: a lista
        desenhada à mão precisa ser descartada quando a do servidor chega, e só
@@ -106,6 +112,9 @@ export function EditorSecoes({
       for (const [k, v] of Object.entries(campos)) f.set(k, v);
       const r = await acao(f);
       setErro(r?.erro ?? null);
+      /* `aviso` não é erro: a ordenação FUNCIONOU, e o recado é sobre o que ela
+         não pôde saber (foto sem data da câmera). Ver `ordenarFotosDaSecaoAction`. */
+      setAviso(r?.aviso ?? null);
       router.refresh();
       aoTerminar?.();
     });
@@ -243,6 +252,45 @@ export function EditorSecoes({
                     >
                       ↓
                     </button>
+                    {/*
+                      ── ORDENAR AS FOTOS DO CAPÍTULO (16/09/2026) ──────────
+
+                      Felipe: "poder organizar por ordem de upload/adição // por
+                      ordem cronológica // por nome A-Z // por nome Z-A".
+
+                      Um `select` e não quatro botões: são quatro opções
+                      EXCLUSIVAS, e quatro botões numa linha que já tem cinco
+                      controles viram parede. Volta para o rótulo depois de
+                      agir, porque a ordem não é um estado que a linha carrega —
+                      é uma ação que acabou de acontecer, e o resultado está na
+                      grade logo abaixo.
+
+                      Some com o capítulo vazio: ordenar zero fotos é um menu
+                      que não faz nada.
+                    */}
+                    {s.total > 1 && (
+                      <select
+                        aria-label={`Ordenar as fotos de ${s.nome}`}
+                        disabled={ocupado}
+                        value=""
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          executar(ordenarFotosDaSecaoAction, {
+                            secao_id: s.id,
+                            criterio: e.target.value,
+                          });
+                          e.target.value = "";
+                        }}
+                        className="rounded-md border border-linha bg-void px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"
+                      >
+                        <option value="">ordenar…</option>
+                        {ORDENS_DAS_FOTOS.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.nome}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <button
                       type="button"
                       disabled={ocupado}
@@ -343,6 +391,13 @@ export function EditorSecoes({
       </div>
 
       {/* Logo abaixo do campo, que é onde o olho está depois de clicar. */}
+      {/* O aviso da ordenação: a ação deu certo e tem um recado. Cor de alerta
+          e não de erro, porque nada falhou — ver `ordenarFotosDaSecaoAction`. */}
+      {aviso && (
+        <p role="status" className="mt-3 text-xs text-alerta">
+          {aviso}
+        </p>
+      )}
       {erro && (
         <p role="alert" className="mt-2 text-xs text-alerta">
           {erro}

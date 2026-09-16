@@ -37,6 +37,13 @@ import {
  * quota antes do envio começar, para dois uploads simultâneos não furarem o
  * limite juntos.
  */
+/** ISO do navegador → Date, ou null. Nunca estoura. */
+function dataValida(bruto: unknown): Date | null {
+  if (typeof bruto !== "string") return null;
+  const d = new Date(bruto);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   /*
    * Navegador (cookie) OU programa (chave de API com escopo `envio`).
@@ -75,6 +82,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     bytes?: number;
     comDerivadas?: boolean;
     comPreview?: boolean;
+    tiradaEm?: string;
     formatoDerivadas?: string;
     secaoId?: string;
     largura?: number;
@@ -214,6 +222,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     tipo,
     mime,
     bytes,
+    /* A data do EXIF, quando o navegador achou. Texto inválido vira nulo em
+       vez de derrubar o envio: a ordenação cronológica cai na de envio, e
+       perder a foto por causa de um cabeçalho torto seria trocar a entrega
+       por um campo de ordenação. */
+    tiradaEm: dataValida(corpo.tiradaEm),
     largura: Number(corpo.largura) || null,
     altura: Number(corpo.altura) || null,
     secaoId,
