@@ -1,0 +1,153 @@
+# PUBLICAR: o merge no master vai para produção.
+#
+# Felipe, 16/09/2026: "vc sempre publicou, o que aconteceu q n consegue agora".
+# O que aconteceu é que a sessão mudou de lugar. O `deploy.sh` fala SSH com o
+# VPS, e o Claude Code na web roda num contêiner sem `ssh`, sem chave e sem
+# rota para a porta 22 — só HTTPS por um proxy. Publicar voltou a depender de
+# alguém com um terminal aberto.
+#
+# Este workflow devolve isso: o runner do GitHub tem `ssh`, alcança o VPS, e a
+# chave mora num segredo do repositório em vez de numa máquina só.
+#
+# ── ELE NÃO REIMPLEMENTA O DEPLOY ──────────────────────────────────────────
+#
+# A tentação era escrever aqui os passos de publicação. Seriam DUAS fontes de
+# verdade para o código mais perigoso do repositório, e a segunda envelheceria
+# em silêncio: o `deploy.sh` ganharia um portão novo e o workflow seguiria
+# publicando sem ele.
+#
+# Então este arquivo só monta a bancada — Node, Postgres, .env.local, chave —
+# e chama `bash deploy.sh --sim`. Os portões (tipos, suíte com --exigir-tudo,
+# dump antes da migração, trava no servidor, troca atômica do symlink) são os
+# mesmos que rodam quando o Felipe publica da máquina dele. `--sim` responde
+# as três perguntas do script; não pula nenhuma conferência.
+#
+# ── O QUE PRECISA ESTAR GUARDADO ───────────────────────────────────────────
+#
+# Settings → Secrets and variables → Actions:
+#
+#   ENV_DE_TESTE    o .env.local inteiro, colado. É o que a suíte usa para
+#                   falar com R2/B2 e Asaas. Use credenciais de TESTE: o que
+#                   estiver aqui fica ao alcance de qualquer workflow do
+#                   repositório, e chave de produção dá acesso às fotos dos
+#                   clientes.
+#   CHAVE_SSH_VPS   a chave privada que abre root@179.197.233.184.
+#   HOST_KEY_VPS    (opcional) a linha de known_hosts do VPS. Sem ela o runner
+#                   aceita o host na primeira vista — ver o passo da chave.
+#
+# Sem os dois primeiros o workflow para no primeiro passo, dizendo qual falta,
+# e nada é publicado.
+name: Publicar
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Uma publicação por vez. A trava que vale é a do servidor
+# (scripts/trava-publicacao.sh), porque duas máquinas diferentes passariam por
+# qualquer trava local e colidiriam no `ln -sfn` de lá. Esta aqui existe só
+# para não gastar o portão inteiro num commit que o próximo da fila substitui.
+concurrency:
+  group: publicar-producao
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: bancada
+          POSTGRES_DB: fotonio_teste
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      # Vence o que vier do ENV_DE_TESTE: no Node 22 a variável de ambiente
+      # real ganha do `--env-file`. Assim o segredo pode ser colado como está,
+      # sem ninguém precisar lembrar de trocar esta linha dentro dele.
+      #
+      # O nome TERMINA EM _teste de propósito: `scripts/guarda-producao.mjs`
+      # recusa rodar a suíte contra banco que não pareça de teste, e faz bem —
+      # ela publica galeria, remove senha e apaga mídia.
+      DATABASE_URL: postgres://postgres:bancada@127.0.0.1:5432/fotonio_teste
+
+    steps:
+      - name: Conferir os segredos antes de gastar tempo
+        env:
+          ENV_DE_TESTE: ${{ secrets.ENV_DE_TESTE }}
+          CHAVE_SSH_VPS: ${{ secrets.CHAVE_SSH_VPS }}
+        run: |
+          faltam=""
+          [ -n "$ENV_DE_TESTE" ] || faltam="$faltam ENV_DE_TESTE"
+          [ -n "$CHAVE_SSH_VPS" ] || faltam="$faltam CHAVE_SSH_VPS"
+          if [ -n "$faltam" ]; then
+            echo "✗ faltam segredos no repositório:$faltam"
+            echo "  Settings → Secrets and variables → Actions → New repository secret"
+            echo "  (o cabeçalho de .github/workflows/publicar.yml diz o que vai em cada um)"
+            exit 1
+          fi
+          echo "segredos no lugar"
+
+      - uses: actions/checkout@v4
+        with:
+          # `portao-origin.sh` compara HEAD com origin/master, e
+          # `git archive HEAD` empacota a árvore: os dois precisam do histórico.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar
+        run: npm ci --no-audit --no-fund
+
+      - name: Montar o .env.local da bancada
+        env:
+          ENV_DE_TESTE: ${{ secrets.ENV_DE_TESTE }}
+        run: |
+          printf '%s\n' "$ENV_DE_TESTE" > .env.local
+          chmod 600 .env.local
+          # `.env*` está no .gitignore, então isto não suja a árvore — o que
+          # importa porque o deploy.sh recusa (ou pergunta sobre) árvore suja.
+          echo "variáveis carregadas: $(grep -cE '^[A-Z]' .env.local)"
+
+      - name: Migrar o banco da bancada
+        # Sem carregador de TypeScript: o migrar.mjs só usa builtins e `pg`, e é
+        # assim que o deploy.sh o chama no servidor. Uma invocação só, igual nos
+        # dois lugares, é uma a menos para divergir.
+        run: node --env-file=.env.local scripts/migrar.mjs --aplicar
+
+      - name: Chave do VPS
+        env:
+          CHAVE_SSH_VPS: ${{ secrets.CHAVE_SSH_VPS }}
+          HOST_KEY_VPS: ${{ secrets.HOST_KEY_VPS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$CHAVE_SSH_VPS" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          if [ -n "$HOST_KEY_VPS" ]; then
+            printf '%s\n' "$HOST_KEY_VPS" > ~/.ssh/known_hosts
+            echo "host conferido pela chave guardada"
+          else
+            # CONFIANÇA NA PRIMEIRA VISTA. Quem estiver no meio do caminho
+            # neste instante vira o servidor para este runner — e o que ele
+            # recebe é a árvore inteira e o acesso root do deploy. Guardar
+            # HOST_KEY_VPS (saída de `ssh-keyscan 179.197.233.184`) fecha isso.
+            echo "! HOST_KEY_VPS não guardada — aceitando o host na primeira vista"
+            ssh-keyscan 179.197.233.184 >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Publicar
+        run: bash deploy.sh --sim
