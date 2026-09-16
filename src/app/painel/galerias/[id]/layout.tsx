@@ -6,7 +6,7 @@ import { paraCampoDeData } from "@/lib/datas";
 import { EditorGaleria } from "@/components/editor-galeria";
 import { MenuGaleria } from "@/components/menu-galeria";
 import { ProvedorDeEnvio } from "@/components/envio-em-curso";
-import { PublicarNoCabecalho } from "@/components/publicar-no-cabecalho";
+import { AcaoDePublicar, SeloDaGaleria } from "@/components/publicar-no-cabecalho";
 
 export const dynamic = "force-dynamic";
 
@@ -116,12 +116,16 @@ export default async function GaleriaLayout({
           {temAparenciaPendente && (
             <Link
               href={`/painel/galerias/${galeria.id}/design`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-alerta/40 bg-alerta/10 px-3 py-1 text-xs text-alerta transition hover:bg-alerta/20"
+              /* Mesmo formato de pastilha dos outros selos — ver o `SELO` de
+                 `publicar-no-cabecalho.tsx`. */
+              className="inline-flex items-center gap-1.5 rounded-full border border-alerta/40 bg-alerta/10 px-3 py-1.5 text-xs leading-none text-alerta transition hover:bg-alerta/20"
             >
               <span aria-hidden="true">●</span>
               aparência não publicada
             </Link>
           )}
+
+          <SeloDaGaleria publicada={noAr} noCofre={noCofre} />
 
           {/*
             VER COMO O CLIENTE VÊ — pedido do sócio em 04/09/2026, "um botão de
@@ -145,7 +149,9 @@ export default async function GaleriaLayout({
             href={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-linha-forte px-3 py-1.5 text-xs transition hover:bg-carbon-2"
+            /* Retângulo, e não pastilha: é ação. Mesma altura dos selos, para a
+               fileira assentar numa linha só. */
+            className="inline-flex items-center gap-1.5 rounded-lg border border-linha-forte px-3 py-1.5 text-xs leading-none transition hover:bg-carbon-2"
           >
             <svg
               viewBox="0 0 24 24"
@@ -168,9 +174,15 @@ export default async function GaleriaLayout({
             O selo virou selo E botão em 05/09/2026, a pedido do Juan: "não
             achei onde publica a galeria… seria ótimo se tivesse lá em cima, em
             'rascunho', pra publicar independente de qual página estivesse".
-            Ver `components/publicar-no-cabecalho.tsx`.
+
+            Em 16/09/2026 os dois voltaram a ser peças separadas — não para
+            desfazer aquilo, mas para AGRUPAR: o selo sobe para junto do aviso
+            de aparência (o que se lê) e a ação desce para junto do "ver como o
+            cliente vê" (o que se clica). Antes o "rascunho" ficava encravado
+            entre as duas ações e parecia um botão apagado. Ver
+            `components/publicar-no-cabecalho.tsx`.
           */}
-          <PublicarNoCabecalho galeriaId={galeria.id} publicada={noAr} noCofre={noCofre} />
+          <AcaoDePublicar galeriaId={galeria.id} publicada={noAr} noCofre={noCofre} />
         </div>
       </header>
 

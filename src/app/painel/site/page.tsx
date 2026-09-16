@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { marca } from "@/config/marca";
+import { SECAO_SITE_NO_AR } from "@/config/site-do-estudio";
 import { lerSite } from "@/lib/site-estudio";
 import { EditorSite } from "@/components/editor-site";
 import { EnderecoDoEstudio } from "@/components/endereco-do-estudio";
@@ -21,6 +22,11 @@ export const dynamic = "force-dynamic";
  * texto mudarem.
  */
 export default async function SitePage() {
+  /* Fora do ar a pedido do Juan em 16/09/2026. 404 e não "acesso negado": para
+     quem entra, esta tela simplesmente não existe hoje — é o mesmo tratamento
+     que `/painel/admin` dá a quem não é admin. Ver `config/site-do-estudio.ts`. */
+  if (!SECAO_SITE_NO_AR) notFound();
+
   const tenantId = await sessaoAtual();
   if (!tenantId) redirect("/entrar");
 
