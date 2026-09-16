@@ -388,6 +388,27 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * o casal, como se fosse o trabalho do fotógrafo.
    */
   let aparencia = lerAparencia(galeria.aparencia);
+
+  /*
+   * ── A PRÉVIA EM TELA CHEIA MOSTRA O RASCUNHO (16/09/2026) ───────────────
+   *
+   * Felipe: "quando trocar as variações da grade, ele não está salvando
+   * automaticamente. Eu clico em 'visualizar a galeria' e ele mostra o modo
+   * antigo, não o último selecionado."
+   *
+   * O rascunho ESTAVA gravando — em `aparencia_rascunho`, como o editor
+   * promete. O que faltava era esta linha: `?previa=1` lia `aparencia`, a
+   * publicada, e o botão devolvia fielmente a galeria de ontem. Da caixa do
+   * editor a escolha chegava pela URL (`?ap=`), então o defeito aparecia só no
+   * botão que abre em tela cheia — o lugar em que ele foi conferir.
+   *
+   * O rascunho vale MENOS que o `?ap=`, e a ordem importa: quem está com o
+   * editor aberto tem na tela uma escolha mais nova que a gravada, e é ela que
+   * a prévia deve desenhar.
+   */
+  if (ehDono && galeria.aparencia_rascunho) {
+    aparencia = lerAparencia(galeria.aparencia_rascunho);
+  }
   if (ehDono && ap) {
     try {
       aparencia = lerAparencia(JSON.parse(ap));

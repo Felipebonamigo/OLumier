@@ -901,8 +901,21 @@ export function EditorAparencia({
         >
           Visualizar galeria ↗
         </a>
+        {/*
+          A frase muda quando há escolha não publicada, porque desde 16/09/2026
+          o botão passou a abrir o RASCUNHO — era o pedido do Felipe ("clico em
+          visualizar a galeria e ele mostra o modo antigo"). Manter "do jeito
+          que o seu cliente vê" nesse estado seria a mesma mentira que
+          `testar-previa.mjs` guarda do outro lado: o cliente ainda vê o
+          anterior, e quem lê a frase precisa saber qual das duas está na tela.
+        */}
         <p className="mt-1.5 text-xs text-texto-faint">
-          Abre em tela cheia, do jeito que o seu cliente vê.
+          {/* `sujo` já cobre os dois casos: `salvo` nasce do PUBLICADO, então
+              ele fica verdadeiro tanto para a escolha de agora quanto para o
+              rascunho que a tela abriu. */}
+          {sujo
+            ? "Abre em tela cheia, com as suas escolhas ainda não publicadas."
+            : "Abre em tela cheia, do jeito que o seu cliente vê."}
         </p>
       </div>
 

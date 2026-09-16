@@ -21,6 +21,16 @@ export interface GaleriaPublica {
   permite_download: boolean;
   expira_em: Date | null;
   aparencia: unknown;
+  /*
+   * O que o fotógrafo está experimentando e ainda não publicou.
+   *
+   * Vem junto porque a PRÉVIA do dono (`?previa=1`) precisa dele: sem esta
+   * coluna o botão "Visualizar galeria" abria a aparência publicada, e quem
+   * acabara de trocar a grade via a antiga. O cliente nunca lê este campo —
+   * `buscarGaleriaPublica` só o traz, e quem decide usá-lo é a página, depois
+   * de provar que a sessão é do dono.
+   */
+  aparencia_rascunho: unknown;
   capa_media_id: string | null;
   /** Capa enviada como arquivo (migração 029). Vence `capa_media_id`. */
   capa_chave: string | null;
@@ -62,7 +72,7 @@ export async function buscarGaleriaPublica(
 ) {
   return consultarUm<GaleriaPublica>(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
-            g.permite_download, g.expira_em, g.aparencia, g.capa_media_id, g.capa_chave, g.capa_foco_x, g.capa_foco_y, g.rostos_ativos,
+            g.permite_download, g.expira_em, g.aparencia, g.aparencia_rascunho, g.capa_media_id, g.capa_chave, g.capa_foco_x, g.capa_foco_y, g.rostos_ativos,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug, t.site as estudio_site,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
             t.fonte_chave as estudio_fonte, t.fonte_nome as estudio_fonte_nome,

@@ -274,6 +274,35 @@ await etapa("o rascunho grava sem tocar no que o cliente vê", async () => {
   return "rascunho creme, publicado noite";
 });
 
+/*
+ * ── O BOTÃO "VISUALIZAR GALERIA" MOSTRA O RASCUNHO (16/09/2026) ───────────
+ *
+ * Felipe: "quando trocar as variações da grade, ele não está salvando
+ * automaticamente. Eu clico em 'visualizar a galeria' e ele mostra o modo
+ * antigo, não o último selecionado."
+ *
+ * Estava gravando — a etapa acima prova. O que faltava era a LEITURA: a página
+ * pública montava a aparência a partir de `aparencia`, a publicada, e nunca
+ * olhava o rascunho. Dentro da caixinha do editor a escolha chega pela URL
+ * (`?ap=`), então o defeito só aparecia no botão que abre em tela cheia — que
+ * é justamente onde ele foi conferir.
+ *
+ * A etapa seguinte é o outro lado da mesma moeda, e é a que não pode falhar
+ * nunca: para o cliente, sem cookie, o rascunho continua invisível.
+ */
+await etapa("o dono, na prévia, vê o rascunho e não o publicado", async () => {
+  const html = await (
+    await fetch(`${BASE}/g/${noAr.tslug}/${noAr.gslug}?previa=1`, {
+      cache: "no-store",
+      headers: { cookie },
+    })
+  ).text();
+  if (!html.includes("#f7f1e6")) {
+    throw new Error("a prévia do dono veio com a aparência publicada — o rascunho não foi lido");
+  }
+  return "creme do rascunho, em tela cheia";
+});
+
 await etapa("a galeria do cliente ignora o rascunho", async () => {
   const html = await (await fetch(`${BASE}/g/${noAr.tslug}/${noAr.gslug}`, { cache: "no-store" })).text();
   if (html.includes("#f7f1e6")) {
