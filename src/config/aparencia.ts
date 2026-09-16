@@ -133,6 +133,55 @@ export type FonteDoTexto = "padrao" | "propria";
 export type Alinhamento = "centro" | "esquerda";
 
 /**
+ * QUANTAS LINHAS O NOME OCUPA — escolha do fotógrafo, não do navegador.
+ *
+ * Felipe, 16/09/2026: "o título fica obrigatoriamente um em cima do outro, eu
+ * preferiria que tudo ficasse em uma linha só"; e depois, olhando de novo:
+ * "permitir que o nome fique na mesma linha, escolha do usuário, na mesma
+ * linha, ou em 2 ou em 3".
+ *
+ * ── DE ONDE VINHAM AS TRÊS LINHAS ────────────────────────────────────────
+ *
+ * As capas embrulhavam o título num `max-w-[18ch]`. A intenção era boa — "uns
+ * 18 caracteres por linha" — mas a conta saía na fonte ERRADA: a classe estava
+ * na `div` de fora, que herda a fonte do corpo em 16 px, então 18ch dava uns
+ * 145 px. O título desenha ao lado em 48 px. O resultado é o que ele
+ * fotografou: "Nathalia & Matheus", que cabe folgado numa linha, caindo em
+ * três.
+ *
+ * Corrigir a conta (medir o `ch` na fonte do TÍTULO) resolve o caso dele e não
+ * responde à pergunta seguinte, que é de gosto: duas linhas centradas são um
+ * desenho legítimo de convite, e havia quem estivesse contando com elas. Por
+ * isso virou eixo em vez de conserto silencioso.
+ *
+ * `auto` deixa o navegador quebrar onde couber, e é o padrão — mas agora com a
+ * largura medida certo, o que na prática devolve a linha única para nome curto.
+ */
+export type LinhasTitulo = "auto" | "uma" | "duas" | "tres";
+
+/**
+ * O TAMANHO DO TÍTULO, EM PORCENTAGEM DO QUE A CAPA JÁ DESENHAVA.
+ *
+ * Felipe, 16/09/2026: "poderia ter um tipo de barrinha que a gente pudesse
+ * definir o tamanho do texto dentro do mesmo espaço de formatação. Assim
+ * poderia ir definindo, pela barrinha, se o texto ficaria tudo em uma única
+ * linha, ou se aumentando o tamanho do texto ele iria pra linhas de baixo".
+ *
+ * ── POR QUE PORCENTAGEM, E NÃO PIXELS ───────────────────────────────────
+ *
+ * Cada capa tem o seu tamanho: a imersa escreve o nome grande sobre a foto, a
+ * redonda escreve pequeno embaixo do círculo. Um número em pixels serviria a
+ * uma e estragaria a outra — e mudaria de significado toda vez que a pessoa
+ * trocasse de desenho de capa. A porcentagem multiplica o tamanho PRÓPRIO de
+ * cada capa, então 120% quer dizer a mesma coisa nas sete.
+ *
+ * 100 é o que a capa já desenhava, e é o padrão: quem não mexer na barrinha
+ * não vê diferença nenhuma.
+ */
+export const TAMANHO_TITULO = { min: 60, max: 180, passo: 5, padrao: 100 } as const;
+
+
+/**
  * Como o link da galeria aparece no WhatsApp.
  *
  * Carol, 08/09/2026, olhando o cartão já corrigido: "não acho bonita a
@@ -231,6 +280,10 @@ export interface Aparencia {
   canto: CantoFoto;
   fonteTexto: FonteDoTexto;
   alinhamento: Alinhamento;
+  /** Em quantas linhas o nome cai. Ver `LinhasTitulo`. */
+  linhasTitulo: LinhasTitulo;
+  /** Porcentagem do tamanho próprio da capa: 100 é o de sempre. Ver `TAMANHO_TITULO`. */
+  tamanhoTitulo: number;
   /**
    * O QUE é o evento, antes de dizer de QUEM ele é.
    *
@@ -295,6 +348,12 @@ export const APARENCIA_PADRAO: Aparencia = {
      galerias não pode mudar sozinho. Ver o comentário de `FonteDoTexto`. */
   fonteTexto: "padrao",
   alinhamento: "centro",
+  /* Os dois nasceram em 16/09/2026 sem mexer em nada: `auto` é a quebra que o
+     navegador já fazia e 100% é o tamanho que a capa já desenhava. O que MUDA
+     as galerias existentes não é o padrão — é a largura do título ter passado
+     a ser medida na fonte certa. Ver `LinhasTitulo`. */
+  linhasTitulo: "auto",
+  tamanhoTitulo: TAMANHO_TITULO.padrao,
   /* `sobreposto` é o cartão de sempre. Ver o comentário de `CartaoDoLink`:
      o modo limpo é escolha, não correção. */
   cartao: "sobreposto",
@@ -335,6 +394,13 @@ export function pesoDoTitulo(t: Tipografia, p: Peso): number {
   return SEM_NEGRITO_REAL.has(t) ? 400 : PESO_ALVO[p];
 }
 
+/** Apara a barrinha para dentro da faixa e para cima de um passo inteiro. */
+function lerTamanhoTitulo(bruto: unknown): number {
+  const n = typeof bruto === "number" && Number.isFinite(bruto) ? bruto : TAMANHO_TITULO.padrao;
+  const dentro = Math.min(TAMANHO_TITULO.max, Math.max(TAMANHO_TITULO.min, n));
+  return Math.round(dentro / TAMANHO_TITULO.passo) * TAMANHO_TITULO.passo;
+}
+
 /** Lê o JSON do banco garantindo valores válidos — galeria antiga cai no padrão. */
 export function lerAparencia(bruto: unknown): Aparencia {
   const o = (bruto ?? {}) as Partial<Aparencia>;
@@ -354,6 +420,17 @@ export function lerAparencia(bruto: unknown): Aparencia {
     canto: valida(o.canto, OPCOES.canto.map((x) => x.id), APARENCIA_PADRAO.canto),
     fonteTexto: valida(o.fonteTexto, OPCOES.fonteTexto.map((x) => x.id), APARENCIA_PADRAO.fonteTexto),
     alinhamento: valida(o.alinhamento, OPCOES.alinhamento.map((x) => x.id), APARENCIA_PADRAO.alinhamento),
+    linhasTitulo: valida(o.linhasTitulo, OPCOES.linhasTitulo.map((x) => x.id), APARENCIA_PADRAO.linhasTitulo),
+    /*
+     * A barrinha é NÚMERO, e por isso não passa por `valida` — não há lista de
+     * valores certos entre 60 e 180. Apara para dentro da faixa em vez de
+     * recusar: um 400 gravado por engano vira 180, e não um título que some.
+     *
+     * O arredondamento para o passo é o que faz a barrinha voltar exatamente
+     * onde a pessoa a soltou. Sem ele, um 103 gravado assentaria em 105 na tela
+     * e a galeria continuaria em 103 — a prévia mentindo por dois por cento.
+     */
+    tamanhoTitulo: lerTamanhoTitulo(o.tamanhoTitulo),
     /*
      * O rótulo é TEXTO LIVRE, e por isso não passa por `valida` — não há lista
      * de valores certos para "aniversário de 15 anos". O que existe é um teto:
@@ -535,6 +612,15 @@ export const OPCOES = {
     { id: "padrao", nome: "A do sistema", desc: "Sem serifa, feita para ler em tela" },
     { id: "propria", nome: "A minha fonte", desc: "O arquivo que você enviou em Conta" },
   ],
+  /* "Automático" primeiro porque é o padrão, e os números depois em ordem: a
+     lista se lê como uma frase — quebra sozinho, ou em 1, 2, 3. O texto de
+     ajuda de cada um fala do RESULTADO na capa, não do mecanismo. */
+  linhasTitulo: [
+    { id: "auto", nome: "Automático", desc: "Quebra onde couber" },
+    { id: "uma", nome: "1 linha", desc: "O nome inteiro numa linha só" },
+    { id: "duas", nome: "2 linhas", desc: "Parte no meio, em duas linhas" },
+    { id: "tres", nome: "3 linhas", desc: "Em três linhas, uma sobre a outra" },
+  ],
   alinhamento: [
     { id: "centro", nome: "Centralizado", desc: "Tudo no eixo do meio" },
     { id: "esquerda", nome: "À esquerda", desc: "Tudo encostado na mesma linha" },
@@ -572,25 +658,25 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   {
     /*
@@ -607,7 +693,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -630,25 +716,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100 },
   },
 ];
 
@@ -674,7 +760,8 @@ export function presetEquivalente(a: Aparencia): string | null {
   const igual = (x: Aparencia, y: Aparencia) =>
     x.capa === y.capa && x.tema === y.tema && x.tipografia === y.tipografia &&
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
-    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento && x.rotulo === y.rotulo && x.cartao === y.cartao;
+    x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento && x.rotulo === y.rotulo && x.cartao === y.cartao &&
+    x.linhasTitulo === y.linhasTitulo && x.tamanhoTitulo === y.tamanhoTitulo;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 

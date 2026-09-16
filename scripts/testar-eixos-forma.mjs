@@ -248,15 +248,32 @@ try {
     }
   }
 
-  /* O título da jornal mora numa caixa de 16ch centrada por `mx-auto`. Trocar
-     só o `text-align` deixaria a CAIXA no meio e o texto encostado na esquerda
-     dela — ou seja, ainda torto, e pior, porque agora há duas referências. */
-  const jornalEsquerda = await html({ ...base, capa: "jornal", alinhamento: "esquerda" });
-  const caixaDoTitulo = jornalEsquerda.match(/<div class="[^"]*max-w-\[16ch\][^"]*"/)?.[0] ?? "";
-  if (caixaDoTitulo && !caixaDoTitulo.includes("mx-auto")) {
-    ok("à esquerda, a caixa do título perde o mx-auto e encosta na mesma linha");
-  } else {
-    erro(`a caixa do título veio "${caixaDoTitulo.slice(0, 100)}" — ainda centrada`);
+  /* A caixa do título é centrada por `mx-auto`. Trocar só o `text-align`
+     deixaria a CAIXA no meio e o texto encostado na esquerda dela — ou seja,
+     ainda torto, e pior, porque agora há duas referências.
+ *
+ * A caixa mudou de elemento em 16/09/2026 e a asserção mudou junto: era uma
+ * `div` com `max-w-[16ch]` em volta do título, e o limite passou para o
+ * próprio `h1`. O motivo está em `quebraDoTitulo` — na `div` o `ch` era medido
+ * na fonte do CORPO, e um limite que devia valer uns 430 px de título valia
+ * 145, empilhando "Nathalia & Matheus" em três linhas. O que este teste
+ * guarda continua sendo o mesmo: à esquerda, a caixa não pode ficar centrada. */
+  for (const [alinhamento, deveCentrar] of [
+    ["centro", true],
+    ["esquerda", false],
+  ]) {
+    const corpo = await html({ ...base, capa: "jornal", alinhamento });
+    const caixaDoTitulo = corpo.match(/<h1[^>]*class="[^"]*"/)?.[0] ?? "";
+    const centrada = caixaDoTitulo.includes("mx-auto");
+    if (caixaDoTitulo && centrada === deveCentrar) {
+      ok(
+        deveCentrar
+          ? "centralizado, a caixa do título fica no eixo do meio"
+          : "à esquerda, a caixa do título perde o mx-auto e encosta na mesma linha",
+      );
+    } else {
+      erro(`a caixa do título veio "${caixaDoTitulo.slice(0, 110)}" com alinhamento ${alinhamento}`);
+    }
   }
 
   /*
