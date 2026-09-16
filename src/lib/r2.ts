@@ -26,6 +26,29 @@ const conta = process.env.R2_ACCOUNT_ID;
 const accessKeyId = process.env.R2_ACCESS_KEY_ID;
 const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
+/*
+ * ── APONTAR O ARMAZÉM PARA OUTRO LUGAR (16/09/2026) ───────────────────────
+ *
+ * O comentário lá em cima promete que trocar de fornecedor "não muda nada aqui
+ * além das variáveis de ambiente". Não era verdade: o endereço era montado a
+ * partir da conta do R2 e não havia como apontar para outro lugar.
+ *
+ * Quem cobrou a promessa foi o CI. A suíte publica galeria, assina upload e
+ * confere que o objeto saiu do bucket — um dublê provaria que o dublê funciona,
+ * então o portão precisa de um armazém DE VERDADE. Com credencial de produção
+ * no runner, qualquer workflow do repositório passaria a alcançar as fotos dos
+ * clientes; com esta variável, ele sobe um MinIO ao lado e fala com ele.
+ *
+ * Em produção `R2_ENDPOINT` não existe, e tudo continua exatamente como estava.
+ *
+ * `forcePathStyle` acompanha porque servidor local não tem DNS curinga: sem
+ * ele o cliente procura `galerias.127.0.0.1` e não acha ninguém. Fica atrás de
+ * uma chave própria em vez de ligar sozinho junto com o endereço, para um
+ * fornecedor futuro poder usar endereço próprio e continuar no estilo virtual.
+ */
+const endereco = process.env.R2_ENDPOINT;
+const caminhoNoEndereco = process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1";
+
 export const BUCKET = process.env.R2_BUCKET ?? "galerias";
 
 /** true quando as credenciais estão configuradas — telas mostram aviso amigável se não. */
@@ -40,8 +63,10 @@ function s3(): S3Client {
     );
   }
   cliente ??= new S3Client({
-    region: "auto",
-    endpoint: `https://${conta}.r2.cloudflarestorage.com`,
+    // "auto" é do R2; um armazém qualquer espera uma região de verdade.
+    region: endereco ? (process.env.R2_REGIAO ?? "us-east-1") : "auto",
+    endpoint: endereco ?? `https://${conta}.r2.cloudflarestorage.com`,
+    forcePathStyle: caminhoNoEndereco,
     credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
   });
   return cliente;

@@ -90,10 +90,19 @@ jobs:
       # próprio código aceitarem. Nada aqui fala com o Asaas.
       SESSION_SECRET: segredo-de-sessao-so-do-ci-0123456789abcdef
       ASAAS_WEBHOOK_TOKEN: token-de-webhook-so-do-ci-0123456789abcdef
+      # `R2_ACCOUNT_ID` precisa existir porque é dele que sai o
+      # `armazenamentoConfigurado` do `src/lib/r2.ts` — sem ele o healthz
+      # responde 503 com "armazenamento=credenciais ausentes" e o servidor do
+      # portão nunca é considerado saudável. O valor não é usado: `R2_ENDPOINT`
+      # substitui o endereço inteiro.
+      R2_ACCOUNT_ID: conta-de-mentira-do-ci
       R2_ENDPOINT: http://127.0.0.1:9000
       R2_ACCESS_KEY_ID: minioadmin
       R2_SECRET_ACCESS_KEY: minioadmin
       R2_BUCKET: galerias
+      # Servidor local não tem DNS curinga: sem isto o cliente S3 procura
+      # `galerias.127.0.0.1`. Em produção esta variável não existe.
+      ARMAZEM_CAMINHO_NO_ENDERECO: "1"
       # O ARMAZÉM DOS ORIGINAIS É OUTRO, e aqui também precisa ser: `b2.ts` lê
       # ARQUIVOS_* sem queda para R2_*, e desconfigurado ele faz o sistema rodar
       # "igual" — o que em produção é a fase da obra ainda não ligada, mas sob
@@ -179,7 +188,9 @@ jobs:
             echo "DATABASE_URL=$DATABASE_URL"
             echo "SESSION_SECRET=$SESSION_SECRET"
             echo "ASAAS_WEBHOOK_TOKEN=$ASAAS_WEBHOOK_TOKEN"
+            echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID"
             echo "R2_ENDPOINT=$R2_ENDPOINT"
+            echo "ARMAZEM_CAMINHO_NO_ENDERECO=$ARMAZEM_CAMINHO_NO_ENDERECO"
             echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
             echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
             echo "R2_BUCKET=$R2_BUCKET"
