@@ -42,24 +42,121 @@ export function colunasQueCabem(
 }
 
 /**
- * Reparte os índices entre as colunas na ordem de LEITURA.
+ * Reparte os índices entre as colunas, na ordem de LEITURA e pela ALTURA.
  *
- * A foto `i` vai para a coluna `i % colunas`. Com 3 colunas: 0,1,2 na primeira
- * fileira; 3,4,5 na segunda. O topo das colunas é 0,1,2 — que é o que a pessoa
- * espera ver primeiro, da esquerda para a direita.
+ * Cada foto vai para a coluna mais CURTA no momento. Empate vai para a mais à
+ * esquerda, então as primeiras fotos ainda ocupam 0, 1, 2 — o topo continua
+ * sendo o começo da galeria, lido da esquerda para a direita, que é a regra que
+ * este arquivo nasceu para proteger. Dentro de cada coluna os índices seguem
+ * crescendo, então a leitura de cima para baixo também se mantém.
  *
- * As alturas das colunas ficam desiguais, e isso é o mural: as fotos têm
- * proporções diferentes e ninguém quer que sejam cortadas. O que não pode
- * acontecer — e era o que acontecia — é a ORDEM se perder.
+ * ── O DEFEITO QUE ISTO CONSERTA (16/09/2026) ──────────────────────────────
+ *
+ * Era `i % colunas`: a foto 0 na coluna 0, a 1 na 1, a 2 na 2, a 3 na 0 de
+ * novo. Repartia a CONTAGEM igualmente e ignorava a altura — e num mural as
+ * alturas é que são desiguais, porque as fotos têm proporções diferentes e
+ * nenhuma é cortada.
+ *
+ * Com sorte ruim, uma coluna junta os retratos e a vizinha junta as deitadas:
+ * a mesma quantidade de fotos, quase o dobro de altura. Felipe, com a foto do
+ * fim da galeria: "ficou estranho, umas partes vazias e outra comprida".
+ *
+ * Distribuir pela altura não muda a ordem e fecha o buraco: o rodapé das
+ * colunas passa a terminar quase junto, e a diferença que resta é, no máximo, a
+ * altura de uma foto.
+ *
+ * @param alturaDe Altura da foto `i` para uma coluna de largura 1 — ou seja,
+ *   `1 / proporção`. Sem ela a repartição volta a ser por contagem, que é o
+ *   certo quando as alturas não são conhecidas (a grade quadrada, por exemplo,
+ *   onde toda foto tem a mesma).
  */
-export function distribuirEmColunas(quantidade: number, colunas: number): number[][] {
+export function distribuirEmColunas(
+  quantidade: number,
+  colunas: number,
+  alturaDe?: (i: number) => number,
+): number[][] {
   const n = Math.max(1, Math.floor(colunas));
   /* Colunas a mais que fotos ficariam vazias e ainda assim ocupariam largura,
    * espremendo as que têm foto. Com poucas fotos, menos colunas. */
   const usadas = Math.max(1, Math.min(n, quantidade));
   const saida: number[][] = Array.from({ length: usadas }, () => []);
-  for (let i = 0; i < quantidade; i++) saida[i % usadas].push(i);
+  if (!alturaDe) {
+    for (let i = 0; i < quantidade; i++) saida[i % usadas].push(i);
+    return saida;
+  }
+
+  const altura = new Array<number>(usadas).fill(0);
+  for (let i = 0; i < quantidade; i++) {
+    let escolhida = 0;
+    for (let c = 1; c < usadas; c++) {
+      /* `<` e não `<=`: no empate fica a mais à esquerda, e é isso que põe as
+         primeiras fotos em 0, 1, 2 com todas as colunas ainda zeradas. */
+      if (altura[c] < altura[escolhida]) escolhida = c;
+    }
+    saida[escolhida].push(i);
+    /* Proporção inválida (foto sem largura/altura no banco) não pode virar
+       NaN: uma coluna com altura NaN nunca mais seria escolhida, e todas as
+       fotos seguintes cairiam numa coluna só. */
+    const h = alturaDe(i);
+    altura[escolhida] += Number.isFinite(h) && h > 0 ? h : 1;
+  }
   return saida;
+}
+
+/**
+ * Agrupa os índices em FILEIRAS que preenchem a largura inteira — o panorama.
+ *
+ * ── POR QUE O PANORAMA DEIXOU DE SER UMA GRADE DE CSS (16/09/2026) ────────
+ *
+ * Felipe: "na panorama, a foto não está bem encaixada nos limites, a segunda
+ * foto da esquerda pra direita fica um espaço grande em branco".
+ *
+ * O desenho anterior era `grid` com linhas de altura FIXA (`gridAutoRows`) e
+ * cada foto ocupando duas delas. Isso só fecha certo para uma proporção: a de
+ * retrato 2:3. Uma foto quadrada na mesma caixa desenha a largura inteira e
+ * dois terços da altura — o terço que sobra é o branco da foto dele. E quando a
+ * deitada pedia duas colunas com apenas uma sobrando na fileira, o próprio CSS
+ * empurrava a foto para a fileira seguinte e deixava o vão para trás.
+ *
+ * Fileira justificada não tem como deixar vão: a altura da fileira é CALCULADA
+ * para que as larguras naturais das fotos somem exatamente a largura
+ * disponível. Nada é cortado — que é a promessa das grades "colunas", "linhas"
+ * e "panorama" — e a deitada continua ocupando o dobro da vizinha, porque é
+ * mais larga na mesma altura.
+ *
+ * @param unidadesPorFileira Quantas colunas a tela comporta. A deitada vale
+ *   duas; as outras, uma. É o que mantém o panorama parecido com uma grade em
+ *   vez de virar uma fileira só de vinte fotos.
+ */
+export function agruparEmFileiras(
+  proporcoes: readonly number[],
+  unidadesPorFileira: number,
+): number[][] {
+  const teto = Math.max(1, Math.floor(unidadesPorFileira));
+  const fileiras: number[][] = [];
+  let atual: number[] = [];
+  let unidades = 0;
+
+  for (let i = 0; i < proporcoes.length; i++) {
+    const peso = Math.min(teto, colunasDoItem(proporcoes[i], teto));
+    /* Não cabe: fecha a fileira ANTES de pôr a foto. Fechar depois deixaria a
+       fileira com mais unidades que a tela, e a conta da altura devolveria uma
+       fileira mais baixa que as vizinhas — o degrau que a grade de CSS fazia. */
+    if (unidades > 0 && unidades + peso > teto) {
+      fileiras.push(atual);
+      atual = [];
+      unidades = 0;
+    }
+    atual.push(i);
+    unidades += peso;
+    if (unidades >= teto) {
+      fileiras.push(atual);
+      atual = [];
+      unidades = 0;
+    }
+  }
+  if (atual.length) fileiras.push(atual);
+  return fileiras;
 }
 
 /**
