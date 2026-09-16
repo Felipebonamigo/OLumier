@@ -238,6 +238,53 @@ await etapa("galeria despublicada não assina nada", async () => {
   await db.query("update galerias set publicada = true where id = $1", [g.id]);
 });
 
+/*
+ * ── AS OUTRAS DUAS PORTAS DA PÁGINA (16/09/2026) ──────────────────────────
+ *
+ * A página diz "o prazo terminou" e "fora do ar" (trial abandonado), mas esta
+ * rota só olhava publicada, no ar, senha e download. Quem guardou o id da
+ * galeria assinava os ORIGINAIS mesmo assim. O zip e a lista ganharam essas
+ * travas no mesmo dia; aqui elas voltam a ser as da página.
+ */
+await etapa("galeria com prazo vencido não assina preview nem original", async () => {
+  await db.query(
+    "update galerias set expira_em = now() - interval '1 day', permite_download = true where id = $1",
+    [g.id],
+  );
+  try {
+    /* Os dois pedidos antes de comparar: um vazamento só do original não pode
+       ficar escondido atrás da falha do preview. */
+    const preview = (await pedir([m0.id], "preview")).status;
+    const download = (await pedir([m0.id], "download")).status;
+    igual(`preview ${preview} · download ${download}`, "preview 409 · download 409", "status");
+    return "preview 409 · download 409";
+  } finally {
+    await db.query("update galerias set expira_em = null where id = $1", [g.id]);
+  }
+});
+
+await etapa("estúdio com trial abandonado não assina preview nem original", async () => {
+  const { rows: [antes] } = await db.query("select status, trial_ate from tenants where id = $1", [g.tenant_id]);
+  await db.query(
+    "update tenants set status = 'trial', trial_ate = now() - interval '400 days' where id = $1",
+    [g.tenant_id],
+  );
+  try {
+    /* Os dois pedidos antes de comparar: um vazamento só do original não pode
+       ficar escondido atrás da falha do preview. */
+    const preview = (await pedir([m0.id], "preview")).status;
+    const download = (await pedir([m0.id], "download")).status;
+    igual(`preview ${preview} · download ${download}`, "preview 409 · download 409", "status");
+    return "preview 409 · download 409";
+  } finally {
+    await db.query("update tenants set status = $2, trial_ate = $3 where id = $1", [
+      g.tenant_id,
+      antes.status,
+      antes.trial_ate,
+    ]);
+  }
+});
+
 await etapa("pedido torto é recusado: sem ids, tipo inventado, id que não é uuid, lista enorme", async () => {
   igual((await pedir([], "preview")).status, 400, "vazio");
   igual((await pedir([m0.id], "original")).status, 400, "tipo inventado");

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultar, consultarUm } from "@/lib/db";
 import { temAcessoLiberado } from "@/lib/galerias-publicas";
+import { galeriasNoAr } from "@/lib/assinatura";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
 import { nomeComCapitulo, vaiPrefixar, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
@@ -19,12 +20,12 @@ import { nomeComCapitulo, vaiPrefixar, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-
  *
  * ── A RÉGUA É A MESMA DA PÁGINA, E É AQUI QUE ELA MORA AGORA ───────────────
  *
- * Publicada, no ar, senha quando houver — e download SÓ quando o fotógrafo
- * permitiu. Essa última regra é a razão de a rota existir com cuidado: antes
- * o interruptor de download decidia se a URL do original ia no HTML; agora
- * decide se esta rota a entrega. "Esconder o botão não é proteger: o
- * interruptor precisa apagar o link" continua valendo, e o link agora nem
- * chega a nascer.
+ * Publicada, estúdio no ar, galeria no ar e no prazo, senha quando houver — e
+ * download SÓ quando o fotógrafo permitiu. Essa última regra é a razão de a
+ * rota existir com cuidado: antes o interruptor de download decidia se a URL
+ * do original ia no HTML; agora decide se esta rota a entrega. "Esconder o
+ * botão não é proteger: o interruptor precisa apagar o link" continua valendo,
+ * e o link agora nem chega a nascer.
  */
 
 const VALIDADE = 6 * 3600;
@@ -39,9 +40,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     senha_hash: string | null;
     estado: string;
     permite_download: boolean;
-  }>("select senha_hash, estado, permite_download from galerias where id = $1 and publicada", [id]);
+    expira_em: string | null;
+    estudio_status: string;
+    estudio_trial_ate: string | null;
+  }>(
+    `select g.senha_hash, g.estado, g.permite_download, g.expira_em,
+            t.status as estudio_status, t.trial_ate as estudio_trial_ate
+       from galerias g join tenants t on t.id = g.tenant_id
+      where g.id = $1 and g.publicada`,
+    [id],
+  );
   if (!galeria) return NextResponse.json({ erro: "sem acesso" }, { status: 404 });
+  /*
+   * Trial abandonado e prazo vencido, na ordem da página (16/09/2026): ela diz
+   * "fora do ar" e "o prazo terminou", e sem estas linhas quem guardou o id da
+   * galeria assinava os originais por aqui mesmo assim. As mesmas portas de
+   * `prepararEntrega`, que guarda o zip e a lista.
+   */
+  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate })) {
+    return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
+  }
   if (galeria.estado !== "online") return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
+  if (galeria.expira_em && new Date(galeria.expira_em) < new Date()) {
+    return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
+  }
   if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 401 });
   }
