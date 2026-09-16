@@ -156,3 +156,40 @@ drop trigger if exists trg_uso on medias;
 create trigger trg_uso
   after insert or update of bytes, pronto or delete on medias
   for each row execute function recalcular_uso();
+
+-- ---------------------------------------------------------------------------
+-- O QUE ESTE RETRATO JÁ CONTÉM
+--
+-- `db/schema.sql` não é o estado do banco no dia zero: é um RETRATO, e ele foi
+-- reescrito ao longo do caminho para já sair com o resultado das primeiras
+-- migrações. A coluna `tenants.logo_chave` aqui em cima é prova disso — ela
+-- nasceu `logo_url` e foi renomeada pela `008-marca.sql`.
+--
+-- O problema é que o retrato não CONTAVA isso a ninguém. Num banco novo —
+-- o do CI, o de quem acabou de clonar — a receita é retrato + migrações, e a
+-- 008 chegava querendo renomear uma coluna que já tinha outro nome:
+--
+--     ✗ 008-marca.sql: column "logo_url" does not exist
+--
+-- Quem tropeça nisso perde um tempo desproporcional, porque o erro aponta para
+-- a migração e o defeito está aqui. As 001–007 passavam por sorte: são
+-- `add column if not exists`, que não reclama de já existir. A 008 é um
+-- `rename`, e rename não tem "if not exists".
+--
+-- Então o retrato passa a registrar o que carrega. A tabela é a mesma que o
+-- `scripts/migrar.mjs` cria ao subir — repetida aqui porque o retrato precisa
+-- funcionar sozinho, aplicado por `psql`, antes de qualquer script rodar.
+--
+-- AO DOBRAR UMA MIGRAÇÃO NOVA DENTRO DESTE ARQUIVO, acrescente-a à lista
+-- abaixo. Sem isso ela roda duas vezes — e a segunda é a que falha.
+-- ---------------------------------------------------------------------------
+
+create table if not exists migracoes_aplicadas (
+  arquivo     text primary key,
+  aplicada_em timestamptz not null default now(),
+  observacao  text
+);
+
+insert into migracoes_aplicadas (arquivo, observacao)
+values ('008-marca.sql', 'já contida neste retrato (logo_url → logo_chave)')
+on conflict do nothing;
