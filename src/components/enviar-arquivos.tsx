@@ -76,11 +76,27 @@ export function EnviarArquivos({
       {secoes.length > 0 && (
         <label className="mb-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-texto-soft">Enviar para o capítulo:</span>
+          {/*
+            LIVRE DURANTE O ENVIO (16/09/2026).
+
+            Era `disabled={envio.rodando}`, e a trava tinha razão de ser: a fila
+            de envio era uma corrida fechada por lote, e mandar um segundo lote
+            no meio do primeiro criava duas corridas disputando a mesma rede.
+
+            Felipe topou com isso: "não consigo enviar simultaneamente fotos
+            para making of, cerimônia, decoração… tenho que esperar subir as
+            fotos de um dos capítulos". E depois, direto: "não bloquear o
+            'enviar para capítulo'".
+
+            A fila virou fila de verdade — um consumidor só, lista que cresce
+            (ver `emParaleloDeFila`). O capítulo de cada arquivo é resolvido no
+            momento em que ele ENTRA na fila e viaja com ele, então trocar o
+            seletor agora não mexe no que já está subindo.
+          */}
           <select
             value={destino}
             onChange={(e) => setDestino(e.target.value)}
-            disabled={envio.rodando}
-            className="rounded-lg border border-linha bg-void px-3 py-1.5 text-sm focus:border-acento focus:outline-none disabled:opacity-50"
+            className="rounded-lg border border-linha bg-void px-3 py-1.5 text-sm focus:border-acento focus:outline-none"
           >
             <option value="">— sem capítulo —</option>
             {secoes.map((s) => (
@@ -89,7 +105,9 @@ export function EnviarArquivos({
               </option>
             ))}
           </select>
-          <span className="text-xs text-texto-faint">dá para mover depois</span>
+          <span className="text-xs text-texto-faint">
+            dá para trocar e mandar outro capítulo sem esperar este terminar
+          </span>
         </label>
       )}
 
