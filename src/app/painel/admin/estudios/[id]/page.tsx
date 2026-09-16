@@ -6,7 +6,12 @@ import { exigirAdmin, metadataDeAdmin } from "@/lib/portao-admin";
 import { fichaDoEstudio } from "@/lib/admin";
 import { mensalEquivalenteCentavos, precoMensalDoEstudio } from "@/lib/metricas-admin";
 import { planoPorId, formatarReais, cicloDe, custoArmazenamentoCentavos, GB } from "@/config/planos";
-import { quotaEfetivaBytes, TETO_TRIAL_GB, CARENCIA_POS_TRIAL_DIAS } from "@/config/trial";
+import {
+  espacoSemLimite,
+  quotaEfetivaBytes,
+  TETO_TRIAL_GB,
+  CARENCIA_POS_TRIAL_DIAS,
+} from "@/config/trial";
 import { marca } from "@/config/marca";
 import {
   Cartao,
@@ -51,7 +56,8 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
   const usado = noAr + guardado;
   const quotaPlano = BigInt(e.quota_bytes);
   const quota = quotaEfetivaBytes(e);
-  const fracao = quota === BigInt(0) ? 0 : Number(usado) / Number(quota);
+  const semLimite = espacoSemLimite(e);
+  const fracao = semLimite || quota === BigInt(0) ? 0 : Number(usado) / Number(quota);
 
   const pagaPorMes =
     e.status === "ativo" ? mensalEquivalenteCentavos(precoMensalDoEstudio(e), e.ciclo_cobranca) : 0;
@@ -87,7 +93,7 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
         <Cartao
           rotulo="Custa por mês"
           valor={formatarReais(custoDele)}
-          nota="B2 + R2 do que ele guarda"
+          nota={e.status === "cortesia" ? "a cobrar por fora — B2 + R2 do que guarda" : "B2 + R2 do que ele guarda"}
         />
         <Cartao
           rotulo="Margem"
@@ -97,7 +103,7 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
         <Cartao
           rotulo="Espaço"
           valor={formatarBytes(usado)}
-          nota={`${porcento(fracao)} de ${formatarBytes(quota)}`}
+          nota={semLimite ? "sem limite (cortesia)" : `${porcento(fracao)} de ${formatarBytes(quota)}`}
           tom={fracao > 0.85 ? "alerta" : "neutro"}
         />
       </div>
@@ -185,9 +191,11 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
           <Cartao rotulo="No cofre" valor={formatarBytes(guardado)} nota="arquivadas" />
           <Cartao
             rotulo="Quota efetiva"
-            valor={formatarBytes(quota)}
+            valor={semLimite ? "sem limite" : formatarBytes(quota)}
             nota={
-              quotaRebaixada
+              semLimite
+                ? "cortesia — conta de sócio"
+                : quotaRebaixada
                 ? `plano dá ${formatarBytes(quotaPlano)} — o teste limita a ${TETO_TRIAL_GB} GB`
                 : "a do plano"
             }

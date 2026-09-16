@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
-import { quotaEfetivaBytes } from "@/config/trial";
+import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais } from "@/config/planos";
@@ -244,7 +244,7 @@ export default async function ContaPage() {
           <Balde
             rotulo="Espaço do estúdio"
             usado={uso.noAr + uso.noCofre}
-            limite={quotaEfetivaBytes(tenant)}
+            limite={espacoSemLimite(tenant) ? null : quotaEfetivaBytes(tenant)}
             nota="Galerias no ar e entregas guardadas usam o mesmo espaço."
           />
           <p className="mt-3 font-mono text-[11px] tabular-nums text-texto-faint">
@@ -326,11 +326,12 @@ function Balde({
 }: {
   rotulo: string;
   usado: bigint;
-  limite: bigint;
+  /** `null` = sem limite (conta de cortesia). */
+  limite: bigint | null;
   nota: string;
 }) {
-  const pct = limite > BigInt(0) ? Number((usado * BigInt(1000)) / limite) / 10 : 0;
-  const estourou = usado > limite;
+  const pct = limite && limite > BigInt(0) ? Number((usado * BigInt(1000)) / limite) / 10 : 0;
+  const estourou = limite !== null && usado > limite;
   const apertado = pct >= 85;
 
   return (
@@ -342,8 +343,10 @@ function Balde({
             estourou ? "text-erro" : apertado ? "text-alerta" : "text-texto-faint"
           }`}
         >
-          {formatarBytes(usado)} de {formatarBytes(limite)}
-          {limite > BigInt(0) && ` · ${pct.toFixed(0)}%`}
+          {limite === null
+            ? `${formatarBytes(usado)} · sem limite`
+            : `${formatarBytes(usado)} de ${formatarBytes(limite)}`}
+          {limite !== null && limite > BigInt(0) && ` · ${pct.toFixed(0)}%`}
         </span>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-void">

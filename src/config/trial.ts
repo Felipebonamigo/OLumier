@@ -48,13 +48,39 @@ export const CARENCIA_POS_TRIAL_DIAS = 15;
 export const TETO_TRIAL_BYTES = BigInt(TETO_TRIAL_GB) * GB;
 
 /**
+ * ── CORTESIA NÃO TEM LIMITE DE ESPAÇO (16/09/2026) ────────────────────────
+ *
+ * Felipe: "o da Sirius e da Carol não tem vencimento, pode deixar ilimitado".
+ * Cortesia é o status das contas dos SÓCIOS (migração 032), e o custo do que
+ * elas guardam é cobrado por fora — o admin mostra quanto
+ * (`custoMensalDoEstudioCentavos`).
+ *
+ * É REGRA, como o teto do trial, e não um número grande gravado no banco: a
+ * troca de plano e o `sincronizar-quotas` regravam `quota_bytes`, e o limite
+ * voltaria sem ninguém perceber.
+ */
+export function espacoSemLimite(t: { status: string }): boolean {
+  return t.status === "cortesia";
+}
+
+/**
+ * O "sem limite" em bytes, para as contas de envio continuarem sendo uma
+ * comparação só (`usado + novo > quota`). 4 EiB: nenhum envio chega perto, e
+ * cabe com folga num bigint. Tela nenhuma deve mostrar este número — elas
+ * perguntam `espacoSemLimite` e dizem "sem limite".
+ */
+export const SEM_LIMITE_BYTES = BigInt(2) ** BigInt(62);
+
+/**
  * A quota que VALE para este tenant, agora.
  *
- * Só o `trial` é rebaixado. Status desconhecido fica com a quota inteira de
- * propósito — é a mesma regra do portão de cobrança: um estado que ninguém
- * previu não pode travar quem está pagando.
+ * Só o `trial` é rebaixado, e só a `cortesia` fica sem limite. Status
+ * desconhecido fica com a quota inteira de propósito — é a mesma regra do
+ * portão de cobrança: um estado que ninguém previu não pode travar quem está
+ * pagando.
  */
 export function quotaEfetivaBytes(t: { status: string; quota_bytes: string }): bigint {
+  if (espacoSemLimite(t)) return SEM_LIMITE_BYTES;
   const doPlano = BigInt(t.quota_bytes);
   if (t.status !== "trial") return doPlano;
   return doPlano < TETO_TRIAL_BYTES ? doPlano : TETO_TRIAL_BYTES;

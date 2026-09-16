@@ -33,7 +33,7 @@ import {
   custoArmazenamentoCentavos,
   planoPorId,
 } from "@/config/planos";
-import { quotaEfetivaBytes } from "@/config/trial";
+import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { custoFixoMensalCentavos } from "@/config/custos-fixos";
 
 /**
@@ -127,7 +127,13 @@ export function bytesNoCofre(estudios: EstudioParaMetrica[]): bigint {
  * que não pagou nada.
  */
 export function quotaVendidaBytes(estudios: EstudioParaMetrica[]): bigint {
-  return estudios.reduce((s, e) => s + quotaEfetivaBytes(e), ZERO);
+  /* Cortesia não tem limite (16/09/2026): somar o "sem limite" faria o pior
+     caso do painel virar bilhões. O teto honesto dela é o que já guarda. */
+  return estudios.reduce(
+    (s, e) =>
+      s + (espacoSemLimite(e) ? BigInt(e.bytes_no_ar) + BigInt(e.bytes_no_cofre) : quotaEfetivaBytes(e)),
+    ZERO,
+  );
 }
 
 const centavosDoEspaco = (bytes: bigint): number =>
@@ -265,4 +271,22 @@ export function resumoDaPlataforma(
     quotaVendidaBytes: quota,
     ocupacao: quota === ZERO ? 0 : Number(guardado) / Number(quota),
   };
+}
+
+/**
+ * O custo de UMA conta: o que os fornecedores cobram pelo que ela guarda, no
+ * ar e no cofre. Pedido do Felipe em 16/09/2026 — "o custo de cada login, para
+ * que eu possa cobrá-los separado". Não inclui o custo fixo (VPS, DAS,
+ * domínio), que os sócios rateiam por fora, nem tráfego, que não é medido por
+ * conta.
+ */
+export function custoMensalDoEstudioCentavos(e: EstudioParaMetrica): number {
+  return custoDoGuardadoCentavos([e]);
+}
+
+/** Quanto as contas de cortesia custam por mês — o que cobrar dos sócios por fora. */
+export function custoDasCortesiasCentavos(estudios: EstudioParaMetrica[]): number {
+  return estudios
+    .filter((e) => e.status === "cortesia")
+    .reduce((s, e) => s + custoMensalDoEstudioCentavos(e), 0);
 }

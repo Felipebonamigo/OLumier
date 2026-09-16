@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
-import { quotaEfetivaBytes } from "@/config/trial";
+import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoDoEstudio } from "@/lib/medias";
 import { MarcaLockup } from "@/components/marca-tile";
@@ -39,7 +39,8 @@ export default async function PainelLayout({ children }: { children: React.React
   const { noAr } = await usoDoEstudio(tenantId);
   const usado = Number(noAr);
   const quota = Number(quotaEfetivaBytes(tenant));
-  const proporcao = quota > 0 ? Math.min(usado / quota, 1) : 0;
+  const semLimite = espacoSemLimite(tenant);
+  const proporcao = !semLimite && quota > 0 ? Math.min(usado / quota, 1) : 0;
   const perto = proporcao >= 0.8;
 
   return (
@@ -99,12 +100,16 @@ export default async function PainelLayout({ children }: { children: React.React
         <div className="mx-auto max-w-5xl px-6 pb-4">
           <div className="flex items-baseline justify-between text-xs">
             <span className="text-texto-soft">
-              {tenant.nome_estudio} · {formatarBytes(usado)} de {formatarBytes(quota)}
+              {tenant.nome_estudio} · {formatarBytes(usado)}
+              {semLimite ? " · sem limite" : ` de ${formatarBytes(quota)}`}
             </span>
-            <span className={perto ? "text-alerta" : "text-texto-faint"}>
-              {(proporcao * 100).toFixed(proporcao < 0.1 ? 1 : 0)}% usado
-            </span>
+            {!semLimite && (
+              <span className={perto ? "text-alerta" : "text-texto-faint"}>
+                {(proporcao * 100).toFixed(proporcao < 0.1 ? 1 : 0)}% usado
+              </span>
+            )}
           </div>
+          {!semLimite && (
           <div
             className="mt-1.5 h-1 overflow-hidden rounded-full bg-carbon-2"
             role="progressbar"
@@ -118,6 +123,7 @@ export default async function PainelLayout({ children }: { children: React.React
               style={{ width: `${Math.max(proporcao * 100, 0.5)}%` }}
             />
           </div>
+          )}
         </div>
       </header>
 

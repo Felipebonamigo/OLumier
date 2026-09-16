@@ -213,6 +213,9 @@ export async function estudiosAcimaDoEspaco() {
        from tenants t
        join galerias g on g.tenant_id = t.id
        join medias   m on m.galeria_id = g.id
+      /* Cortesia não tem limite (ver espacoSemLimite): acusá-la de passar da
+         quota do plano seria um aviso falso todo dia. */
+      where t.status <> 'cortesia'
       group by t.id, t.nome_estudio, t.email, t.quota_bytes
      having coalesce(sum(m.bytes),0) > t.quota_bytes`,
   );
