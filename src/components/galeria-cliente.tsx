@@ -66,6 +66,20 @@ export interface ItemGaleria {
 
 export interface CapituloGaleria {
   id: string;
+  /**
+   * O que vai no LINK (`?cap=cerimonia`), em vez do id.
+   *
+   * Felipe, 16/09/2026: "o link do capítulo está muito extenso, temos que
+   * diminuir e ficar mais simples, para quando mandar". Era o UUID da seção —
+   * 36 caracteres para dizer "Cerimônia", com cara de link de rastreamento no
+   * meio de uma mensagem de WhatsApp.
+   *
+   * O `id` continua existindo e continua sendo o do DOM (`#cap-<id>`): âncora
+   * de página é coisa interna, e trocá-la por um texto que a pessoa escolhe
+   * abriria a porta para um capítulo chamado "fotos" colidir com outro
+   * elemento. O apelido é só para o que sai daqui. Ver migração 034.
+   */
+  apelido: string;
   nome: string;
   /**
    * Índices em `itens`, ou seja: as fotos deste capítulo QUE ESTÃO NESTA TELA.
@@ -898,6 +912,17 @@ export function GaleriaCliente({
    * Em cima E embaixo da grade: quem chega ao fim das 600 procura a
    * continuação ali, e quem entra quer saber de cara que a pasta tem partes.
    */
+  /*
+   * O APELIDO do capítulo aberto, para os links das partes.
+   *
+   * `fatia.capituloAtivo` é o ID — é ele que casa com `capitulos[].id` no
+   * destaque da barra. Mas o que vai no link é o apelido, senão as pastilhas de
+   * capítulo ficariam curtas e os links de parte voltariam a carregar o UUID.
+   * Ver a migração 034.
+   */
+  const apelidoAtivo =
+    capitulos.find((c) => c.id === fatia?.capituloAtivo)?.apelido ?? fatia?.capituloAtivo ?? null;
+
   const partesDaPasta =
     fatia && fatia.partes > 1 ? (
       <nav
@@ -910,7 +935,7 @@ export function GaleriaCliente({
         {Array.from({ length: fatia.partes }, (_, k) => k + 1).map((n) => (
           <a
             key={n}
-            href={enderecoNaGaleria(busca.toString(), { cap: fatia.capituloAtivo, parte: n })}
+            href={enderecoNaGaleria(busca.toString(), { cap: apelidoAtivo, parte: n })}
             aria-current={n === fatia.parte ? "page" : undefined}
             className="grid h-9 min-w-9 place-items-center rounded-full px-3 transition hover:opacity-70"
             style={{
@@ -925,7 +950,7 @@ export function GaleriaCliente({
         {fatia.parte < fatia.partes && (
           <a
             href={enderecoNaGaleria(busca.toString(), {
-              cap: fatia.capituloAtivo,
+              cap: apelidoAtivo,
               parte: fatia.parte + 1,
             })}
             className="underline underline-offset-4 transition hover:opacity-70"
