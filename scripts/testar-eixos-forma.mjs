@@ -105,16 +105,52 @@ if (forma["--g-capa-h"] === "78vh" && forma["--g-canto"] === "6px") {
   erro(`variaveisDeForma devolveu ${JSON.stringify(forma)}`);
 }
 
-/* Preset que escolhesse outro par desmarcaria o card de toda galeria antiga
-   que usa aquele preset — ver o comentário acima de PRESETS. */
+/*
+ * ── A REGRA É SOBRE MUDAR UM PRESET, NÃO SOBRE CRIAR UM (16/09/2026) ──────
+ *
+ * MUDAR o par de um preset que já existe desmarca o card de toda galeria antiga
+ * que casava com ele: ninguém mexeu em nada e o editor passa a dizer
+ * "personalizado". É o defeito que esta verificação nasceu para impedir, e ele
+ * continua guardado — a lista abaixo é fechada de propósito.
+ *
+ * CRIAR um preset com outro par não desmarca ninguém, e a razão é aritmética:
+ * nenhuma galeria casa hoje com uma combinação que não existia. É exatamente o
+ * que o comentário de `PRESETS` prevê ("dá para dar a cada preset o canto que
+ * combina com ele — Moda com `reto`, Papel com `redondo`"), e o "Marfim" é o
+ * primeiro a exercer isso: ele reproduz o telefone da página inicial, cujas
+ * miniaturas têm canto visivelmente arredondado.
+ *
+ * Preset novo entra nesta lista só se alguém decidir que ele deve seguir o par
+ * antigo. Verificar `PRESETS` inteiro voltaria a proibir o que já foi decidido
+ * que é permitido.
+ */
+const PRESETS_DO_PAR_ANTIGO = [
+  "atomo",
+  "revista",
+  "atelie",
+  "essencial",
+  "convite",
+  "caligrafia",
+  "moda",
+  "cerimonia",
+  "papel",
+];
 const presetsDivergentes = PRESETS.filter(
-  (p) => p.aparencia.alturaCapa !== "cheia" || p.aparencia.canto !== "suave",
+  (p) =>
+    PRESETS_DO_PAR_ANTIGO.includes(p.id) &&
+    (p.aparencia.alturaCapa !== "cheia" || p.aparencia.canto !== "suave"),
 ).map((p) => p.id);
 if (!presetsDivergentes.length) {
-  ok(`os ${PRESETS.length} presets usam o mesmo par, e o card antigo segue marcado`);
+  ok(`os ${PRESETS_DO_PAR_ANTIGO.length} presets antigos usam o mesmo par, e o card segue marcado`);
 } else {
-  erro(`presets com forma própria: ${presetsDivergentes.join(", ")}`);
+  erro(`preset ANTIGO mudou de forma: ${presetsDivergentes.join(", ")}`);
 }
+
+/* E o contrário: um id que sumiu de `PRESETS` sem sair desta lista faria a
+   verificação passar sem verificar nada. */
+const sumidos = PRESETS_DO_PAR_ANTIGO.filter((id) => !PRESETS.some((p) => p.id === id));
+if (!sumidos.length) ok("a lista dos presets antigos ainda descreve presets que existem");
+else erro(`a lista cita preset que não existe mais: ${sumidos.join(", ")}`);
 
 /* A prova disso: uma aparência gravada ANTES dos eixos — sem os dois campos —
    ainda tem de casar com o preset dela. */

@@ -62,11 +62,8 @@ export interface Fatia<T> {
   total: number;
   /** A galeria passou do teto e está sendo servida em pedaços? */
   fatiada: boolean;
-  /** Quantas fotos do capítulo ficaram DEPOIS desta parte. */
+  /** Quantas fotos do capítulo ficaram DEPOIS desta tela. */
   restantes: number;
-  /** Qual parte do capítulo esta tela mostra (a partir de 1), e quantas há. */
-  parte: number;
-  partes: number;
 }
 
 /**
@@ -83,10 +80,9 @@ export function fatiarGaleria<T extends { secao_id?: string | null }>(
   medias: T[],
   secaoId?: string | null,
   teto = FOTOS_POR_TELA,
-  parte = 1,
 ): Fatia<T> {
   const total = medias.length;
-  if (total <= teto) return { itens: medias, total, fatiada: false, restantes: 0, parte: 1, partes: 1 };
+  if (total <= teto) return { itens: medias, total, fatiada: false, restantes: 0 };
 
   /* `sem-capitulo` é o id que a página dá ao grupo das fotos que não estão em
      capítulo nenhum. Aqui ele vira o filtro "secao_id nulo". */
@@ -100,21 +96,22 @@ export function fatiarGaleria<T extends { secao_id?: string | null }>(
   /*
    * O teto vale mesmo DENTRO do capítulo: nada impede um capítulo de 1500.
    *
-   * ── E O RESTO DO CAPÍTULO TEM ONDE APARECER (16/09/2026) ─────────────────
+   * ── E O RESTO CHEGA ROLANDO (16/09/2026) ─────────────────────────────────
    *
-   * Até aqui o corte era `slice(0, teto)` e mais nada: da 601ª foto em diante
-   * não existia tela nenhuma. Agora o capítulo vem em partes de `teto`, e a
-   * página desenha os links entre elas. Parte fora do intervalo vira a mais
-   * próxima — um link velho ou digitado à mão não abre tela vazia.
+   * Até 11/09 o corte era `slice(0, teto)` e mais nada: da 601ª foto em diante
+   * não existia tela nenhuma. Veio a paginação, e com ela "parte 3 de 4" — que
+   * durou cinco dias. Felipe: "remover paginação dentro do mesmo capítulo, tem
+   * apenas que rolar até o final".
+   *
+   * Esta função voltou a servir UMA tela, que é o que ela sempre fez melhor. O
+   * resto é pedido pela rolagem, em `api/g/[id]/mais`, e o corte ali usa este
+   * mesmo teto como ponto de partida — por isso `restantes` continua saindo
+   * daqui: é ele que diz se ainda há o que buscar.
    */
-  const partes = Math.max(1, Math.ceil(doCapitulo.length / teto));
-  const atual = Math.min(Math.max(1, Math.floor(parte) || 1), partes);
   return {
-    itens: doCapitulo.slice((atual - 1) * teto, atual * teto),
+    itens: doCapitulo.slice(0, teto),
     total,
     fatiada: true,
-    restantes: Math.max(0, doCapitulo.length - atual * teto),
-    parte: atual,
-    partes,
+    restantes: Math.max(0, doCapitulo.length - teto),
   };
 }
