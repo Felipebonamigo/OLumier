@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -27,7 +27,6 @@ import {
   type ProgressoDaEntrega,
 } from "@/lib/salvar-client";
 import type { ModoDeEntrega } from "@/lib/modo-de-entrega";
-import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
@@ -62,6 +61,16 @@ export interface ItemGaleria {
   bytes: number;
   largura: number | null;
   altura: number | null;
+  /**
+   * Em que capítulo esta foto está. Null = solta.
+   *
+   * Existe desde a rolagem infinita (16/09/2026): as fotos que chegam depois da
+   * primeira tela precisam saber onde entrar, e recalcular os índices dos
+   * capítulos a partir daqui é o que mantém UMA fonte de verdade — antes o
+   * servidor mandava os índices prontos, e uma lista que cresce no cliente
+   * deixaria os dois discordando.
+   */
+  secaoId?: string | null;
 }
 
 export interface CapituloGaleria {
@@ -112,11 +121,11 @@ const VALE_NO_CACHE = 4 * 3600 * 1000;
 const GLIFO_SOBRE_FOTO = "drop-shadow(0 1px 1.5px rgba(0,0,0,.85)) drop-shadow(0 0 6px rgba(0,0,0,.45))";
 
 export function GaleriaCliente({
-  itens,
+  itens: itensIniciais,
   permiteDownload,
   galeriaId,
   aparencia,
-  capitulos,
+  capitulos: capitulosIniciais,
   modoProvavel,
   bytesDaGaleria = 0,
   favoritasIniciais,
@@ -168,13 +177,55 @@ export function GaleriaCliente({
     motivo: "fechada" | "prazo" | null;
   };
 }) {
+  /*
+   * ── A ROLAGEM QUE NÃO TERMINA (16/09/2026) ──────────────────────────────
+   *
+   * Felipe: "remover paginação dentro do mesmo capítulo, tem apenas que rolar
+   * até o final".
+   *
+   * A página continua nascendo com uma tela de fotos — o corte de 11/09 existe
+   * porque 2108 fotos davam 6,35 MB de DOCUMENTO e o Safari do iPhone
+   * estourava. O que muda é o resto: em vez de "parte 3 de 4", as fotos
+   * seguintes chegam em JSON conforme a pessoa rola, e viram nós do DOM sem
+   * passar pelo documento. Ver `api/g/[id]/mais`.
+   *
+   * `itens` e `capitulos` deixam de ser props e viram valores derivados com o
+   * MESMO nome: as três dezenas de usos abaixo continuam lendo o que sempre
+   * leram, e a lista simplesmente cresce por baixo deles.
+   */
+  const [extras, setExtras] = useState<ItemGaleria[]>([]);
+  const itens = useMemo(
+    () => (extras.length === 0 ? itensIniciais : [...itensIniciais, ...extras]),
+    [itensIniciais, extras],
+  );
+
+  /*
+   * Os índices dos capítulos, recalculados a partir de `itens`.
+   *
+   * O servidor manda os do primeiro pedaço; a partir do segundo, só ele sabe
+   * quantas fotos existem no cliente. Recalcular aqui é o que impede os dois de
+   * discordarem — e é barato: uma passada pela lista, e só quando ela cresce.
+   *
+   * `total` continua vindo do servidor: é o tamanho do capítulo na GALERIA, e o
+   * menu de baixar mostra esse número, não o do que já foi rolado.
+   */
+  const capitulos = useMemo(() => {
+    if (extras.length === 0) return capitulosIniciais;
+    return capitulosIniciais.map((c) => ({
+      ...c,
+      indices: itens.reduce<number[]>((acc, it, i) => {
+        const dele = c.id === "sem-capitulo" ? !it.secaoId : it.secaoId === c.id;
+        if (dele) acc.push(i);
+        return acc;
+      }, []),
+    }));
+  }, [capitulosIniciais, itens, extras.length]);
+
   /* Navegar é como a galeria fatiada mostra um recorte — capítulo, favoritas,
      resultado da selfie. `router.push` e não `location.href`: o Next troca só
      o que mudou, e é o caminho que o próprio framework pede. */
   const router = useRouter();
   const caminho = usePathname();
-  /* A consulta atual, para os links de parte não perderem o `?previa=1` do dono. */
-  const busca = useSearchParams();
 
   const [aberto, setAberto] = useState<number | null>(null);
   /*
@@ -913,53 +964,89 @@ export function GaleriaCliente({
    * continuação ali, e quem entra quer saber de cara que a pasta tem partes.
    */
   /*
-   * O APELIDO do capítulo aberto, para os links das partes.
+   * ── QUEM BUSCA O PRÓXIMO PEDAÇO ─────────────────────────────────────────
    *
-   * `fatia.capituloAtivo` é o ID — é ele que casa com `capitulos[].id` no
-   * destaque da barra. Mas o que vai no link é o apelido, senão as pastilhas de
-   * capítulo ficariam curtas e os links de parte voltariam a carregar o UUID.
-   * Ver a migração 034.
+   * Um pedido de cada vez (`buscando`), e ele para quando a rota diz que não
+   * sobrou nada. Sem a trava, chegar ao fim da página com o observador ainda
+   * disparando pediria a mesma página três vezes.
+   *
+   * `desde` conta as fotos JÁ CARREGADAS do mesmo recorte — é o que a rota usa
+   * para cortar. Sai de `itensIniciais.length + extras.length` e não de
+   * `itens.length` para deixar claro que a conta é sobre o que veio do
+   * servidor, não sobre o que a tela está filtrando (favoritas, busca por
+   * rosto).
    */
-  const apelidoAtivo =
-    capitulos.find((c) => c.id === fatia?.capituloAtivo)?.apelido ?? fatia?.capituloAtivo ?? null;
+  const [buscando, setBuscando] = useState(false);
+  const [acabou, setAcabou] = useState(!fatia);
+  const sentinela = useRef<HTMLDivElement | null>(null);
 
-  const partesDaPasta =
-    fatia && fatia.partes > 1 ? (
-      <nav
-        aria-label={fatia.capituloAtivo ? "Partes desta pasta" : "Partes da galeria"}
-        className="my-8 flex flex-wrap items-center justify-center gap-2 text-sm"
-      >
-        <span style={{ color: "var(--g-tenue)" }}>
-          parte {fatia.parte} de {fatia.partes}
-        </span>
-        {Array.from({ length: fatia.partes }, (_, k) => k + 1).map((n) => (
-          <a
-            key={n}
-            href={enderecoNaGaleria(busca.toString(), { cap: apelidoAtivo, parte: n })}
-            aria-current={n === fatia.parte ? "page" : undefined}
-            className="grid h-9 min-w-9 place-items-center rounded-full px-3 transition hover:opacity-70"
-            style={{
-              border: "1px solid var(--g-linha)",
-              color: n === fatia.parte ? "var(--g-texto)" : "var(--g-suave)",
-              background: n === fatia.parte ? "var(--g-superficie)" : undefined,
-            }}
-          >
-            {n}
-          </a>
-        ))}
-        {fatia.parte < fatia.partes && (
-          <a
-            href={enderecoNaGaleria(busca.toString(), {
-              cap: apelidoAtivo,
-              parte: fatia.parte + 1,
-            })}
-            className="underline underline-offset-4 transition hover:opacity-70"
-            style={{ color: "var(--g-texto)" }}
-          >
-            próxima parte ›
-          </a>
-        )}
-      </nav>
+  const carregarMais = useCallback(async () => {
+    if (buscando || acabou) return;
+    setBuscando(true);
+    try {
+      const busca = new URLSearchParams();
+      if (fatia?.capituloAtivo) busca.set("cap", fatia.capituloAtivo);
+      busca.set("desde", String(itensIniciais.length + extras.length));
+      const r = await fetch(`/api/g/${galeriaId}/mais?${busca}`, { cache: "no-store" });
+      if (!r.ok) throw new Error(String(r.status));
+      const d = (await r.json()) as { fotos: ItemGaleria[]; restantes: number };
+      /* Pedaço vazio também encerra: sem isso, um `restantes` errado deixaria o
+         observador pedindo para sempre. */
+      if (d.fotos.length === 0 || d.restantes === 0) setAcabou(true);
+      if (d.fotos.length > 0) setExtras((atual) => [...atual, ...d.fotos]);
+    } catch {
+      /* Rede caiu no meio da rolagem: para de tentar sozinho e deixa o botão.
+         Insistir em laço numa conexão ruim é o que trava o celular do
+         convidado no salão. */
+      setAcabou(true);
+    } finally {
+      setBuscando(false);
+    }
+  }, [buscando, acabou, fatia, galeriaId, itensIniciais.length, extras.length]);
+
+  useEffect(() => {
+    const alvo = sentinela.current;
+    if (!alvo || acabou) return;
+    /*
+     * `rootMargin` de 800 px embaixo: o pedido sai quando o fim está a uma
+     * dobra de distância, não quando já chegou. É a diferença entre a galeria
+     * parecer infinita e a galeria parecer lenta.
+     */
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) void carregarMais();
+      },
+      { rootMargin: "0px 0px 800px 0px" },
+    );
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, [carregarMais, acabou]);
+
+
+  /*
+   * ── O FIM DA GALERIA, EM VEZ DA PAGINAÇÃO (16/09/2026) ──────────────────
+   *
+   * Felipe: "remover paginação dentro do mesmo capítulo, tem apenas que rolar
+   * até o final".
+   *
+   * Aqui moravam as pastilhas "parte 1 2 3 4" e o "próxima parte ›". Cada uma
+   * era um link para outro documento: a pessoa chegava ao fim de 600 fotos,
+   * clicava, a página recarregava e a rolagem voltava ao topo. No meio de uma
+   * escolha de álbum, isso é perder o lugar.
+   *
+   * O que fica é uma sentinela invisível. Quando ela entra na área de visão —
+   * com 800 px de antecedência — o próximo pedaço é pedido e as fotos entram no
+   * fim da grade. Ver `carregarMais`.
+   *
+   * O texto SÓ aparece enquanto está buscando ou quando a rede falhou: uma
+   * linha permanente dizendo "fim da galeria" é ruído embaixo de toda entrega,
+   * e a ausência de mais fotos já diz isso.
+   */
+  const fimDaGaleria =
+    fatia && !acabou ? (
+      <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
+        {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
+      </div>
     ) : null;
 
   // Arrastar para o lado troca de foto — o gesto que todo app de fotos tem.
@@ -1356,7 +1443,6 @@ export function GaleriaCliente({
           menus, lá em cima. Duas faixas grudadas no topo brigariam pelo mesmo
           lugar — ver `menus-da-galeria.tsx`. */}
 
-      {partesDaPasta}
 
       <div id="fotos" className="mt-8 scroll-mt-4">
         {capitulos.map((capOriginal) => {
@@ -1643,7 +1729,9 @@ export function GaleriaCliente({
         })}
       </div>
 
-      {partesDaPasta}
+      {/* A sentinela fica DEPOIS de todos os capítulos, e só uma vez: é o fim da
+          rolagem, não o fim de cada seção. Ver `fimDaGaleria`. */}
+      {fimDaGaleria}
 
       {/*
         Tela cheia. Tudo aqui é pintado com o tema DA GALERIA (--g-*), nunca com

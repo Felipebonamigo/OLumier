@@ -58,7 +58,8 @@ type Props = {
    *   fotos  uma lista de ids — é como a busca por rosto entrega o resultado
    *          numa galeria fatiada, sem depender de a foto estar no capítulo
    *          que por acaso está carregado
-   *   parte  qual pedaço de um capítulo maior que a tela (16/09/2026)
+   *   (o `parte` de 16/09/2026 saiu no mesmo dia: a rolagem infinita o
+   *    substituiu — ver o comentário em `fatiarGaleria` abaixo)
    */
   searchParams: Promise<{
     previa?: string;
@@ -67,7 +68,6 @@ type Props = {
     capa?: string;
     cap?: string;
     fotos?: string;
-    parte?: string;
   }>;
 };
 
@@ -120,7 +120,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GaleriaPublicaPage({ params, searchParams }: Props) {
   const { estudio, galeria: galeriaSlug } = await params;
-  const { previa, amostra, ap, cap, fotos, parte } = await searchParams;
+  const { previa, amostra, ap, cap, fotos } = await searchParams;
 
   /*
    * PRÉVIA DO DONO.
@@ -305,7 +305,21 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         parte: 1,
         partes: 1,
       }
-    : fatiarGaleria(todasAsMedias, capSecaoId, FOTOS_POR_TELA, Number(parte) || 1);
+    : /*
+       * SEMPRE A PRIMEIRA PARTE (16/09/2026).
+       *
+       * Havia `?parte=N`, e era a paginação que o Felipe pediu para tirar:
+       * "remover paginação dentro do mesmo capítulo, tem apenas que rolar até o
+       * final". O documento continua nascendo com uma tela de fotos — o corte
+       * de 11/09 existe porque 2108 fotos davam 6,35 MB e o Safari estourava —
+       * e o resto chega rolando, por `api/g/[id]/mais`.
+       *
+       * Link antigo com `?parte=3` na mão de alguém não quebra: ele abre no
+       * começo do capítulo e a rolagem leva ao mesmo lugar. Continuar honrando o
+       * parâmetro é que seria o problema — o cliente conta quantas fotos já tem
+       * para pedir as próximas, e ele nasceria contando errado.
+       */
+      fatiarGaleria(todasAsMedias, capSecaoId, FOTOS_POR_TELA, 1);
 
   const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : fatia.itens;
 
