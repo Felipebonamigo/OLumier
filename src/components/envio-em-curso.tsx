@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
 import type { RostoMedido } from "@/lib/rostos-client";
@@ -185,13 +186,18 @@ export function ProvedorDeEnvio({
     return () => clearInterval(t);
   }, [rodando]);
 
-  // Fechar a aba no meio de 600 fotos perde o que faltava: avisa antes.
-  useEffect(() => {
-    if (!rodando) return;
-    const avisar = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", avisar);
-    return () => window.removeEventListener("beforeunload", avisar);
-  }, [rodando]);
+  /*
+   * Sair no meio de 600 fotos perde o que faltava: avisa antes.
+   *
+   * Passou a cobrir também a navegação DENTRO do painel — clicar em "←
+   * Galerias" com o envio rodando matava a fila em silêncio, porque o App
+   * Router não recarrega a página e o `beforeunload` não dispara. Ver
+   * `lib/aviso-de-saida-client.ts`.
+   */
+  useAvisoDeSaida(
+    rodando,
+    "O envio ainda está em andamento. Se sair agora, os arquivos que faltam não sobem.",
+  );
 
   const enfileirar = useCallback(
     async (brutos: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => {
@@ -311,6 +317,11 @@ export function ProvedorDeEnvio({
                       mime: arquivo.type,
                       bytes: arquivo.size,
                       comDerivadas: Boolean(derivadas),
+                      /* Vídeo manda pôster e não manda preview: sem este aviso a
+                         rota reservaria a chave do preview e a mídia ficaria com um
+                         `chave_preview` apontando para um arquivo que nunca sobe —
+                         e o lightbox pediria esse arquivo em vez do filme. */
+                      comPreview: Boolean(derivadas?.preview),
                       largura: derivadas?.largura,
                       altura: derivadas?.altura,
                       /* A pasta manda: o capítulo lido do disco vence o seletor
@@ -341,13 +352,25 @@ export function ProvedorDeEnvio({
                  * Medido em 03/09/2026: enfileirá-las atrás do original custava
                  * 0,8 s por foto para 300 KB. Não é banda, é latência.
                  */
-                const derivadasSubindo =
-                  derivadas && dados.urlThumb && dados.urlPreview
-                    ? Promise.allSettled([
-                        enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}),
-                        enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}),
-                      ])
-                    : Promise.resolve();
+                /*
+                 * O PREVIEW PODE NÃO EXISTIR, e isso é vídeo (16/09/2026).
+                 *
+                 * Vídeo gera pôster e não gera arquivo de 2048 px — ver
+                 * `Derivadas.preview`. As duas subidas viraram uma lista
+                 * montada, em vez de um par fixo: com o par, um `urlPreview`
+                 * nulo derrubava a miniatura do vídeo junto, e a grade voltava
+                 * ao retângulo cinza que o Felipe fotografou.
+                 */
+                const paraSubir: Array<Promise<unknown>> = [];
+                if (derivadas && dados.urlThumb) {
+                  paraSubir.push(enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}));
+                }
+                if (derivadas?.preview && dados.urlPreview) {
+                  paraSubir.push(enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}));
+                }
+                const derivadasSubindo = paraSubir.length
+                  ? Promise.allSettled(paraSubir)
+                  : Promise.resolve();
 
                 // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
                 if (dados.emPartes) {

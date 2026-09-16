@@ -337,6 +337,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         largura: m.largura,
         altura: m.altura,
         url: thumb,
+        /* Sem derivada, `thumb` É o original — ver `urlDaDerivada`. Em vídeo
+           isso faz diferença na grade: ver `ItemGaleria.temPoster`. */
+        temPoster: Boolean(m.chave_thumb),
         /* Na amostra da prévia a miniatura faz as vezes do preview: a caixa de
            460 px nunca amplia nada, e pedir à rota seria uma ida e volta para
            nada. Fora da amostra fica em aberto, e o lightbox pede quando abre. */
