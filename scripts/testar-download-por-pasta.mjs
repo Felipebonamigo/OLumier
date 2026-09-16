@@ -135,7 +135,7 @@ const menuBaixar = async () => {
 
 await etapa("sem capítulos, o menu tem só o baixar tudo", async () => {
   const m = await menuBaixar();
-  if (!/Todas as fotos \(4\)/.test(m)) throw new Error("sumiu o baixar tudo");
+  if (!/Todas as fotos num zip \(4\)/.test(m)) throw new Error("sumiu o baixar tudo");
   return "um item";
 });
 
@@ -158,7 +158,7 @@ await etapa("com capítulos, cada um vira um item com a sua contagem", async () 
   const m = await menuBaixar();
   if (!/Cerimônia \(3\)/.test(m)) throw new Error("não achei “Cerimônia (3)”");
   if (!/Festa \(1\)/.test(m)) throw new Error("não achei “Festa (1)”");
-  if (!/Todas as fotos \(4\)/.test(m)) throw new Error("o baixar tudo sumiu junto");
+  if (!/Todas as fotos num zip \(4\)/.test(m)) throw new Error("o baixar tudo sumiu junto");
   return "Cerimônia (3) · Festa (1) · Todas (4)";
 });
 
@@ -172,7 +172,7 @@ await etapa("com UM capítulo só, não há pasta a escolher", async () => {
   try {
     const m = await menuBaixar();
     if (/Cerimônia/.test(m)) throw new Error("ofereceu a pasta única ao lado do baixar tudo");
-    if (!/Todas as fotos \(4\)/.test(m)) throw new Error("e ainda perdeu o baixar tudo");
+    if (!/Todas as fotos num zip \(4\)/.test(m)) throw new Error("e ainda perdeu o baixar tudo");
     return "só o baixar tudo";
   } finally {
     await db.query("update medias set secao_id = null where galeria_id = $1", [g.id]);
@@ -209,14 +209,30 @@ const menuDaGrande = async () => {
   return menu;
 };
 
-await etapa("o menu NÃO chama de “todas” o pedaço que está na tela", async () => {
+/*
+ * Desde 16/09/2026 o "todas" do computador é um zip montado no SERVIDOR com a
+ * galeria inteira, não com a fatia da tela. A mentira que esta seção prende
+ * continua a mesma — o número tem de ser o que chega —, só que agora o número
+ * certo é o da galeria. Um item que ainda contasse a fatia diria "(600)" e cai
+ * aqui.
+ */
+await etapa("no computador, “todas” conta a galeria inteira, não o pedaço da tela", async () => {
   const m = await menuDaGrande();
-  if (/Todas as fotos/.test(m)) {
-    throw new Error(
-      `a galeria tem ${FOTOS_POR_TELA + 1} fotos e o menu oferece "Todas as fotos" sobre ${FOTOS_POR_TELA}`,
-    );
+  const item = m.match(/Todas as fotos[^<]*/)?.[0];
+  if (!item) throw new Error("a galeria grande perdeu o baixar tudo");
+  if (!item.includes(`(${FOTOS_POR_TELA + 1})`)) {
+    throw new Error(`a galeria tem ${FOTOS_POR_TELA + 1} fotos e o item diz "${item}"`);
   }
-  return "não promete o que não entrega";
+  return item;
+});
+
+await etapa("e não manda baixar pasta por pasta quem leva tudo num zip", async () => {
+  /* O rodapé "baixe pasta por pasta para levar tudo" era o caminho do resto
+     quando o download saía da tela. No computador ele virou conselho errado:
+     faria a noiva baixar 12 zips em vez de um. No celular continua valendo. */
+  const m = await menuDaGrande();
+  if (/pasta por pasta/.test(m)) throw new Error("o rodapé ainda manda baixar pasta por pasta");
+  return "um zip leva tudo";
 });
 
 await etapa("e diz quantas a galeria tem de verdade", async () => {

@@ -226,6 +226,22 @@ export function GaleriaCliente({
    */
   const totalDaGaleria = fatia?.total ?? itens.length;
 
+  /**
+   * Baixa um zip montado no servidor — ver `api/g/[id]/zip`.
+   *
+   * Um link com `download`, e não `fetch`: o zip de um capítulo passa de 2 GB,
+   * e buscar isso para a memória da aba derrubaria o navegador. Com o link, o
+   * próprio navegador escreve direto no disco, mostra a barra de progresso (a
+   * rota anuncia o tamanho exato) e deixa a pessoa continuar olhando a galeria
+   * enquanto baixa.
+   *
+   * O registro na Atividade acontece no SERVIDOR, quando o zip termina de ser
+   * entregue — cancelar no meio não conta como entrega.
+   */
+  function baixarZip(consulta: string) {
+    baixarNoComputador(`/api/g/${galeriaId}/zip${consulta}`, "galeria.zip");
+  }
+
   /*
    * URLs assinadas SOB DEMANDA (03/09/2026).
    *
@@ -728,9 +744,14 @@ export function GaleriaCliente({
           nome: c.nome,
           quantas: c.total,
           baixar: () =>
-            c.indices.length > 0
-              ? salvarLoteDeFotos(c.indices.map((i) => itens[i]))
-              : router.push(`${caminho}?cap=${encodeURIComponent(c.id)}`),
+            /* No computador, o capítulo vem num zip montado no servidor — e aí
+               tanto faz se ele está nesta fatia: o servidor tem a galeria
+               inteira. No celular continua o menu do sistema (rolo da câmera). */
+            !modoSalvar
+              ? baixarZip(`?cap=${encodeURIComponent(c.id)}`)
+              : c.indices.length > 0
+                ? salvarLoteDeFotos(c.indices.map((i) => itens[i]))
+                : router.push(`${caminho}?cap=${encodeURIComponent(c.id)}`),
         }))
       : [];
 
@@ -812,10 +833,19 @@ export function GaleriaCliente({
                 modoSalvar,
                 baixando: baixandoTudo,
                 progresso: progressoLote,
-                baixarTudo: () => salvarLoteDeFotos(itens),
+                /* No computador, a galeria INTEIRA num zip — não a fatia desta
+                   tela. O servidor monta com todas as fotos, então numa galeria
+                   de 2108 "baixar tudo" finalmente é o casamento todo. */
+                baixarTudo: () => (modoSalvar ? salvarLoteDeFotos(itens) : baixarZip("")),
+                /* No celular o padrão continua sendo o menu do sistema, porque
+                   ele grava no ROLO DA CÂMERA. O zip fica como alternativa para
+                   quem quer um arquivo só — e ele cai no app Arquivos. */
+                baixarZip: modoSalvar ? () => baixarZip("") : undefined,
+                quantasNaGaleria: totalDaGaleria,
                 pastas: pastasParaBaixar,
                 favoritas: favoritas.size,
                 baixarFavoritas: () => {
+                  if (!modoSalvar) return baixarZip("?favoritas=1");
                   const escolhidas = itens.filter((it) => favoritas.has(it.id));
                   /* Todas as favoritas estão nesta tela: entrega direta. */
                   if (!fatia || escolhidas.length === favoritas.size) {

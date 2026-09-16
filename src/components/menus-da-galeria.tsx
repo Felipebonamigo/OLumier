@@ -65,6 +65,13 @@ export type MenuBaixar = {
   /** Quantas o casal marcou. Zero = a linha das favoritas não aparece. */
   favoritas: number;
   baixarFavoritas: () => void;
+  /**
+   * O zip da galeria inteira, oferecido como SEGUNDA opção no celular — no
+   * computador ele já é o "baixar tudo". Ausente = não oferecer.
+   */
+  baixarZip?: () => void;
+  /** Quantas fotos a galeria tem — no computador é isso que o zip entrega. */
+  quantasNaGaleria: number;
 };
 
 export function MenusDaGaleria({
@@ -187,13 +194,36 @@ export function MenusDaGaleria({
               real e para onde ir buscar o resto: as pastas, logo abaixo, são o
               caminho inteiro da galeria, um capítulo por vez.
             */}
+            {/*
+              NO COMPUTADOR, "TODAS" VOLTA A SER TODAS (16/09/2026).
+
+              O zip é montado no servidor com a galeria inteira, não com a fatia
+              da tela — então a ressalva "desta parte" deixou de valer ali, e o
+              número é o da galeria. No celular a entrega ainda sai do que está
+              carregado, e a ressalva continua.
+            */}
             <ItemDoMenu aoTocar={baixar.baixarTudo} desligado={baixar.baixando}>
               {baixar.modoSalvar
                 ? `Salvar as ${baixar.quantas} fotos no celular`
-                : fatia
-                  ? `As ${baixar.quantas} desta parte`
-                  : `Todas as fotos (${baixar.quantas})`}
+                : `Todas as fotos num zip (${baixar.quantasNaGaleria})`}
             </ItemDoMenu>
+
+            {/*
+              O ZIP NO CELULAR É A SEGUNDA OPÇÃO, e a linha embaixo diz por quê.
+
+              O menu do sistema grava no ROLO DA CÂMERA, que é onde a noiva quer
+              as fotos. O zip cai no app Arquivos e precisa ser descompactado à
+              mão — um toque só, mas as fotos continuam fora do rolo. Serve a
+              quem quer levar tudo para o computador depois.
+            */}
+            {baixar.baixarZip && (
+              <>
+                <ItemDoMenu aoTocar={baixar.baixarZip} desligado={baixar.baixando}>
+                  {`Todas num arquivo .zip (${baixar.quantasNaGaleria})`}
+                </ItemDoMenu>
+                <Rodape>o zip vai para Arquivos, não para o rolo da câmera</Rodape>
+              </>
+            )}
 
             {/*
               AS FAVORITAS LOGO DEPOIS DE "TUDO", e antes das pastas.
@@ -211,9 +241,11 @@ export function MenusDaGaleria({
               </ItemDoMenu>
             )}
 
-            {fatia && (
+            {/* Só no celular: no computador o zip já leva a galeria inteira, e
+                "pasta por pasta" faria a noiva baixar um zip por capítulo. */}
+            {fatia && baixar.modoSalvar && (
               <Rodape>
-                Esta galeria tem {fatia.total} fotos e vem em partes — baixe pasta por pasta para
+                Esta galeria tem {fatia.total} fotos e vem em partes — salve pasta por pasta para
                 levar tudo.
               </Rodape>
             )}

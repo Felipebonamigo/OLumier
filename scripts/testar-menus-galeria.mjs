@@ -102,10 +102,10 @@ await etapa("o menu do DOWNLOAD está lá, com o baixar tudo dentro", async () =
   if (!/<summary[^>]*>[^]*?Baixar[^]*?<\/summary>/.test(b)) {
     throw new Error("não achei o menu Baixar");
   }
-  if (!/Todas as fotos \(4\)/.test(b)) {
+  if (!/Todas as fotos num zip \(4\)/.test(b)) {
     throw new Error("o menu não traz o baixar tudo com a contagem");
   }
-  return "Todas as fotos (4)";
+  return "Todas as fotos num zip (4)";
 });
 
 await etapa("sem download liberado, o menu Baixar não existe", async () => {
