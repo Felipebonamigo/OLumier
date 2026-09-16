@@ -102,6 +102,62 @@ export async function apelidosDaGaleria(galeriaId: string) {
 export type ResultadoDoEndereco = { ok: true; slug: string } | { ok: false; erro: string };
 
 /**
+ * ── O APELIDO SÓ EXISTE PARA PROTEGER LINK QUE CIRCULOU (16/09/2026) ──────
+ *
+ * Felipe: "quando alterar o endereço da galeria, apagar o antigo".
+ *
+ * O apelido nasceu de um risco real e continua valendo: o endereço vai para o
+ * WhatsApp do casal e é repassado para a família inteira, e link de casamento
+ * não se reenvia. Só que ele estava sendo criado SEMPRE — inclusive na galeria
+ * que nunca foi publicada, onde não existe link nenhum em circulação para
+ * proteger. Ali o apelido não protege nada: é lixo que ocupa o endereço, conta
+ * contra o limite de três trocas e ainda aparece na tela dizendo "também
+ * continua abrindo".
+ *
+ * É exatamente o caso do `paula-bruno-2` que deu origem ao recurso — galeria
+ * criada por engano, endereço corrigido antes de qualquer entrega.
+ *
+ * A regra passa a ser: guarda apelido quem TEM o que proteger. Galeria que
+ * nunca esteve no ar troca de endereço e o anterior simplesmente deixa de
+ * existir. Publicada, o apelido continua nascendo — e para apagá-lo há
+ * `esquecerApelidoDaGaleria`, que é uma decisão consciente e não um efeito
+ * colateral de corrigir um typo.
+ */
+async function jaCirculou(galeriaId: string): Promise<boolean> {
+  const linha = await consultarUm<{ circulou: boolean }>(
+    `select (g.publicada
+             or exists (select 1 from enderecos_antigos_galeria a where a.galeria_id = g.id)
+             or exists (select 1 from acessos ac where ac.galeria_id = g.id)) as circulou
+       from galerias g where g.id = $1`,
+    [galeriaId],
+  );
+  return Boolean(linha?.circulou);
+}
+
+/**
+ * Apaga um endereço antigo: ele deixa de abrir a galeria.
+ *
+ * Existe para quem trocou de endereço DEPOIS de entregar e, mais tarde, quer o
+ * anterior fora do ar — o caso mais provável é o oposto do typo: o link vazou e
+ * trocar o endereço era justamente para revogá-lo. Enquanto o apelido existisse,
+ * a troca não revogava nada.
+ *
+ * É destrutivo e não tem volta pelo produto (o apelido pode ser reivindicado por
+ * outra galeria depois), então quem chama pergunta antes.
+ */
+export async function esquecerApelidoDaGaleria(
+  galeriaId: string,
+  tenantId: string,
+  slug: string,
+): Promise<{ ok: boolean }> {
+  const linhas = await consultar(
+    "delete from enderecos_antigos_galeria where tenant_id = $1 and galeria_id = $2 and slug = $3 returning slug",
+    [tenantId, galeriaId, slug],
+  );
+  return { ok: linhas.length > 0 };
+}
+
+/**
  * Troca o endereço, guardando o anterior como apelido.
  *
  * O texto pedido passa por `gerarSlug` — a MESMA função que nomeia a galeria na
@@ -175,17 +231,24 @@ export async function trocarEnderecoDaGaleria(
     };
   }
 
+  const guardarApelido = await jaCirculou(galeriaId);
+
   try {
     return await emTransacao(async (q) => {
-      /* O endereço que sai vira apelido. `on conflict do nothing` cobre o
-         vaivém — trocar para A, para B e de volta para A deixaria o apelido A
-         já gravado, e isso não é erro nenhum. */
-      await q(
-        `insert into enderecos_antigos_galeria (tenant_id, slug, galeria_id)
-              values ($1, $2, $3)
-         on conflict (tenant_id, slug) do nothing`,
-        [tenantId, galeria.slug, galeriaId],
-      );
+      /* O endereço que sai vira apelido — SE houver link a proteger. Ver
+         `jaCirculou`: galeria que nunca esteve no ar não deixa rastro, e o
+         endereço anterior some de vez, que foi o pedido do Felipe.
+
+         `on conflict do nothing` cobre o vaivém — trocar para A, para B e de
+         volta para A deixaria o apelido A já gravado, e isso não é erro. */
+      if (guardarApelido) {
+        await q(
+          `insert into enderecos_antigos_galeria (tenant_id, slug, galeria_id)
+                values ($1, $2, $3)
+           on conflict (tenant_id, slug) do nothing`,
+          [tenantId, galeria.slug, galeriaId],
+        );
+      }
       /* O apelido que a galeria está retomando deixa de ser apelido: ele volta
          a ser o endereço vigente, e uma linha dizendo "este endereço é antigo"
          mandaria o visitante para si mesmo, em laço. */
