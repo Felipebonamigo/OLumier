@@ -422,6 +422,67 @@ await etapa("o cabeçalho da galeria avisa que há aparência não publicada", a
   return "as quatro abas avisam";
 });
 
+/*
+ * ── PUBLICAR ALTERAÇÕES SEM TIRAR DO AR (16/09/2026) ─────────────────────
+ *
+ * Felipe: "aqui, para poder ver a galeria, estamos precisando tirar do ar e
+ * publicar novamente. Talvez um botão republicar com as atualizações."
+ *
+ * O buraco era de interface e custava caro: "Publicar galeria" só existia
+ * enquanto a galeria fosse RASCUNHO, e era ele que promovia a aparência
+ * pendente. Publicada, o cabeçalho só oferecia "tirar do ar" — então o caminho
+ * que sobrava era despublicar e publicar de novo, com o link do casal fora do
+ * ar no meio.
+ */
+console.log("\npublicar alterações com a galeria no ar");
+
+await etapa("o cabeçalho de uma galeria NO AR com rascunho oferece publicar", async () => {
+  await db.query(
+    "update galerias set publicada = true, aparencia_rascunho = $2 where id = $1",
+    [noAr.id, JSON.stringify({ tema: "creme" })],
+  );
+  const html = await (
+    await fetch(`${BASE}/painel/galerias/${noAr.id}`, { headers: { cookie }, cache: "no-store" })
+  ).text();
+  if (!html.includes("Publicar alterações")) {
+    throw new Error("sem o botão: só sobraria despublicar e publicar de novo");
+  }
+  return "botão presente";
+});
+
+await etapa("sem rascunho, o botão NÃO aparece", async () => {
+  /* Botão permanente chamado "publicar alterações" numa galeria sem alteração
+     nenhuma é botão que não faz nada — e ensina a ignorá-lo justamente no dia
+     em que importa. */
+  await db.query("update galerias set aparencia_rascunho = null where id = $1", [noAr.id]);
+  const html = await (
+    await fetch(`${BASE}/painel/galerias/${noAr.id}`, { headers: { cookie }, cache: "no-store" })
+  ).text();
+  if (html.includes("Publicar alterações")) throw new Error("apareceu sem ter o que publicar");
+  return "escondido";
+});
+
+await etapa("publicar alterações promove o rascunho SEM tirar a galeria do ar", async () => {
+  await db.query(
+    "update galerias set publicada = true, aparencia = $2, aparencia_rascunho = $3 where id = $1",
+    [noAr.id, JSON.stringify({ tema: "noite" }), JSON.stringify({ tema: "claro" })],
+  );
+  const promoveu = await (
+    await import("../src/lib/aparencia-galeria.ts")
+  ).promoverRascunhoSePendente(noAr.id, noAr.estudio.id);
+  if (!promoveu) throw new Error("não promoveu");
+
+  const { rows } = await db.query(
+    "select publicada, aparencia, aparencia_rascunho from galerias where id = $1",
+    [noAr.id],
+  );
+  if (rows[0].aparencia?.tema !== "claro") throw new Error("a aparência não foi publicada");
+  if (rows[0].aparencia_rascunho !== null) throw new Error("o rascunho ficou para trás");
+  /* O ponto do pedido: o link do casal não pode piscar para fazer isso. */
+  if (rows[0].publicada !== true) throw new Error("a galeria saiu do ar no caminho");
+  return "publicada o tempo todo";
+});
+
 console.log("\na permissão não afrouxou");
 
 /*
