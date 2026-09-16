@@ -11,6 +11,7 @@ import {
   PALETAS,
   TEMAS,
   TAMANHO_TITULO,
+  temPesoLeve,
   type Aparencia,
   type ViewportPrevia,
 } from "@/config/aparencia";
@@ -744,6 +745,22 @@ export function EditorAparencia({
               {/* Junto da fonte, e não da logo: quem acha o título grosso está
                   olhando para a LETRA, e é ali que ele procura. */}
               <Eixo eixo="peso" titulo="Grossura do título" ap={ap} mudar={mudar} />
+              {/*
+                O aviso só aparece quando a fonte escolhida não tem traço mais
+                fino — nas outras ele seria ruído. Felipe, 16/09/2026: "a normal
+                pra fina não muda nada, só muda da normal para forte". Na
+                serifada aquilo era defeito nosso e foi corrigido em
+                `layout.tsx`; nestas quinze a família realmente não desenha nada
+                abaixo de 400, e dizer isso aqui vale mais que um botão que não
+                responde. Mesma conversa que o "sem efeito nas manuscritas" que
+                a opção "Forte" já traz.
+              */}
+              {!temPesoLeve(ap.tipografia) && (
+                <p className="-mt-1 text-[11px] leading-snug text-texto-faint">
+                  Esta fonte não tem um traço mais fino que o normal — “Fina” desenha igual a
+                  “Normal”. Para afinar o título, troque a fonte acima.
+                </p>
+              )}
               {/* As duas do tamanho vêm juntas porque respondem à mesma
                   pergunta — "como o nome ocupa a capa" — e uma mexe na outra:
                   puxar a barrinha para cima é o que faz o nome procurar a linha

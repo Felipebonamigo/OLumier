@@ -379,6 +379,55 @@ const SEM_NEGRITO_REAL = new Set<Tipografia>([
   "propria",
 ]);
 
+/**
+ * As fontes que NÃO têm nada abaixo de 400 — conferidas contra a tabela de
+ * pesos do próprio `next/font` (`@next/font/dist/google/font-data.json`).
+ *
+ * ── A QUEIXA QUE ISTO RESPONDE ───────────────────────────────────────────
+ *
+ * Felipe, 16/09/2026: "a normal pra fina não muda nada. Só muda da normal para
+ * forte". Ele estava na serifada, e ali era defeito nosso: a Cormorant TEM 300,
+ * e `layout.tsx` carregava só 400, 600 e 700 — o navegador caía no 400 por
+ * falta do arquivo. Isso virou a fonte variável e está resolvido.
+ *
+ * Nas quinze desta lista, porém, não há defeito a corrigir: a família não
+ * desenha nada mais leve que 400, e não existe arquivo para carregar. Pedir
+ * 300 continua sendo inofensivo — o navegador escolhe o mais próximo para cima
+ * e desenha 400 —, mas o botão fica sem resposta, e é exatamente essa a
+ * experiência de que ele reclamou.
+ *
+ * O simétrico de `SEM_NEGRITO_REAL`, e pelo mesmo motivo: o eixo não inventa um
+ * peso que a fonte não tem. A diferença é o RISCO — para cima o navegador
+ * engorda o traço artificialmente e estraga a letra; para baixo ele apenas
+ * ignora. Por isso aqui a lista não muda o que é desenhado: ela serve para o
+ * editor AVISAR, em vez de deixar a pessoa clicar três vezes achando que
+ * quebrou.
+ */
+const SEM_LEVE_REAL = new Set<Tipografia>([
+  "playfair", // 400–900
+  "lora", // 400–700
+  "garamond", // 400–800
+  "baskerville", // 400–700
+  "bodoni", // 400–900
+  "dancing", // 400–700
+  "cinzel", // 400–900
+  /* As sete de peso único já estão travadas em 400 pela lista de cima; entram
+     aqui também porque a pergunta é outra e a resposta seria a mesma. */
+  "manuscrita",
+  "parisienne",
+  "petit",
+  "sacramento",
+  "italianno",
+  "marcellus",
+  "tenor",
+  "propria", // arquivo do estúdio: não sabemos o que tem dentro
+]);
+
+/** A fonte tem traço mais fino que o normal para dar? Usado só para avisar. */
+export function temPesoLeve(t: Tipografia): boolean {
+  return !SEM_LEVE_REAL.has(t);
+}
+
 /** O que cada opção pede, quando a fonte tem peso de verdade para dar. */
 const PESO_ALVO: Record<Peso, number> = { leve: 300, normal: 400, forte: 700 };
 
