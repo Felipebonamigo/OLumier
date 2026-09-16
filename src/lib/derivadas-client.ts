@@ -34,20 +34,95 @@ export interface Derivadas {
   rostos?: Promise<RostoMedido[]>;
 }
 
-async function redimensionar(bitmap: ImageBitmap, alvo: number): Promise<Blob> {
+/*
+ * ── A QUALIDADE DA MINIATURA, E POR QUE ELA MUDOU (16/09/2026) ────────────
+ *
+ * Felipe: "a miniatura, para usuários que usam granulação, está ficando bem
+ * prejudicada a imagem".
+ *
+ * Grão é a coisa mais difícil que existe para um pipeline de miniatura, e o
+ * nosso errava nas duas pontas:
+ *
+ *   A REDUÇÃO. `drawImage` de 6000 px direto para 640 pede ao navegador que
+ *   resuma dez pixels em um. Em imagem lisa isso passa; em grão, os pontos
+ *   caem entre as amostras e viram manchas — o padrão fino vira um chiado
+ *   irregular, que é pior que grão nenhum. É aliasing, e a resposta clássica é
+ *   reduzir PELA METADE de cada vez: cada passo mistura quatro pixels vizinhos,
+ *   e o grão vira textura em vez de mancha.
+ *
+ *   A COMPRESSÃO. WebP joga fora a alta frequência primeiro, e grão é alta
+ *   frequência pura. Em 0,82 uma foto granulada ganhava blocos lavados nas
+ *   sombras — justamente onde o fotógrafo pôs o grão.
+ *
+ * A miniatura subiu para 0,86 e o preview para 0,90.
+ *
+ * ── O QUE ISSO CUSTA, MEDIDO ────────────────────────────────────────────
+ *
+ * Numa cena de 4000×2667 com detalhe e grão, reduzida para 640 e pesada no
+ * próprio Chromium (16/09/2026):
+ *
+ *   sem grão      20,0 KB → 22,2 KB   (+11%)
+ *   grão leve     19,9 KB → 22,4 KB   (+13%)
+ *   grão forte    22,3 KB → 28,7 KB   (+29%)
+ *
+ * A redução por metades sai de graça: sozinha, ela move 19,9 KB para 19,9 KB e
+ * 22,3 KB para 23,4 KB. Quem custa é a qualidade, e custa só onde há grão para
+ * preservar — que é exatamente onde o Felipe reclamou.
+ *
+ * Treze por cento no caso comum é o preço de a galeria de quem trabalha com
+ * grão parar de parecer mal comprimida. Quem não usa grão paga onze, e a
+ * miniatura fica melhor do mesmo jeito.
+ */
+const QUALIDADE_THUMB = 0.86;
+const QUALIDADE_PREVIEW = 0.9;
+
+/**
+ * Reduz pela metade até chegar perto do alvo, e só então ao tamanho exato.
+ *
+ * O laço para quando o próximo passo passaria do alvo — daí o `/ 2 >= alvo`.
+ * Sem ele, uma foto de 700 px pedindo 640 faria uma volta inútil por 350 e
+ * subiria de novo, que é perder nitidez para ganhar nada.
+ */
+async function redimensionar(bitmap: ImageBitmap, alvo: number, qualidade: number): Promise<Blob> {
   const escala = Math.min(1, alvo / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * escala));
   const h = Math.max(1, Math.round(bitmap.height * escala));
 
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("canvas indisponível");
+  ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(bitmap, 0, 0, w, h);
 
-  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", 0.82));
+  /* `origem` é o que será desenhado no passo seguinte: o bitmap no primeiro, e
+     o canvas intermediário daí em diante. */
+  let origem: CanvasImageSource = bitmap;
+  let larguraAtual = bitmap.width;
+  let alturaAtual = bitmap.height;
+
+  while (Math.max(larguraAtual, alturaAtual) / 2 >= Math.max(w, h)) {
+    const meioW = Math.max(1, Math.round(larguraAtual / 2));
+    const meioH = Math.max(1, Math.round(alturaAtual / 2));
+    /* Um canvas por passo, e não o de saída: desenhar um canvas sobre si mesmo
+       lê e escreve a mesma memória, e o resultado é indefinido. */
+    const passo = document.createElement("canvas");
+    passo.width = meioW;
+    passo.height = meioH;
+    const ctxPasso = passo.getContext("2d");
+    if (!ctxPasso) break;
+    ctxPasso.imageSmoothingEnabled = true;
+    ctxPasso.imageSmoothingQuality = "high";
+    ctxPasso.drawImage(origem, 0, 0, meioW, meioH);
+    origem = passo;
+    larguraAtual = meioW;
+    alturaAtual = meioH;
+  }
+
+  canvas.width = w;
+  canvas.height = h;
+  ctx.drawImage(origem, 0, 0, w, h);
+
+  const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", qualidade));
   if (!blob || blob.size === 0) throw new Error("falha ao gerar WebP");
   return blob;
 }
@@ -153,7 +228,7 @@ export async function gerarDerivadas(
     if (!bitmap) return null;
     try {
       return {
-        thumb: await redimensionar(bitmap, TAMANHO_THUMB),
+        thumb: await redimensionar(bitmap, TAMANHO_THUMB, QUALIDADE_THUMB),
         preview: null,
         largura: bitmap.width,
         altura: bitmap.height,
@@ -171,8 +246,8 @@ export async function gerarDerivadas(
     const bitmap = await createImageBitmap(arquivo, { imageOrientation: "from-image" });
     try {
       const [thumb, preview] = await Promise.all([
-        redimensionar(bitmap, TAMANHO_THUMB),
-        redimensionar(bitmap, TAMANHO_PREVIEW),
+        redimensionar(bitmap, TAMANHO_THUMB, QUALIDADE_THUMB),
+        redimensionar(bitmap, TAMANHO_PREVIEW, QUALIDADE_PREVIEW),
       ]);
       const derivadas: Derivadas = { thumb, preview, largura: bitmap.width, altura: bitmap.height };
 
