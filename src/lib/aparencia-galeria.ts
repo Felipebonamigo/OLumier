@@ -1,5 +1,5 @@
 import "server-only";
-import { consultar } from "@/lib/db";
+import { consultar, consultarUm } from "@/lib/db";
 import { lerAparencia, type Aparencia } from "@/config/aparencia";
 
 /**
@@ -121,4 +121,53 @@ export async function promoverRascunhoSePendente(
     [galeriaId, tenantId],
   );
   return linhas.length > 0;
+}
+
+/**
+ * ── O PADRÃO DE DESIGN DO ESTÚDIO (16/09/2026) ────────────────────────────
+ *
+ * Felipe: "adicionar algum método de 'salvar padrão criado', para sempre se
+ * repetir na hora do design da capa".
+ *
+ * O editor tem doze eixos. Um fotógrafo acerta a combinação dele uma vez e a
+ * partir daí quer ISSO em toda entrega — e até hoje refazia as doze escolhas
+ * por galeria. Um estúdio tem UMA identidade visual; o padrão é ela.
+ *
+ * Ver a migração 036 para por que isto é uma coluna no tenant e não uma lista
+ * de presets salvos.
+ */
+
+/** Guarda a aparência como o padrão do estúdio. Sobrescreve o anterior. */
+export async function salvarPadraoDoEstudio(tenantId: string, bruto: unknown) {
+  /*
+   * Passa por `lerAparencia` ANTES de gravar, ao contrário do rascunho — que já
+   * chega validado de `gravarRascunho`. Aqui a origem é a tela, e o que se grava
+   * vai valer para toda galeria futura: um campo torto aqui se propagaria
+   * silenciosamente por um ano de entregas.
+   */
+  await consultar("update tenants set aparencia_padrao = $1 where id = $2", [
+    JSON.stringify(lerAparencia(bruto)),
+    tenantId,
+  ]);
+}
+
+/** Esquece o padrão: a galeria nova volta a nascer com o padrão do código. */
+export async function esquecerPadraoDoEstudio(tenantId: string) {
+  await consultar("update tenants set aparencia_padrao = null where id = $1", [tenantId]);
+}
+
+/**
+ * A aparência com que uma galeria nova deste estúdio deve nascer.
+ *
+ * Null quando o estúdio nunca salvou um padrão — e aí quem cria não grava nada,
+ * deixando a coluna `aparencia` no `'{}'` de sempre, que `lerAparencia`
+ * completa com o padrão do código. É o que mantém esta migração sem efeito
+ * nenhum sobre quem não pediu.
+ */
+export async function padraoDoEstudio(tenantId: string): Promise<unknown | null> {
+  const linha = await consultarUm<{ aparencia_padrao: unknown }>(
+    "select aparencia_padrao from tenants where id = $1",
+    [tenantId],
+  );
+  return linha?.aparencia_padrao ?? null;
 }
