@@ -294,6 +294,11 @@ export function ProvedorDeEnvio({
                      `chave_preview` apontando para um arquivo que nunca sobe —
                      e o lightbox pediria esse arquivo em vez do filme. */
                   comPreview: Boolean(derivadas?.preview),
+                  /* A data que a CÂMERA gravou, para a ordenação cronológica
+                     do capítulo. Nula em vídeo, PNG e foto exportada sem
+                     metadados — e aí a ordem cai na de envio, dizendo quantas.
+                     Ver `lib/exif-client.ts` e a migração 035. */
+                  tiradaEm: tiradaEm?.toISOString(),
                   largura: derivadas?.largura,
                   altura: derivadas?.altura,
                   /* A pasta manda: o capítulo lido do disco vence o seletor

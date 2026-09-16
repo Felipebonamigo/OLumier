@@ -151,6 +151,71 @@ await etapa("a galeria continua agrupando por capítulo depois de renumerar", as
   return `${blocos.length} blocos, um por capítulo`;
 });
 
+/*
+ * ── A DATA PRECISA CHEGAR AO BANCO ────────────────────────────────────────
+ *
+ * As etapas acima provam a ORDENAÇÃO com `tirada_em` já gravado. Faltava a
+ * outra metade: o caminho do navegador até a coluna.
+ *
+ * Ela quase não existiu. O envio lia a data do EXIF e não a punha no corpo do
+ * pedido — o `lerAparencia` do lint acusou um `tiradaEm` calculado e nunca
+ * usado. O efeito seria silencioso e caro: a coluna ficaria NULA em tudo, a
+ * ordem cronológica cairia na de envio para todas as fotos, e a tela avisaria
+ * "600 de 600 sem data da câmera" sem ninguém entender por quê.
+ *
+ * Por isso o teste olha os DOIS lados do fio, e não só a ponta que ele
+ * exercita: o cliente tem de mandar, e a rota tem de gravar.
+ */
+await etapa("o envio manda a data do EXIF no pedido", async () => {
+  const fs = await import("node:fs/promises");
+  const envio = await fs.readFile("src/components/envio-em-curso.tsx", "utf8");
+  if (!/tiradaEm:\s*tiradaEm\?\.toISOString\(\)/.test(envio)) {
+    throw new Error("o corpo do /upload não leva `tiradaEm` — a coluna ficaria nula em tudo");
+  }
+  if (!/dataDaFoto\(tarefa\.arquivo\)/.test(envio)) {
+    throw new Error("o envio não lê mais o EXIF");
+  }
+  return "lido e enviado";
+});
+
+await etapa("a rota grava a data, e recusa texto inválido", async () => {
+  const fs = await import("node:fs/promises");
+  const rota = await fs.readFile("src/app/api/galerias/[id]/upload/route.ts", "utf8");
+  if (!/tiradaEm:\s*dataValida\(corpo\.tiradaEm\)/.test(rota)) {
+    throw new Error("a rota não passa a data para `criarMediaPendente`");
+  }
+  const medias = await fs.readFile("src/lib/medias.ts", "utf8");
+  if (!/tirada_em/.test(medias)) throw new Error("o insert não tem a coluna");
+  return "gravada pela rota";
+});
+
+await etapa("a coluna aceita a data e devolve o que recebeu", async () => {
+  /* Ida e volta pelo banco: fuso, tipo e precisão. Um `timestamptz` lido como
+     texto ou um `Date` inválido apareceriam aqui, e não na tela do fotógrafo. */
+  const { criarMediaPendente } = await import("../src/lib/medias.ts");
+  const quando = new Date("2026-09-14T18:32:07.000Z");
+  const m = await criarMediaPendente({
+    galeriaId: g.id,
+    tenantId: g.estudio.id,
+    chave: `x/${g.id}/exif.jpg`,
+    nomeOriginal: "exif.jpg",
+    tipo: "foto",
+    mime: "image/jpeg",
+    bytes: 1000,
+    tiradaEm: quando,
+  });
+  try {
+    const { rows } = await db.query("select tirada_em from medias where id = $1", [m.id]);
+    if (!rows[0].tirada_em) throw new Error("gravou nulo");
+    if (rows[0].tirada_em.getTime() !== quando.getTime()) {
+      throw new Error(`voltou ${rows[0].tirada_em.toISOString()}`);
+    }
+    return quando.toISOString();
+  } finally {
+    await db.query("delete from medias where id = $1", [m.id]);
+  }
+});
+
 await etapa("galeria de outro estúdio é recusada", async () => {
   const r = await ordenarFotosDaSecao(g.id, "00000000-0000-0000-0000-000000000000", cerimonia.id, "nome");
   if (r.ok) throw new Error("ordenou a galeria alheia");
