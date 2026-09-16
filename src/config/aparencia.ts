@@ -725,7 +725,7 @@ export interface Preset {
 }
 
 /*
- * OS NOVE PRESETS USAM A MESMA ALTURA DE CAPA E O MESMO CANTO — de propósito.
+ * OS NOVE PRIMEIROS USAM A MESMA ALTURA DE CAPA E O MESMO CANTO — de propósito.
  *
  * Os dois eixos nasceram em 04/09/2026 com o valor que o componente já cravava
  * (78vh e 6 px). Quem já tem galeria no ar cai nesse mesmo par por
@@ -737,6 +737,10 @@ export interface Preset {
  * Quando o par deixar de ser novidade — digamos, quando a maioria das galerias
  * já tiver escolha própria gravada —, dá para dar a cada preset o canto que
  * combina com ele (Moda com `reto`, Papel com `redondo`) sem esse efeito.
+ *
+ * O "Marfim" (16/09/2026) já escolhe o seu, e isso não desmarca ninguém: ele
+ * NASCEU com essa combinação. O efeito descrito acima só existe ao MUDAR um
+ * preset que galerias antigas já casam.
  */
 export const PRESETS: Preset[] = [
   {
@@ -759,6 +763,40 @@ export const PRESETS: Preset[] = [
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
     aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+  },
+  {
+    /*
+     * ── "GOSTEI MUITO DISSO AQUI" (16/09/2026) ──────────────────────────
+     *
+     * Felipe apontou o telefone desenhado na página de vendas — "Ana & Pedro",
+     * manuscrita, a data e o local em maiúsculas espaçadas, o mural de duas
+     * colunas — e perguntou: "isso existe em alguma galeria? esse modelo? se
+     * não, crie".
+     *
+     * Existia em peças. Cada eixo daquele desenho já era escolhível, e nenhuma
+     * combinação pronta juntava os cinco: o `atelie` tem a manuscrita mas capa
+     * dividida e grade de linhas; o `essencial` tem a mínima e a compacta mas
+     * letra moderna e grade quadrada. Quem quisesse AQUILO montava eixo a eixo,
+     * adivinhando qual manuscrita era a da imagem.
+     *
+     * É a resposta honesta ao "se não, crie": não faltava recurso, faltava o
+     * atalho. O preset é a página de vendas cumprindo o que mostra.
+     *
+     * As peças, e por quê:
+     *
+     *   capa mínima   — o desenho não tem foto de capa: abre no nome do casal
+     *   creme         — o papel da imagem, marfim e não branco de tela
+     *   manuscrita    — a Great Vibes, que é a `font-script` daquele mock
+     *   colunas       — o mural de duas colunas com alturas diferentes
+     *   normal        — e não `compacta`: ela tem piso de TRÊS colunas, e no
+     *                   celular o desenho vira três fileiras estreitas. A
+     *                   imagem tem duas, que é o que `normal` dá num telefone
+     *   canto redondo — os cantos visivelmente arredondados das miniaturas
+     */
+    id: "marfim",
+    nome: "Marfim",
+    desc: "Creme e manuscrita, mural rente. É o desenho da nossa página inicial.",
+    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "essencial",
