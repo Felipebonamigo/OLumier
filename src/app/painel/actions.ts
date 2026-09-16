@@ -45,6 +45,9 @@ import {
   moverSecao,
   reordenarSecoes,
   renomearSecao,
+  ordenarFotosDaSecao,
+  ORDENS_DAS_FOTOS,
+  type OrdemDasFotos,
 } from "@/lib/secoes";
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
 import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
@@ -347,6 +350,45 @@ export async function apagarSecaoAction(form: FormData) {
   const tenantId = await exigirTenant();
   await apagarSecao(String(form.get("secao_id") ?? ""), tenantId);
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+/**
+ * Reordena as fotos de UM capítulo por um critério.
+ *
+ * Felipe, 16/09/2026: "poder organizar por ordem de upload/adição // por ordem
+ * cronológica // por nome A-Z // por nome Z-A".
+ *
+ * `secao_id` vazio é o grupo das fotos SEM capítulo — ele aparece na mesma
+ * lista da tela e tem o mesmo direito de ser ordenado.
+ */
+export async function ordenarFotosDaSecaoAction(form: FormData): Promise<{ aviso?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const secaoId = String(form.get("secao_id") ?? "") || null;
+  const criterio = String(form.get("criterio") ?? "") as OrdemDasFotos;
+  if (!ORDENS_DAS_FOTOS.some((o) => o.id === criterio)) return {};
+
+  const r = await ordenarFotosDaSecao(galeriaId, tenantId, secaoId, criterio);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  if (!r.ok) return {};
+
+  /*
+   * O aviso é honesto sobre o que a ordem cronológica conseguiu.
+   *
+   * Foto sem data da câmera cai na data de ENVIO — vídeo, PNG, foto exportada
+   * sem metadados e tudo que subiu antes da migração 035. Ordenar 600 fotos e
+   * não dizer que 200 delas foram pelo envio é entregar uma sequência que
+   * parece cronológica e não é.
+   */
+  if (r.semData > 0) {
+    return {
+      aviso:
+        `${r.semData} de ${r.quantas} ${r.semData === 1 ? "foto não tem" : "fotos não têm"} a data ` +
+        `da câmera e ${r.semData === 1 ? "entrou" : "entraram"} pela ordem de envio. ` +
+        `Fotos enviadas antes de 16/09/2026 não guardaram essa data.`,
+    };
+  }
+  return {};
 }
 
 export async function moverSecaoAction(form: FormData) {
