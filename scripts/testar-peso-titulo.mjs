@@ -23,6 +23,7 @@
  * só faz efeito onde há peso de verdade para escolher.
  */
 import pg from "pg";
+import { readFile } from "node:fs/promises";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import {
@@ -31,6 +32,7 @@ import {
   PRESETS,
   lerAparencia,
   pesoDoTitulo,
+  temPesoLeve,
 } from "../src/config/aparencia.ts";
 
 await exigirBancoDeTeste();
@@ -160,6 +162,57 @@ await etapa("com fonte de peso único, o h1 NÃO pede 700 nem no forte", async (
   const w = tag.match(/font-weight:\s*(\d+)/);
   if (!w) throw new Error(`h1 sem font-weight: ${tag}`);
   igual(Number(w[1]), 400, "peso");
+});
+
+/*
+ * ── "FINA" PRECISA DESENHAR MAIS FINO QUE "NORMAL" ────────────────────────
+ *
+ * Felipe, 16/09/2026: "a normal pra fina não muda nada. Só muda da normal para
+ * forte."
+ *
+ * O eixo sempre pediu 300 na "Fina" — o defeito não estava aqui, estava no
+ * `layout.tsx`: a Cormorant era carregada como três arquivos estáticos (400,
+ * 600, 700). O 300 não existia para baixar, e o navegador desenha o peso mais
+ * próximo que EXISTE. Três botões, duas respostas.
+ *
+ * A fonte virou a versão variável da família (eixo 300–700), e este passo é o
+ * que impede a volta: se alguém recravar uma lista de pesos sem o 300, a
+ * asserção quebra antes de o Felipe perceber de novo.
+ */
+await etapa('a serifada carrega peso abaixo de 400 — "Fina" tem o que desenhar', async () => {
+  const layout = await readFile("src/app/layout.tsx", "utf8");
+  const decl = layout.match(/const cormorant = Cormorant_Garamond\(\{[^}]*\}\)/)?.[0];
+  if (!decl) throw new Error("não achei a declaração da Cormorant em layout.tsx");
+  const pesos = decl.match(/weight:\s*(\[[^\]]*\]|"[^"]*")/)?.[1];
+  /* Sem `weight` é a fonte variável, que cobre 300–700 inteiro. Com `weight`,
+     o 300 tem de estar escrito lá — senão não há arquivo para o navegador. */
+  if (pesos && !pesos.includes("300")) {
+    throw new Error(`a Cormorant volta a ser estática sem o 300: weight: ${pesos}`);
+  }
+  return pesos ? `weight: ${pesos}` : "fonte variável, eixo 300–700";
+});
+
+await etapa('"Fina" e "Normal" pedem números diferentes onde a fonte tem os dois', () => {
+  for (const t of ["serifada", "moderna", "jost", "raleway", "josefin", "work", "outfit"]) {
+    const leve = pesoDoTitulo(t, "leve");
+    const normal = pesoDoTitulo(t, "normal");
+    if (leve >= normal) throw new Error(`${t}: leve ${leve} não é mais fino que normal ${normal}`);
+    if (!temPesoLeve(t)) throw new Error(`${t} está marcada como sem peso leve, mas tem`);
+  }
+  return "7 fontes respondem aos três botões";
+});
+
+/*
+ * O outro lado: quinze famílias não desenham nada abaixo de 400, e isso NÃO é
+ * defeito nosso — é o arquivo da fonte. O que o produto deve é avisar, em vez
+ * de deixar a pessoa clicar três vezes achando que quebrou. O editor mostra a
+ * nota; aqui o que se prende é a lista estar honesta nos dois sentidos.
+ */
+await etapa("a lista de fontes sem traço fino é honesta", () => {
+  for (const t of ["playfair", "lora", "garamond", "bodoni", "cinzel", "italianno", "propria"]) {
+    if (temPesoLeve(t)) throw new Error(`${t} não tem peso abaixo de 400, mas está marcada como se tivesse`);
+  }
+  return "7 conferidas contra a tabela do next/font";
 });
 
 await etapa("o título deixou de vir com o negrito cravado na classe", async () => {
