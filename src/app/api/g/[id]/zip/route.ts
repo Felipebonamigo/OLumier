@@ -1,14 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { consultarUm } from "@/lib/db";
 import { armazemDe, urlDoOriginal } from "@/lib/armazem";
 import { dispositionSegura } from "@/lib/r2";
-import {
-  listarMediasPublicas,
-  registrarAcesso,
-  temAcessoLiberado,
-} from "@/lib/galerias-publicas";
-import { listarSecoes } from "@/lib/secoes";
-import { favoritasDaPessoa, pessoaAtual } from "@/lib/favoritas";
+import { registrarAcesso } from "@/lib/galerias-publicas";
+import { prepararEntrega } from "@/lib/entrega-da-galeria";
 import { GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 import { tamanhoDoZip, zipEmFluxo, type ArquivoDoZip } from "@/lib/zip-em-fluxo";
 
@@ -74,56 +68,16 @@ const semProibidos = (s: string) => s.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  /* ── As mesmas travas de qualquer download da galeria ─────────────────── */
-  const galeria = await consultarUm<{
-    titulo: string;
-    senha_hash: string | null;
-    estado: string;
-    permite_download: boolean;
-  }>(
-    "select titulo, senha_hash, estado, permite_download from galerias where id = $1 and publicada",
-    [id],
+  /* ── As travas e a escolha das fotos: as mesmas da lista do celular ──── */
+  const entrega = await prepararEntrega(id, request.nextUrl.searchParams);
+  if (entrega instanceof NextResponse) return entrega;
+  const escolhidas = entrega.fotos;
+  const nomeDoCapitulo = new Map(
+    [...entrega.capitulos].map(([cid, nome]) => [cid, semProibidos(nome)]),
   );
-  if (!galeria) return NextResponse.json({ erro: "sem acesso" }, { status: 404 });
-  if (galeria.estado !== "online") return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
-  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
-    return NextResponse.json({ erro: "sem acesso" }, { status: 401 });
-  }
-  if (!galeria.permite_download) {
-    return NextResponse.json({ erro: "download não permitido nesta galeria" }, { status: 403 });
-  }
-
-  const busca = request.nextUrl.searchParams;
-  const cap = busca.get("cap");
-  const querFavoritas = busca.get("favoritas") === "1";
-
-  const [medias, secoes] = await Promise.all([listarMediasPublicas(id), listarSecoes(id)]);
-  const nomeDoCapitulo = new Map(secoes.map((s) => [s.id, semProibidos(s.nome)]));
-
-  /* ── Quais fotos entram ────────────────────────────────────────────────── */
-  let escolhidas = medias;
-  let sufixo = "";
   /* Pasta por capítulo só no zip da galeria inteira: num zip de UM capítulo a
      pasta seria um nível a mais para abrir sem motivo. */
-  let comPastas = false;
-
-  if (querFavoritas) {
-    const pessoa = await pessoaAtual(id);
-    if (!pessoa) {
-      return NextResponse.json({ erro: "identifique-se", precisaEmail: true }, { status: 428 });
-    }
-    const minhas = new Set(await favoritasDaPessoa(id, pessoa));
-    escolhidas = medias.filter((m) => minhas.has(m.id));
-    sufixo = " - favoritas";
-  } else if (cap) {
-    escolhidas =
-      cap === "sem-capitulo"
-        ? medias.filter((m) => !m.secao_id)
-        : medias.filter((m) => m.secao_id === cap);
-    sufixo = ` - ${cap === "sem-capitulo" ? GRUPO_SEM_CAPITULO : (nomeDoCapitulo.get(cap) ?? "capítulo")}`;
-  } else {
-    comPastas = secoes.length > 0;
-  }
+  const comPastas = entrega.tipo === "tudo" && entrega.capitulos.size > 0;
 
   if (escolhidas.length === 0) {
     return NextResponse.json({ erro: "nada para baixar" }, { status: 404 });
@@ -163,14 +117,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
    */
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = request.headers.get("user-agent");
-  const acao = querFavoritas || cap ? "baixou" : "baixou_tudo";
+  const acao = entrega.tipo === "tudo" ? "baixou_tudo" : "baixou";
 
   async function* comRegistro() {
     yield* zipEmFluxo(arquivos);
     await registrarAcesso({ galeriaId: id, acao, ip, userAgent });
   }
 
-  const nomeDoZip = `${semProibidos(galeria.titulo) || "galeria"}${sufixo}.zip`;
+  const sufixo = semProibidos(entrega.sufixo.replace(/^ - /, ""));
+  const nomeDoZip = `${semProibidos(entrega.titulo) || "galeria"}${sufixo ? ` - ${sufixo}` : ""}.zip`;
 
   /*
    * Um pedaço por vez, SÓ quando o navegador pede o próximo (`pull`). É o que

@@ -62,10 +62,15 @@ if (!pastas) {
     erro('o menu de baixar conta só o que está carregado — a pasta que não veio aparece como "(0)"');
   }
 
-  if (/c\.indices\.length\s*>\s*0\s*\?/.test(pastas)) {
-    ok("e tocar numa pasta não carregada leva até ela, em vez de não fazer nada");
+  /* Até 16/09/2026 a exigência era olhar `c.indices` e navegar até a pasta
+     quando ela não estava carregada — e, carregada, entregar `c.indices`: uma
+     pasta de 800 fotos entregava as 600 da tela. Agora a pasta pede a lista
+     INTEIRA ao servidor (`api/g/[id]/lista?cap=`), esteja ou não na tela. O
+     que não pode voltar é a ação montar a entrega com o pedaço carregado. */
+  if (/cap=/.test(pastas) && /iniciarEntrega\(/.test(pastas) && !/c\.indices/.test(pastas)) {
+    ok("tocar numa pasta entrega a pasta inteira, carregada ou não");
   } else {
-    erro("tocar numa pasta que não veio nesta fatia não baixaria nada");
+    erro("a pasta entrega o pedaço carregado nesta tela, e não a pasta inteira");
   }
 }
 

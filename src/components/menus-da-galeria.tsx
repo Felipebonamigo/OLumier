@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
+import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import type { CapituloGaleria } from "@/components/galeria-cliente";
+import type { ModoDeEntrega } from "@/lib/modo-de-entrega";
+import { tamanhoLegivel, toquesPrevistos } from "@/lib/salvar-client";
 
 /**
  * A BARRA DE MENUS DO INÍCIO DA GALERIA.
@@ -54,11 +58,13 @@ export type MenuFavoritas = {
 };
 
 export type MenuBaixar = {
-  quantas: number;
-  /** No celular a entrega é pelo menu do sistema, e o verbo muda junto. */
-  modoSalvar: boolean;
-  baixando: boolean;
-  progresso: number;
+  /** Como este aparelho recebe as fotos — o verbo e o caminho mudam junto. */
+  modo: ModoDeEntrega;
+  /** Quantas fotos a galeria tem — é o que "todas" entrega, em qualquer aparelho. */
+  quantasNaGaleria: number;
+  bytesDaGaleria: number;
+  /** A entrega em curso, ou null. */
+  progresso: { feitas: number; total: number } | null;
   baixarTudo: () => void;
   /** Os capítulos, quando há mais de um. Vazio = não há pasta a escolher. */
   pastas: { id: string; nome: string; quantas: number; baixar: () => void }[];
@@ -66,12 +72,14 @@ export type MenuBaixar = {
   favoritas: number;
   baixarFavoritas: () => void;
   /**
-   * O zip da galeria inteira, oferecido como SEGUNDA opção no celular — no
+   * O zip da galeria inteira, oferecido como opção a mais no celular — no
    * computador ele já é o "baixar tudo". Ausente = não oferecer.
    */
   baixarZip?: () => void;
-  /** Quantas fotos a galeria tem — no computador é isso que o zip entrega. */
-  quantasNaGaleria: number;
+  /** Manda o link para a pessoa baixar no computador. Só no celular. */
+  enviarParaOComputador?: () => void;
+  /** As fotos da tela `?fotos=` (busca por rosto), ou null fora dela. */
+  recorte?: { quantas: number; baixar: () => void } | null;
 };
 
 export function MenusDaGaleria({
@@ -83,7 +91,7 @@ export function MenusDaGaleria({
 }: {
   capitulos: CapituloGaleria[];
   /** Só numa galeria que não coube inteira — ver `config/fatia-galeria.ts`. */
-  fatia?: { total: number; capituloAtivo: string | null } | null;
+  fatia?: { total: number; capituloAtivo: string | null; parte: number; partes: number } | null;
   /** Null quando não há o que oferecer: escolha encerrada e nenhuma marcada. */
   favoritas: MenuFavoritas | null;
   /** Null quando o fotógrafo não liberou download. */
@@ -92,6 +100,7 @@ export function MenusDaGaleria({
   tocarSlideshow: (() => void) | null;
 }) {
   const barra = useRef<HTMLElement | null>(null);
+  const busca = useSearchParams();
 
   useEffect(() => {
     const fechar = (menosEste?: Node) => {
@@ -175,53 +184,79 @@ export function MenusDaGaleria({
         {baixar && (
           <Menu
             nome={
-              baixar.baixando
-                ? `${baixar.modoSalvar ? "Salvando" : "Baixando"} ${baixar.progresso} de ${baixar.quantas}…`
+              baixar.progresso
+                ? `${baixar.modo === "menu" ? "Salvando" : "Baixando"} ${baixar.progresso.feitas} de ${baixar.progresso.total}…`
                 : "↓ Baixar"
             }
           >
             {/*
-              "TODAS" SÓ QUANDO É TODAS (11/09/2026).
+              "TODAS" É TODAS, EM QUALQUER APARELHO (16/09/2026).
 
               Numa galeria que não coube inteira, o que está na tela é um pedaço
-              — 600 de 2.108, no casamento da Carol — e o menu oferecia "Todas
-              as fotos (600)". O cliente levava 28% e fechava a aba achando que
-              tinha o casamento inteiro. Mentir para o cliente é pior do que o
-              número errado no painel do fotógrafo, que é a outra metade do
-              mesmo defeito (ver `acaoDeEntrega`).
+              — 600 de 2.108, no casamento da Carol. Até 11/09 o menu oferecia
+              "Todas as fotos (600)" e o cliente levava 28% achando que tinha o
+              casamento inteiro. A correção daquele dia foi dizer "desta parte".
 
-              Com fatia, o item diz o que entrega, e o rodapé diz o tamanho
-              real e para onde ir buscar o resto: as pastas, logo abaixo, são o
-              caminho inteiro da galeria, um capítulo por vez.
-            */}
-            {/*
-              NO COMPUTADOR, "TODAS" VOLTA A SER TODAS (16/09/2026).
+              A de hoje é entregar tudo: no computador o zip é montado no
+              servidor, e no celular a lista vem inteira de `api/g/[id]/lista`.
+              O número é o da galeria nos dois, e a ressalva deixou de existir.
 
-              O zip é montado no servidor com a galeria inteira, não com a fatia
-              da tela — então a ressalva "desta parte" deixou de valer ali, e o
-              número é o da galeria. No celular a entrega ainda sai do que está
-              carregado, e a ressalva continua.
+              O verbo muda com o aparelho porque o destino muda:
+                iPhone   "Salvar" — o menu do sistema grava no app Fotos
+                Android  "Baixar" — vai para a pasta Download, que a Galeria mostra
             */}
-            <ItemDoMenu aoTocar={baixar.baixarTudo} desligado={baixar.baixando}>
-              {baixar.modoSalvar
-                ? `Salvar as ${baixar.quantas} fotos no celular`
-                : `Todas as fotos num zip (${baixar.quantasNaGaleria})`}
+            {baixar.recorte && (
+              <ItemDoMenu aoTocar={baixar.recorte.baixar} desligado={Boolean(baixar.progresso)}>
+                {baixar.modo === "computador"
+                  ? `Baixar estas ${baixar.recorte.quantas} fotos num zip`
+                  : `${baixar.modo === "menu" ? "Salvar" : "Baixar"} estas ${baixar.recorte.quantas} fotos no celular`}
+              </ItemDoMenu>
+            )}
+            <ItemDoMenu aoTocar={baixar.baixarTudo} desligado={Boolean(baixar.progresso)}>
+              {baixar.modo === "computador"
+                ? `Todas as fotos num zip (${baixar.quantasNaGaleria})`
+                : `${baixar.modo === "menu" ? "Salvar" : "Baixar"} as ${baixar.quantasNaGaleria} fotos no celular`}
             </ItemDoMenu>
+            {/* O tamanho ANTES de começar: 2108 fotos são gigas, e quem está no
+                4G do salão precisa saber disso antes do primeiro toque. */}
+            {baixar.modo !== "computador" && baixar.bytesDaGaleria > 0 && (
+              <Rodape>
+                {tamanhoLegivel(baixar.bytesDaGaleria)}
+                {baixar.modo === "menu"
+                  ? ` · cerca de ${toquesPrevistos(baixar.quantasNaGaleria, baixar.bytesDaGaleria)} toques`
+                  : " · deixe a tela aberta até terminar"}
+              </Rodape>
+            )}
 
             {/*
-              O ZIP NO CELULAR É A SEGUNDA OPÇÃO, e a linha embaixo diz por quê.
+              A GALERIA INTEIRA CABE MELHOR NO COMPUTADOR.
 
-              O menu do sistema grava no ROLO DA CÂMERA, que é onde a noiva quer
-              as fotos. O zip cai no app Arquivos e precisa ser descompactado à
-              mão — um toque só, mas as fotos continuam fora do rolo. Serve a
-              quem quer levar tudo para o computador depois.
+              Um casamento inteiro pelo celular são gigas e dezenas de toques, e
+              no iPhone passa dos 5 GB do iCloud grátis. No computador é um zip
+              só. O item manda o LINK para a própria pessoa — WhatsApp, e-mail —
+              sem arquivo nenhum; lá ela abre e clica.
+            */}
+            {baixar.enviarParaOComputador && (
+              <>
+                <ItemDoMenu aoTocar={baixar.enviarParaOComputador}>Baixar tudo no computador</ItemDoMenu>
+                <Rodape>manda o link para você — lá as fotos vêm num zip só</Rodape>
+              </>
+            )}
+
+            {/*
+              O ZIP NO CELULAR É OPÇÃO A MAIS, e a linha embaixo diz por quê:
+              ele não cai onde a noiva procura as fotos.
             */}
             {baixar.baixarZip && (
               <>
-                <ItemDoMenu aoTocar={baixar.baixarZip} desligado={baixar.baixando}>
+                <ItemDoMenu aoTocar={baixar.baixarZip} desligado={Boolean(baixar.progresso)}>
                   {`Todas num arquivo .zip (${baixar.quantasNaGaleria})`}
                 </ItemDoMenu>
-                <Rodape>o zip vai para Arquivos, não para o rolo da câmera</Rodape>
+                <Rodape>
+                  {baixar.modo === "menu"
+                    ? "o zip vai para Arquivos, não para o app Fotos"
+                    : "o zip vai para Downloads e precisa ser extraído"}
+                </Rodape>
               </>
             )}
 
@@ -229,30 +264,18 @@ export function MenusDaGaleria({
               AS FAVORITAS LOGO DEPOIS DE "TUDO", e antes das pastas.
 
               É a segunda coisa que o casal quer baixar — muitas vezes a
-              primeira — porque é a lista que ELES montaram. As pastas são a
-              organização do fotógrafo; esta é a deles, e por isso vem antes.
-
-              Some quando não há nenhuma marcada: um item "As favoritas (0)" é
-              um botão que não faz nada.
+              primeira — porque é a lista que ELES montaram. Some quando não há
+              nenhuma marcada: um item "As favoritas (0)" é um botão que não faz
+              nada.
             */}
             {baixar.favoritas > 0 && (
-              <ItemDoMenu aoTocar={baixar.baixarFavoritas} desligado={baixar.baixando}>
-                {`${baixar.modoSalvar ? "Salvar" : "Baixar"} as favoritas (${baixar.favoritas})`}
+              <ItemDoMenu aoTocar={baixar.baixarFavoritas} desligado={Boolean(baixar.progresso)}>
+                {`${baixar.modo === "menu" ? "Salvar" : "Baixar"} as favoritas (${baixar.favoritas})`}
               </ItemDoMenu>
             )}
 
-            {/* Só no celular: no computador o zip já leva a galeria inteira, e
-                "pasta por pasta" faria a noiva baixar um zip por capítulo. */}
-            {fatia && baixar.modoSalvar && (
-              <Rodape>
-                Esta galeria tem {fatia.total} fotos e vem em partes — salve pasta por pasta para
-                levar tudo.
-              </Rodape>
-            )}
-
             {/* "…ou separado em pastas": os capítulos, um por linha. A contagem
-                no rótulo é o que vai vir — é ela que separa "a pasta inteira"
-                de "o que estou vendo agora". */}
+                no rótulo é o que vai vir — a pasta inteira, carregada ou não. */}
             {baixar.pastas.length > 0 && (
               <>
                 <p
@@ -262,7 +285,7 @@ export function MenusDaGaleria({
                   ou uma pasta
                 </p>
                 {baixar.pastas.map((p) => (
-                  <ItemDoMenu key={p.id} aoTocar={p.baixar} desligado={baixar.baixando}>
+                  <ItemDoMenu key={p.id} aoTocar={p.baixar} desligado={Boolean(baixar.progresso)}>
                     {`${p.nome} (${p.quantas})`}
                   </ItemDoMenu>
                 ))}
@@ -270,9 +293,11 @@ export function MenusDaGaleria({
             )}
 
             <Rodape>
-              {baixar.modoSalvar
-                ? "vai abrir o menu do seu celular — toque em “Salvar imagem”"
-                : "sem limite de downloads — baixe quantas vezes quiser"}
+              {baixar.modo === "menu"
+                ? "vai abrir o menu do seu celular — toque em “Salvar imagens”"
+                : baixar.modo === "download"
+                  ? "vão para a pasta Download — no Google Fotos, em Coleções › No dispositivo"
+                  : "sem limite de downloads — baixe quantas vezes quiser"}
             </Rodape>
           </Menu>
         )}
@@ -298,11 +323,17 @@ export function MenusDaGaleria({
               tirou 6,35 MB do documento que estourava o iPhone. Aí a pastilha
               precisa ir buscá-lo, e vira um link de verdade.
             */
-            const ativo = fatia ? (fatia.capituloAtivo ?? capitulos[0]?.id) === c.id : false;
+            /* Sem `cap`, a parte 1 abre pelo primeiro capítulo; da parte 2 em
+               diante a tela mostra outros, e destacar o primeiro seria dizer
+               "você está no Making Of" sobre a Festa. */
+            const aberto = fatia
+              ? (fatia.capituloAtivo ?? (fatia.parte > 1 ? null : capitulos[0]?.id))
+              : null;
+            const ativo = fatia ? aberto === c.id : false;
             return (
               <li key={c.id}>
                 <a
-                  href={fatia ? `?cap=${encodeURIComponent(c.id)}` : `#cap-${c.id}`}
+                  href={fatia ? enderecoNaGaleria(busca.toString(), { cap: c.id }) : `#cap-${c.id}`}
                   aria-current={ativo ? "page" : undefined}
                   className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
                   style={{

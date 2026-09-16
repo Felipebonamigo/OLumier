@@ -62,15 +62,19 @@ export interface Fatia<T> {
   total: number;
   /** A galeria passou do teto e está sendo servida em pedaços? */
   fatiada: boolean;
-  /** Quantas fotos ficaram de fora desta fatia. */
+  /** Quantas fotos do capítulo ficaram DEPOIS desta parte. */
   restantes: number;
+  /** Qual parte do capítulo esta tela mostra (a partir de 1), e quantas há. */
+  parte: number;
+  partes: number;
 }
 
 /**
  * Corta a lista de fotos para caber num documento.
  *
  * `secaoId` escolhe o capítulo; `null` é "o começo da galeria" e `undefined`
- * quer dizer que ninguém escolheu — nos dois casos o corte é pelo começo.
+ * quer dizer que ninguém escolheu — nos dois casos o corte é pela galeria
+ * inteira, na ordem dela. `parte` escolhe qual pedaço de `teto` fotos.
  *
  * Quando a galeria cabe inteira, devolve a lista intacta e `fatiada: false`:
  * é o sinal para a página desenhar exatamente o que desenhava antes.
@@ -79,9 +83,10 @@ export function fatiarGaleria<T extends { secao_id?: string | null }>(
   medias: T[],
   secaoId?: string | null,
   teto = FOTOS_POR_TELA,
+  parte = 1,
 ): Fatia<T> {
   const total = medias.length;
-  if (total <= teto) return { itens: medias, total, fatiada: false, restantes: 0 };
+  if (total <= teto) return { itens: medias, total, fatiada: false, restantes: 0, parte: 1, partes: 1 };
 
   /* `sem-capitulo` é o id que a página dá ao grupo das fotos que não estão em
      capítulo nenhum. Aqui ele vira o filtro "secao_id nulo". */
@@ -93,14 +98,23 @@ export function fatiarGaleria<T extends { secao_id?: string | null }>(
         : medias.filter((m) => m.secao_id === secaoId);
 
   /*
-   * O teto vale mesmo DENTRO do capítulo: "Cerimônia" tem 511 fotos e cabe,
-   * mas nada impede alguém de ter um capítulo de 1500. Sem este segundo corte,
-   * a correção teria um buraco do tamanho do defeito original.
+   * O teto vale mesmo DENTRO do capítulo: nada impede um capítulo de 1500.
+   *
+   * ── E O RESTO DO CAPÍTULO TEM ONDE APARECER (16/09/2026) ─────────────────
+   *
+   * Até aqui o corte era `slice(0, teto)` e mais nada: da 601ª foto em diante
+   * não existia tela nenhuma. Agora o capítulo vem em partes de `teto`, e a
+   * página desenha os links entre elas. Parte fora do intervalo vira a mais
+   * próxima — um link velho ou digitado à mão não abre tela vazia.
    */
+  const partes = Math.max(1, Math.ceil(doCapitulo.length / teto));
+  const atual = Math.min(Math.max(1, Math.floor(parte) || 1), partes);
   return {
-    itens: doCapitulo.slice(0, teto),
+    itens: doCapitulo.slice((atual - 1) * teto, atual * teto),
     total,
     fatiada: true,
-    restantes: Math.max(0, doCapitulo.length - teto),
+    restantes: Math.max(0, doCapitulo.length - atual * teto),
+    parte: atual,
+    partes,
   };
 }

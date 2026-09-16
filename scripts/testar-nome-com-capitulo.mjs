@@ -224,10 +224,17 @@ await etapa("o componente da galeria monta o nome pela mesma função", () => {
   if (!/nomeDeArquivo\(it\)/.test(umaFoto)) {
     throw new Error("baixar UMA foto não monta o nome pelo auxiliar");
   }
-  /* E o lote, que é o caminho do "baixar a pasta". */
-  const lote = fonte.match(/const baixaveis = [^]*?;\n/)?.[0] ?? "";
-  if (!/nomeDeArquivo\(it\)/.test(lote)) {
-    throw new Error("o lote ainda monta o nome cru");
+  /* E o lote, que é o caminho do "baixar a pasta". Desde 16/09/2026 o celular
+     não monta mais o nome do lote: ele vem pronto de `api/g/[id]/lista`, que
+     passa por `nomeNaEntrega` → `nomeComCapitulo`. O comportamento é conferido
+     de ponta a ponta em `testar-lista-de-entrega.mjs`; aqui se prende que o
+     caminho continua sendo a função compartilhada. */
+  const raiz = path.resolve(import.meta.dirname, "..");
+  const rotaLista = readFileSync(path.join(raiz, "src/app/api/g/[id]/lista/route.ts"), "utf8");
+  const entrega = readFileSync(path.join(raiz, "src/lib/entrega-da-galeria.ts"), "utf8");
+  const funcao = entrega.match(/export function nomeNaEntrega[^]*?\n\}/)?.[0] ?? "";
+  if (!/nomeNaEntrega\(/.test(rotaLista) || !/nomeComCapitulo\(/.test(funcao)) {
+    throw new Error("o lote do celular não monta o nome pela função compartilhada");
   }
   return "lote e foto avulsa";
 });

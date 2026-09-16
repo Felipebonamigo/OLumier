@@ -21,7 +21,7 @@ import {
   registrarAcesso,
 } from "@/lib/galerias-publicas";
 import { listarSecoes } from "@/lib/secoes";
-import { fatiarGaleria, TETO_DE_ESCOLHIDAS } from "@/config/fatia-galeria";
+import { fatiarGaleria, FOTOS_POR_TELA, TETO_DE_ESCOLHIDAS } from "@/config/fatia-galeria";
 import { sessaoAtual } from "@/lib/auth";
 import {
   GaleriaCliente,
@@ -38,6 +38,7 @@ import {
 } from "@/config/aparencia";
 import { FAMILIA_PROPRIA } from "@/lib/fonte-estudio";
 import { lerSite } from "@/lib/site-estudio";
+import { modoPeloUserAgent } from "@/lib/modo-de-entrega";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -57,6 +58,7 @@ type Props = {
    *   fotos  uma lista de ids — é como a busca por rosto entrega o resultado
    *          numa galeria fatiada, sem depender de a foto estar no capítulo
    *          que por acaso está carregado
+   *   parte  qual pedaço de um capítulo maior que a tela (16/09/2026)
    */
   searchParams: Promise<{
     previa?: string;
@@ -65,6 +67,7 @@ type Props = {
     capa?: string;
     cap?: string;
     fotos?: string;
+    parte?: string;
   }>;
 };
 
@@ -117,7 +120,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GaleriaPublicaPage({ params, searchParams }: Props) {
   const { estudio, galeria: galeriaSlug } = await params;
-  const { previa, amostra, ap, cap, fotos } = await searchParams;
+  const { previa, amostra, ap, cap, fotos, parte } = await searchParams;
 
   /*
    * PRÉVIA DO DONO.
@@ -286,8 +289,10 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         total: todasAsMedias.length,
         fatiada: true,
         restantes: 0,
+        parte: 1,
+        partes: 1,
       }
-    : fatiarGaleria(todasAsMedias, cap);
+    : fatiarGaleria(todasAsMedias, cap, FOTOS_POR_TELA, Number(parte) || 1);
 
   const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : fatia.itens;
 
@@ -354,7 +359,10 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
   // Palpite pelo user-agent só para a primeira pintura já sair com o botão certo;
   // no navegador, a detecção de recurso corrige se o palpite estiver errado.
-  const celularProvavel = /android|iphone|ipad|ipod/i.test(cabecalhos.get("user-agent") ?? "");
+  const modoProvavel = modoPeloUserAgent(cabecalhos.get("user-agent") ?? "");
+  /* O tamanho da galeria INTEIRA, dito no menu do celular antes do primeiro
+     toque: 2108 fotos são gigas, e quem está no 4G precisa saber antes. */
+  const bytesDaGaleria = todasAsMedias.reduce((soma, m) => soma + Number(m.bytes), 0);
 
   const dataEvento = galeria.data_evento
     ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", {
@@ -650,7 +658,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               galeriaId={galeria.id}
               aparencia={aparencia}
               capitulos={[]}
-              celularProvavel={celularProvavel}
+              modoProvavel={modoProvavel}
             />
           </>
         ) : itens.length === 0 ? (
@@ -671,9 +679,11 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             galeriaId={galeria.id}
             aparencia={aparencia}
             capitulos={capitulos}
-            celularProvavel={celularProvavel}
+            modoProvavel={modoProvavel}
             buscaPorRosto={buscaPorRosto}
-            fatia={fatiada ? { total: fatia.total, capituloAtivo: cap ?? null } : null}
+            bytesDaGaleria={bytesDaGaleria}
+            recorte={escolhidas.size > 0 && !amostrando}
+            fatia={fatiada ? { total: fatia.total, capituloAtivo: cap ?? null, parte: fatia.parte, partes: fatia.partes } : null}
           />
         )}
       </div>

@@ -235,6 +235,90 @@ await etapa("e não manda baixar pasta por pasta quem leva tudo num zip", async 
   return "um zip leva tudo";
 });
 
+/*
+ * ── NO CELULAR, O MESMO NÚMERO (16/09/2026) ───────────────────────────────
+ *
+ * Até aqui "Salvar as N fotos no celular" levava `itens` — a fatia. Numa
+ * galeria de 601 o botão dizia 600 e entregava 600, e o rodapé mandava salvar
+ * pasta por pasta. Agora a lista vem inteira do servidor, e o número do botão é
+ * o da galeria. O palpite pelo user-agent é o que desenha a primeira pintura,
+ * então dá para conferir pelo HTML.
+ */
+const menuComo = async (ua) => {
+  const html = await (
+    await fetch(`${BASE}/g/${grande.tslug}/${grande.gslug}`, {
+      cache: "no-store",
+      headers: { "user-agent": ua },
+    })
+  ).text();
+  const barra = html.match(/<nav[^>]*aria-label="Menu da galeria"[^]*?<\/nav>/)?.[0] ?? "";
+  return barra.match(/<details[^]*?<summary[^>]*>[^]*?Baixar[^]*?<\/details>/)?.[0] ?? "";
+};
+const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1";
+const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36";
+
+await etapa("no iPhone, “salvar” conta a galeria inteira", async () => {
+  const m = await menuComo(IPHONE);
+  const item = m.match(/Salvar as \d+ fotos no celular/)?.[0];
+  if (item !== `Salvar as ${FOTOS_POR_TELA + 1} fotos no celular`) {
+    throw new Error(`o item do iPhone diz "${item ?? "nada"}"`);
+  }
+  return item;
+});
+
+await etapa("no Android, BAIXAR — o menu do Android não salva na galeria", async () => {
+  const m = await menuComo(ANDROID);
+  const item = m.match(/Baixar as \d+ fotos no celular/)?.[0];
+  if (item !== `Baixar as ${FOTOS_POR_TELA + 1} fotos no celular`) {
+    throw new Error(`o item do Android diz "${item ?? "nada"}"`);
+  }
+  if (/Salvar as \d+ fotos/.test(m)) throw new Error("o Android ainda oferece o menu de compartilhar");
+  return item;
+});
+
+await etapa("no celular, a galeria inteira também pode ir para o computador", async () => {
+  const m = await menuComo(IPHONE);
+  if (!/Baixar tudo no computador/.test(m)) throw new Error("não há o item de mandar para o computador");
+  if (/pasta por pasta/.test(m)) throw new Error("o celular ainda manda salvar pasta por pasta");
+  return "Baixar tudo no computador";
+});
+
+/*
+ * ── AS FOTOS QUE A SELFIE ACHOU (revisão de 16/09/2026) ──────────────────
+ *
+ * Numa galeria fatiada a busca por rosto leva a `?fotos=<ids>`. Quando o
+ * "salvar tudo" do celular passou a pedir a galeria inteira ao servidor, o
+ * convidado perdeu o jeito de levar só as dele. O menu dessa tela oferece as
+ * encontradas antes de tudo.
+ */
+await etapa("na tela da busca por rosto, o menu oferece só as encontradas", async () => {
+  const { rows } = await db.query(
+    "select id from medias where galeria_id = $1 order by ordem limit 2",
+    [grande.id],
+  );
+  const consulta = `?fotos=${rows.map((r) => r.id).join(",")}`;
+  const pagina = async (ua) => {
+    const html = await (
+      await fetch(`${BASE}/g/${grande.tslug}/${grande.gslug}${consulta}`, {
+        cache: "no-store",
+        headers: { "user-agent": ua },
+      })
+    ).text();
+    return html.match(/<nav[^>]*aria-label="Menu da galeria"[^]*?<\/nav>/)?.[0] ?? "";
+  };
+  const iphone = await pagina(IPHONE);
+  if (!/Salvar estas 2 fotos no celular/.test(iphone)) {
+    throw new Error("o iPhone não oferece “Salvar estas 2 fotos”");
+  }
+  const pc = await pagina(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+  );
+  if (!/Baixar estas 2 fotos num zip/.test(pc)) {
+    throw new Error("o computador não oferece “Baixar estas 2 fotos num zip”");
+  }
+  return "celular e computador";
+});
+
 await etapa("e diz quantas a galeria tem de verdade", async () => {
   /* Sem o número real, "esta parte" é honesto e inútil: a pessoa não sabe se
      falta uma foto ou mil, nem que existe outro caminho para o resto. */

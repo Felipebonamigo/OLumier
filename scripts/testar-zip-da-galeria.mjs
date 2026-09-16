@@ -113,6 +113,64 @@ try {
     }
   }
 
+  console.log("\nPastas e capítulo\n");
+
+  /* Desde 16/09/2026 a escolha das fotos mora em `lib/entrega-da-galeria.ts`,
+     dividida com a lista do celular. Estas etapas prendem o que o zip fazia
+     antes da mudança: uma pasta por capítulo no zip inteiro, e o zip de UM
+     capítulo sem pasta nenhuma, com o nome do capítulo no arquivo. */
+  const { rows: caps } = await db.query(
+    `insert into secoes (galeria_id, nome, ordem)
+          values ($1, 'Cerimônia', 0), ($1, 'Festa', 1) returning id, nome`,
+    [g.id],
+  );
+  await db.query("update medias set secao_id = $1 where id = any($2::uuid[])", [
+    caps[0].id,
+    g.midias.slice(0, 2).map((m) => m.id),
+  ]);
+  await db.query("update medias set secao_id = $1 where id = $2", [caps[1].id, g.midias[2].id]);
+
+  {
+    const r = await fetch(url, { cache: "no-store" });
+    const { dir, destino, codigo, msg } = extrair(Buffer.from(await r.arrayBuffer()));
+    try {
+      if (codigo !== 0) {
+        erro(`o zip com capítulos não abriu: ${msg.split("\n")[0]}`);
+      } else {
+        const esperados = [
+          ["Cerimônia", g.midias[0].nome_original],
+          ["Cerimônia", g.midias[1].nome_original],
+          ["Festa", g.midias[2].nome_original],
+        ];
+        const faltando = esperados.filter(([p, n]) => !existsSync(path.join(destino, p, n)));
+        if (faltando.length === 0) ok("o zip inteiro separa uma pasta por capítulo");
+        else erro(`fora da pasta do capítulo: ${faltando.map((x) => x.join("/")).join(", ")}`);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  {
+    const r = await fetch(`${url}?cap=${caps[1].id}`, { cache: "no-store" });
+    const disposicao = decodeURIComponent(r.headers.get("content-disposition") ?? "");
+    const { dir, destino, codigo } = extrair(Buffer.from(await r.arrayBuffer()));
+    try {
+      const soAFesta =
+        codigo === 0 &&
+        existsSync(path.join(destino, g.midias[2].nome_original)) &&
+        !existsSync(path.join(destino, g.midias[0].nome_original));
+      if (soAFesta) ok("o zip de um capítulo traz só ele, sem pasta a mais");
+      else erro("o zip do capítulo Festa não trouxe só a Festa, solta na raiz");
+      if (/Festa\.zip/.test(disposicao)) ok("e o arquivo diz de que capítulo é", disposicao.match(/[^']*\.zip/)?.[0]);
+      else erro(`o nome do zip não diz o capítulo: ${disposicao}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+  await db.query("update medias set secao_id = null where galeria_id = $1", [g.id]);
+  await db.query("delete from secoes where galeria_id = $1", [g.id]);
+
   console.log("\nAs travas de qualquer download\n");
 
   /* Download desligado pelo fotógrafo: o zip é download, e a regra é a mesma. */

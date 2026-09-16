@@ -1,19 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
   entregarTudo,
   entregouUmaFoto,
   baixarNoComputador,
-  deveOferecerSalvar,
+  modoDeEntrega,
   salvarNoCelular,
-  prepararLote,
   acaoDeEntrega,
   compartilharPreparado,
+  buscarFoto,
+  chaveDoProgresso,
+  lerProgresso,
+  gravadorDeProgresso,
+  apagarProgresso,
+  travaDeTela,
+  recadoDoFim,
+  escopoDasFavoritas,
+  enviarParaOComputador,
+  partesPrevistas,
+  tamanhoLegivel,
+  type FotoParaEntregar,
+  type ProgressoDaEntrega,
 } from "@/lib/salvar-client";
+import type { ModoDeEntrega } from "@/lib/modo-de-entrega";
+import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
@@ -66,6 +80,9 @@ export interface CapituloGaleria {
  * imediato do ícone; a de cima, larga e fraca, escurece um halo maior para o
  * caso da foto estourada de sol. Uma sozinha falha num dos dois extremos.
  */
+/** Link assinado mais velho que isto é pedido de novo — a rota assina por 6 h. */
+const VALE_NO_CACHE = 4 * 3600 * 1000;
+
 const GLIFO_SOBRE_FOTO = "drop-shadow(0 1px 1.5px rgba(0,0,0,.85)) drop-shadow(0 0 6px rgba(0,0,0,.45))";
 
 export function GaleriaCliente({
@@ -74,11 +91,13 @@ export function GaleriaCliente({
   galeriaId,
   aparencia,
   capitulos,
-  celularProvavel,
+  modoProvavel,
+  bytesDaGaleria = 0,
   favoritasIniciais,
   selecaoInicial,
   buscaPorRosto = null,
   fatia = null,
+  recorte = false,
   eu: euInicial = null,
 }: {
   itens: ItemGaleria[];
@@ -87,7 +106,9 @@ export function GaleriaCliente({
   aparencia: Aparencia;
   capitulos: CapituloGaleria[];
   /** Palpite do servidor pelo user-agent, só para a primeira pintura não piscar. */
-  celularProvavel: boolean;
+  modoProvavel: ModoDeEntrega;
+  /** Soma dos originais da galeria INTEIRA — dita antes de salvar no celular. */
+  bytesDaGaleria?: number;
   /**
    * A busca por rosto, quando o fotógrafo ligou. Null = o botão não existe.
    * O contato é do estúdio: é com ele que o convidado fala sobre as fotos.
@@ -98,7 +119,13 @@ export function GaleriaCliente({
    * `config/fatia-galeria.ts`. `null` quer dizer "veio inteira", e é o caso
    * de quase toda galeria: nada muda de comportamento.
    */
-  fatia?: { total: number; capituloAtivo: string | null } | null;
+  fatia?: { total: number; capituloAtivo: string | null; parte: number; partes: number } | null;
+  /**
+   * A tela é um recorte por `?fotos=` — o resultado da busca por rosto numa
+   * galeria fatiada. Aí `itens` são exatamente as fotos achadas, e o menu de
+   * baixar as oferece antes da galeria inteira.
+   */
+  recorte?: boolean;
   /** Quem se identificou por e-mail nesta galeria. Null = ninguém ainda. */
   eu?: { email: string; nome: string | null } | null;
   /**
@@ -120,32 +147,46 @@ export function GaleriaCliente({
      o que mudou, e é o caminho que o próprio framework pede. */
   const router = useRouter();
   const caminho = usePathname();
+  /* A consulta atual, para os links de parte não perderem o `?previa=1` do dono. */
+  const busca = useSearchParams();
 
   const [aberto, setAberto] = useState<number | null>(null);
-  const [baixandoTudo, setBaixandoTudo] = useState(false);
-  const [progressoLote, setProgressoLote] = useState(0);
   /*
-   * O SEGUNDO TOQUE.
+   * A ENTREGA EM CURSO NO CELULAR (16/09/2026).
    *
-   * `null` quando não há nada esperando. Com valor, a tela desenha um botão e
-   * a entrega fica parada até a pessoa tocar nele — porque é DENTRO desse
-   * toque que `share()` pode ser chamado. Ver `lib/salvar-client.ts`.
+   * `null` quando nada está saindo. Com valor, um painel fixo na base da tela
+   * mostra o progresso — e, no iPhone, o botão do toque de cada lote, que é
+   * DENTRO do qual `share()` pode ser chamado (ver `lib/salvar-client.ts`).
+   *
+   * O botão morava logo abaixo da barra de menus. Com a página rolada ele ficava
+   * fora da tela, e a entrega parecia travada esperando um toque que a pessoa
+   * não via.
    */
-  const [aguardandoToque, setAguardandoToque] = useState<{
-    quantas: number;
-    seguir: () => void;
+  const [entrega, setEntrega] = useState<{
+    rotulo: string;
+    progresso: ProgressoDaEntrega;
+    bytes: number;
+    jaTinham: number;
+    suaVez: { seguir: () => void; parar: () => void } | null;
+    /* Um AbortController por entrega, guardado com ela: uma entrega nova não
+       herda o pedido de parada da anterior. */
+    parar: () => void;
+    /* Apaga o progresso guardado e para — ver `recomecar` em iniciarEntrega. */
+    recomecar: () => void;
   } | null>(null);
+  /* O recado de quando a entrega termina: onde as fotos foram parar. Fica até a
+     pessoa fechar — some sozinho só o que não exige ação. */
+  const [fimDaEntrega, setFimDaEntrega] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   /* O servidor chuta pelo user-agent para a primeira pintura já sair certa; ao
-     montar, a detecção de recurso (canShare) corrige o palpite. Sem o chute, o
-     celular mostraria "Baixar" por um instante antes de virar "Salvar". */
-  const [modoSalvar, setModoSalvar] = useState(celularProvavel);
+     montar, a detecção de recurso corrige o palpite. */
+  const [modo, setModo] = useState<ModoDeEntrega>(modoProvavel);
   /* eslint-disable-next-line react-hooks/set-state-in-effect --
      A cascata é o objetivo, não efeito colateral: a detecção depende de API do
      navegador que não existe no servidor. Sem o palpite do user-agent na
      primeira pintura, o botão sairia errado por um instante; sem a correção ao
      montar, o palpite errado ficaria. Uma renderização extra, uma vez, ao abrir. */
-  useEffect(() => setModoSalvar(deveOferecerSalvar()), []);
+  useEffect(() => setModo(modoDeEntrega()), []);
 
   const [favoritas, setFavoritas] = useState<Set<string>>(() => new Set(favoritasIniciais));
   const [soFavoritas, setSoFavoritas] = useState(false);
@@ -242,6 +283,21 @@ export function GaleriaCliente({
     baixarNoComputador(`/api/g/${galeriaId}/zip${consulta}`, "galeria.zip");
   }
 
+  /**
+   * "Baixar tudo no computador", tocado no celular: manda o link da galeria —
+   * sem o `?cap=` nem nada da tela — para a própria pessoa abrir lá.
+   */
+  async function mandarParaOComputador() {
+    const r = await enviarParaOComputador(
+      `${window.location.origin}${window.location.pathname}`,
+      document.title,
+    );
+    if (r === "copiou") setFimDaEntrega("link copiado — abra no computador e clique em ↓ Baixar");
+    if (r === "falhou") {
+      setFimDaEntrega("não consegui abrir o compartilhar — copie o endereço desta página e abra no computador");
+    }
+  }
+
   /*
    * URLs assinadas SOB DEMANDA (03/09/2026).
    *
@@ -255,11 +311,23 @@ export function GaleriaCliente({
   const cacheOriginal = useRef(new Map<string, string>());
   const [previews, setPreviews] = useState<Map<string, string>>(() => new Map());
 
+  /*
+   * Quando cada link foi assinado. A rota assina por 6 h, e uma entrega de 2108
+   * fotos pelo iPhone — ou uma aba esquecida aberta desde a manhã — passa disso:
+   * link vencido é foto que não vem. Acima de 4 h, pede de novo.
+   */
+  const assinadoEm = useRef(new Map<string, number>());
+
   const assinar = useCallback(
     async (ids: string[], tipo: "preview" | "download"): Promise<Map<string, string>> => {
       const cache = tipo === "preview" ? cachePreview.current : cacheOriginal.current;
+      const agora = Date.now();
       // Foto de demonstração não existe no banco; pedir por ela seria 400.
-      const faltam = ids.filter((id) => !cache.has(id) && !id.startsWith("demo:"));
+      const faltam = ids.filter(
+        (id) =>
+          !id.startsWith("demo:") &&
+          (!cache.has(id) || agora - (assinadoEm.current.get(`${tipo}:${id}`) ?? 0) > VALE_NO_CACHE),
+      );
       if (faltam.length > 0) {
         const r = await fetch(`/api/g/${galeriaId}/urls`, {
           method: "POST",
@@ -268,7 +336,10 @@ export function GaleriaCliente({
         });
         if (!r.ok) throw new Error(String(r.status));
         const { urls } = (await r.json()) as { urls: Record<string, string> };
-        for (const [id, url] of Object.entries(urls)) cache.set(id, url);
+        for (const [id, url] of Object.entries(urls)) {
+          cache.set(id, url);
+          assinadoEm.current.set(`${tipo}:${id}`, agora);
+        }
         if (tipo === "preview") setPreviews(new Map(cache));
       }
       return cache;
@@ -561,9 +632,16 @@ export function GaleriaCliente({
       return;
     }
 
-    if (!modoSalvar) {
+    /* Computador e Android: download direto. No Android o menu de compartilhar
+       não tem "salvar na galeria" — a foto baixada cai na pasta Download, que
+       a Galeria mostra. Ver `lib/modo-de-entrega.ts`. */
+    if (modo !== "menu") {
       registrar("baixou", it.id);
       baixarNoComputador(url, nomeDeArquivo(it));
+      if (modo === "download") {
+        setAviso("baixada — está na pasta Download");
+        setTimeout(() => setAviso(null), 2500);
+      }
       return;
     }
     setAviso("preparando…");
@@ -593,149 +671,191 @@ export function GaleriaCliente({
   }
 
   /**
-   * Um lote de fotos: a galeria inteira, ou UMA PASTA dela.
+   * Salvar VÁRIAS fotos no celular: a galeria, uma pasta ou as favoritas.
    *
-   * No celular, vai em lotes pelo menu nativo: a memória não aguenta 600 fotos
-   * de uma vez, e cada lote termina nas Fotos em vez do app Arquivos.
-   * No computador, dispara os downloads em sequência.
+   * ── A LISTA VEM INTEIRA DO SERVIDOR (16/09/2026) ─────────────────────────
    *
-   * Não geramos ZIP no servidor de propósito: empacotar exigiria puxar a galeria
-   * inteira para o nosso servidor antes — lento para o casal e caro para nós.
-   * É também por isso que "separado em pastas" (pedido do Juan em 10/09) não é
-   * um zip por capítulo: é o mesmo caminho, com a lista menor.
+   * Até aqui a entrega saía de `itens` — o que estava na tela. Numa galeria
+   * fatiada isso é um pedaço: "Salvar as 600" numa galeria de 2108, a pasta de
+   * 800 entregando 600, as favoritas de outros capítulos exigindo navegar
+   * antes. Agora quem diz o que vai é `api/g/[id]/lista`, com as mesmas regras
+   * do zip do computador (`lib/entrega-da-galeria.ts`).
+   *
+   * No computador nada disto roda: lá é o zip. Ver `baixarZip`.
+   *
+   * ── O REGISTRO VEM DEPOIS ────────────────────────────────────────────────
+   *
+   * O Juan tentou baixar tudo no celular em 05/09/2026, não veio nada, e a aba
+   * Atividade marcou 1 download: o registro contava o CLIQUE. Toda a
+   * orquestração mora em `entregarTudo`, que devolve o desfecho — e só depois
+   * dele se registra.
    */
-  async function salvarLoteDeFotos(fotos: ItemGaleria[]) {
-    setBaixandoTudo(true);
-    setProgressoLote(0);
+  async function iniciarEntrega(pedido: { escopo: string; consulta: string; rotulo: string }) {
+    if (entrega || modo === "computador") return;
+    /* Um AbortController por entrega. O motivo diz o que a pessoa pediu: parar
+       (e continuar depois) ou recomeçar do zero. */
+    const parada = new AbortController();
+    setFimDaEntrega(null);
+    const inicio: ProgressoDaEntrega = {
+      feitas: 0,
+      total: 0,
+      parte: 0,
+      partes: 0,
+      fase: "preparando",
+      preparadas: 0,
+      doLote: 0,
+    };
+    setEntrega({
+      rotulo: pedido.rotulo,
+      progresso: inicio,
+      bytes: 0,
+      jaTinham: 0,
+      suaVez: null,
+      parar: () => parada.abort("parar"),
+      recomecar: () => parada.abort("recomecar"),
+    });
 
-    /*
-     * Os links da galeria inteira, numa chamada só. Seiscentas URLs assinadas
-     * são uns 400 KB de JSON — que só quem clicou em "baixar tudo" paga, em
-     * vez de todo visitante pagar no HTML.
-     */
-    let cache: Map<string, string>;
+    let fotos: FotoParaEntregar[];
     try {
-      cache = await assinar(
-        fotos.map((it) => it.id),
-        "download",
-      );
+      const r = await fetch(`/api/g/${galeriaId}/lista${pedido.consulta}`, { cache: "no-store" });
+      if (r.status === 428) {
+        setEntrega(null);
+        setFimDaEntrega("diga o seu e-mail marcando uma foto — as favoritas são de quem escolheu");
+        return;
+      }
+      if (!r.ok) throw new Error(String(r.status));
+      fotos = ((await r.json()) as { fotos: FotoParaEntregar[] }).fotos;
     } catch {
-      setAviso("não consegui preparar os downloads. Confira sua conexão e tente de novo.");
-      setTimeout(() => setAviso(null), 4000);
-      setBaixandoTudo(false);
+      setEntrega(null);
+      setFimDaEntrega("não consegui preparar as fotos. Confira sua conexão e tente de novo.");
+      return;
+    }
+    if (fotos.length === 0) {
+      setEntrega(null);
+      setFimDaEntrega("não há fotos para salvar aqui.");
       return;
     }
 
-    // Só o que tem link de verdade. Numa galeria bloqueada a rota não entrega
-    // nada, a lista fica vazia e o laço não roda — nada a baixar, nenhuma exceção.
-    const baixaveis = fotos
-      .map((it) => ({ url: cache.get(it.id), nome: nomeDeArquivo(it), bytes: it.bytes }))
-      .filter((x): x is { url: string; nome: string; bytes: number } => Boolean(x.url));
-    if (baixaveis.length === 0) {
-      setBaixandoTudo(false);
-      return;
-    }
-
-    /*
-     * O REGISTRO VEM DEPOIS, e não aqui.
-     *
-     * Ficava exatamente neste ponto — logo após assinar as URLs — e por isso
-     * contava o CLIQUE. O Juan tentou baixar tudo no celular em 05/09/2026,
-     * não veio nada, e a aba Atividade marcou 1 download. A Atividade é prova
-     * de entrega para o fotógrafo; número que sobe sem entrega é prova falsa,
-     * e ela aparece justamente na conversa em que o cliente diz que não
-     * recebeu.
-     *
-     * Toda a orquestração mora em `entregarTudo` (lib/salvar-client.ts), que é
-     * pura e devolve o desfecho — é o que permite `testar-salvar-mobile.mjs`
-     * perguntar "e se a pessoa fechar o menu?" sem um celular na mão.
-     */
+    /* Continuar de onde parou: o progresso é deste aparelho, por pedido. Só
+       conta o que ainda está na lista — foto que o fotógrafo tirou da galeria
+       não pode inflar o "já tinham ido". */
+    let armazem: Storage | null = null;
     try {
-      const desfecho = await entregarTudo(baixaveis, {
-        peloMenu: modoSalvar,
+      armazem = window.localStorage;
+    } catch {
+      armazem = null;
+    }
+    const chave = chaveDoProgresso(galeriaId, pedido.escopo);
+    const naLista = new Set(fotos.map((f) => f.id));
+    const jaEntregues = new Set([...lerProgresso(armazem, chave)].filter((id) => naLista.has(id)));
+    const progressoGuardado = gravadorDeProgresso(armazem, chave, jaEntregues);
+
+    const bytes = fotos.reduce((s, f) => s + f.bytes, 0);
+    const pendentes = fotos.filter((f) => !jaEntregues.has(f.id));
+    setEntrega(
+      (e) =>
+        e && {
+          ...e,
+          bytes,
+          jaTinham: jaEntregues.size,
+          progresso: {
+            ...e.progresso,
+            total: fotos.length,
+            feitas: jaEntregues.size,
+            parte: 1,
+            partes: modo === "menu" ? Math.max(1, partesPrevistas(pendentes)) : 1,
+          },
+        },
+    );
+
+    const tela = travaDeTela();
+    await tela.ligar();
+    try {
+      const desfecho = await entregarTudo(fotos, {
+        modo,
+        assinar: (ids) => assinar(ids, "download"),
+        buscar: buscarFoto,
         /*
-         * PREPARAR, PEDIR O TOQUE, COMPARTILHAR — nesta ordem, e é a correção
-         * de 10/09/2026.
+         * PREPARAR, PEDIR O TOQUE, COMPARTILHAR — nesta ordem (10/09/2026).
          *
-         * `salvarNoCelular` fazia as três coisas de uma vez, e o Safari
-         * recusava o menu porque a busca das fotos passava da janela do gesto.
-         * O resultado era cair no download um a um: um diálogo de confirmação
-         * por foto, que o Juan teve de clicar doze vezes.
-         *
-         * Aqui a parte lenta acontece primeiro e a tela mostra um botão. O
+         * O Safari recusa o menu quando a busca das fotos passa da janela do
+         * gesto. A parte lenta acontece primeiro e o painel mostra um botão; o
          * toque nele é um gesto NOVO, e os arquivos já estão na memória.
+         *
+         * Esperando o toque, nada está saindo: a tela pode apagar.
          */
-        salvarLote: async (lote) => {
-          const prontos = await prepararLote(lote, setProgressoLote);
-          if (!prontos) return "sem-acesso";
-          await new Promise<void>((seguir) =>
-            setAguardandoToque({ quantas: prontos.length, seguir }),
+        pedirToque: (p) => {
+          void tela.desligar();
+          return new Promise((responder) =>
+            setEntrega(
+              (e) =>
+                e && {
+                  ...e,
+                  progresso: p,
+                  suaVez: {
+                    seguir: () => {
+                      setEntrega((x) => x && { ...x, suaVez: null });
+                      responder("seguir");
+                    },
+                    parar: () => responder("parar"),
+                  },
+                },
+            ),
           );
-          setAguardandoToque(null);
-          return compartilharPreparado(prontos);
+        },
+        /* `share()` é chamado aqui dentro ANTES de qualquer espera — a trava da
+           tela volta depois, sem roubar a janela do toque. */
+        compartilhar: (arquivos) => {
+          const resultado = compartilharPreparado(arquivos);
+          void tela.ligar();
+          return resultado;
         },
         baixar: baixarNoComputador,
         esperar: (ms) => new Promise((r) => setTimeout(r, ms)),
-        aoProgredir: setProgressoLote,
+        aoProgredir: (p) => setEntrega((e) => e && { ...e, progresso: p }),
+        aoEntregar: (ids) => progressoGuardado.marcar(ids),
+        jaEntregues,
+        sinal: parada.signal,
       });
 
       /*
-       * Baixar uma pasta não é baixar tudo — ver `acaoDeEntrega`.
-       *
-       * E o total é o da GALERIA, não o de `itens` (11/09/2026). Desde o corte
-       * por fatia, `itens` é só o pedaço que coube na tela: na galeria de 2.108
-       * fotos da Carol são 600, e comparar 600 com 600 registrava BAIXOU TUDO —
-       * a Atividade jurando ao fotógrafo que o casal levou o casamento inteiro,
-       * tendo levado 28%. Mesma prova falsa de 05/09, por outra porta.
+       * Baixar uma pasta não é baixar tudo — ver `acaoDeEntrega`. E o total é o
+       * da GALERIA, não o de `itens` (11/09/2026): numa galeria fatiada `itens`
+       * é o pedaço na tela, e 600 de 600 virava BAIXOU TUDO. Entrega parada no
+       * meio também não é "tudo", mesmo que o pedido fosse.
        */
-      if (desfecho.entregues > 0) registrar(acaoDeEntrega(fotos.length, totalDaGaleria));
+      if (desfecho.entregues > 0) {
+        registrar(desfecho.completo ? acaoDeEntrega(fotos.length, totalDaGaleria) : "baixou");
+      }
 
-      /* Cancelar é escolha da pessoa e não vira mensagem. O resto vira: quem
-         batia em CORS via o contador chegar ao fim e nada acontecer, sem uma
-         palavra — era o "não deu" dito em silêncio. */
-      const aviso = desfecho.cancelado
-        ? null
-        : (desfecho.aviso ??
-          (desfecho.entregues === 0 ? "não consegui salvar. Tente em partes." : null));
-      if (aviso) {
-        setAviso(aviso);
-        setTimeout(() => setAviso(null), 4000);
+      if (parada.signal.reason === "recomecar") {
+        /* "Recomeçar do zero": quem escolheu "Salvar em Arquivos" no menu por
+           engano não pode ficar com aquelas fotos puladas por uma semana. */
+        apagarProgresso(armazem, chave);
+        setFimDaEntrega("pronto para começar do zero — toque em salvar de novo");
+      } else {
+        if (desfecho.completo) apagarProgresso(armazem, chave);
+        else progressoGuardado.gravar();
+        setFimDaEntrega(recadoDoFim(desfecho, modo));
       }
     } catch {
-      setAviso("não consegui salvar tudo. Tente em partes.");
-      setTimeout(() => setAviso(null), 4000);
+      progressoGuardado.gravar();
+      setFimDaEntrega("não consegui salvar tudo. Toque em salvar de novo para continuar de onde parou.");
     } finally {
-      setBaixandoTudo(false);
+      await tela.desligar();
+      setEntrega(null);
     }
   }
 
   /*
    * AS PASTAS DO MENU DE BAIXAR (10/09/2026): "todas de uma única vez ou
-   * separado em pastas", nas palavras do Juan.
+   * separado em pastas", nas palavras do Juan. As pastas são os CAPÍTULOS.
+   * Com UM capítulo apenas não há o que escolher.
    *
-   * As pastas já existiam — são os CAPÍTULOS, que o envio por pasta do
-   * Lightroom cria sozinho. Faltava poder baixar um só.
-   *
-   * Com UM capítulo apenas não há o que escolher: baixar a pasta é baixar a
-   * galeria, e o item repetiria o de cima com outro nome.
-   *
-   * Cada pasta leva a lista CHEIA do capítulo, e não a filtrada: este menu fala
-   * da galeria como o fotógrafo a organizou, e o número no rótulo é exatamente
-   * o que vai vir. Quem está com o filtro das favoritas ligado lê "Cerimônia
-   * (42)" e recebe 42.
-   */
-  /*
-   * ── A PASTA QUE NÃO ESTÁ NESTA FATIA (11/09/2026) ───────────────────────
-   *
-   * Numa galeria fatiada, `capitulos` traz também os que não vieram — o menu
-   * precisa deles para navegar. Mapear a lista inteira usando `indices.length`
-   * como contagem punha seis entradas "(0)" no menu de baixar, com nome certo
-   * e nada por trás: o convidado toca a pasta "Festa" e não acontece nada.
-   *
-   * Agora a contagem é a da GALERIA (`total`), que é o que vai vir, e a ação
-   * depende de a pasta estar carregada: se está, baixa; se não, leva até ela,
-   * e de lá o "baixar esta parte" entrega o capítulo inteiro. Dois toques, e
-   * os dois fazem o que dizem.
+   * A contagem é a da GALERIA (`total`), e a entrega é a pasta INTEIRA, esteja
+   * ela nesta fatia ou não: no computador num zip, no celular pela lista que
+   * vem do servidor. Até 16/09/2026 o celular entregava a parte carregada — uma
+   * pasta de 800 fotos virava 600.
    */
   const pastasParaBaixar =
     capitulos.length > 1
@@ -744,16 +864,66 @@ export function GaleriaCliente({
           nome: c.nome,
           quantas: c.total,
           baixar: () =>
-            /* No computador, o capítulo vem num zip montado no servidor — e aí
-               tanto faz se ele está nesta fatia: o servidor tem a galeria
-               inteira. No celular continua o menu do sistema (rolo da câmera). */
-            !modoSalvar
+            modo === "computador"
               ? baixarZip(`?cap=${encodeURIComponent(c.id)}`)
-              : c.indices.length > 0
-                ? salvarLoteDeFotos(c.indices.map((i) => itens[i]))
-                : router.push(`${caminho}?cap=${encodeURIComponent(c.id)}`),
+              : iniciarEntrega({
+                  escopo: `cap:${c.id}`,
+                  consulta: `?cap=${encodeURIComponent(c.id)}`,
+                  rotulo: c.nome || "Pasta",
+                }),
         }))
       : [];
+
+  /*
+   * ── AS PARTES DE UMA PASTA MAIOR QUE A TELA (16/09/2026) ─────────────────
+   *
+   * O corte por fatia serve no máximo `FOTOS_POR_TELA` fotos por documento, e
+   * o teto vale dentro do capítulo. Até hoje nada levava ao resto: numa pasta
+   * "Festa" de 800 fotos, da 601ª em diante não havia tela onde aparecessem —
+   * e numa galeria de 2000 fotos sem capítulo, 1400 sumiam. Links de verdade,
+   * como as pastilhas de capítulo: cada parte é outro documento, pequeno.
+   *
+   * Em cima E embaixo da grade: quem chega ao fim das 600 procura a
+   * continuação ali, e quem entra quer saber de cara que a pasta tem partes.
+   */
+  const partesDaPasta =
+    fatia && fatia.partes > 1 ? (
+      <nav
+        aria-label={fatia.capituloAtivo ? "Partes desta pasta" : "Partes da galeria"}
+        className="my-8 flex flex-wrap items-center justify-center gap-2 text-sm"
+      >
+        <span style={{ color: "var(--g-tenue)" }}>
+          parte {fatia.parte} de {fatia.partes}
+        </span>
+        {Array.from({ length: fatia.partes }, (_, k) => k + 1).map((n) => (
+          <a
+            key={n}
+            href={enderecoNaGaleria(busca.toString(), { cap: fatia.capituloAtivo, parte: n })}
+            aria-current={n === fatia.parte ? "page" : undefined}
+            className="grid h-9 min-w-9 place-items-center rounded-full px-3 transition hover:opacity-70"
+            style={{
+              border: "1px solid var(--g-linha)",
+              color: n === fatia.parte ? "var(--g-texto)" : "var(--g-suave)",
+              background: n === fatia.parte ? "var(--g-superficie)" : undefined,
+            }}
+          >
+            {n}
+          </a>
+        ))}
+        {fatia.parte < fatia.partes && (
+          <a
+            href={enderecoNaGaleria(busca.toString(), {
+              cap: fatia.capituloAtivo,
+              parte: fatia.parte + 1,
+            })}
+            className="underline underline-offset-4 transition hover:opacity-70"
+            style={{ color: "var(--g-texto)" }}
+          >
+            próxima parte ›
+          </a>
+        )}
+      </nav>
+    ) : null;
 
   // Arrastar para o lado troca de foto — o gesto que todo app de fotos tem.
   const swipe = useSwipe(proximo, anterior);
@@ -790,10 +960,11 @@ export function GaleriaCliente({
         certo no rótulo e as fotos erradas no telefone, a mesma mentira que a
         busca por rosto quase virou em 11/09.
 
-        A saída é a mesma de lá: os ids vão no endereço e a página volta com
-        exatamente elas. Como o `?fotos=` já desenha só as escolhidas, o botão
-        de baixar tudo daquela tela JÁ é "baixar as favoritas" — por isso aqui
-        a ação é navegar, não montar lote.
+        Desde 16/09/2026 "baixar as favoritas" não depende mais da tela: o zip
+        e a lista do celular vêm do servidor, com as favoritas de quem está
+        escolhendo, de todos os capítulos. O `?fotos=` continua sendo a tela
+        da busca por rosto, e ali o menu oferece "estas N fotos" — ver
+        `recorte`.
       */}
       <MenusDaGaleria
         capitulos={capitulos}
@@ -829,31 +1000,53 @@ export function GaleriaCliente({
         baixar={
           permiteDownload && itens.length > 0
             ? {
-                quantas: itens.length,
-                modoSalvar,
-                baixando: baixandoTudo,
-                progresso: progressoLote,
-                /* No computador, a galeria INTEIRA num zip — não a fatia desta
-                   tela. O servidor monta com todas as fotos, então numa galeria
-                   de 2108 "baixar tudo" finalmente é o casamento todo. */
-                baixarTudo: () => (modoSalvar ? salvarLoteDeFotos(itens) : baixarZip("")),
-                /* No celular o padrão continua sendo o menu do sistema, porque
-                   ele grava no ROLO DA CÂMERA. O zip fica como alternativa para
-                   quem quer um arquivo só — e ele cai no app Arquivos. */
-                baixarZip: modoSalvar ? () => baixarZip("") : undefined,
+                modo,
                 quantasNaGaleria: totalDaGaleria,
+                /* As que a selfie achou, na tela `?fotos=`. Sem este item, "tudo"
+                   era a única entrega em lote — 2108 fotos para quem aparece
+                   em 37. */
+                recorte:
+                  recorte && itens.length > 0
+                    ? {
+                        quantas: itens.length,
+                        baixar: () => {
+                          const consulta = `?fotos=${itens.map((it) => it.id).join(",")}`;
+                          if (modo === "computador") return baixarZip(consulta);
+                          void iniciarEntrega({
+                            escopo: `fotos:${itens.length}:${itens[0].id}`,
+                            consulta,
+                            rotulo: "Suas fotos",
+                          });
+                        },
+                      }
+                    : null,
+                bytesDaGaleria,
+                progresso: entrega
+                  ? { feitas: entrega.progresso.feitas, total: entrega.progresso.total }
+                  : null,
+                /* A galeria INTEIRA, não a fatia desta tela: no computador num
+                   zip montado no servidor, no celular pela lista que vem dele. */
+                baixarTudo: () =>
+                  modo === "computador"
+                    ? baixarZip("")
+                    : iniciarEntrega({ escopo: "tudo", consulta: "", rotulo: "Galeria" }),
+                /* No celular o zip é opção a mais: ele não cai no app Fotos nem
+                   na Galeria, que é onde a noiva procura. */
+                baixarZip: modo !== "computador" ? () => baixarZip("") : undefined,
+                enviarParaOComputador:
+                  modo !== "computador" ? () => void mandarParaOComputador() : undefined,
                 pastas: pastasParaBaixar,
                 favoritas: favoritas.size,
-                baixarFavoritas: () => {
-                  if (!modoSalvar) return baixarZip("?favoritas=1");
-                  const escolhidas = itens.filter((it) => favoritas.has(it.id));
-                  /* Todas as favoritas estão nesta tela: entrega direta. */
-                  if (!fatia || escolhidas.length === favoritas.size) {
-                    return salvarLoteDeFotos(escolhidas);
-                  }
-                  /* Faltam favoritas de outros capítulos: busca todas primeiro. */
-                  router.push(`${caminho}?fotos=${[...favoritas].join(",")}`);
-                },
+                /* As favoritas de QUEM ESTÁ ESCOLHENDO, de todos os capítulos —
+                   a lista vem do servidor, não do que está nesta tela. */
+                baixarFavoritas: () =>
+                  modo === "computador"
+                    ? baixarZip("?favoritas=1")
+                    : iniciarEntrega({
+                        escopo: escopoDasFavoritas(eu?.email ?? ""),
+                        consulta: "?favoritas=1",
+                        rotulo: "Favoritas",
+                      }),
               }
             : null
         }
@@ -886,42 +1079,73 @@ export function GaleriaCliente({
         </p>
       )}
 
-      {permiteDownload && itens.length > 0 && (aguardandoToque || aviso) && (
+      {permiteDownload && itens.length > 0 && aviso && (
         <div className="mt-4 flex flex-col items-center gap-2">
-          {/*
-            O BOTÃO DO SEGUNDO TOQUE.
-
-            Aparece quando as fotos já estão na memória e só falta abrir o menu
-            do celular. Existe porque o Safari exige que `share()` seja chamado
-            de dentro de um gesto, e a busca das fotos passa dessa janela — sem
-            este toque, a entrega caía no download um a um, com um diálogo de
-            confirmação por foto (doze toques, no caso do Juan).
-
-            Fica ACIMA do texto de ajuda e com a cor de ação: é o único lugar da
-            tela que importa enquanto ele está lá, e a pessoa acabou de ver um
-            contador andando — ela precisa entender na hora que a vez é dela.
-          */}
-          {aguardandoToque && (
-            <button
-              type="button"
-              onClick={aguardandoToque.seguir}
-              className="rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85"
-              style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
-            >
-              Salvar {aguardandoToque.quantas}{" "}
-              {aguardandoToque.quantas === 1 ? "foto" : "fotos"} no celular
-            </button>
-          )}
-
           {/* Só o RECADO da vez. A ajuda permanente ("sem limite de
-              downloads…") virou o rodapé do menu de baixar: dita ali, ela chega
-              no momento em que a pessoa escolhe como baixar, e não como uma
-              linha cinza fixa embaixo de uma barra. */}
-          {aviso && (
-            <span className="text-center text-xs" style={{ color: "var(--g-tenue)" }}>
-              {aviso}
-            </span>
-          )}
+              downloads…") mora no rodapé do menu de baixar. */}
+          <span className="text-center text-xs" style={{ color: "var(--g-tenue)" }}>
+            {aviso}
+          </span>
+        </div>
+      )}
+
+      {/*
+        ── O PAINEL DA ENTREGA, FIXO NA BASE DA TELA (16/09/2026) ─────────────
+
+        Tudo o que a pessoa precisa enquanto as fotos saem, num lugar que não
+        some quando a página rola:
+
+          · quantas já foram, de quantas, e em que parte — acumulado. O
+            contador antigo voltava a zero a cada lote, e 53 lotes pareciam
+            53 recomeços;
+          · o tamanho, antes do primeiro toque: 2108 fotos são gigas;
+          · no iPhone, o botão do toque de cada lote. Ele morava embaixo da
+            barra de menus e ficava fora da tela com a página rolada — a
+            entrega parecia travada esperando um toque que ninguém via;
+          · parar, e o recado final dizendo ONDE as fotos foram parar.
+      */}
+      {(entrega || fimDaEntrega) && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+        >
+          <div
+            className="mx-auto max-w-md rounded-2xl p-4 shadow-2xl"
+            style={{
+              background: "var(--g-fundo)",
+              border: "1px solid var(--g-linha)",
+              color: "var(--g-texto)",
+            }}
+          >
+            {entrega ? (
+              <PainelDaEntrega
+                entrega={entrega}
+                modo={modo}
+                aoParar={() => {
+                  entrega.parar();
+                  entrega.suaVez?.parar();
+                }}
+                aoRecomecar={() => {
+                  entrega.recomecar();
+                  entrega.suaVez?.parar();
+                }}
+              />
+            ) : (
+              <div className="flex items-start justify-between gap-3 text-sm">
+                <p>{fimDaEntrega}</p>
+                <button
+                  type="button"
+                  onClick={() => setFimDaEntrega(null)}
+                  aria-label="Fechar"
+                  className="shrink-0 rounded-lg px-2 py-1 text-xs transition hover:opacity-70"
+                  style={{ color: "var(--g-suave)" }}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1094,6 +1318,8 @@ export function GaleriaCliente({
       {/* Os capítulos mudaram de casa: agora são a segunda linha da barra de
           menus, lá em cima. Duas faixas grudadas no topo brigariam pelo mesmo
           lugar — ver `menus-da-galeria.tsx`. */}
+
+      {partesDaPasta}
 
       <div id="fotos" className="mt-8 scroll-mt-4">
         {capitulos.map((capOriginal) => {
@@ -1344,6 +1570,8 @@ export function GaleriaCliente({
         })}
       </div>
 
+      {partesDaPasta}
+
       {/*
         Tela cheia. Tudo aqui é pintado com o tema DA GALERIA (--g-*), nunca com
         os tokens do painel: quem abre é o casal, e a cara é a que o fotógrafo
@@ -1445,7 +1673,7 @@ export function GaleriaCliente({
                 className="rounded-lg border px-3 py-1.5 text-xs transition hover:opacity-70"
                 style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
               >
-                {modoSalvar ? "Salvar no celular" : "↓ Baixar"}
+                {modo === "menu" ? "Salvar no celular" : "↓ Baixar"}
               </button>
             ) : (
               /* Espaço vazio do tamanho do botão: sem ele o `justify-between`
@@ -1544,5 +1772,115 @@ export function GaleriaCliente({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * O miolo do painel fixo enquanto as fotos saem. Separado para o JSX do
+ * componente grande não carregar a conta dos rótulos.
+ */
+function PainelDaEntrega({
+  entrega,
+  modo,
+  aoParar,
+  aoRecomecar,
+}: {
+  entrega: {
+    rotulo: string;
+    progresso: ProgressoDaEntrega;
+    bytes: number;
+    jaTinham: number;
+    suaVez: { seguir: () => void; parar: () => void } | null;
+    /* Um AbortController por entrega, guardado com ela: uma entrega nova não
+       herda o pedido de parada da anterior. */
+    parar: () => void;
+    /* Apaga o progresso guardado e para — ver `recomecar` em iniciarEntrega. */
+    recomecar: () => void;
+  };
+  modo: ModoDeEntrega;
+  aoParar: () => void;
+  aoRecomecar: () => void;
+}) {
+  const { progresso: p, bytes, jaTinham, suaVez, rotulo } = entrega;
+  const listaChegou = p.total > 0;
+  const fracao = listaChegou ? p.feitas / p.total : 0;
+  const comecando = listaChegou && p.feitas === jaTinham && p.parte <= 1;
+
+  let detalhe: string;
+  if (!listaChegou) detalhe = "preparando a lista…";
+  else if (suaVez) detalhe = "as fotos já estão prontas — toque para abrir o menu e escolha “Salvar imagens”";
+  else if (p.fase === "baixando") detalhe = "baixando — deixe esta tela aberta até terminar";
+  else detalhe = `preparando ${p.preparadas} de ${p.doLote}…`;
+
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <div className="flex items-baseline justify-between gap-3">
+        <p className="font-semibold">
+          {rotulo}
+          {listaChegou && (
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              {`: ${p.feitas} de ${p.total}`}
+            </span>
+          )}
+        </p>
+        {modo === "menu" && p.partes > 1 && (
+          <p className="shrink-0 text-xs" style={{ color: "var(--g-suave)" }}>
+            parte {p.parte} de {p.partes}
+          </p>
+        )}
+      </div>
+
+      <div
+        className="h-1.5 w-full overflow-hidden rounded-full"
+        style={{ background: "var(--g-linha)" }}
+        aria-hidden="true"
+      >
+        <div
+          className="h-full rounded-full transition-[width] duration-300"
+          style={{ width: `${Math.round(fracao * 100)}%`, background: "var(--g-destaque)" }}
+        />
+      </div>
+
+      <p className="text-xs" style={{ color: "var(--g-tenue)" }}>
+        {comecando && bytes > 0 && `${tamanhoLegivel(bytes)} · `}
+        {jaTinham > 0 && comecando && `${jaTinham} já tinham ido antes — continuando · `}
+        {detalhe}
+      </p>
+
+      {suaVez && (
+        <button
+          type="button"
+          onClick={suaVez.seguir}
+          className="w-full rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85"
+          style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+        >
+          Salvar {p.preparadas} {p.preparadas === 1 ? "foto" : "fotos"} no celular
+        </button>
+      )}
+
+      <div className="flex items-center justify-center gap-4 text-xs">
+        <button
+          type="button"
+          onClick={aoParar}
+          className="underline underline-offset-4 transition hover:opacity-70"
+          style={{ color: "var(--g-suave)" }}
+        >
+          parar
+        </button>
+        {/* Só quando está continuando uma entrega anterior: é a saída de quem
+            escolheu "Salvar em Arquivos" no menu por engano e agora teria
+            aquelas fotos puladas. */}
+        {jaTinham > 0 && (
+          <button
+            type="button"
+            onClick={aoRecomecar}
+            className="underline underline-offset-4 transition hover:opacity-70"
+            style={{ color: "var(--g-suave)" }}
+          >
+            recomeçar do zero
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
