@@ -313,8 +313,17 @@ export default function Home() {
         />
 
         <div className="mx-auto w-full max-w-6xl px-6 pb-16 pt-40">
+          {/* A sobrancelha e o parágrafo abaixo saíram do Felipe em 16/09/2026,
+              nas palavras dele: "colocar: galerias inteligentes de alto padrão
+              visual" e "usar slogan: uma galeria brasileira, intuitiva e feita
+              para fotógrafos & filmmakers/storymakers".
+
+              A sobrancelha lê `marca.descricao` em vez de repetir a frase: ela
+              é a mesma que sai no `<meta description>` e no cartão do link, e
+              duas cópias da promessa da marca é exatamente o tipo de coisa que
+              envelhece separada. */}
           <p className="text-[13px] tracking-[0.22em] text-texto-soft uppercase">
-            Galerias inteligentes para fotógrafos
+            {marca.descricao.replace(/\.$/, "")}
           </p>
           {/* As duas linhas juntas são `marca.tagline`, e não por acaso:
               `testar-marca-plataforma.mjs` exige a igualdade. O corte fica aqui
@@ -326,8 +335,9 @@ export default function Home() {
             <span className="text-acento-alto">permanece.</span>
           </h1>
           <p className="mt-7 max-w-[46ch] text-lg leading-relaxed text-texto sm:text-xl">
-            {marca.nome} é o lugar onde o seu trabalho chega ao seu cliente: com a sua marca,
-            no seu endereço, direto na galeria do celular dele.
+            Uma galeria brasileira, intuitiva e feita para fotógrafos, filmmakers e
+            storymakers: o seu trabalho chega ao seu cliente com a sua marca, no seu
+            endereço, direto no celular dele.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link href="/cadastrar" className={CTA}>

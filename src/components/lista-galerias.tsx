@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apagarGaleriaAction, salvarPublicacaoAction } from "@/app/painel/actions";
+import { useFecharMenuAoClicarFora } from "@/lib/fechar-menu-client";
 
 export interface GaleriaDaLista {
   id: string;
@@ -45,11 +46,20 @@ export interface GaleriaDaLista {
  *
  * ── O MENU É UM <details>, E NÃO UM POPOVER ───────────────────────────────
  *
- * Fecha com Esc, abre com teclado, não precisa de listener de clique-fora nem
- * de biblioteca. O que ele perde — flutuar por cima do conteúdo — não faz falta
- * numa lista em que empurrar a linha de baixo é aceitável.
+ * Abre com teclado, anda com Tab, é lido certo por leitor de tela e não precisa
+ * de biblioteca nenhuma.
+ *
+ * O que ele não traz de fábrica é o descarte leve, e até 16/09/2026 esta lista
+ * ficou sem: Felipe, com a foto do menu aberto, "aqui ao clicar fora disso,
+ * deveria fechar esse pop-up". A barra da galeria já fechava — o efeito existia
+ * num arquivo só. Agora ele mora em `lib/fechar-menu-client.ts` e serve aos
+ * dois, que é o que impede o terceiro menu de nascer sem.
  */
 export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
+  /* O clique fora fecha o menu de três pontos. Ver `fechar-menu-client.ts`:
+     era o mesmo efeito que a barra da galeria já tinha, e esta lista não. */
+  const lista = useRef<HTMLDivElement | null>(null);
+  useFecharMenuAoClicarFora(lista);
   const [busca, setBusca] = useState("");
   const [apagando, setApagando] = useState<string | null>(null);
   const [digitado, setDigitado] = useState("");
@@ -98,7 +108,10 @@ export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
   const confere = alvo != null && digitado.trim() === alvo.titulo.trim();
 
   return (
-    <>
+    /* A `div` existe para o `ref`: o efeito de fechar menu precisa de um escopo,
+       e sem ela a alternativa seria varrer o documento inteiro — o que fecharia
+       junto qualquer `<details>` que este painel venha a usar como sanfona. */
+    <div ref={lista}>
       {/*
         A busca aparece sempre que há mais de uma galeria.
 
@@ -260,7 +273,7 @@ export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
           Nenhuma galeria com “{busca}”.
         </p>
       )}
-    </>
+    </div>
   );
 }
 

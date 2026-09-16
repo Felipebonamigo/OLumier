@@ -470,6 +470,26 @@ export function ProvedorDeEnvio({
   return (
     <Contexto.Provider value={valor}>
       {children}
+      {/*
+        O ESPAÇADOR QUE DEVOLVE O FIM DA PÁGINA.
+
+        Felipe, 16/09/2026, com a foto: "a barra do rodapé tá em cima do botão".
+        Ele estava no fim da aba de Entrega, e o "Apagar galeria" desaparecia
+        sob a barra de envio.
+
+        É o preço do `fixed`: a barra sai do fluxo, e o navegador termina a
+        página como se ela não existisse. A resposta é reservar em BAIXO o
+        espaço que ela ocupa — um bloco vazio no fluxo, irmão do conteúdo.
+
+        A altura é a da barra RECOLHIDA, que é como ela passa a maior parte do
+        tempo. Aberta ela cresce, mas aí a pessoa está olhando para a lista de
+        arquivos, não para o pé da página; reservar a altura máxima deixaria um
+        buraco permanente embaixo de toda tela durante o envio inteiro.
+
+        `aria-hidden` porque não há nada para ler aqui: quem usa leitor de tela
+        não tem barra por cima de botão nenhum.
+      */}
+      {fila.length > 0 && <div aria-hidden className="h-16" />}
       {fila.length > 0 && (
         <BarraDeEnvio
           fila={fila}
