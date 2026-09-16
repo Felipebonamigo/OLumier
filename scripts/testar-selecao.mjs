@@ -30,7 +30,8 @@ exigirBancoDeTeste();
 
 const {
   estadoSelecao,
-  alternar,
+  alternarDaPessoa,
+  pessoaPorEmail,
   fecharSelecao,
   reabrirSelecao,
   definirRegrasSelecao,
@@ -104,30 +105,39 @@ const etapa = async (nome, fn) => {
   }
 };
 
-const NOIVA = "visitante-noiva";
-const NOIVO = "visitante-noivo";
+const NOIVA = (await pessoaPorEmail(galeriaId, `noiva-${Date.now()}@exemplo.com`, "Noiva")).id;
+const NOIVO = (await pessoaPorEmail(galeriaId, `noivo-${Date.now()}@exemplo.com`, "Noivo")).id;
 
 console.log("Seleção:\n");
 
-/* ── a seleção é UMA, da galeria ─────────────────────────────────────────── */
+/* ── a seleção é DE CADA UM, e o limite também (migração 033) ────────────── */
 
-await etapa("noiva e noivo somam na MESMA lista", async () => {
-  await alternar(galeriaId, fotos[0].id, NOIVA);
-  await alternar(galeriaId, fotos[1].id, NOIVO);
-  const e = await estadoSelecao(galeriaId);
-  if (e.total !== 2) throw new Error(`esperava 2 na lista da galeria, veio ${e.total}`);
-  return "2 fotos, uma lista só";
+await etapa("noiva e noivo têm listas separadas", async () => {
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[1].id, NOIVO);
+  const daNoiva = await estadoSelecao(galeriaId, NOIVA);
+  const doNoivo = await estadoSelecao(galeriaId, NOIVO);
+  if (daNoiva.total !== 1 || doNoivo.total !== 1) {
+    throw new Error(`esperava 1 para cada, veio ${daNoiva.total} e ${doNoivo.total}`);
+  }
+  /* E o limite conta por pessoa — a razão está em `estadoSelecao`: "escolha até
+     30" dito a quatro pessoas não pode virar 30 no total, ou a primeira a abrir
+     a galeria consome a cota das outras. */
+  return "1 para cada, e o limite conta por pessoa";
 });
 
-await etapa("a mesma foto marcada pelos dois conta uma vez", async () => {
-  await alternar(galeriaId, fotos[0].id, NOIVA);
-  const r = await alternar(galeriaId, fotos[0].id, NOIVO);
-  const e = await estadoSelecao(galeriaId);
-  /* Marcar o que já está marcado é DESmarcar — a lista é compartilhada, então o
-   * segundo clique tira a foto que o primeiro pôs. É o mesmo botão de sempre. */
-  if (e.total !== 0) throw new Error(`esperava 0 depois do segundo clique, veio ${e.total}`);
-  if (r.favorita !== false) throw new Error("não devolveu que desmarcou");
-  return "clique do segundo desmarca";
+await etapa("a mesma foto marcada pelos dois fica nas DUAS listas", async () => {
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
+  const r = await alternarDaPessoa(galeriaId, fotos[0].id, NOIVO);
+  /*
+   * Até 15/09/2026 isto DESMARCAVA: a lista era uma só, e o segundo clique
+   * tirava a foto que o primeiro pôs. Era o defeito que o Felipe descreveu —
+   * "eu não posso tirar as favoritas da noiva" — visto de dentro.
+   */
+  if (r.favorita !== true) throw new Error("o segundo clique desmarcou em vez de escolher");
+  const daNoiva = await estadoSelecao(galeriaId, NOIVA);
+  if (daNoiva.total !== 1) throw new Error(`a noiva perdeu a escolha: ${daNoiva.total}`);
+  return "os dois escolheram a mesma foto, e ninguém perdeu nada";
 });
 
 /* ── o limite dito ANTES ─────────────────────────────────────────────────── */
@@ -171,21 +181,21 @@ await etapa("sem limite, não inventa aviso", async () => {
 /* ── limite ──────────────────────────────────────────────────────────────── */
 
 await etapa("sem limite definido, marca à vontade", async () => {
-  for (const f of fotos) await alternar(galeriaId, f.id, NOIVA);
-  const e = await estadoSelecao(galeriaId);
+  for (const f of fotos) await alternarDaPessoa(galeriaId, f.id, NOIVA);
+  const e = await estadoSelecao(galeriaId, NOIVA);
   if (e.total !== 3) throw new Error(`esperava 3, veio ${e.total}`);
   if (e.cheia) throw new Error("disse que encheu sem limite nenhum");
 });
 
 await etapa("no limite, a próxima é RECUSADA pelo servidor", async () => {
   await definirRegrasSelecao(galeriaId, tenantId, { limite: 2, prazo: null });
-  await alternar(galeriaId, fotos[0].id, NOIVA);
-  await alternar(galeriaId, fotos[1].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[1].id, NOIVA);
 
-  const r = await alternar(galeriaId, fotos[2].id, NOIVA);
+  const r = await alternarDaPessoa(galeriaId, fotos[2].id, NOIVA);
   if (r?.erro !== "cheia") throw new Error(`esperava recusa "cheia", veio ${JSON.stringify(r)}`);
 
-  const e = await estadoSelecao(galeriaId);
+  const e = await estadoSelecao(galeriaId, NOIVA);
   if (e.total !== 2) throw new Error(`entrou mesmo assim: ${e.total} na lista`);
   if (!e.cheia) throw new Error("não avisou que está cheia");
   return "3a foto barrada com limite 2";
@@ -193,23 +203,23 @@ await etapa("no limite, a próxima é RECUSADA pelo servidor", async () => {
 
 await etapa("DESmarcar continua valendo com a lista cheia", async () => {
   await definirRegrasSelecao(galeriaId, tenantId, { limite: 2, prazo: null });
-  await alternar(galeriaId, fotos[0].id, NOIVA);
-  await alternar(galeriaId, fotos[1].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[1].id, NOIVA);
 
   /* Se o limite bloqueasse o toggle inteiro, o casal ficaria preso: cheio, sem
    * poder trocar uma foto por outra, e sem entender por quê. */
-  const r = await alternar(galeriaId, fotos[0].id, NOIVA);
+  const r = await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   if (r?.favorita !== false) throw new Error("não deixou desmarcar com a lista cheia");
 
-  const depois = await alternar(galeriaId, fotos[2].id, NOIVA);
+  const depois = await alternarDaPessoa(galeriaId, fotos[2].id, NOIVA);
   if (depois?.favorita !== true) throw new Error("não deixou trocar de foto");
   return "dá para trocar uma pela outra";
 });
 
 await etapa("limite menor que o já marcado não apaga escolha de ninguém", async () => {
-  for (const f of fotos) await alternar(galeriaId, f.id, NOIVA);
+  for (const f of fotos) await alternarDaPessoa(galeriaId, f.id, NOIVA);
   await definirRegrasSelecao(galeriaId, tenantId, { limite: 1, prazo: null });
-  const e = await estadoSelecao(galeriaId);
+  const e = await estadoSelecao(galeriaId, NOIVA);
   if (e.total !== 3) throw new Error(`apagou marcação ao baixar o limite: ${e.total}`);
   if (!e.cheia) throw new Error("deveria estar cheia (3 de 1)");
   return "3 marcadas seguem lá, e a lista está cheia";
@@ -218,29 +228,29 @@ await etapa("limite menor que o já marcado não apaga escolha de ninguém", asy
 /* ── fechar ──────────────────────────────────────────────────────────────── */
 
 await etapa("fechada, não aceita mais marcar nem desmarcar", async () => {
-  await alternar(galeriaId, fotos[0].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   await fecharSelecao(galeriaId);
 
-  const marcar = await alternar(galeriaId, fotos[1].id, NOIVA);
+  const marcar = await alternarDaPessoa(galeriaId, fotos[1].id, NOIVA);
   if (marcar?.erro !== "fechada") throw new Error(`marcou depois de fechada: ${JSON.stringify(marcar)}`);
 
-  const desmarcar = await alternar(galeriaId, fotos[0].id, NOIVA);
+  const desmarcar = await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   if (desmarcar?.erro !== "fechada") throw new Error("desmarcou depois de fechada");
 
-  const e = await estadoSelecao(galeriaId);
+  const e = await estadoSelecao(galeriaId, NOIVA);
   if (e.aberta) throw new Error("continua dizendo que está aberta");
   if (e.motivo !== "fechada") throw new Error(`motivo errado: ${e.motivo}`);
   return "trancada dos dois lados";
 });
 
 await etapa("o fotógrafo consegue reabrir — cliente que muda de ideia é comum", async () => {
-  await alternar(galeriaId, fotos[0].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   await fecharSelecao(galeriaId);
   await reabrirSelecao(galeriaId, tenantId);
 
-  const e = await estadoSelecao(galeriaId);
+  const e = await estadoSelecao(galeriaId, NOIVA);
   if (!e.aberta) throw new Error("não reabriu");
-  const r = await alternar(galeriaId, fotos[1].id, NOIVA);
+  const r = await alternarDaPessoa(galeriaId, fotos[1].id, NOIVA);
   if (r?.favorita !== true) throw new Error("reabriu mas não deixa marcar");
   return "reaberta e marcando de novo";
 });
@@ -249,7 +259,7 @@ await etapa("reabrir é do dono da galeria, não de quem tem o link", async () =
   await fecharSelecao(galeriaId);
   const alheio = await reabrirSelecao(galeriaId, "00000000-0000-0000-0000-000000000000");
   if (alheio) throw new Error("estúdio errado conseguiu reabrir");
-  const e = await estadoSelecao(galeriaId);
+  const e = await estadoSelecao(galeriaId, NOIVA);
   if (e.aberta) throw new Error("reabriu mesmo assim");
 });
 
@@ -260,11 +270,11 @@ await etapa("passado o prazo, tranca sozinha", async () => {
     limite: null,
     prazo: new Date(Date.now() - 60_000),
   });
-  const e = await estadoSelecao(galeriaId);
+  const e = await estadoSelecao(galeriaId, NOIVA);
   if (e.aberta) throw new Error("segue aberta com o prazo vencido");
   if (e.motivo !== "prazo") throw new Error(`motivo errado: ${e.motivo}`);
 
-  const r = await alternar(galeriaId, fotos[0].id, NOIVA);
+  const r = await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   if (r?.erro !== "prazo") throw new Error(`marcou fora do prazo: ${JSON.stringify(r)}`);
   return "recusa com motivo próprio, não 'fechada'";
 });
@@ -274,15 +284,15 @@ await etapa("dentro do prazo, segue normal", async () => {
     limite: null,
     prazo: new Date(Date.now() + 3_600_000),
   });
-  const r = await alternar(galeriaId, fotos[0].id, NOIVA);
+  const r = await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   if (r?.favorita !== true) throw new Error("barrou dentro do prazo");
 });
 
 /* ── a lista que o fotógrafo leva para o Lightroom ───────────────────────── */
 
 await etapa("exportar devolve os nomes ORIGINAIS dos arquivos", async () => {
-  await alternar(galeriaId, fotos[0].id, NOIVA);
-  await alternar(galeriaId, fotos[1].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[1].id, NOIVA);
 
   const lista = await listaDaSelecao(galeriaId);
   if (lista.length !== 2) throw new Error(`esperava 2 nomes, veio ${lista.length}`);
@@ -302,8 +312,8 @@ await etapa("exportar devolve os nomes ORIGINAIS dos arquivos", async () => {
 });
 
 await etapa("exportar sai na ordem da galeria, não na de marcação", async () => {
-  await alternar(galeriaId, fotos[2].id, NOIVA);
-  await alternar(galeriaId, fotos[0].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[2].id, NOIVA);
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
 
   const lista = await listaDaSelecao(galeriaId);
   const ordemNaGaleria = await db.query(

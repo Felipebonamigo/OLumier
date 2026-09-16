@@ -5,7 +5,12 @@ import { marca } from "@/config/marca";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
-import { estadoSelecao, minhasFavoritas } from "@/lib/favoritas";
+import {
+  estadoSelecao,
+  favoritasDaPessoa,
+  pessoaAtual,
+  dadosDaPessoa,
+} from "@/lib/favoritas";
 import { galeriasNoAr } from "@/lib/assinatura";
 import { resolverEstudio } from "@/lib/endereco";
 import { resolverGaleriaDoEstudio } from "@/lib/endereco-galeria";
@@ -393,8 +398,18 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * Quem nunca marcou nada não tem cookie, e isto devolve lista vazia sem tocar
    * o banco.
    */
-  const favoritasIniciais = await minhasFavoritas(galeria.id);
-  const selecao = await estadoSelecao(galeria.id);
+  /*
+   * ── "MINHAS" PASSOU A QUERER DIZER MINHAS (15/09/2026, migração 033) ─────
+   *
+   * Até aqui isto lia a lista da galeria inteira, e era o defeito que o Felipe
+   * descreveu: qualquer pessoa com o link via — e desmarcava — a escolha da
+   * noiva. Agora a lista é da PESSOA identificada pelo e-mail; sem
+   * identificação, é vazia, e a tela oferece o campo na primeira marcação.
+   */
+  const pessoaId = await pessoaAtual(galeria.id);
+  const eu = pessoaId ? await dadosDaPessoa(galeria.id, pessoaId) : null;
+  const favoritasIniciais = await favoritasDaPessoa(galeria.id, pessoaId);
+  const selecao = await estadoSelecao(galeria.id, pessoaId);
 
   /*
    * Agrupa as fotos em capítulos preservando os índices do array original: o
@@ -645,6 +660,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         ) : (
           <GaleriaCliente
             favoritasIniciais={favoritasIniciais}
+            eu={eu ? { email: eu.email, nome: eu.nome } : null}
             selecaoInicial={{
               limite: selecao.limite,
               aberta: selecao.aberta,

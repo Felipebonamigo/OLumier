@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { resumoAcessos } from "@/lib/galerias-publicas";
-import { estadoSelecao, listaDaSelecao } from "@/lib/favoritas";
+import { estadoSelecao, listaDaSelecao, resumoPorPessoa } from "@/lib/favoritas";
 import { PainelSelecao } from "@/components/painel-selecao";
 
 export const metadata: Metadata = { title: "Atividade da galeria" };
@@ -28,6 +28,9 @@ export default async function AtividadePage({ params }: { params: Promise<{ id: 
   const acessos = await resumoAcessos(galeria.id);
   const selecao = await estadoSelecao(galeria.id);
   const listaSelecao = await listaDaSelecao(galeria.id);
+  /* Quem escolheu o quê — desde a migração 033 a lista tem dona, e sem isto o
+     fotógrafo veria um total sem saber de quem é cada escolha. */
+  const pessoas = await resumoPorPessoa(galeria.id);
 
   return (
     <>
@@ -82,6 +85,7 @@ export default async function AtividadePage({ params }: { params: Promise<{ id: 
         aberta={selecao.aberta}
         motivo={selecao.motivo}
         lista={listaSelecao.map((l) => ({ nome: l.nome, capitulo: l.capitulo }))}
+        pessoas={pessoas}
       />
     </>
   );

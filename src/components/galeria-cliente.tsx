@@ -79,6 +79,7 @@ export function GaleriaCliente({
   selecaoInicial,
   buscaPorRosto = null,
   fatia = null,
+  eu: euInicial = null,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
@@ -98,6 +99,8 @@ export function GaleriaCliente({
    * de quase toda galeria: nada muda de comportamento.
    */
   fatia?: { total: number; capituloAtivo: string | null } | null;
+  /** Quem se identificou por e-mail nesta galeria. Null = ninguém ainda. */
+  eu?: { email: string; nome: string | null } | null;
   /**
    * Ids das fotos já escolhidas NESTA galeria. Desde a migração 019 a lista é
    * uma só, compartilhada: a noiva no celular e o noivo no notebook veem a mesma
@@ -149,11 +152,70 @@ export function GaleriaCliente({
   /* As fotos em que o convidado se achou pela selfie. Null = sem filtro. Vive
      só nesta página: fechar a aba apaga, que é o que o texto prometeu. */
   const [encontradas, setEncontradas] = useState<Set<string> | null>(null);
+  /*
+   * ── QUEM ESTÁ ESCOLHENDO (15/09/2026) ───────────────────────────────────
+   *
+   * `eu` vem do servidor (cookie assinado); `pedindoEmail` guarda a foto que
+   * disparou o pedido, para marcá-la assim que a pessoa se identificar — sem
+   * isso ela digita o e-mail e tem de procurar a foto de novo.
+   */
+  const [eu, setEu] = useState(euInicial);
+  const [pedindoEmail, setPedindoEmail] = useState<{
+    mediaId: string;
+    eraFavorita: boolean;
+  } | null>(null);
+  const [emailDigitado, setEmailDigitado] = useState("");
+  const [nomeDigitado, setNomeDigitado] = useState("");
+  const [identificando, setIdentificando] = useState(false);
+
   const [selecao, setSelecao] = useState(selecaoInicial);
   const [fechando, setFechando] = useState(false);
 
   const limite = selecao.limite;
   const cheia = limite !== null && favoritas.size >= limite;
+
+  /**
+   * Diz quem está escolhendo, e marca a foto que estava esperando.
+   *
+   * O e-mail não é conferido — não há código, não há senha, não há conta. Ele
+   * separa a lista da noiva da lista do convidado, que é o problema real; contra
+   * quem QUEIRA mexer na dela sabendo o endereço, não protege, e a tela não
+   * promete que protege.
+   */
+  async function identificar() {
+    if (identificando) return;
+    setIdentificando(true);
+    try {
+      const r = await fetch(`/api/g/${galeriaId}/eu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailDigitado, nome: nomeDigitado }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setAviso(d?.erro ?? "não consegui guardar o seu e-mail. Tente de novo.");
+        setTimeout(() => setAviso(null), 4000);
+        return;
+      }
+
+      setEu(d.pessoa);
+      /* A lista dela vem na resposta: quem se identifica no segundo aparelho
+         espera reencontrar o que já escolheu, e sem isto a tela ficaria vazia
+         até o próximo carregamento. */
+      setFavoritas(new Set<string>(d.favoritas ?? []));
+
+      const esperando = pedindoEmail;
+      setPedindoEmail(null);
+      setEmailDigitado("");
+      setNomeDigitado("");
+      if (esperando) await alternarFavorita(esperando.mediaId, esperando.eraFavorita);
+    } catch {
+      setAviso("não consegui guardar o seu e-mail. Confira sua conexão.");
+      setTimeout(() => setAviso(null), 4000);
+    } finally {
+      setIdentificando(false);
+    }
+  }
 
   /**
    * Quantas fotos a GALERIA tem — que desde 11/09/2026 não é `itens.length`.
@@ -223,6 +285,24 @@ export function GaleriaCliente({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ mediaId }),
         });
+
+        /*
+         * ── 428: FALTA DIZER QUEM VOCÊ É (15/09/2026) ──────────────────────
+         *
+         * Desde a migração 033 a favorita tem dona, e o servidor recusa marcar
+         * de quem não se identificou. Não é erro para mostrar — é um passo que
+         * falta: o coração volta ao lugar, o campo do e-mail abre, e a foto
+         * fica guardada para ser marcada assim que a pessoa disser o nome.
+         *
+         * Guardar a foto importa: sem isso a pessoa digita o e-mail e descobre
+         * que ainda precisa achar de novo a foto que ela tinha acabado de
+         * escolher.
+         */
+        if (r.status === 428) {
+          mexer(eraFavorita);
+          setPedindoEmail({ mediaId, eraFavorita });
+          return;
+        }
 
         /*
          * 409 é regra da seleção, não falha de rede: a lista encheu, o prazo
@@ -749,6 +829,33 @@ export function GaleriaCliente({
         }
       />
 
+      {/*
+        QUEM ESTÁ ESCOLHENDO, DITO NA TELA.
+
+        Sem isto, a pessoa que abre a galeria no notebook da casa não tem como
+        saber que está vendo a lista do marido — e "sumiram as minhas fotos" é
+        exatamente a queixa que a identificação veio resolver. O "não sou eu"
+        ao lado é o que faz dois moradores dividirem o mesmo computador.
+      */}
+      {eu && (
+        <p className="mt-3 text-center text-xs" style={{ color: "var(--g-tenue)" }}>
+          escolhendo como <strong style={{ color: "var(--g-suave)" }}>{eu.nome || eu.email}</strong>
+          {" · "}
+          <button
+            type="button"
+            onClick={async () => {
+              await fetch(`/api/g/${galeriaId}/eu`, { method: "DELETE" }).catch(() => {});
+              setEu(null);
+              setFavoritas(new Set());
+              router.refresh();
+            }}
+            className="underline underline-offset-4 transition hover:opacity-70"
+          >
+            não sou eu
+          </button>
+        </p>
+      )}
+
       {permiteDownload && itens.length > 0 && (aguardandoToque || aviso) && (
         <div className="mt-4 flex flex-col items-center gap-2">
           {/*
@@ -808,6 +915,93 @@ export function GaleriaCliente({
           Escolha até <strong style={{ color: "var(--g-destaque)" }}>{limite} fotos</strong> para o
           álbum — toque no coração das que você quer.
         </p>
+      )}
+
+      {/*
+        ── QUEM É VOCÊ, PEDIDO NA HORA DE ESCOLHER ─────────────────────────
+
+        Não é uma porta na entrada da galeria. Quem só quer VER as fotos nunca
+        vê este campo — ele aparece no primeiro coração, que é o instante em
+        que a pergunta faz sentido e a pessoa já quer alguma coisa.
+
+        O nome é opcional de propósito: o que separa as listas é o e-mail, e
+        cada campo obrigatório a mais é uma chance de a pessoa desistir de
+        escolher as fotos do próprio casamento.
+      */}
+      {pedindoEmail && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Quem está escolhendo"
+          className="fixed inset-0 z-[60] flex items-center justify-center p-5 backdrop-blur"
+          style={{ background: "color-mix(in srgb, var(--g-fundo) 92%, transparent)" }}
+          onClick={() => setPedindoEmail(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-xl border p-5"
+            style={{ borderColor: "var(--g-linha)", background: "var(--g-superficie)" }}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--g-texto)" }}>
+              Quem está escolhendo?
+            </p>
+            <p className="mt-1 text-xs leading-snug" style={{ color: "var(--g-suave)" }}>
+              Seu e-mail guarda as SUAS escolhas. Assim ninguém desmarca as suas, e você
+              reencontra a lista ao abrir no computador.
+            </p>
+
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoFocus
+              value={emailDigitado}
+              onChange={(e) => setEmailDigitado(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && identificar()}
+              placeholder="seu@email.com"
+              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "var(--g-linha)",
+                background: "var(--g-fundo)",
+                color: "var(--g-texto)",
+              }}
+            />
+            <input
+              type="text"
+              autoComplete="name"
+              value={nomeDigitado}
+              onChange={(e) => setNomeDigitado(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && identificar()}
+              placeholder="seu nome (opcional)"
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "var(--g-linha)",
+                background: "var(--g-fundo)",
+                color: "var(--g-texto)",
+              }}
+            />
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPedindoEmail(null)}
+                className="rounded-lg border px-3 py-2 text-xs transition hover:opacity-70"
+                style={{ borderColor: "var(--g-linha)", color: "var(--g-suave)" }}
+              >
+                agora não
+              </button>
+              <button
+                type="button"
+                onClick={identificar}
+                disabled={identificando}
+                className="rounded-lg px-4 py-2 text-xs font-semibold transition hover:opacity-85 disabled:opacity-60"
+                style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+              >
+                {identificando ? "guardando…" : "escolher esta foto"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {buscaPorRosto && (

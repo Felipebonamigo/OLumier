@@ -34,6 +34,7 @@ export function PainelSelecao({
   aberta,
   motivo,
   lista,
+  pessoas = [],
 }: {
   galeriaId: string;
   total: number;
@@ -43,6 +44,14 @@ export function PainelSelecao({
   aberta: boolean;
   motivo: "fechada" | "prazo" | null;
   lista: { nome: string; capitulo: string | null }[];
+  /**
+   * Quem escolheu, e quantas — migração 033.
+   *
+   * Vazio nas galerias entregues antes de 15/09/2026: lá a lista era uma só e
+   * ninguém se identificava. O bloco some nesse caso, em vez de desenhar um
+   * "0 pessoas" que faria o fotógrafo procurar um defeito que não existe.
+   */
+  pessoas?: { id: string; email: string; nome: string | null; quantas: number }[];
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -137,6 +146,35 @@ export function PainelSelecao({
             </span>
           )}
         </div>
+      )}
+
+      {/*
+        ── QUEM ESCOLHEU (15/09/2026, migração 033) ────────────────────────
+
+        Antes a seleção era um número só, porque a lista era uma só. Agora cada
+        pessoa tem a sua, e o total sem os nomes esconderia justamente o que o
+        fotógrafo precisa para montar o álbum: se as 60 fotos são a escolha de
+        uma pessoa ou a soma de duas listas de 30 que se sobrepõem.
+
+        O e-mail aparece porque é o que identifica; o nome, quando foi dado,
+        vem na frente porque é como o fotógrafo conhece a pessoa.
+      */}
+      {pessoas.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {pessoas.map((p) => (
+            <li
+              key={p.id}
+              className="rounded-lg border border-linha px-3 py-1.5 text-xs text-texto-soft"
+              title={p.email}
+            >
+              <span className="font-medium text-texto">{p.nome || p.email}</span>
+              {p.nome && <span className="ml-1.5 text-texto-faint">{p.email}</span>}
+              <span className="ml-2 text-texto-faint">
+                {p.quantas} {p.quantas === 1 ? "foto" : "fotos"}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
 
       {mostrandoLista && total > 0 && (

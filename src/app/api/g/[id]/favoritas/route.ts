@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultarUm } from "@/lib/db";
 import {
-  alternar,
   estadoSelecao,
   fecharSelecao,
   garantirVisitante,
-  minhasFavoritas,
+  favoritasDaPessoa,
+  pessoaAtual,
+  alternarDaPessoa,
 } from "@/lib/favoritas";
 import { temAcessoLiberado } from "@/lib/galerias-publicas";
 
@@ -47,9 +48,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const mediaId = String(corpo.mediaId ?? "");
   if (!mediaId) return NextResponse.json({ erro: "foto não informada" }, { status: 400 });
 
-  // O cookie do visitante nasce aqui, no primeiro clique — não na visita.
-  const visitante = await garantirVisitante(id);
-  const r = await alternar(id, mediaId, visitante);
+  /*
+   * ── SEM PESSOA, NÃO HÁ LISTA (15/09/2026) ────────────────────────────────
+   *
+   * Desde a migração 033 a favorita tem dona. Marcar sem dizer quem se é não
+   * tem onde cair: cairia na lista antiga, compartilhada, que é exatamente o
+   * que o Felipe pediu para acabar.
+   *
+   * 428 e não 401: não é falta de permissão — quem tem o link pode escolher —,
+   * é falta de um passo anterior. A tela lê este código e abre o campo do
+   * e-mail, em vez de dizer "sem acesso" para quem tem acesso.
+   */
+  const pessoa = await pessoaAtual(id);
+  if (!pessoa) {
+    return NextResponse.json({ erro: "identifique-se", precisaEmail: true }, { status: 428 });
+  }
+
+  // O cookie do visitante segue nascendo aqui: ele diz de ONDE veio a marcação.
+  await garantirVisitante(id);
+  const r = await alternarDaPessoa(id, mediaId, pessoa);
   if (!r) return NextResponse.json({ erro: "foto não é desta galeria" }, { status: 404 });
 
   /*
@@ -58,14 +75,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
    * é o que a tela usa para explicar em português em vez de um "não deu".
    */
   if ("erro" in r) {
-    const estado = await estadoSelecao(id);
+    const estado = await estadoSelecao(id, pessoa);
     return NextResponse.json(
       { erro: r.erro, total: estado.total, limite: estado.limite },
       { status: 409 },
     );
   }
 
-  const estado = await estadoSelecao(id);
+  const estado = await estadoSelecao(id, pessoa);
   return NextResponse.json({ ...r, limite: estado.limite, cheia: estado.cheia });
 }
 
@@ -74,9 +91,13 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
   const permissao = await galeriaLiberada(id);
   if (!permissao.ok) return NextResponse.json({ erro: "sem acesso" }, { status: permissao.status });
-  const estado = await estadoSelecao(id);
+  /* "Minhas" passou a querer dizer minhas de verdade (migração 033). Sem
+     identificação a lista é vazia — e não a da galeria inteira, que era o
+     defeito. */
+  const pessoa = await pessoaAtual(id);
+  const estado = await estadoSelecao(id, pessoa);
   return NextResponse.json({
-    favoritas: await minhasFavoritas(id),
+    favoritas: await favoritasDaPessoa(id, pessoa),
     total: estado.total,
     limite: estado.limite,
     cheia: estado.cheia,

@@ -14,7 +14,7 @@
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, marcaDaRodada } from "./fixture-de-teste.mjs";
-import { alternar, resumoDaGaleria } from "../src/lib/favoritas.ts";
+import { alternarDaPessoa, pessoaPorEmail, resumoDaGaleria } from "../src/lib/favoritas.ts";
 
 await exigirBancoDeTeste();
 
@@ -45,18 +45,27 @@ const galeriaId = bancada.id;
 const foto = bancada.midias[0].id;
 const outraFoto = bancada.midias[1]?.id ?? bancada.midias[0].id;
 
-/* O visitante carrega a marca da execução. Com nome fixo, o `delete ... where
- * visitante in (...)` do `limpar()` varria a lista de QUALQUER execução rodando
- * junto — a galeria já estava isolada e este identificador ainda não. Foi o
- * segundo fundo falso do mesmo defeito. */
-const VISITANTE_A = `visitante-a-${marcaDaRodada()}`;
-const VISITANTE_B = `visitante-b-${marcaDaRodada()}`;
+/*
+ * DUAS PESSOAS DE VERDADE, desde a migração 033.
+ *
+ * Antes daqui vinham dois ids de visitante inventados, porque a coluna era
+ * texto livre. Agora a favorita aponta para `pessoas_da_galeria`, e uma string
+ * qualquer não é mais aceita pelo banco — o que é a mudança funcionando.
+ *
+ * O e-mail carrega a marca da execução pela mesma razão de sempre: com endereço
+ * fixo, duas execuções simultâneas dividiriam a mesma pessoa e o `limpar()` de
+ * uma varreria a lista da outra.
+ */
+const PESSOA_A = await pessoaPorEmail(galeriaId, `a-${marcaDaRodada()}@exemplo.com`, "Pessoa A");
+const PESSOA_B = await pessoaPorEmail(galeriaId, `b-${marcaDaRodada()}@exemplo.com`, "Pessoa B");
+const VISITANTE_A = PESSOA_A.id;
+const VISITANTE_B = PESSOA_B.id;
 
 // Galeria descartável, para provar o isolamento entre galerias.
 const galeriaVizinha = (await galeriaDaRodada(db, { nome: "vizinha", medias: 1 })).id;
 
 async function limpar() {
-  await db.query("delete from favoritas where visitante in ($1, $2)", [VISITANTE_A, VISITANTE_B]);
+  await db.query("delete from favoritas where pessoa_id in ($1, $2)", [VISITANTE_A, VISITANTE_B]);
 }
 
 try {
@@ -64,20 +73,20 @@ try {
   console.log("marcar e desmarcar");
 
   await etapa("marca a foto", async () => {
-    const r = await alternar(galeriaId, foto, VISITANTE_A);
+    const r = await alternarDaPessoa(galeriaId, foto, VISITANTE_A);
     igual(r?.favorita, true, "resultado");
     const { rows } = await db.query(
-      "select count(*)::int n from favoritas where media_id = $1 and visitante = $2",
+      "select count(*)::int n from favoritas where media_id = $1 and pessoa_id = $2",
       [foto, VISITANTE_A],
     );
     igual(rows[0].n, 1, "linhas no banco");
   });
 
   await etapa("marcar de novo DESMARCA", async () => {
-    const r = await alternar(galeriaId, foto, VISITANTE_A);
+    const r = await alternarDaPessoa(galeriaId, foto, VISITANTE_A);
     igual(r?.favorita, false, "resultado");
     const { rows } = await db.query(
-      "select count(*)::int n from favoritas where media_id = $1 and visitante = $2",
+      "select count(*)::int n from favoritas where media_id = $1 and pessoa_id = $2",
       [foto, VISITANTE_A],
     );
     igual(rows[0].n, 0, "linhas no banco");
@@ -92,61 +101,69 @@ try {
     await limpar();
     await Promise.all([
       db.query(
-        `insert into favoritas (galeria_id, media_id, visitante) values ($1,$2,$3)
-         on conflict (galeria_id, media_id) do nothing`,
+        `insert into favoritas (galeria_id, media_id, visitante, pessoa_id) values ($1,$2,$3::text,$3::uuid)
+         on conflict (galeria_id, media_id, pessoa_id) where pessoa_id is not null do nothing`,
         [galeriaId, foto, VISITANTE_A],
       ),
       db.query(
-        `insert into favoritas (galeria_id, media_id, visitante) values ($1,$2,$3)
-         on conflict (galeria_id, media_id) do nothing`,
+        `insert into favoritas (galeria_id, media_id, visitante, pessoa_id) values ($1,$2,$3::text,$3::uuid)
+         on conflict (galeria_id, media_id, pessoa_id) where pessoa_id is not null do nothing`,
         [galeriaId, foto, VISITANTE_A],
       ),
     ]);
     const { rows } = await db.query(
-      "select count(*)::int n from favoritas where media_id = $1 and visitante = $2",
+      "select count(*)::int n from favoritas where media_id = $1 and pessoa_id = $2",
       [foto, VISITANTE_A],
     );
     igual(rows[0].n, 1, "linhas depois de duas inserções");
   });
 
   await etapa("foto de OUTRA galeria é recusada", async () => {
-    const r = await alternar(galeriaVizinha, foto, VISITANTE_A);
+    const r = await alternarDaPessoa(galeriaVizinha, foto, VISITANTE_A);
     igual(r, null, "resultado");
   });
 
   console.log("\nresumo para o fotógrafo");
 
   /*
-   * ── MUDOU NA MIGRAÇÃO 019 ────────────────────────────────────────────────
-   * Até a 018, cada visitante tinha a SUA lista e o painel mostrava quantas
-   * pessoas marcaram a mesma foto. A partir da 019 a seleção é UMA, da galeria:
-   * "o álbum tem 40 fotos" é uma frase sobre a galeria, não sobre cada aparelho,
-   * e "terminei" também é do casal, não de um celular.
+   * ── FOI E VOLTOU: 010 → 019 → 033 ────────────────────────────────────────
    *
-   * Estas duas etapas travavam o modelo antigo — foi por elas que a mudança
+   * Até a 018 cada visitante tinha a SUA lista. A 019 colapsou em uma lista da
+   * galeria, para o casal escolher junto. A 033 (15/09/2026) voltou à lista por
+   * pessoa, agora com e-mail, porque o link vai para o casamento inteiro e
+   * qualquer convidado desmarcava a escolha da noiva.
+   *
+   * Estas duas etapas travaram o modelo de 019 — foi por elas que a mudança
    * apareceu vermelha em vez de passar despercebida, que é o serviço que se
-   * espera delas. Agora travam o novo. As regras da seleção (limite, prazo,
-   * fechar) moram em `testar-selecao.mjs`.
+   * espera delas. Agora travam o de 033, e o que elas afirmam é o INVERSO do
+   * que afirmavam ontem. A separação em si tem suíte própria em
+   * `testar-favoritas-por-pessoa.mjs`; aqui ficam as duas perguntas que o
+   * resumo do FOTÓGRAFO faz.
    */
-  await etapa("a lista é uma só: dois aparelhos somam na mesma", async () => {
+  await etapa("o resumo do fotógrafo soma as duas listas", async () => {
     await limpar();
-    await alternar(galeriaId, foto, VISITANTE_A);
-    await alternar(galeriaId, outraFoto, VISITANTE_B);
+    await alternarDaPessoa(galeriaId, foto, VISITANTE_A);
+    await alternarDaPessoa(galeriaId, outraFoto, VISITANTE_B);
 
     const r = await resumoDaGaleria(galeriaId);
-    igual(r.fotos, foto === outraFoto ? 1 : 2, "fotos na lista da galeria");
-    igual(r.pessoas, foto === outraFoto ? 1 : 2, "pessoas que contribuíram");
+    igual(r.fotos, foto === outraFoto ? 1 : 2, "fotos distintas escolhidas");
+    igual(r.pessoas, 2, "pessoas que contribuíram");
     return `${r.fotos} foto(s), ${r.pessoas} pessoa(s)`;
   });
 
-  await etapa("clique do segundo na MESMA foto desmarca, não empilha", async () => {
+  await etapa("a MESMA foto escolhida pelos dois conta uma vez para o álbum", async () => {
     await limpar();
-    await alternar(galeriaId, foto, VISITANTE_A);
+    await alternarDaPessoa(galeriaId, foto, VISITANTE_A);
     igual((await resumoDaGaleria(galeriaId)).fotos, 1, "depois do primeiro");
 
-    await alternar(galeriaId, foto, VISITANTE_B);
-    igual((await resumoDaGaleria(galeriaId)).fotos, 0, "depois do segundo");
-    return "uma linha por foto, não por pessoa";
+    /* O segundo escolhe a MESMA foto. Antes isso DESMARCAVA — era o defeito.
+       Agora entra na lista dele, e o álbum continua com uma foto: o fotógrafo
+       revela uma cópia, escolhida por duas pessoas. */
+    await alternarDaPessoa(galeriaId, foto, VISITANTE_B);
+    const r = await resumoDaGaleria(galeriaId);
+    igual(r.fotos, 1, "fotos distintas depois do segundo");
+    igual(r.pessoas, 2, "pessoas que escolheram essa foto");
+    return "duas escolhas, uma foto no álbum";
   });
 
   // --- pela rota, com senha ------------------------------------------------
@@ -163,12 +180,32 @@ try {
   } else {
     console.log("\npela rota");
 
-    const marcar = (gid, corpo, cookie) =>
-      fetch(`${BASE}/api/g/${gid}/favoritas`, {
+    /*
+     * ── DESDE A MIGRAÇÃO 033, MARCAR EXIGE DIZER QUEM É ────────────────────
+     *
+     * A favorita tem dona. Uma identificação serve para o arquivo inteiro: o
+     * que estas etapas conferem é a ROTA das favoritas — cookie, senha, cofre,
+     * foto de outra galeria —, e não o cadastro, que tem suíte própria em
+     * `testar-favoritas-por-pessoa.mjs`.
+     */
+    let euCookie = "";
+    const identificar = async (gid, email) => {
+      const r = await fetch(`${BASE}/api/g/${gid}/eu`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(cookie ? { cookie } : {}) },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      return (r.headers.get("set-cookie") ?? "").split(";")[0];
+    };
+
+    const marcar = (gid, corpo, cookie) => {
+      const cookies = [euCookie, cookie].filter(Boolean).join("; ");
+      return fetch(`${BASE}/api/g/${gid}/favoritas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(cookies ? { cookie: cookies } : {}) },
         body: JSON.stringify(corpo),
       });
+    };
 
     // Estado de partida conhecido: publicada, sem senha, no ar.
     const antes = (
@@ -180,6 +217,21 @@ try {
     );
 
     try {
+      /* A regra nova, conferida ANTES de tudo — e é ela que dá sentido às
+         outras: sem dizer quem é, não há lista onde a marcação caia. */
+      await etapa("sem se identificar, a rota pede o e-mail (428)", async () => {
+        const r = await marcar(galeriaId, { mediaId: foto });
+        igual(r.status, 428, "status");
+        const d = await r.json();
+        if (!d.precisaEmail) throw new Error("a resposta não diz que falta o e-mail");
+        return "428 · precisaEmail";
+      });
+
+      euCookie = await identificar(galeriaId, `teste-${Date.now()}@exemplo.com`);
+      if (!/^pes_[0-9a-f]{8}=/.test(euCookie)) {
+        throw new Error(`a identificação não devolveu cookie de pessoa: ${euCookie}`);
+      }
+
       await etapa("marca e devolve o estado novo", async () => {
         const r = await marcar(galeriaId, { mediaId: foto });
         igual(r.status, 200, "status");
