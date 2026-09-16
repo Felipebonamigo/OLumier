@@ -7,7 +7,7 @@ import { marca } from "@/config/marca";
 import { MontadorPlano } from "@/components/montador-plano";
 import { MarcaTile, SeloBeta } from "@/components/marca-tile";
 import { SeletorTema } from "@/components/seletor-tema";
-import { TEMAS } from "@/config/aparencia";
+import { TEMAS, PRESETS, OPCOES } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
 import { ESPACOS, formatarGb } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
@@ -402,9 +402,21 @@ export default function Home() {
             },
             {
               n: "2",
-              titulo: "Escolha a cara da entrega",
+              titulo: "Deixe com a sua cara",
+              /*
+                O número dos estilos sai de `PRESETS`, e o das fontes de
+                `OPCOES.tipografia`: escritos à mão, os dois já estavam
+                desatualizados — a página prometia "quatro estilos prontos" com
+                dez no ar e "nove fontes" com vinte e uma. Número escrito à mão
+                numa página de vendas envelhece calado, e quem descobre é o
+                cliente, depois de assinar.
+              */
               texto:
-                "Quatro estilos prontos ou a sua combinação: capa, cores, grade, espaçamento e nove fontes de título — cada uma mostrada nela mesma. A prévia já abre com fotos, para você decidir vendo, e a sua logo assina o topo.",
+                `${PRESETS.length} estilos prontos ou a sua combinação: capa, cores, grade, ` +
+                `espaçamento e ${OPCOES.tipografia.length} fontes de título — cada uma mostrada ` +
+                `nela mesma. A sua logo assina o topo, a sua fonte pode ser a do título e do ` +
+                `texto, e a sua cor pinta os botões. Salvou o desenho como padrão, toda entrega ` +
+                `nova já nasce assim. A prévia é a galeria de verdade: você decide vendo.`,
             },
             {
               n: "3",
@@ -571,10 +583,69 @@ export default function Home() {
         </div>
       </section>
 
+      {/*
+        ── ato 3¾: de onde ela vem ──────────────────────────────────────────
+
+        Felipe, 16/09/2026: "na página de vendas, precisa ficar claro como
+        funciona a galeria, que ela é personalizável com a identidade do
+        fotógrafo, que ela é intuitiva, uma galeria brasileira feita por
+        fotógrafos, um suporte brasileiro que facilita tudo".
+
+        O "como funciona" e o "personalizável" estão no ato 2, que é onde a
+        pessoa ainda está decidindo se continua lendo. O que faltava é o que
+        esta seção diz: de onde o produto vem, e por que isso muda a entrega.
+
+        ── A REGRA DE CONTEÚDO É A DA PÁGINA INTEIRA ──────────────────────
+
+        Só entra o que EXISTE. Esta página não tem barra de logos nem
+        depoimento porque o produto tem zero estúdios pagantes hoje, e o mesmo
+        critério vale aqui: cada frase abaixo é conferível.
+
+        "Feita junto com quem entrega casamento" é literal — o histórico deste
+        repositório é uma sequência de queixas datadas de fotógrafos em serviço,
+        e cada uma virou uma linha de código. "Em português" e "em real" são
+        fatos do produto. Sobre o atendimento, a frase promete o que dá para
+        cumprir: quem responde é gente da equipe, e não uma central. Não há
+        promessa de prazo, porque prazo é coisa que se cumpre, não que se
+        anuncia.
+      */}
+      <section className="border-b border-linha">
+        <div className="mx-auto max-w-6xl px-6 py-28">
+          <Revelar>
+            <Marcador n="04" rotulo="De onde ela vem" />
+            <h2 className="mt-5 max-w-[20ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+              Brasileira, e feita junto com quem entrega casamento.
+            </h2>
+          </Revelar>
+
+          <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-linha bg-linha sm:grid-cols-3">
+            {[
+              [
+                "Nasceu dentro de um estúdio",
+                "Cada tela daqui começou numa reclamação de quem estava entregando um casamento naquele dia — a pasta que não virou capítulo, o link que não dava para arrumar, a foto que abria fora de ordem. Não é um produto importado e traduzido.",
+              ],
+              [
+                "Intuitiva porque foi cortada",
+                "A entrega inteira são três gestos, e o que não cabia neles saiu. Quem sobe as fotos não responde formulário, não escolhe formato e não aprende palavra nova: arrasta a pasta e manda o link.",
+              ],
+              [
+                "Em português, e em real",
+                "Painel, e-mail do casal e atendimento na sua língua. Preço em real, no Pix ou no cartão, sem conversão de dólar no meio do mês. E quem responde quando você escrever é alguém da equipe que fez isto.",
+              ],
+            ].map(([t, d]) => (
+              <div key={t} className="bg-void px-6 py-8">
+                <h3 className="font-serif text-xl font-semibold tracking-tight">{t}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-texto-soft">{d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── ato 4: a ferramenta — índice de catálogo, linha a linha ────── */}
       <section className="mx-auto max-w-6xl px-6 py-28">
         <Revelar>
-          <Marcador n="04" rotulo="Do seu lado do balcão" />
+          <Marcador n="05" rotulo="Do seu lado do balcão" />
           <h2 className="mt-5 max-w-[24ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
             O estúdio continua seu. Só o trabalho pesado muda de dono.
           </h2>
@@ -738,7 +809,7 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-28">
           <Revelar>
             <div className="max-w-2xl">
-              <Marcador n="05" rotulo="Planos" />
+              <Marcador n="06" rotulo="Planos" />
               <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
                 Um número só: quanto espaço você quer
               </h2>
