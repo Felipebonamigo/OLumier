@@ -12,7 +12,12 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
-import { estudioDaRodada, galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
+import {
+  estudioDaRodada,
+  segundoEstudioDaRodada,
+  galeriaDaRodada,
+  limparRodada,
+} from "./fixture-de-teste.mjs";
 import { apagarObjetos, listarChaves, objetoExiste, BUCKET } from "../src/lib/r2.ts";
 /*
  * A regra de "quem tem dono" vem do módulo compartilhado, NÃO de uma consulta
@@ -209,11 +214,25 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
   const { apagarGaleria } = await import("../src/lib/tenants.ts");
   const t = [await estudioDaRodada(db)];
 
-  const outro = await db.query(
-    `insert into tenants (slug,nome_estudio,email,senha_hash)
-     values ($1,'Outro','outro-limpeza@teste','x') returning id`,
-    [`outro-limpeza-${Date.now()}`],
-  );
+  /*
+   * ── O VIZINHO VEM DA BANCADA, NÃO DAQUI (17/09/2026) ────────────────────
+   *
+   * Este estúdio era criado à mão com o e-mail FIXO `outro-limpeza@teste`. O
+   * `finally` lá embaixo o apagava — quando chegava lá. Qualquer rodada que
+   * morresse antes (um Postgres que cai, um Ctrl+C, uma etapa acima que
+   * estoura) deixava a linha para trás, e daí em diante TODA execução futura
+   * reprovava com `duplicate key value violates unique constraint
+   * "tenants_email_key"`.
+   *
+   * É o vermelho que não fala do código: o teste passa a acusar o ambiente, e
+   * quem for depurar vai procurar defeito na limpeza de arquivos, que está
+   * certa. Aconteceu de verdade nesta bancada.
+   *
+   * `segundoEstudioDaRodada` existe exatamente para isto: nome único por
+   * execução, e `limparRodada` no fim do arquivo leva o estúdio e tudo que
+   * pendura nele — inclusive quando uma etapa estoura no meio.
+   */
+  const outro = { rows: [await segundoEstudioDaRodada(db)] };
   const g = await db.query(
     `insert into galerias (tenant_id, slug, titulo) values ($1,'alheia','Alheia') returning id`,
     [outro.rows[0].id],
@@ -236,7 +255,8 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
     if (!(await objetoExiste(chave))) throw new Error("apagou ARQUIVO de outro estúdio!");
     return "galeria e arquivo intactos";
   } finally {
-    await db.query("delete from tenants where id = $1", [outro.rows[0].id]);
+    /* O estúdio NÃO é apagado aqui: ele é da bancada, e quem o leva é o
+       `limparRodada` no fim do arquivo. O objeto sim, porque subiu por cima. */
     await apagarObjetos([chave]);
   }
 });

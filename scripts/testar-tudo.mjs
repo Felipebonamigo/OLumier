@@ -155,6 +155,30 @@ if (!servidorNoAr) {
  * se a bancada não deveria ser de verdade — e não se cabe mais uma exceção.
  */
 const SO_CONTRA_ARMAZEM_DE_VERDADE = new Set(["testar-cors", "testar-cors-arquivos"]);
+
+/*
+ * ── ESTE ARQUIVO PRECISA LER O `.env.local` (17/09/2026) ──────────────────
+ *
+ * As suítes recebem `--env-file=.env.local` do `spawnSync` lá embaixo, mas ESTE
+ * processo não recebia nada — `npm test` o chama seco. Então a decisão logo
+ * abaixo enxergava só o que estivesse no ambiente do shell.
+ *
+ * No CI isso funcionava por acidente: o workflow declara as variáveis em `env:`
+ * do job, e elas chegam no ambiente de verdade. Na máquina de qualquer um, onde
+ * elas moram só no `.env.local`, a mesma bateria decidia diferente — as duas
+ * suítes de CORS iam a um armazém de mentira achando que era o de verdade, e
+ * saíam VERMELHAS em vez de "não se aplica".
+ *
+ * O mesmo comando tem de dar a mesma resposta nos dois lugares, senão o CI e a
+ * máquina discordam e ninguém sabe qual está certo.
+ */
+try {
+  process.loadEnvFile(path.join(AQUI, "..", ".env.local"));
+} catch {
+  /* Sem `.env.local` (uma instalação recém-clonada) a bancada é o ambiente, e é
+     isso mesmo: o que não existe não pode ser lido. */
+}
+
 const armazemDeMentira = Boolean(process.env.R2_ENDPOINT);
 
 const verdes = [];

@@ -711,7 +711,7 @@ export function EditorAparencia({
                 </div>
               )}
               <Eixo eixo="capa" titulo="Desenho da capa" ap={ap} mudar={mudar} />
-              <Eixo eixo="logo" titulo="Tamanho da logo" ap={ap} mudar={mudar} />
+              <Eixo eixo="logo" titulo="Logo" ap={ap} mudar={mudar} />
               {/* Junto do desenho da capa porque é a MESMA decisão vista de
                   outro lado: escolher "imersa" e depois "baixa" é dizer foto em
                   tela cheia, mas não a tela inteira. */}

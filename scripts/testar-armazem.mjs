@@ -67,6 +67,24 @@ async function foiParaOB2(fn) {
   try {
     const url = await fn();
     if (!arquivosConfigurado) throw new Error("não estourou nem gerou URL");
+    /*
+     * ── SÓ SERVE PARA QUEM DEVOLVE URL (17/09/2026) ────────────────────────
+     *
+     * Este detector foi usado um dia com `abrirEnvioDoOriginal`, que devolve um
+     * **id de upload**, não um endereço. Com as ARQUIVOS_* ausentes ninguém
+     * percebeu, porque o ramo do estouro respondia antes; com o B2 LIGADO o
+     * `url.includes(...)` passou a olhar um id e dizer "não foi ao B2" — a
+     * suíte acusando o produto por um defeito do teste.
+     *
+     * Então ele recusa o que não for endereço, em vez de responder sobre isso.
+     * Quem não devolve URL se prova de outro jeito — ver a etapa do multipart.
+     */
+    if (typeof url !== "string" || !/^https?:\/\//.test(url)) {
+      throw new Error(
+        `o detector de URL recebeu ${JSON.stringify(url)?.slice(0, 40)}, que não é endereço — ` +
+          `esta operação precisa de outra prova`,
+      );
+    }
     return /backblazeb2\.com|\/\/[^/]*b2/i.test(url) || url.includes(process.env.ARQUIVOS_BUCKET);
   } catch (e) {
     return e.message.includes("ARQUIVOS_");
@@ -218,14 +236,113 @@ await etapa("a escrita do original respeita o armazém escolhido", async () => {
  * fechar no outro deixa partes órfãs ocupando espaço e cobrando.
  */
 await etapa("o envio em partes inteiro respeita o armazém", async () => {
-  const noB2 = [
-    () => abrirEnvioDoOriginal("g/1/v.mp4", "video/mp4", "b2"),
-    () => urlDaParteDoOriginal("g/1/v.mp4", "upload-id", 1, "b2"),
-    () => fecharEnvioDoOriginal("g/1/v.mp4", "upload-id", [{ numero: 1, etag: "x" }], "b2"),
-    () => abortarEnvioDoOriginal("g/1/v.mp4", "upload-id", "b2"),
-  ];
-  for (const c of noB2) if (!(await foiParaOB2(c))) throw new Error("alguma etapa do multipart saiu do B2");
-  return `${noB2.length} etapas do multipart`;
+  /*
+   * SEM credencial do B2 a prova é o estouro: as quatro operações têm de
+   * reclamar das ARQUIVOS_*, o que quer dizer que a escolha chegou lá. É o que
+   * roda na máquina do Felipe, onde o B2 não está configurado.
+   */
+  if (!arquivosConfigurado) {
+    const noB2 = [
+      () => abrirEnvioDoOriginal("g/1/v.mp4", "video/mp4", "b2"),
+      () => urlDaParteDoOriginal("g/1/v.mp4", "upload-id", 1, "b2"),
+      () => fecharEnvioDoOriginal("g/1/v.mp4", "upload-id", [{ numero: 1, etag: "x" }], "b2"),
+      () => abortarEnvioDoOriginal("g/1/v.mp4", "upload-id", "b2"),
+    ];
+    for (const c of noB2) {
+      if (!(await foiParaOB2(c))) throw new Error("alguma etapa do multipart saiu do B2");
+    }
+    return `${noB2.length} etapas, pelo estouro (B2 não configurado aqui)`;
+  }
+
+  /*
+   * ── COM O B2 LIGADO, A PROVA É A VIAGEM INTEIRA (17/09/2026) ────────────
+   *
+   * Três das quatro operações NÃO devolvem endereço — `abrir` devolve um id,
+   * `fechar` e `abortar` não devolvem nada. Ler o retorno não prova nada sobre
+   * elas, e foi tentar isso que deixou esta etapa vermelha no CI.
+   *
+   * O que prova é ONDE O ARQUIVO FOI PARAR. Os dois armazéns da bancada falam
+   * com o mesmo servidor, mas em BALDES diferentes, então o balde é o que
+   * distingue um do outro:
+   *
+   *   abrir  → o id existe no balde do B2, e a URL da parte carrega os dois
+   *   fechar → o objeto aparece no balde do B2 e NÃO no do R2
+   *   abortar→ depois dele, fechar o mesmo id falha (o upload deixou de existir)
+   *
+   * Cada uma dessas respostas seria diferente se a operação tivesse ido para o
+   * outro lado — que é o que faz disto prova, e não passeio.
+   */
+  const chave = `g/teste-multipart/${Date.now()}.mp4`;
+
+  const id = await abrirEnvioDoOriginal(chave, "video/mp4", "b2");
+  if (typeof id !== "string" || !id) throw new Error(`abrir não devolveu id de upload: ${id}`);
+
+  const urlParte = await urlDaParteDoOriginal(chave, id, 1, "b2");
+  if (!urlParte.includes(process.env.ARQUIVOS_BUCKET)) {
+    throw new Error(`a URL da parte não aponta para o balde do B2: ${urlParte}`);
+  }
+  if (!urlParte.includes(encodeURIComponent(id)) && !urlParte.includes(id)) {
+    throw new Error("a URL da parte não carrega o id que o abrir devolveu — são dois uploads");
+  }
+
+  /* Uma parte só, pequena: o mínimo de 5 MB do S3 vale para todas menos a
+     última, e aqui a primeira TAMBÉM é a última. */
+  const bytes = Buffer.from("um pedaço de vídeo de mentira");
+  const envio = await fetch(urlParte, { method: "PUT", body: bytes });
+  if (!envio.ok) throw new Error(`a parte não subiu: HTTP ${envio.status}`);
+  const etag = envio.headers.get("etag");
+  if (!etag) throw new Error("o armazém não devolveu ETag da parte");
+
+  await fecharEnvioDoOriginal(chave, id, [{ numero: 1, etag }], "b2");
+
+  const tamanhoNoB2 = await conferirOriginal(chave, "b2");
+  if (!tamanhoNoB2) throw new Error("depois de fechar, o objeto não está no balde do B2");
+  const achouNoR2 = await conferirOriginal(chave, "r2").then(
+    () => true,
+    () => false,
+  );
+  if (achouNoR2) throw new Error("o objeto apareceu no balde do R2 — o fechar saiu do B2");
+
+  /*
+   * Agora o abortar, com um upload novo: abortado, fechar tem de falhar.
+   *
+   * ── QUANDO A BANCADA NÃO SABE ABORTAR ───────────────────────────────────
+   *
+   * `AbortMultipartUpload` é do S3 e o MinIO implementa, mas nem todo servidor
+   * de mentira implementa — o `s3rver` responde `MethodNotAllowed`. Isso é
+   * limitação da bancada, não defeito do produto, e reprovar por isso seria o
+   * mesmo erro que os testes de zip cometeram acusando o zip quando quem
+   * faltava era o powershell.
+   *
+   * Então essa recusa específica é dita em voz alta e a perna fica de fora.
+   * QUALQUER outro erro continua sendo reprovação: a exceção é estreita de
+   * propósito, senão ela engole o defeito que a etapa existe para pegar.
+   */
+  const id2 = await abrirEnvioDoOriginal(`${chave}.2`, "video/mp4", "b2");
+  const erroAoAbortar = await abortarEnvioDoOriginal(`${chave}.2`, id2, "b2").then(
+    () => null,
+    (e) => e,
+  );
+
+  if (erroAoAbortar && /MethodNotAllowed|NotImplemented/i.test(erroAoAbortar.name ?? "")) {
+    return "abrir, parte e fechar no balde do B2 (o abortar esta bancada não sabe fazer)";
+  }
+  if (erroAoAbortar) throw new Error(`abortar falhou: ${erroAoAbortar.name}: ${erroAoAbortar.message}`);
+
+  const fechouDepoisDeAbortar = await fecharEnvioDoOriginal(
+    `${chave}.2`,
+    id2,
+    [{ numero: 1, etag: '"x"' }],
+    "b2",
+  ).then(
+    () => true,
+    () => false,
+  );
+  if (fechouDepoisDeAbortar) {
+    throw new Error("fechar funcionou depois do abortar — o abortar não chegou ao B2");
+  }
+
+  return "abrir, parte, fechar e abortar, todos no balde do B2";
 });
 
 /*
@@ -235,7 +352,43 @@ await etapa("o envio em partes inteiro respeita o armazém", async () => {
  * "foi ao R2 e o objeto não existe".
  */
 await etapa("conferir o objeto olha no armazém certo", async () => {
-  if (arquivosConfigurado) return "pulado: com B2 ligado os dois lados vão à rede de verdade";
+  /*
+   * ── COM O B2 LIGADO, A PROVA MUDA DE NATUREZA (17/09/2026) ──────────────
+   *
+   * Esta etapa se PULAVA quando o B2 estava configurado, com a justificativa de
+   * que "os dois lados vão à rede de verdade". Só que era justamente aí que ela
+   * podia provar mais: com rede, dá para pôr um objeto num balde só e perguntar
+   * aos dois. Quem responde "achei" é quem foi ao balde certo.
+   *
+   * Pulada, ela deixava sem cobertura exatamente a configuração de produção —
+   * a única em que este código roda para valer.
+   */
+  if (arquivosConfigurado) {
+    const chave = `g/teste-conferir/${Date.now()}.jpg`;
+    const bytes = Buffer.from("uma foto de mentira");
+    const envio = await fetch(await urlDeEnvioDoOriginal(chave, "image/jpeg", "b2"), {
+      method: "PUT",
+      headers: { "Content-Type": "image/jpeg" },
+      body: bytes,
+    });
+    if (!envio.ok) throw new Error(`não consegui pôr o objeto no B2: HTTP ${envio.status}`);
+
+    const noB2 = await conferirOriginal(chave, "b2");
+    if (!noB2) throw new Error("conferir com armazem=b2 não achou um objeto que está no B2");
+    if (noB2.bytes !== bytes.length) {
+      throw new Error(`conferiu ${noB2.bytes} bytes e o objeto tem ${bytes.length}`);
+    }
+
+    /* O mesmo caminho, no outro armazém, tem de NÃO achar: o objeto só existe
+       num dos dois baldes, e é essa diferença que prova para onde cada um foi. */
+    const achouNoR2 = await conferirOriginal(chave, "r2").then(
+      () => true,
+      () => false,
+    );
+    if (achouNoR2) throw new Error("conferir com armazem=r2 achou um objeto que só existe no B2");
+
+    return `objeto só no B2: b2 acha (${noB2.bytes} bytes), r2 não`;
+  }
 
   const erroB2 = await conferirOriginal("g/1/inexistente.jpg", "b2").then(
     () => null,

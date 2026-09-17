@@ -103,22 +103,33 @@ jobs:
       # Servidor local não tem DNS curinga: sem isto o cliente S3 procura
       # `galerias.127.0.0.1`. Em produção esta variável não existe.
       ARMAZEM_CAMINHO_NO_ENDERECO: "1"
-      # O ARMAZÉM DOS ORIGINAIS FICA DESLIGADO, como na máquina do Felipe.
+      # O ARMAZÉM DOS ORIGINAIS, LIGADO — e a volta atrás de uma volta atrás.
       #
-      # Eu o tinha ligado apontando para o mesmo MinIO, e isso quebrou o
-      # `testar-armazem`: o detector dele foi escrito para o caso em que
-      # ARQUIVOS_* está AUSENTE — o módulo do B2 estoura nomeando as variáveis, e
-      # é esse estouro que prova que a escolha chegou lá. Com o B2 ligado ele cai
-      # no outro ramo, que lê a URL assinada; só que `abrirEnvioDoOriginal`
-      # devolve um id de upload, não uma URL, e a prova virava falsa.
+      # Em 17/09/2026 de manhã eu o DESLIGUEI aqui para a bateria ficar verde. O
+      # `testar-armazem` reprovava com ele ligado, e a leitura foi que a bancada
+      # estava inventando um estado que a máquina do Felipe não tem.
       #
-      # O `deploy.sh` já dizia que em dev o B2 não está configurado. A bancada
-      # copia esse estado em vez de inventar um terceiro.
+      # Estava errada. O defeito era do TESTE: o detector dele usava o retorno de
+      # `abrirEnvioDoOriginal` como se fosse uma URL, e ele devolve um id de
+      # upload. Com as ARQUIVOS_* ausentes ninguém percebia, porque o ramo do
+      # estouro respondia antes.
       #
-      # O NOME DO BALDE fica, porque `testar-marca-plataforma` confere que
-      # ARQUIVOS_BUCKET é "olumier-arquivos" — e nome de balde não é credencial:
-      # apontar para um balde que não existe abre a galeria do casal vazia.
+      # Desligar deixou a suíte verde e o caminho dos ORIGINAIS — o que carrega a
+      # foto de verdade, e o único caminho que existe em produção — sem ser
+      # exercitado em lugar nenhum. Verde por não olhar.
+      #
+      # Consertado o detector (a prova agora é em qual BALDE o arquivo foi
+      # parar), ele volta a ligar. Mesmo MinIO, balde separado: é a separação dos
+      # dois armazéns que se quer exercitar, e ela só aparece quando os dois
+      # existem.
+      ARQUIVOS_ENDPOINT: http://127.0.0.1:9000
+      ARQUIVOS_ACCESS_KEY_ID: minioadmin
+      ARQUIVOS_SECRET_ACCESS_KEY: minioadmin
+      # O NOME NÃO É ESCOLHA: `testar-marca-plataforma` confere que
+      # ARQUIVOS_BUCKET é "olumier-arquivos", porque bucket é onde o arquivo mora
+      # e apontar para um balde que não existe abre a galeria do casal vazia.
       ARQUIVOS_BUCKET: olumier-arquivos
+      ARQUIVOS_REGIAO: us-east-1
 
     steps:
       - name: Conferir o segredo antes de gastar tempo
@@ -177,7 +188,7 @@ jobs:
             docker logs minio 2>&1 | tail -30
             exit 1
           fi
-          for balde in galerias; do
+          for balde in galerias olumier-arquivos; do
             AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
               aws --endpoint-url http://127.0.0.1:9000 --region us-east-1 \
                   s3 mb "s3://$balde"
@@ -199,7 +210,11 @@ jobs:
             echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
             echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
             echo "R2_BUCKET=$R2_BUCKET"
+            echo "ARQUIVOS_ENDPOINT=$ARQUIVOS_ENDPOINT"
+            echo "ARQUIVOS_ACCESS_KEY_ID=$ARQUIVOS_ACCESS_KEY_ID"
+            echo "ARQUIVOS_SECRET_ACCESS_KEY=$ARQUIVOS_SECRET_ACCESS_KEY"
             echo "ARQUIVOS_BUCKET=$ARQUIVOS_BUCKET"
+            echo "ARQUIVOS_REGIAO=$ARQUIVOS_REGIAO"
           } > .env.local
 
       # A RECEITA DO BANCO NOVO É DE DUAS PARTES, e a primeira execução deste

@@ -16,17 +16,60 @@
 # Log: /var/log/fotonio-vigia.log
 set -uo pipefail
 
-URL="https://fotonio.com.br/api/healthz"
-SERVICO=fotonio
-LOG=/var/log/fotonio-vigia.log
-SEGREDOS=/opt/atomatiza-secrets.env
+# ── O ALVO E O DOMINIO CANONICO, E ELE JA MUDOU DUAS VEZES (17/09/2026) ─────
+#
+# Ate hoje esta linha apontava para `fotonio.com.br` — a PRIMEIRA marca, de
+# antes do Olumier e do Galeria Atomo. Ele nao esta em `DOMINIOS_ATENDIDOS`
+# (src/config/dominios.ts), que e a lista que o Caddy consulta antes de emitir
+# certificado; o proprio `testar-cors.mjs` ja o chamava de DOMINIO_ANTERIOR.
+#
+# Um vigia mirando no endereco errado e pior do que vigia nenhum, porque parece
+# que tem: ou ele nao alcanca nada e cai no ramo 000, que REINICIA O SERVICO a
+# cada 5 minutos para sempre; ou alcanca outra coisa e um Fotonio de verdade
+# fora do ar passa batido. Nos dois casos o painel diz "vigiado".
+#
+# A copia fica aqui (bash nao importa TypeScript), mas PRESA: o
+# `scripts/testar-vigia.mjs` exige que este endereco seja o `marca.dominio`. Na
+# proxima troca de marca o teste fica vermelho antes de alguem descobrir pelo
+# cliente.
+URL="${VIGIA_URL:-https://galeriaatomo.com.br/api/healthz}"
+
+# ── POR QUE OS CAMINHOS ACEITAM SER TROCADOS ────────────────────────────────
+#
+# Os valores de producao sao os padroes e nao mudam. O `${VAR:-padrao}` existe
+# para este arquivo poder ser EXERCITADO — pelo mesmo motivo que o
+# `portao-origin.sh` e um script separado: um vigia cujos ramos ninguem
+# consegue rodar sem derrubar o servidor e um vigia que ninguem nunca testou.
+#
+# `scripts/testar-vigia.mjs` roda ESTE arquivo com um `curl` de mentira no PATH
+# e confere os tres desfechos: aviso que sai, aviso que o Resend recusa (e que
+# portanto NAO pode gravar o carimbo de silencio), e segredo ausente.
+SERVICO="${VIGIA_SERVICO:-fotonio}"
+LOG="${VIGIA_LOG:-/var/log/fotonio-vigia.log}"
+SEGREDOS="${VIGIA_SEGREDOS:-/opt/atomatiza-secrets.env}"
 # Nao repetir o mesmo aviso a cada 5 min: um problema de madrugada viraria 100
 # e-mails e a pessoa acordaria com a caixa entupida em vez de informada.
 ESPERA_AVISO=$((60 * 60))
-CARIMBO=/var/lib/fotonio-vigia-ultimo-aviso
+CARIMBO="${VIGIA_CARIMBO:-/var/lib/fotonio-vigia-ultimo-aviso}"
 
 registrar() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
 
+# ── "AVISO ENVIADO" PRECISA QUERER DIZER ENVIADO (17/09/2026) ───────────────
+#
+# Esta funcao terminava em:
+#
+#     curl -s ... >/dev/null && registrar "  (aviso enviado para $dest)"
+#
+# `curl -s` sai 0 sempre que a REQUISICAO completa — inclusive quando o Resend
+# responde 401, 403 ou 422. Chave vencida, dominio nao verificado, destino
+# recusado: o log registrava "aviso enviado" e ninguem foi avisado. Luz verde
+# por cima de silencio, no unico lugar cujo trabalho e contar que o resto
+# quebrou.
+#
+# Agora o codigo HTTP e lido e o corpo da recusa vai para o log. E o CARIMBO da
+# espera de 1h so e gravado quando o envio DEU CERTO: antes ele era gravado
+# antes de tentar, entao uma recusa custava mais uma hora de silencio alem do
+# aviso perdido.
 avisar() {
   local assunto="$1" texto="$2"
   local agora ultimo
@@ -36,18 +79,34 @@ avisar() {
     registrar "  (aviso silenciado — ja avisei ha menos de 1h)"
     return 0
   fi
-  echo "$agora" > "$CARIMBO"
 
-  [ -f "$SEGREDOS" ] || { registrar "  (sem arquivo de segredos — nao consegui avisar)"; return 0; }
+  [ -f "$SEGREDOS" ] || { registrar "  (!! SEM AVISO: $SEGREDOS nao existe)"; return 0; }
   local chave dest
   chave=$(sed -n 's/^RESEND_API_KEY=//p' "$SEGREDOS" | tail -1)
   dest=$(sed -n 's/^ALERTA_EMAIL_DESTINO=//p' "$SEGREDOS" | tail -1)
-  [ -n "$chave" ] && [ -n "$dest" ] || { registrar "  (chave/destino ausentes)"; return 0; }
+  # Nomeia QUAL falta: "chave/destino ausentes" mandava conferir as duas.
+  [ -n "$chave" ] || { registrar "  (!! SEM AVISO: RESEND_API_KEY ausente em $SEGREDOS)"; return 0; }
+  [ -n "$dest" ] || { registrar "  (!! SEM AVISO: ALERTA_EMAIL_DESTINO ausente em $SEGREDOS)"; return 0; }
 
-  curl -s --max-time 30 -X POST https://api.resend.com/emails \
+  local corpo http
+  corpo=$(mktemp)
+  http=$(curl -s -o "$corpo" -w '%{http_code}' --max-time 30 \
+    -X POST https://api.resend.com/emails \
     -H "Authorization: Bearer $chave" -H "Content-Type: application/json" \
     -d "{\"from\":\"Vigia do Fotonio <contato@atomatiza.com.br>\",\"to\":[\"$dest\"],\"subject\":\"$assunto\",\"text\":\"$texto\"}" \
-    >/dev/null && registrar "  (aviso enviado para $dest)"
+    2>/dev/null || echo "000")
+
+  case "$http" in
+    2*)
+      echo "$agora" > "$CARIMBO"
+      registrar "  (aviso enviado para $dest)"
+      ;;
+    *)
+      registrar "  (!! O AVISO NAO SAIU — Resend respondeu $http: $(tr -d '\n' < "$corpo" | cut -c1-300))"
+      registrar "  (!! ninguem foi avisado. Conferir RESEND_API_KEY e o dominio do remetente.)"
+      ;;
+  esac
+  rm -f "$corpo"
 }
 
 CORPO=$(curl -s --max-time 20 "$URL" 2>/dev/null || true)

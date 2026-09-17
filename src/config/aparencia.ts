@@ -49,7 +49,27 @@ export type Tipografia =
 export type Grade = "colunas" | "linhas" | "quadrada" | "editorial" | "panorama";
 export type Densidade = "compacta" | "normal" | "arejada";
 
-export type TamanhoLogo = "discreta" | "media" | "grande" | "enorme";
+/**
+ * O tamanho da logo na capa — e a opção de não ter logo nenhuma.
+ *
+ * ── POR QUE "NENHUMA" MORA AQUI, E NÃO NUM INTERRUPTOR SEPARADO (17/09/2026)
+ *
+ * Felipe pediu "ter a opção sem logo" na galeria. Até aqui a logo aparecia
+ * sempre que o ESTÚDIO tivesse uma, e o único jeito de entregar uma capa sem
+ * ela era o estúdio não ter logo nenhuma — o que a tirava de todas as galerias
+ * de uma vez, inclusive das já entregues. Tudo ou nada.
+ *
+ * Um interruptor "mostrar logo" à parte resolveria, e criaria dois controles
+ * para a mesma decisão: a pessoa escolheria "Discreta" num lugar e "desligado"
+ * em outro, e as duas telas teriam de concordar para sempre. Como um eixo, a
+ * escolha é uma só, fica onde ela já vai procurar, e pega de graça o "salvar
+ * como padrão do estúdio" — quem nunca quer logo marca uma vez.
+ *
+ * `nenhuma` tira a ASSINATURA inteira da capa, não só a imagem: a capa fica com
+ * a foto, o título e a data. Pôr o nome do estúdio em texto no lugar seria
+ * responder outra pergunta — essa já é a que o eixo dá a quem não enviou logo.
+ */
+export type TamanhoLogo = "nenhuma" | "discreta" | "media" | "grande" | "enorme";
 
 /**
  * A grossura do título da capa.
@@ -576,8 +596,18 @@ export const raioDoCantoPx = (c: CantoFoto): number =>
  * quadrada usa o teto inteiro. Um número só serve para as duas porque quem
  * limita é a ALTURA, que é o que aperta contra o título logo abaixo.
  */
+/*
+ * O padrão vem pelo NOME, não pela posição.
+ *
+ * Era `OPCOES.logo[1].px` — o segundo item da lista, que por acaso era o
+ * padrão. Bastou "Nenhuma" entrar na frente para o índice 1 passar a ser outra
+ * coisa, e o valor de reserva viraria o tamanho errado em silêncio. Lista que
+ * cresce não pode carregar um índice cravado.
+ */
 export const alturaLogoPx = (t: TamanhoLogo): number =>
-  OPCOES.logo.find((o) => o.id === t)?.px ?? OPCOES.logo[1].px;
+  OPCOES.logo.find((o) => o.id === t)?.px ??
+  OPCOES.logo.find((o) => o.id === APARENCIA_PADRAO.logo)?.px ??
+  0;
 
 // --- eixos, com rótulos para a interface --------------------------------------
 
@@ -660,6 +690,7 @@ export const OPCOES = {
    * título do casal na capa imersa — deixa de ser marca e vira cabeçalho.
    */
   logo: [
+    { id: "nenhuma", nome: "Nenhuma", desc: "Só o título e a data — sem assinatura", px: 0 },
     { id: "discreta", nome: "Discreta", desc: "Assinatura no canto", px: 56 },
     { id: "media", nome: "Média", desc: "Marca visível, sem roubar o título", px: 88 },
     { id: "grande", nome: "Grande", desc: "A marca conduz a capa", px: 136 },

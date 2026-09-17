@@ -428,6 +428,47 @@ systemctl is-active $SERVICO
 ls -1dt $RELEASES/*/ 2>/dev/null | tail -n +$((MANTER + 1)) | xargs -r rm -rf
 REMOTE
 
+# ── OS SCRIPTS DE OPERACAO VIAJAM JUNTO (17/09/2026) ────────────────────────
+#
+# Ate hoje o `ops/` existia no git e NUNCA era instalado por nada. Os arquivos
+# que rodam de verdade moram em /opt e eram copiados a mao, uma vez, quando
+# foram criados. As duas copias divergiram em silencio, e foi assim que o vigia
+# ficou mirando `fotonio.com.br` — a marca de ANTES do Olumier — muito depois de
+# o dominio ter mudado duas vezes.
+#
+# Corrigir o arquivo no repositorio nao consertava nada enquanto isso: o
+# servidor seguia rodando a copia velha. Entao agora eles sobem a cada
+# publicacao, e a conferencia e por soma: `scp` que "deu certo" para o caminho
+# errado e exatamente o tipo de sucesso que esconde o problema.
+#
+# As UNIDADES (.service/.timer) NAO sao instaladas aqui de proposito: mexer em
+# systemd no meio de uma publicacao troca um risco conhecido por um
+# desconhecido. Elas mudam raramente, e a divergencia e acusada logo abaixo.
+echo "→ atualizando os scripts de operação"
+for f in fotonio-vigia fotonio-backup; do
+	scp -q "ops/$f.sh" "$VPS:/opt/$f.sh"
+	ssh -n "$VPS" "chmod +x /opt/$f.sh"
+	AQUI_SOMA=$(sha256sum "ops/$f.sh" | cut -d' ' -f1)
+	LA_SOMA=$(ssh -n "$VPS" "sha256sum /opt/$f.sh" | cut -d' ' -f1)
+	if [ "$AQUI_SOMA" != "$LA_SOMA" ]; then
+		echo "✗ /opt/$f.sh no servidor nao bate com ops/$f.sh — a copia nao chegou."
+		exit 1
+	fi
+	echo "  $f.sh em dia"
+done
+
+# As unidades nao sao instaladas, mas a divergencia nao pode ficar muda: uma
+# unidade velha aponta para caminho que talvez nem exista mais.
+for u in ops/*.service ops/*.timer; do
+	NOME=$(basename "$u")
+	LA=$(ssh -n "$VPS" "cat /etc/systemd/system/$NOME 2>/dev/null" || true)
+	if [ -n "$LA" ] && [ "$LA" != "$(cat "$u")" ]; then
+		echo "  ! $NOME do servidor difere de $u"
+		echo "    instalar na mao:  scp $u $VPS:/etc/systemd/system/$NOME"
+		echo "                      ssh $VPS 'systemctl daemon-reload'"
+	fi
+done
+
 # Conferir /entrar so provava que o Next respondia: aquela pagina nao toca banco
 # nem R2. O healthz testa as duas dependencias de verdade.
 echo "→ conferindo"
