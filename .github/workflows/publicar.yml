@@ -112,7 +112,12 @@ jobs:
       ARQUIVOS_ENDPOINT: http://127.0.0.1:9000
       ARQUIVOS_ACCESS_KEY_ID: minioadmin
       ARQUIVOS_SECRET_ACCESS_KEY: minioadmin
-      ARQUIVOS_BUCKET: originais
+      # O NOME NÃO É ESCOLHA: `testar-marca-plataforma` confere que
+      # ARQUIVOS_BUCKET é "olumier-arquivos", porque bucket é onde o arquivo
+      # mora e apontar para um balde que não existe abre a galeria do casal
+      # vazia. E é o nome do balde que o `testar-armazem` usa para saber se a
+      # coisa foi parar no armazém certo.
+      ARQUIVOS_BUCKET: olumier-arquivos
       ARQUIVOS_REGIAO: us-east-1
 
     steps:
@@ -172,7 +177,7 @@ jobs:
             docker logs minio 2>&1 | tail -30
             exit 1
           fi
-          for balde in galerias originais; do
+          for balde in galerias olumier-arquivos; do
             AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
               aws --endpoint-url http://127.0.0.1:9000 --region us-east-1 \
                   s3 mb "s3://$balde"

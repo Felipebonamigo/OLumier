@@ -101,6 +101,42 @@ export async function estudioDaRodada(db, opcoes = {}) {
   return estudio;
 }
 
+/* O vizinho, para os testes de isolamento. Ver `segundoEstudioDaRodada`. */
+let vizinho = null;
+
+/**
+ * O SEGUNDO estúdio desta execução — o vizinho de quem nada deve vazar.
+ *
+ * Três suítes (`testar-api-galerias`, `testar-chave-api`,
+ * `testar-dominio-proprio`) pediam dois estúdios EMPRESTADOS do banco:
+ *
+ *     select id from tenants order by criado_em limit 2
+ *
+ * Os dois mais antigos que por acaso existissem. Numa máquina com histórico
+ * funciona; num banco recém-criado — o do CI, o de quem acabou de clonar — não
+ * existem dois, e as três desistiam antes da primeira etapa com "preciso de
+ * dois estúdios no banco de teste". Só passavam porque a máquina de quem
+ * rodava tinha sobra de rodadas anteriores.
+ *
+ * Pior no `testar-dominio-proprio`, que ESCREVE nos estúdios que encontra:
+ * num banco de desenvolvimento com conta de gente, era o teste apagando o
+ * domínio próprio de quem não pediu nada.
+ *
+ * Agora o vizinho é criado aqui, e `limparRodada` leva os dois embora.
+ */
+export async function segundoEstudioDaRodada(db) {
+  if (vizinho) return vizinho;
+
+  const { rows } = await db.query(
+    `insert into tenants (slug, nome_estudio, email, senha_hash, quota_bytes, status)
+     values ($1, $2, $3, 'x', $4, 'ativo')
+     returning *`,
+    [`vizinho-${MARCA}`, "Estúdio Vizinho", `vizinho-${MARCA}@teste.local`, String(1024 ** 4)],
+  );
+  vizinho = rows[0];
+  return vizinho;
+}
+
 /**
  * Uma galeria desta execução, com mídia pronta dentro.
  *
@@ -115,12 +151,17 @@ export async function estudioDaRodada(db, opcoes = {}) {
  * @param opcoes.medias     quantas mídias criar (padrão: 3)
  * @param opcoes.publicada  padrão: true, que é o que a maioria dos testes quer
  * @param opcoes.bytes      tamanho de cada mídia (padrão: 1 MB)
+ * @param opcoes.dono       de quem é a galeria (padrão: o estúdio da rodada).
+ *                          Passe `segundoEstudioDaRodada(db)` para dar conteúdo
+ *                          ao vizinho: sem galeria do lado de lá, toda prova de
+ *                          isolamento passa sem comparar nada — e "passou" aí
+ *                          quer dizer "não olhou", que é pior que vermelho.
  */
 export async function galeriaDaRodada(db, opcoes = {}) {
   const nome = opcoes.nome ?? "principal";
   if (galerias.has(nome)) return galerias.get(nome);
 
-  const t = await estudioDaRodada(db);
+  const t = opcoes.dono ?? (await estudioDaRodada(db));
   const sufixo = `${MARCA}-${nome}`;
 
   const { rows } = await db.query(
@@ -202,9 +243,15 @@ export async function limparRodada(db) {
    * favoritas, acessos, chaves de API e recuperações. Conferido no schema. */
   await db.query("delete from tenants where id = $1", [estudio.id]);
 
+  /* O vizinho vai junto: quem o cria não é quem o limpa, e deixá-lo para trás
+     encheria o banco de "Estúdio Vizinho" a cada execução. */
+  if (vizinho) await db.query("delete from tenants where id = $1", [vizinho.id]);
+
+  const quantosEstudios = vizinho ? 2 : 1;
   estudio = null;
+  vizinho = null;
   galerias.clear();
-  return { estudios: 1, galerias: quantas, objetos };
+  return { estudios: quantosEstudios, galerias: quantas, objetos };
 }
 
 /**
