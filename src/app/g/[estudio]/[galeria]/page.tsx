@@ -771,6 +771,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             buscaPorRosto={buscaPorRosto}
             bytesDaGaleria={bytesDaGaleria}
             recorte={escolhidas.size > 0 && !amostrando}
+            /* O capítulo aberto vale em qualquer galeria, fatiada ou não —
+               ver `capituloAberto` em galeria-cliente. */
+            capituloAberto={capSecaoId ?? null}
             fatia={
               fatiada
                 ? {

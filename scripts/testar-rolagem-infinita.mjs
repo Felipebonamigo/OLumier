@@ -151,6 +151,64 @@ try {
     }
     return "as duas mandam secaoId";
   });
+  /* ── 3. A SAÍDA DO FIM DO CAPÍTULO ─────────────────────────────────────
+   *
+   * Felipe: "no fim do capítulo tem que ter um botão: 'próximo capítulo' ou
+   * 'continuar'".
+   *
+   * Vendo UM capítulo, a última foto era um beco: a pessoa rolava, as fotos
+   * acabavam, e continuar exigia voltar ao menu lá em cima — num capítulo de
+   * 700 fotos, a galeria inteira de volta.
+   *
+   * A etapa usa a galeria PEQUENA de propósito. Nela não há fatia, e é
+   * justamente onde a primeira versão do botão não aparecia: ele saía de
+   * `fatia.capituloAtivo`, e `fatia` só existe acima de 600 fotos. O recorte
+   * por capítulo existe em qualquer galeria.
+   */
+  const pequena = await galeriaDaRodada(db, { nome: "saida", medias: 0, publicada: true });
+  await db.query("update galerias set senha_hash = null where id = $1", [pequena.id]);
+  const c1 = await criarSecao(pequena.id, pequena.estudio.id, "Making Of");
+  const c2 = await criarSecao(pequena.id, pequena.estudio.id, "Festa");
+  let n = 0;
+  for (const c of [c1, c2]) {
+    for (let i = 0; i < 4; i++, n++) {
+      await db.query(
+        `insert into medias (galeria_id,tenant_id,secao_id,chave,nome_original,tipo,mime,bytes,largura,altura,ordem,pronto)
+         values ($1,$2,$3,$4,$5,'foto','image/jpeg',1000,1200,1800,$6,true)`,
+        [pequena.id, pequena.estudio.id, c.id, `x/${pequena.id}/${n}.jpg`, `f${n}.jpg`, n],
+      );
+    }
+  }
+  const pagina = async (consulta) =>
+    (await fetch(`${BASE}/g/${pequena.tslug}/${pequena.gslug}${consulta}`, { cache: "no-store" })).text();
+
+  await etapa("no fim de um capítulo há como ir para o próximo", async () => {
+    const html = await pagina("?cap=making-of");
+    if (!html.includes("Próximo capítulo")) {
+      throw new Error("o capítulo termina num beco: nada leva ao seguinte");
+    }
+    if (!html.includes("Festa")) throw new Error("o botão não nomeia o capítulo de destino");
+    return "Próximo capítulo: Festa";
+  });
+
+  await etapa("no ÚLTIMO capítulo a saída é a galeria inteira", async () => {
+    const html = await pagina("?cap=festa");
+    if (html.includes("Próximo capítulo")) {
+      throw new Error("ofereceu um próximo capítulo que não existe");
+    }
+    if (!html.includes("Ver a galeria inteira")) {
+      throw new Error("o último capítulo ficou sem saída nenhuma");
+    }
+    return "volta para a galeria";
+  });
+
+  await etapa("na galeria inteira o botão não aparece", async () => {
+    const html = await pagina("");
+    if (/Próximo capítulo|Ver a galeria inteira/.test(html)) {
+      throw new Error("ofereceu saída de capítulo onde os capítulos já emendam um no outro");
+    }
+    return "a rolagem já faz esse papel";
+  });
 } finally {
   await limparRodada(db);
   await db.end();
