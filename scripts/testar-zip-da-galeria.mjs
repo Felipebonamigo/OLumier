@@ -14,9 +14,7 @@
  * a rota falhar na busca, e o teste não diria nada sobre o zip.
  */
 import pg from "pg";
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { spawnSync } from "node:child_process";
+import { readFileSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -45,19 +43,10 @@ const url = `${BASE}/api/g/${g.id}/zip`;
 const conteudos = new Map();
 const chaves = [];
 
-function extrair(zip) {
-  const dir = mkdtempSync(path.join(tmpdir(), "zip-rota-"));
-  const arquivo = path.join(dir, "g.zip");
-  writeFileSync(arquivo, zip);
-  const destino = path.join(dir, "saida");
-  const r = spawnSync(
-    "powershell",
-    ["-NoProfile", "-NonInteractive", "-Command",
-      `Expand-Archive -LiteralPath '${arquivo}' -DestinationPath '${destino}' -Force`],
-    { encoding: "utf8" },
-  );
-  return { dir, destino, codigo: r.status, msg: (r.stderr || "").trim() };
-}
+/* Quem abre o zip é um descompactador de verdade — o do Windows onde ele
+   existe, `unzip` onde não existe. Ver scripts/abrir-zip.mjs. */
+const { abrirZip } = await import("./abrir-zip.mjs");
+const extrair = (zip) => abrirZip(zip, "g.zip");
 
 try {
   /* Cada mídia da bancada ganha um original de verdade no balde, com o tamanho
@@ -97,7 +86,7 @@ try {
     const { dir, destino, codigo, msg } = extrair(zip);
     try {
       if (codigo !== 0) {
-        erro(`o Windows não abriu o zip: ${msg.split("\n")[0]}`);
+        erro(`o descompactador recusou o zip: ${msg.split("\n")[0]}`);
       } else {
         ok("o Windows descompacta");
         let iguais = 0;

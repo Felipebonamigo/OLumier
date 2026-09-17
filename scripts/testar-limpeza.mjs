@@ -41,7 +41,7 @@ const etapa = async (nome, fn) => {
 
 /* O endereço do armazém vem do `lib/r2.ts`: eram cinco cópias desta conta,
    e as cópias não acompanharam o dia em que o armazém mudou de lugar. */
-const { ENDERECO_DO_ARMAZEM, OPCOES_DO_CLIENTE } = await import("../src/lib/r2.ts");
+const { OPCOES_DO_CLIENTE } = await import("../src/lib/r2.ts");
 const s3 = new S3Client({
   ...OPCOES_DO_CLIENTE,
   credentials: {

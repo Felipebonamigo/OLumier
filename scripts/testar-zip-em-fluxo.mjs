@@ -30,12 +30,11 @@
  * `Expand-Archive` do PowerShell, que é o que a Carol usa, e o conteúdo de cada
  * arquivo extraído é comparado byte a byte com o que entrou.
  */
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { spawnSync } from "node:child_process";
+import { readFileSync, existsSync, rmSync } from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 
+import { abrirZip } from "./abrir-zip.mjs";
 import { zipEmFluxo } from "../src/lib/zip-em-fluxo.ts";
 
 let falhou = false;
@@ -76,7 +75,7 @@ const entrada = (nome, bytes, partes = 3) => ({
  * comparando com `zlib.crc32` dos bytes originais. É independente do escritor:
  * se o escritor errasse a soma, os dois números divergiriam.
  */
-function crcsDoDiretorio(zip) {
+function entradasDoDiretorio(zip) {
   const fim = zip.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   let inicio = zip.readUInt32LE(fim + 16);
   let quantos = zip.readUInt16LE(fim + 10);
@@ -88,37 +87,32 @@ function crcsDoDiretorio(zip) {
     quantos = Number(zip.readBigUInt64LE(fim64 + 32));
     inicio = Number(zip.readBigUInt64LE(fim64 + 48));
   }
-  const crcs = new Map();
+  const entradas = new Map();
   let p = inicio;
   for (let i = 0; i < quantos; i++) {
+    const flags = zip.readUInt16LE(p + 8);
     const crc = zip.readUInt32LE(p + 16);
     const tamNome = zip.readUInt16LE(p + 28);
     const tamExtra = zip.readUInt16LE(p + 30);
     const tamComent = zip.readUInt16LE(p + 32);
     const nome = zip.subarray(p + 46, p + 46 + tamNome).toString("utf8");
-    crcs.set(nome, crc);
+    entradas.set(nome, { crc, flags });
     p += 46 + tamNome + tamExtra + tamComent;
   }
-  return crcs;
+  return entradas;
 }
 
-/** Descompacta com o Windows e devolve o diretório. */
+/**
+ * Descompacta com um descompactador de verdade e devolve o diretório.
+ *
+ * Era `powershell -Command Expand-Archive` direto. Na máquina do Felipe é o
+ * certo — o Windows é onde a noiva abre o arquivo —, mas num runner Linux o
+ * powershell não existe, o spawn volta com status nulo e o teste acusava o zip
+ * de um defeito que era da bancada. Ver scripts/abrir-zip.mjs.
+ */
 function descompactarComWindows(zip) {
-  const dir = mkdtempSync(path.join(tmpdir(), "zip-teste-"));
-  const arquivo = path.join(dir, "galeria.zip");
-  writeFileSync(arquivo, zip);
-  const destino = path.join(dir, "saida");
-  const r = spawnSync(
-    "powershell",
-    [
-      "-NoProfile",
-      "-NonInteractive",
-      "-Command",
-      `Expand-Archive -LiteralPath '${arquivo}' -DestinationPath '${destino}' -Force`,
-    ],
-    { encoding: "utf8" },
-  );
-  return { dir, destino, codigo: r.status, erro: (r.stderr || "").trim() };
+  const r = abrirZip(zip, "galeria.zip");
+  return { dir: r.dir, destino: r.destino, codigo: r.codigo, erro: r.msg, ferramenta: r.ferramenta };
 }
 
 const casos = [
@@ -154,20 +148,42 @@ for (const [rotulo, opcoes] of casos) {
     continue;
   }
 
-  /* O CRC primeiro, e sem o Windows no meio — ver `crcsDoDiretorio`. */
+  /* O CRC primeiro, e sem o Windows no meio — ver `entradasDoDiretorio`. */
   const { crc32 } = await import("node:zlib");
-  const crcs = crcsDoDiretorio(zip);
-  const crcErrado = arquivos.find(([nome, bytes]) => crcs.get(nome) !== crc32(bytes));
+  const entradas = entradasDoDiretorio(zip);
+  const crcErrado = arquivos.find(([nome, bytes]) => entradas.get(nome)?.crc !== crc32(bytes));
   if (crcErrado) {
     erro(`o CRC de "${crcErrado[0]}" está errado — o Mac e o 7-Zip recusariam este arquivo`);
   } else {
     ok("o CRC de cada arquivo confere com o conteúdo", "o que o Windows não verifica");
   }
 
+  /*
+   * ── O BIT 11, CONFERIDO À PARTE (17/09/2026) ────────────────────────────
+   *
+   * Sem o bit 11 o nome não é declarado como UTF-8 e o Windows entrega a pasta
+   * como "CerimÃ´nia". O juiz natural disso é o próprio descompactador — e é,
+   * no Windows. No Linux não é: o `unzip` é chamado com `-UU -O UTF-8`, que
+   * manda confiar nos bytes do nome, justamente para ele parar de traduzir
+   * "ô" para `#U00f4` (ver `scripts/abrir-zip.mjs`). Só que quem manda confiar
+   * nos bytes deixa de julgar a flag: um zip que a esquecesse sairia com o
+   * nome certo aqui e quebrado no computador da noiva.
+   *
+   * Então a flag é lida direto do diretório central, pelo mesmo motivo e no
+   * mesmo lugar em que o CRC é: é conferência estrutural, não veredito de
+   * leitor, e as duas coisas juntas cobrem o que cada uma não alcança.
+   */
+  const semUtf8 = arquivos.filter(([nome]) => !(entradas.get(nome)?.flags & 0x0800));
+  if (semUtf8.length) {
+    erro(`sem a flag de UTF-8: ${semUtf8.map(([n]) => `"${n}"`).join(", ")} — o Windows abriria com o nome quebrado`);
+  } else {
+    ok("todo nome vai declarado como UTF-8 (bit 11)", "é o que salva o acento de \"Cerimônia\"");
+  }
+
   const { dir, destino, codigo, erro: msg } = descompactarComWindows(zip);
   try {
     if (codigo !== 0) {
-      erro(`o Windows recusou o arquivo: ${msg.split("\n")[0]}`);
+      erro(`o descompactador recusou o arquivo: ${msg.split("\n")[0]}`);
       continue;
     }
     ok("o Windows descompacta sem reclamar");
