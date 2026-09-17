@@ -53,6 +53,21 @@ const regiao = process.env.ARQUIVOS_REGIAO ?? "us-east-005";
 export const ARQUIVOS_BUCKET = process.env.ARQUIVOS_BUCKET ?? "";
 
 /**
+ * Irmãs das de `r2.ts`, e pelo mesmo motivo: `testar-cors-arquivos` e
+ * `configurar-cors` montavam cada um o seu cliente, e uma cópia esquecida é
+ * uma cópia que fala com o armazém errado.
+ *
+ * `forcePathStyle`: servidor local não tem DNS curinga, e sem ele o cliente
+ * procura `olumier-arquivos.127.0.0.1`. Em produção a variável não existe e o
+ * B2 segue no estilo virtual.
+ */
+export const OPCOES_DO_CLIENTE_ARQUIVOS = {
+  region: regiao,
+  endpoint,
+  forcePathStyle: process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1",
+};
+
+/**
  * true quando dá para servir do B2.
  *
  * Enquanto for false o sistema roda igual: nada foi movido para cá ainda, e
@@ -74,12 +89,7 @@ function s3(): S3Client {
     );
   }
   cliente ??= new S3Client({
-    region: regiao,
-    endpoint,
-    /* Mesma chave do `r2.ts`, mesmo motivo: servidor local não tem DNS
-       curinga, e sem isto o cliente procura `originais.127.0.0.1`. Em
-       produção a variável não existe e o B2 segue no estilo virtual. */
-    forcePathStyle: process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1",
+    ...OPCOES_DO_CLIENTE_ARQUIVOS,
     credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
   });
   return cliente;

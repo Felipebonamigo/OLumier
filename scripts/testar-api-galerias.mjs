@@ -46,12 +46,18 @@ const igual = (a, b, o) => {
   if (a !== b) throw new Error(`${o}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 
-const { rows: ts } = await db.query("select id, nome_estudio from tenants order by criado_em limit 2");
-if (ts.length < 2) {
-  console.error("✗ preciso de dois estúdios no banco de teste");
-  process.exit(1);
-}
-const [estudio, outro] = ts;
+/* A BANCADA CRIA OS DOIS, em vez de pegar emprestado do banco.
+ *
+ * Isto aqui era `select id from tenants order by criado_em limit 2`: os dois
+ * estúdios mais antigos que por acaso existissem. Num banco recém-criado — o do
+ * CI, o de quem acabou de clonar — não existem dois, e a suíte desistia antes da
+ * primeira etapa. Só passava porque a máquina de quem rodava tinha sobra de
+ * rodadas anteriores. Ver `segundoEstudioDaRodada` em fixture-de-teste.mjs. */
+const { estudioDaRodada, segundoEstudioDaRodada, galeriaDaRodada, limparRodada } = await import(
+  "./fixture-de-teste.mjs"
+);
+const estudio = await estudioDaRodada(db);
+const outro = await segundoEstudioDaRodada(db);
 
 /*
  * Um estúdio descartável e JÁ CANCELADO, só para o portão de cobrança.
@@ -176,9 +182,18 @@ await etapa("capítulo repetido é recusado, mesmo com outra caixa", async () =>
 });
 
 await etapa("capítulo em galeria de outro estúdio não é criado", async () => {
-  const { rows } = await db.query("select id from galerias where tenant_id = $1 limit 1", [outro.id]);
-  if (rows.length === 0) return "outro estúdio sem galeria — nada a provar";
-  const r = await chamar(`/api/galerias/${rows[0].id}/secoes`, {
+  /* A GALERIA DO VIZINHO É CRIADA AQUI, e não procurada no banco.
+   *
+   * Isto perguntava se o outro estúdio POR ACASO tinha galeria e, quando não
+   * tinha, saía com "nada a provar" — verde. Uma prova de vazamento que passa
+   * sem comparar nada é pior que vermelha: ela ocupa o lugar da prova e ninguém
+   * desconfia. Com a bancada criando o vizinho, a galeria dele existe sempre. */
+  const dela = await galeriaDaRodada(db, {
+    nome: "do-vizinho",
+    medias: 1,
+    dono: outro,
+  });
+  const r = await chamar(`/api/galerias/${dela.id}/secoes`, {
     metodo: "POST",
     chave: deEnvio,
     corpo: { nome: "Invasão" },
@@ -248,6 +263,7 @@ if (criadas.chaves.length > 0) {
   await db.query("delete from chaves_api where id = any($1::uuid[])", [criadas.chaves]);
 }
 await db.query("delete from tenants where id = any($1::uuid[])", [criadas.tenants]);
+await limparRodada(db);
 await db.end();
 
 console.log(falhou ? "\n✗ rotas de galeria com falha\n" : "\n✓ rotas de galeria ok\n");

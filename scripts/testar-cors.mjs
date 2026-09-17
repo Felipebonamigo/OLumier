@@ -35,10 +35,13 @@ if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) 
   process.exit(1);
 }
 
-const ENDPOINT = `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+
+/* O endereço do armazém vem do `lib/r2.ts`: eram cinco cópias desta conta,
+   e as cópias não acompanharam o dia em que o armazém mudou de lugar. */
+const { ENDERECO_DO_ARMAZEM, OPCOES_DO_CLIENTE } = await import("../src/lib/r2.ts");
+const ENDPOINT = ENDERECO_DO_ARMAZEM;
 const s3 = new S3Client({
-  region: "auto",
-  endpoint: ENDPOINT,
+  ...OPCOES_DO_CLIENTE,
   credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
 });
 

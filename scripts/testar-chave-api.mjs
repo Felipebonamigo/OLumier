@@ -51,12 +51,18 @@ const igual = (a, b, o) => {
 
 /* Dois estúdios: o teste de isolamento entre contas é o que mais importa aqui,
  * e ele precisa de um segundo tenant de verdade, não de um id inventado. */
-const { rows: ts } = await db.query("select id, nome_estudio from tenants order by criado_em limit 2");
-if (ts.length < 2) {
-  console.error("✗ preciso de dois estúdios no banco de teste — crie outra conta em /cadastrar");
-  process.exit(1);
-}
-const [estudio, outro] = ts;
+/* A BANCADA CRIA OS DOIS, em vez de pegar emprestado do banco.
+ *
+ * Isto aqui era `select id from tenants order by criado_em limit 2`: os dois
+ * estúdios mais antigos que por acaso existissem. Num banco recém-criado — o do
+ * CI, o de quem acabou de clonar — não existem dois, e a suíte desistia antes da
+ * primeira etapa. Só passava porque a máquina de quem rodava tinha sobra de
+ * rodadas anteriores. Ver `segundoEstudioDaRodada` em fixture-de-teste.mjs. */
+const { estudioDaRodada, segundoEstudioDaRodada, limparRodada } = await import(
+  "./fixture-de-teste.mjs"
+);
+const estudio = await estudioDaRodada(db);
+const outro = await segundoEstudioDaRodada(db);
 
 console.log(`\nChave de API — estúdio: ${estudio.nome_estudio}\n`);
 
@@ -256,6 +262,7 @@ await etapa("chave revogada fecha a porta na hora", async () => {
 if (criadas.length > 0) {
   await db.query("delete from chaves_api where id = any($1::uuid[])", [criadas]);
 }
+await limparRodada(db);
 await db.end();
 
 console.log(falhou ? "\n✗ chave de API com falha\n" : "\n✓ chave de API ok\n");

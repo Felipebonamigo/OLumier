@@ -34,9 +34,12 @@ if (faltando.length) {
 
 console.log(`conta ...${R2_ACCOUNT_ID.slice(-6)} · bucket "${R2_BUCKET}"`);
 
+
+/* O endereço do armazém vem do `lib/r2.ts`: eram cinco cópias desta conta,
+   e as cópias não acompanharam o dia em que o armazém mudou de lugar. */
+const { ENDERECO_DO_ARMAZEM, OPCOES_DO_CLIENTE } = await import("../src/lib/r2.ts");
 const s3 = new S3Client({
-  region: "auto",
-  endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  ...OPCOES_DO_CLIENTE,
   credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
 });
 

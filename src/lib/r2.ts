@@ -45,11 +45,33 @@ const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
  * ele o cliente procura `galerias.127.0.0.1` e não acha ninguém. Fica atrás de
  * uma chave própria em vez de ligar sozinho junto com o endereço, para um
  * fornecedor futuro poder usar endereço próprio e continuar no estilo virtual.
+ *
+ * As duas variáveis são lidas em `OPCOES_DO_CLIENTE`, logo abaixo.
  */
-const endereco = process.env.R2_ENDPOINT;
-const caminhoNoEndereco = process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1";
 
 export const BUCKET = process.env.R2_BUCKET ?? "galerias";
+
+/**
+ * O endereço do armazém, e as opções do cliente S3 — exportados porque havia
+ * CINCO cópias desta mesma conta espalhadas pelos scripts.
+ *
+ * `testar-r2`, `testar-limpeza`, `testar-cors` e `configurar-cors` montavam
+ * cada um o seu `new S3Client({ endpoint: `https://${conta}.r2...` })`. Quando
+ * o CI apontou o armazém para outro lugar, o app obedeceu e os scripts não:
+ * eles abriram TLS contra um servidor HTTP e devolveram
+ * `ssl3_read_bytes:ssl/tls alert handshake failure`, que não diz nada sobre
+ * endereço nenhum.
+ *
+ * Uma cópia só, e quem falar com o armazém por fora do app usa esta.
+ */
+export const ENDERECO_DO_ARMAZEM =
+  process.env.R2_ENDPOINT ?? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+
+export const OPCOES_DO_CLIENTE = {
+  region: process.env.R2_ENDPOINT ? (process.env.R2_REGIAO ?? "us-east-1") : "auto",
+  endpoint: ENDERECO_DO_ARMAZEM,
+  forcePathStyle: process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1",
+};
 
 /** true quando as credenciais estão configuradas — telas mostram aviso amigável se não. */
 export const armazenamentoConfigurado = Boolean(conta && accessKeyId && secretAccessKey);
@@ -63,10 +85,7 @@ function s3(): S3Client {
     );
   }
   cliente ??= new S3Client({
-    // "auto" é do R2; um armazém qualquer espera uma região de verdade.
-    region: endereco ? (process.env.R2_REGIAO ?? "us-east-1") : "auto",
-    endpoint: endereco ?? `https://${conta}.r2.cloudflarestorage.com`,
-    forcePathStyle: caminhoNoEndereco,
+    ...OPCOES_DO_CLIENTE,
     credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
   });
   return cliente;

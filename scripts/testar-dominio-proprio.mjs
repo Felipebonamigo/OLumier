@@ -182,12 +182,18 @@ await etapa("o token é longo e aleatório o bastante para não ser adivinhado",
 
 console.log("\nno banco");
 
-const { rows: ts } = await db.query("select id, slug from tenants order by criado_em limit 2");
-if (ts.length < 2) {
-  console.error("✗ preciso de 2 estúdios no banco de teste");
-  process.exit(1);
-}
-const [estudioA, estudioB] = ts;
+/* A BANCADA CRIA OS DOIS, em vez de pegar emprestado do banco.
+ *
+ * Isto aqui era `select id from tenants order by criado_em limit 2`: os dois
+ * estúdios mais antigos que por acaso existissem. Num banco recém-criado — o do
+ * CI, o de quem acabou de clonar — não existem dois, e a suíte desistia antes da
+ * primeira etapa. Só passava porque a máquina de quem rodava tinha sobra de
+ * rodadas anteriores. Ver `segundoEstudioDaRodada` em fixture-de-teste.mjs. */
+const { estudioDaRodada, segundoEstudioDaRodada, limparRodada } = await import(
+  "./fixture-de-teste.mjs"
+);
+const estudioA = await estudioDaRodada(db);
+const estudioB = await segundoEstudioDaRodada(db);
 const DOM = `teste-dominio-${Date.now()}.com.br`;
 
 const limpar = async () => {
@@ -275,6 +281,7 @@ await etapa("soltar o domínio para de resolver e de liberar certificado", async
 });
 
 await limpar();
+await limparRodada(db);
 await db.end();
 
 if (falhou) {
