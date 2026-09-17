@@ -31,6 +31,7 @@ import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
 import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-visiveis";
+import { capitulosComOsExtras } from "@/lib/capitulos-da-rolagem";
 import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
 export interface ItemGaleria {
@@ -200,26 +201,20 @@ export function GaleriaCliente({
   );
 
   /*
-   * Os índices dos capítulos, recalculados a partir de `itens`.
+   * Os índices dos capítulos, com as fotos que a rolagem trouxe.
    *
-   * O servidor manda os do primeiro pedaço; a partir do segundo, só ele sabe
-   * quantas fotos existem no cliente. Recalcular aqui é o que impede os dois de
-   * discordarem — e é barato: uma passada pela lista, e só quando ela cresce.
+   * Aqui morava uma RECONTAGEM do zero, e ela apagava a galeria: ver o bloco
+   * inteiro em `lib/capitulos-da-rolagem.ts`. Agora os índices do servidor
+   * ficam como estão e só as fotos novas são classificadas — uma foto que já
+   * está na tela não tem como sair dela.
    *
    * `total` continua vindo do servidor: é o tamanho do capítulo na GALERIA, e o
    * menu de baixar mostra esse número, não o do que já foi rolado.
    */
-  const capitulos = useMemo(() => {
-    if (extras.length === 0) return capitulosIniciais;
-    return capitulosIniciais.map((c) => ({
-      ...c,
-      indices: itens.reduce<number[]>((acc, it, i) => {
-        const dele = c.id === "sem-capitulo" ? !it.secaoId : it.secaoId === c.id;
-        if (dele) acc.push(i);
-        return acc;
-      }, []),
-    }));
-  }, [capitulosIniciais, itens, extras.length]);
+  const capitulos = useMemo(
+    () => capitulosComOsExtras(capitulosIniciais, itensIniciais.length, extras),
+    [capitulosIniciais, itensIniciais.length, extras],
+  );
 
   /* Navegar é como a galeria fatiada mostra um recorte — capítulo, favoritas,
      resultado da selfie. `router.push` e não `location.href`: o Next troca só

@@ -369,6 +369,28 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
            460 px nunca amplia nada, e pedir à rota seria uma ida e volta para
            nada. Fora da amostra fica em aberto, e o lightbox pede quando abre. */
         urlGrande: amostrando ? thumb : undefined,
+        /*
+         * ── DE QUAL CAPÍTULO É ESTA FOTO (17/09/2026) ──────────────────────
+         *
+         * Faltava, e o buraco só aparecia na rolagem infinita — que é onde ele
+         * era catastrófico.
+         *
+         * O servidor manda os índices de cada capítulo prontos, então aqui o
+         * campo parecia dispensável. Só que, quando o primeiro pedaço acaba e
+         * `carregarMais` traz o seguinte, o cliente RECALCULA os capítulos a
+         * partir da lista inteira — e a conta é `it.secaoId === c.id`. As fotos
+         * da rota `/mais` trazem `secaoId`; estas não traziam.
+         *
+         * Resultado: no instante em que a segunda parte chegava, as 600
+         * primeiras fotos deixavam de pertencer a capítulo nenhum e SUMIAM da
+         * tela. Juan, rolando o Making Of de um casamento entregue: "to
+         * descendo as fotos do making of e buga, vai para as fotos da decoração
+         * e diminui a página do making of". Medido no navegador: 601 imagens
+         * viram 121, e a página cai de 192.661 px para 42.275.
+         *
+         * `scripts/testar-rolagem-infinita.mjs` prende os dois lados agora.
+         */
+        secaoId: m.secao_id,
       };
     }),
   );
