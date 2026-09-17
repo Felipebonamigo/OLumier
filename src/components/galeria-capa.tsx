@@ -196,8 +196,18 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const alinharBloco = aEsquerda ? "" : "mx-auto";
   const alinharItens = aEsquerda ? "items-start" : "items-center";
 
+  /*
+   * ── A CAPA SEM ASSINATURA NENHUMA (17/09/2026) ──────────────────────────
+   *
+   * "Nenhuma" no eixo da logo não troca a imagem por texto: tira a assinatura
+   * inteira. A capa fica com a foto, o título e a data — que é o que "sem logo"
+   * quer dizer numa capa de casamento. Trocar por texto seria responder outra
+   * pergunta, e é a resposta que o eixo já dá a quem não enviou logo.
+   */
+  const semAssinatura = aparencia.logo === "nenhuma";
+
   const Estudio = ({ className = "" }: { className?: string }) =>
-    logoUrl ? (
+    semAssinatura ? null : logoUrl ? (
       // eslint-disable-next-line @next/next/no-img-element -- URL externa do estúdio, sem otimização nossa
       <img
         src={logoUrl}
@@ -473,7 +483,15 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         </div>
 
         <div className="flex flex-col justify-between gap-10 md:py-4">
-          <Estudio className={aEsquerda ? "self-start" : "self-center"} />
+          {/* Sem assinatura, o lugar dela FICA: este `justify-between` tem dois
+              filhos, e é o de cima que empurra o texto para o pé da coluna. Com
+              um filho só, o texto subiria para o topo — a capa CONVITE mudaria
+              de desenho por causa de uma escolha que era só sobre a logo. */}
+          {semAssinatura ? (
+            <span aria-hidden />
+          ) : (
+            <Estudio className={aEsquerda ? "self-start" : "self-center"} />
+          )}
           <div className={`flex flex-col gap-5 ${alinharItens} ${alinharTexto}`}>
             <Legenda />
             {/* Peso normal, e não negrito: a serifada de contraste alto (Bodoni,
@@ -578,9 +596,13 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         <div className="mt-4">
           <Legenda />
         </div>
-        <div className="mt-6">
-          <Estudio />
-        </div>
+        {/* O embrulho sai junto: vazio, o `mt-6` dele deixaria um vão morto no pé
+            da capa — espaço reservado para uma assinatura que não vem. */}
+        {!semAssinatura && (
+          <div className="mt-6">
+            <Estudio />
+          </div>
+        )}
       </header>
     );
   }
