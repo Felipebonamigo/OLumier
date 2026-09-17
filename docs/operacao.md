@@ -36,7 +36,66 @@ errado na metade dos casos:
   **Avisa** por e-mail.
 
 Aviso repetido é silenciado por 1h — um problema de madrugada viraria 100 e-mails
-e a pessoa acordaria com a caixa entupida em vez de informada.
+e a pessoa acordaria com a caixa entupida em vez de informada. O relógio dessa
+espera só é reiniciado quando o aviso **saiu**: uma recusa do Resend não pode
+custar o aviso e mais uma hora de silêncio junto.
+
+### Para onde vai o aviso
+
+Os dois avisos — o do vigia e o do backup — leem **duas** variáveis de
+`/opt/atomatiza-secrets.env`:
+
+| Variável | O que é |
+|---|---|
+| `RESEND_API_KEY` | chave do Resend. É a do Atomatiza, reaproveitada: mesmo dono, mesmo servidor, e duplicar segredo é duplicar o que pode vazar. |
+| `ALERTA_EMAIL_DESTINO` | **para quem o aviso vai.** Uma caixa que você lê de verdade. |
+
+```bash
+grep -E 'RESEND_API_KEY|ALERTA_EMAIL_DESTINO' /opt/atomatiza-secrets.env
+```
+
+⚠️ **`ALERTA_EMAIL_DESTINO` não pode ser `contato@galeriaatomo.com.br`.** Esse
+domínio não tem MX (ver `docs/email.md`), então o aviso mais importante que este
+sistema manda — "o backup falhou, o banco está sem cópia do dia" — cairia no
+vazio. Até a caixa existir, aponte para uma caixa que recebe hoje.
+
+O remetente é `contato@atomatiza.com.br`, de outro produto, porque é o único
+domínio verificado no Resend. Verificar o `galeriaatomo.com.br` resolve isso
+junto com o resto — ver `docs/email.md`.
+
+### "Aviso enviado" quer dizer enviado
+
+Até 17/09/2026 não queria. Os dois scripts mandavam o e-mail com `curl -s` e não
+liam o código HTTP, e o `curl` sai 0 sempre que a **requisição** completa —
+inclusive quando o Resend responde 401 ou 422. Chave vencida, remetente não
+verificado, destino recusado: o log dizia "aviso enviado" e ninguém tinha sido
+avisado. No `fotonio-backup.sh` era pior, com um `|| true` que não deixava rastro
+nenhum.
+
+Hoje o código é lido e a recusa vai para o log com o corpo da resposta:
+
+```
+(!! O AVISO NAO SAIU — Resend respondeu 401: {"message":"API key is invalid"})
+(!! ninguem foi avisado. Conferir RESEND_API_KEY e o dominio do remetente.)
+```
+
+`scripts/testar-vigia.mjs` prende isso rodando o vigia de verdade com um `curl`
+de mentira no PATH — um teste que só procurasse o texto do código passaria com a
+variável sendo ignorada logo abaixo.
+
+### Os scripts de `ops/` sobem no deploy
+
+O que roda no servidor mora em `/opt/fotonio-vigia.sh` e `/opt/fotonio-backup.sh`.
+Até 17/09/2026 **nada os instalava**: eram cópias feitas à mão uma vez, e as duas
+pontas divergiram em silêncio — foi assim que o vigia ficou mirando
+`fotonio.com.br`, a marca de antes do Olumier, por muito tempo depois de o
+domínio ter mudado duas vezes.
+
+Agora o `deploy.sh` os envia a cada publicação e confere por soma SHA-256. As
+**unidades** (`.service`/`.timer`) continuam sendo instaladas à mão de propósito
+— mexer em systemd no meio de uma publicação troca um risco conhecido por um
+desconhecido —, mas o deploy avisa quando a do servidor difere da do repositório,
+com o comando para acertar.
 
 ## Como o deploy funciona
 
