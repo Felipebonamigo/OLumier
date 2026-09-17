@@ -23,6 +23,9 @@
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
+
+const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 
 exigirBancoDeTeste();
 
@@ -220,6 +223,72 @@ await etapa("galeria de outro estúdio é recusada", async () => {
   const r = await ordenarFotosDaSecao(g.id, "00000000-0000-0000-0000-000000000000", cerimonia.id, "nome");
   if (r.ok) throw new Error("ordenou a galeria alheia");
   return "recusado";
+});
+
+/*
+ * ── O CONTROLE PRECISA ESTAR NA TELA, E NÃO SÓ FUNCIONAR (17/09/2026) ─────
+ *
+ * Felipe, olhando uma galeria com seis capítulos: "a opção ordenar ficou só em
+ * um capítulo". Estava certo — o `select` sumia com menos de duas fotos.
+ *
+ * O argumento de esconder era razoável sobre a AÇÃO (ordenar zero fotos não faz
+ * nada) e errado sobre a TELA, por dois motivos:
+ *
+ *   1. capítulo nasce vazio. O caminho normal é criar Making Of, Cerimônia e
+ *      Festa e só DEPOIS mandar as fotos — na hora de conhecer a tela o recurso
+ *      não está lá, e quem não o viu no começo não o procura depois.
+ *   2. a linha some, o espaço não: sem o select, os botões escorregam para a
+ *      esquerda e nenhuma coluna bate com a de cima.
+ *
+ * Por isso a etapa vai ao HTML do painel em vez de conferir a ação: o defeito
+ * era de presença, e presença não se prova chamando função.
+ */
+await etapa("o ordenar aparece em TODO capítulo, apagado quando não há o que ordenar", async () => {
+  /* Um capítulo CLARAMENTE vazio, criado aqui: os outros dois trocaram de mãos
+     ao longo do arquivo e o total deles não é contrato desta etapa. */
+  const vazioDeVerdade = await criarSecao(g.id, g.estudio.id, "Recepção");
+  const { rows: contagem } = await db.query(
+    `select s.nome, count(m.id)::int total
+       from secoes s left join medias m on m.secao_id = s.id
+      where s.galeria_id = $1 group by s.nome order by s.nome`,
+    [g.id],
+  );
+  const cheia = contagem.find((c) => c.total >= 2);
+  if (!cheia) throw new Error(`nenhum capítulo com 2+ fotos: ${JSON.stringify(contagem)}`);
+
+  const cookie = cookieDeSessao(g.tenant_id);
+  const html = await (
+    await fetch(`${BASE}/painel/galerias/${g.id}/fotos`, { headers: { cookie }, cache: "no-store" })
+  ).text();
+
+  /* A âncora é o `aria-label`, que nomeia o capítulo: é o que liga cada select
+     à sua linha sem depender da ordem em que eles saem no HTML. */
+  const tagDoSelect = (nome) =>
+    html.match(new RegExp(`<select[^>]*aria-label="Ordenar as fotos de ${nome}"[^>]*>`))?.[0] ?? null;
+
+  const cheio = tagDoSelect(cheia.nome);
+  const vazio = tagDoSelect("Recepção");
+
+  if (!cheio) throw new Error("o capítulo COM fotos não tem o menu de ordenar");
+  if (!vazio) {
+    throw new Error(
+      "o capítulo VAZIO não tem o menu de ordenar — é o defeito de 17/09/2026: " +
+        "some justamente de quem ainda vai receber fotos, e torce a lista inteira",
+    );
+  }
+  /*
+   * O ATRIBUTO, não a palavra: a classe do select tem `disabled:opacity-50`, e
+   * um `\bdisabled\b` casa com ela — `\b` trata `:` como fronteira. A primeira
+   * versão desta etapa reprovou o capítulo CHEIO por isso, acusando um defeito
+   * que era da expressão regular.
+   */
+  const apagado = (tag) => /\sdisabled(=|\s|>|$)/.test(tag);
+  if (apagado(cheio)) throw new Error(`o capítulo com fotos veio apagado: ${cheio.slice(0, 120)}`);
+  if (!apagado(vazio)) {
+    throw new Error("o capítulo vazio veio com o menu ativo — ordenar zero fotos não faz nada");
+  }
+  void vazioDeVerdade;
+  return `"${cheia.nome}" (${cheia.total} fotos) ativo, "Recepção" (0) apagado`;
 });
 
 await limparRodada(db);

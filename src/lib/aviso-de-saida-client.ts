@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { ehSaida } from "@/lib/aviso-de-saida";
 
 /**
  * AVISAR ANTES DE SAIR, quando sair custa trabalho.
@@ -40,10 +41,34 @@ import { useEffect } from "react";
  * gestos e ter um botão de voltar imprevisível em 100% das telas, a escolha é
  * a primeira. O `beforeunload` continua pegando o fechar e o recarregar.
  *
+ * ── O AVISO NÃO PODE MENTIR SOBRE O QUE SE PERDE (17/09/2026) ────────────
+ *
+ * Felipe: "adicionar opção de poder modificar a capa enquanto as fotos da
+ * galeria tão subindo". Ele clicava em Design com o envio rodando e recebia "se
+ * sair agora, os arquivos que faltam não sobem".
+ *
+ * E não era verdade. Desde 05/09/2026 a fila mora no PROVEDOR do layout da
+ * galeria, e o App Router não remonta layout ao trocar entre as abas filhas —
+ * o próprio `envio-em-curso.tsx` fecha dizendo "enquanto a pessoa estiver
+ * DENTRO da galeria, o envio segue". A capacidade existia; o aviso é que não
+ * tinha ficado sabendo.
+ *
+ * Aviso falso custa mais caro que aviso nenhum: ele ENSINA que não se pode
+ * fazer uma coisa que se pode, e quem acredita nele espera 600 fotos subirem
+ * antes de mexer na capa.
+ *
+ * Daí o `dentroDe`: o trecho de caminho em que a navegação NÃO custa nada.
+ * Quem passa é quem sabe da própria estrutura — o provedor do envio sabe que
+ * sobrevive às abas da galeria; o editor de aparência sabe que não, e por isso
+ * não passa nada. `beforeunload` continua valendo para os dois: fechar a aba
+ * mata tudo, esteja onde estiver.
+ *
  * @param ativo  Só guarda quando há o que perder. Falso não instala nada.
  * @param mensagem O que se perde, em uma frase, para a pessoa decidir.
+ * @param dentroDe Prefixo de caminho que não conta como saída. Sem ele, toda
+ *                 navegação para outro caminho pergunta.
  */
-export function useAvisoDeSaida(ativo: boolean, mensagem: string) {
+export function useAvisoDeSaida(ativo: boolean, mensagem: string, dentroDe?: string) {
   useEffect(() => {
     if (!ativo) return;
 
@@ -65,7 +90,8 @@ export function useAvisoDeSaida(ativo: boolean, mensagem: string) {
       /* Outro site sai pelo `beforeunload`, que já pergunta. Âncora para a
          mesma página (#fotos) não é saída. */
       if (destino.origin !== window.location.origin) return;
-      if (destino.pathname === window.location.pathname) return;
+
+      if (!ehSaida(window.location.pathname, destino.pathname, dentroDe)) return;
 
       if (!window.confirm(mensagem)) {
         e.preventDefault();
@@ -79,5 +105,5 @@ export function useAvisoDeSaida(ativo: boolean, mensagem: string) {
       window.removeEventListener("beforeunload", aoDescarregar);
       document.removeEventListener("click", aoClicar, true);
     };
-  }, [ativo, mensagem]);
+  }, [ativo, mensagem, dentroDe]);
 }

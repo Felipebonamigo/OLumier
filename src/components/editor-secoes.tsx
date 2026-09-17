@@ -265,13 +265,41 @@ export function EditorSecoes({
                       é uma ação que acabou de acontecer, e o resultado está na
                       grade logo abaixo.
 
-                      Some com o capítulo vazio: ordenar zero fotos é um menu
-                      que não faz nada.
+                      ── DESABILITADO, E NÃO ESCONDIDO (17/09/2026) ──────
+
+                      Ele SUMIA com menos de duas fotos, com o argumento de que
+                      ordenar zero fotos é um menu que não faz nada. Verdade
+                      sobre a ação, e errado sobre a tela, por dois motivos que
+                      o Felipe viu de uma vez: "a opção ordenar ficou só em um
+                      capítulo".
+
+                      1. Capítulo NASCE vazio. O caminho normal é criar Making
+                         Of, Cerimônia, Festa e só depois mandar as fotos — ou
+                         seja, na hora de conhecer a tela o recurso não está lá,
+                         e quem não o viu no começo não vai procurá-lo depois.
+
+                      2. A linha some, mas o espaço não: sem o select, os botões
+                         daquela linha escorregam para a esquerda e nenhuma
+                         coluna bate com a de cima. A lista inteira fica torta
+                         por causa de um controle a menos.
+
+                      Desabilitado resolve os dois: a coluna se mantém, o
+                      recurso se anuncia, e continua sem fazer nada quando não
+                      há o que ordenar — que era o ponto legítimo do argumento
+                      antigo. O `title` diz por que está apagado, senão vira
+                      botão morto sem explicação.
                     */}
-                    {s.total > 1 && (
+                    {(() => {
+                      const poucasFotos = s.total < 2;
+                      return (
                       <select
                         aria-label={`Ordenar as fotos de ${s.nome}`}
-                        disabled={ocupado}
+                        title={
+                          poucasFotos
+                            ? "Mande fotos para este capítulo — com menos de duas não há o que ordenar"
+                            : undefined
+                        }
+                        disabled={ocupado || poucasFotos}
                         value=""
                         onChange={(e) => {
                           if (!e.target.value) return;
@@ -290,7 +318,8 @@ export function EditorSecoes({
                           </option>
                         ))}
                       </select>
-                    )}
+                      );
+                    })()}
                     <button
                       type="button"
                       disabled={ocupado}

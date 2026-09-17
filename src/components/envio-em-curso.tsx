@@ -198,6 +198,15 @@ export function ProvedorDeEnvio({
   useAvisoDeSaida(
     rodando,
     "O envio ainda está em andamento. Se sair agora, os arquivos que faltam não sobem.",
+    /*
+     * As quatro abas DESTA galeria não são saída: este provedor mora no layout
+     * delas e não é remontado na troca — é o que o bloco "POR QUE O LAYOUT
+     * RESOLVE" lá em cima garante. Perguntar ali ensinaria que não se pode
+     * mexer no Design durante o envio, que é o contrário do que foi construído.
+     *
+     * A barra alta continua: sair da galeria mata a fila, e aí o aviso vale.
+     */
+    `/painel/galerias/${galeriaId}/`,
   );
 
   /*
