@@ -158,8 +158,8 @@ export default function SegurancaPage() {
 
       <p>
         Dúvida sobre qualquer coisa desta página?{" "}
-        <a href={`mailto:${marca.email}`}>{marca.email}</a> — respondemos com detalhe técnico se
-        você quiser.
+        <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a> — respondemos com detalhe
+        técnico se você quiser.
       </p>
     </>
   );

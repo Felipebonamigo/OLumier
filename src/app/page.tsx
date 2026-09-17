@@ -919,8 +919,8 @@ export default function Home() {
 
           <p className="mt-8 text-sm text-texto-soft">
             Ficou faltando alguma?{" "}
-            <a href={`mailto:${marca.email}`} className="text-acento underline underline-offset-4">
-              {marca.email}
+            <a href={marca.whatsappLink} className="text-acento underline underline-offset-4">
+              WhatsApp {marca.whatsappVisivel}
             </a>{" "}
             — respondemos com detalhe técnico se você quiser.
           </p>
@@ -975,8 +975,8 @@ export default function Home() {
               Termos de uso
             </Link>
             {" · "}
-            <a href={`mailto:${marca.email}`} className="hover:text-texto-soft">
-              {marca.email}
+            <a href={marca.whatsappLink} className="hover:text-texto-soft">
+              WhatsApp {marca.whatsappVisivel}
             </a>
           </p>
           <p>© {new Date().getFullYear()}</p>
