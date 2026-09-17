@@ -173,6 +173,23 @@ try {
     } else {
       ok("o cartão do painel descreve as listas por pessoa");
     }
+
+    /*
+     * A SEGUNDA frase errada do mesmo cartão, e a mais cara. Ela dizia "o
+     * limite vale para a galeria inteira, não por pessoa" — e quem aplica é
+     * `alternarDaPessoa`, contra a contagem de quem está marcando.
+     *
+     * Não é questão de redação: um fotógrafo que lesse aquilo combinaria 40
+     * fotos com o casal achando que 40 era o teto da galeria, e receberia 120.
+     * A tela estava, literalmente, informando errado o combinado do contrato.
+     */
+    if (/para a galeria inteira, não por pessoa/i.test(texto)) {
+      erro("o cartão ainda diz que o limite é da galeria — ele é POR PESSOA desde a migração 033");
+    } else if (!/por pessoa/i.test(texto)) {
+      erro("o cartão não diz que o limite é por pessoa — é o combinado do contrato que depende disso");
+    } else {
+      ok("o cartão diz que o limite vale por pessoa, que é como o código aplica");
+    }
   }
 
   {

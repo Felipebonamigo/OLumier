@@ -122,11 +122,25 @@ export function PainelSelecao({
         </span>
       </div>
 
-      {/* O número primeiro: é o que ele abre a tela para ver. */}
+      {/*
+        O número primeiro: é o que ele abre a tela para ver.
+
+        ── "DE 40" SAIU DAQUI (17/09/2026) ─────────────────────────────────
+
+        Este total é o da GALERIA INTEIRA, e o limite é POR PESSOA — quem
+        aplica é `alternarDaPessoa`, que conta as favoritas de quem está
+        marcando. Escrever "90 de 40" juntava os dois números como se fossem a
+        mesma conta e dizia ao fotógrafo que o combinado tinha estourado
+        quando três pessoas escolheram 30 cada, dentro do combinado.
+
+        O limite agora aparece onde ele de fato vale: ao lado de cada pessoa,
+        logo abaixo. Aqui fica só o que este número é — a soma.
+      */}
       <p className="mt-4 text-sm text-texto-soft">
         <strong className="text-texto">{total}</strong>{" "}
         {total === 1 ? "foto escolhida" : "fotos escolhidas"}
-        {limite !== null && <> de {limite}</>}
+        {pessoas.length > 1 && <> por {pessoas.length} pessoas</>}
+        {limite !== null && <> · até {limite} por pessoa</>}
         {motivo === "fechada" && fechadaEm && <> · encerrada em {dataBonita(fechadaEm)}</>}
       </p>
 
@@ -180,8 +194,12 @@ export function PainelSelecao({
             >
               <span className="font-medium text-texto">{p.nome || p.email}</span>
               {p.nome && <span className="ml-1.5 text-texto-faint">{p.email}</span>}
+              {/* Com limite, a conta de cada uma é contra o limite DELA — que é
+                  como o produto aplica, e o que o fotógrafo precisa saber para
+                  cobrar o combinado. */}
               <span className="ml-2 text-texto-faint">
                 {p.quantas} {p.quantas === 1 ? "foto" : "fotos"}
+                {limite !== null && <> de {limite}</>}
               </span>
             </li>
           ))}
@@ -197,7 +215,7 @@ export function PainelSelecao({
       {/* Regras */}
       <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-linha pt-5">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-texto-soft">Quantas fotos o cliente escolhe</span>
+          <span className="text-xs font-medium text-texto-soft">Quantas fotos cada pessoa escolhe</span>
           <input
             type="number"
             min={1}
@@ -245,9 +263,20 @@ export function PainelSelecao({
         )}
       </div>
 
+      {/*
+        ── ESTE PARÁGRAFO DIZIA O CONTRÁRIO DO CÓDIGO (17/09/2026) ─────────
+
+        "O limite vale para a galeria inteira, não por pessoa" foi verdade até a
+        migração 033. Desde então quem aplica é `alternarDaPessoa`, contra a
+        contagem de quem está marcando: o limite é POR PESSOA.
+
+        Felipe apontou o cartão dizendo que "ali está comunicando outro recado".
+        Não era só redação: um fotógrafo que lesse isto combinaria 40 fotos com
+        o casal achando que 40 era o teto da galeria, e receberia 120.
+      */}
       <p className="mt-2 text-xs text-texto-faint">
-        Deixe em branco para não limitar. O limite vale para a galeria inteira, não por pessoa —
-        e baixar o limite nunca apaga escolha que já foi feita.
+        Deixe em branco para não limitar. O limite vale <strong>por pessoa</strong> — cada uma
+        escolhe até esse número —, e baixar o limite nunca apaga escolha que já foi feita.
       </p>
 
       {erro && <p className="mt-3 text-sm text-erro">{erro}</p>}
