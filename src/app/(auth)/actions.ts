@@ -144,7 +144,9 @@ export async function pedirRecuperacaoAction(
 
   if (!emailConfigurado()) {
     return {
-      erro: `O envio de e-mail ainda não está ligado. Fale com ${marca.email} para redefinir sua senha.`,
+      erro:
+        `O envio de e-mail ainda não está ligado. Chame no WhatsApp ` +
+        `${marca.whatsappVisivel} para redefinir sua senha.`,
     };
   }
 

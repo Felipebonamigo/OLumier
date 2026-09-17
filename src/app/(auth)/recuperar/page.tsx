@@ -36,15 +36,20 @@ export default function RecuperarPage() {
           Sem remetente verificado, não adianta mostrar o formulário: ele
           aceitaria o e-mail e não mandaria nada. Melhor dizer a verdade e dar o
           caminho que funciona hoje.
+
+          E até 17/09/2026 o "caminho que funciona" era escrever para
+          `marca.email` — uma caixa que NÃO RECEBE (ver `config/marca.ts`). Ou
+          seja: a tela que existe para ser honesta mandava quem já não consegue
+          entrar falar com o vazio. Agora é o WhatsApp, que atende.
         */
         <div className="mt-6 rounded-xl border border-linha bg-carbon p-5 text-sm text-texto-soft">
           <p className="font-medium text-texto">O envio automático ainda não está ligado.</p>
           <p className="mt-2">
-            Escreva para{" "}
-            <a href={`mailto:${marca.email}`} className="text-acento underline underline-offset-4">
-              {marca.email}
+            Chame no{" "}
+            <a href={marca.whatsappLink} className="text-acento underline underline-offset-4">
+              WhatsApp {marca.whatsappVisivel}
             </a>{" "}
-            do endereço cadastrado e a senha é redefinida na hora.
+            dizendo o e-mail cadastrado, e a senha é redefinida na hora.
           </p>
         </div>
       )}

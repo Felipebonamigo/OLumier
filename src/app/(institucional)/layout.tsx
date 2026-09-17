@@ -39,7 +39,10 @@ export default function InstitucionalLayout({ children }: { children: React.Reac
           </Link>
         </p>
         <p className="mt-2">
-          {marca.nome} · {marca.email}
+          {marca.nome} ·{" "}
+          <a href={marca.whatsappLink} className="hover:text-texto-soft">
+            WhatsApp {marca.whatsappVisivel}
+          </a>
         </p>
       </footer>
     </div>

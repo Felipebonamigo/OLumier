@@ -24,7 +24,8 @@ export default function PrivacidadePage() {
       <h2>Quem é o responsável</h2>
       <p>
         O {marca.nome} é operado por Felipe Carboni Bonamigo. Contato para qualquer assunto de
-        privacidade, inclusive os pedidos descritos abaixo: <a href={`mailto:${marca.email}`}>{marca.email}</a>.
+        privacidade, inclusive os pedidos descritos abaixo:{" "}
+        <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a>.
       </p>
 
       <h2>Dados do fotógrafo</h2>
@@ -163,13 +164,14 @@ export default function PrivacidadePage() {
       <h2>Seus direitos (LGPD)</h2>
       <p>
         A Lei Geral de Proteção de Dados garante que você peça confirmação, acesso, correção,
-        portabilidade, anonimização ou exclusão dos seus dados, e que revogue consentimento. Escreva
-        para <a href={`mailto:${marca.email}`}>{marca.email}</a> — respondemos em até 15 dias.
+        portabilidade, anonimização ou exclusão dos seus dados, e que revogue consentimento. Chame
+        no <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a> — respondemos em até 15
+        dias.
       </p>
       <p>
         <strong>Se você aparece numa foto</strong> e quer que ela saia do ar, fale primeiro com o
         fotógrafo que fez a entrega: o conteúdo é dele e ele consegue remover na hora. Se não obtiver
-        resposta, escreva para nós.
+        resposta, fale com a gente.
       </p>
 
       <h2>Segurança</h2>
