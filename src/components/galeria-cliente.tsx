@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -31,6 +33,7 @@ import { useSwipe } from "@/lib/usar-swipe";
 import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
 import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-visiveis";
+import { capitulosComOsExtras } from "@/lib/capitulos-da-rolagem";
 import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
 export interface ItemGaleria {
@@ -132,6 +135,7 @@ export function GaleriaCliente({
   selecaoInicial,
   buscaPorRosto = null,
   fatia = null,
+  capituloAberto = null,
   recorte = false,
   eu: euInicial = null,
 }: {
@@ -155,6 +159,14 @@ export function GaleriaCliente({
    * de quase toda galeria: nada muda de comportamento.
    */
   fatia?: { total: number; capituloAtivo: string | null } | null;
+  /**
+   * O capítulo aberto (`?cap=`), pelo ID — ou `null` na galeria inteira.
+   *
+   * Separado da `fatia` de propósito: a fatia só existe acima de 600 fotos, e o
+   * recorte por capítulo existe em qualquer galeria. Amarrar um ao outro faria
+   * a saída do fim do capítulo sumir nas galerias pequenas.
+   */
+  capituloAberto?: string | null;
   /**
    * A tela é um recorte por `?fotos=` — o resultado da busca por rosto numa
    * galeria fatiada. Aí `itens` são exatamente as fotos achadas, e o menu de
@@ -200,26 +212,20 @@ export function GaleriaCliente({
   );
 
   /*
-   * Os índices dos capítulos, recalculados a partir de `itens`.
+   * Os índices dos capítulos, com as fotos que a rolagem trouxe.
    *
-   * O servidor manda os do primeiro pedaço; a partir do segundo, só ele sabe
-   * quantas fotos existem no cliente. Recalcular aqui é o que impede os dois de
-   * discordarem — e é barato: uma passada pela lista, e só quando ela cresce.
+   * Aqui morava uma RECONTAGEM do zero, e ela apagava a galeria: ver o bloco
+   * inteiro em `lib/capitulos-da-rolagem.ts`. Agora os índices do servidor
+   * ficam como estão e só as fotos novas são classificadas — uma foto que já
+   * está na tela não tem como sair dela.
    *
    * `total` continua vindo do servidor: é o tamanho do capítulo na GALERIA, e o
    * menu de baixar mostra esse número, não o do que já foi rolado.
    */
-  const capitulos = useMemo(() => {
-    if (extras.length === 0) return capitulosIniciais;
-    return capitulosIniciais.map((c) => ({
-      ...c,
-      indices: itens.reduce<number[]>((acc, it, i) => {
-        const dele = c.id === "sem-capitulo" ? !it.secaoId : it.secaoId === c.id;
-        if (dele) acc.push(i);
-        return acc;
-      }, []),
-    }));
-  }, [capitulosIniciais, itens, extras.length]);
+  const capitulos = useMemo(
+    () => capitulosComOsExtras(capitulosIniciais, itensIniciais.length, extras),
+    [capitulosIniciais, itensIniciais.length, extras],
+  );
 
   /* Navegar é como a galeria fatiada mostra um recorte — capítulo, favoritas,
      resultado da selfie. `router.push` e não `location.href`: o Next troca só
@@ -1042,12 +1048,69 @@ export function GaleriaCliente({
    * linha permanente dizendo "fim da galeria" é ruído embaixo de toda entrega,
    * e a ausência de mais fotos já diz isso.
    */
-  const fimDaGaleria =
-    fatia && !acabou ? (
-      <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
-        {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
-      </div>
-    ) : null;
+  /*
+   * ── O FIM DE UM CAPÍTULO PRECISA TER SAÍDA (17/09/2026) ─────────────────
+   *
+   * Felipe: "no fim do capítulo tem que ter um botão: 'próximo capítulo' ou
+   * 'continuar'".
+   *
+   * Vendo UM capítulo, a última foto é um beco: a pessoa rola, as fotos acabam,
+   * e o que sobra é o rodapé. Continuar exige rolar de volta até o menu lá em
+   * cima — e num capítulo de 700 fotos isso é a galeria inteira de volta.
+   *
+   * Só no recorte de um capítulo. Na galeria inteira os capítulos já emendam um
+   * no outro, e um botão "próximo" ali apontaria para onde a rolagem já vai.
+   *
+   * Capítulo vazio é pulado: mandar a pessoa para uma tela sem foto é pior que
+   * não oferecer saída nenhuma. E no último a saída é a galeria inteira, que é
+   * de onde ela veio.
+   */
+  /*
+   * Qual capítulo está aberto — e ele NÃO sai da fatia.
+   *
+   * Sair dela amarraria a saída do capítulo ao tamanho da galeria: `fatia` só
+   * existe acima de 600 fotos, e o recorte por capítulo existe em qualquer
+   * galeria. O botão do fim sumiria justamente nas pequenas, que são a maioria.
+   *
+   * Fora do `useMemo` porque o compilador do React não preserva a memoização
+   * quando a dependência é um acesso encadeado opcional.
+   */
+  const capituloAtivo = capituloAberto ?? null;
+  const saidaDoCapitulo = useMemo(() => {
+    if (!capituloAtivo) return null;
+    const comFoto = capitulos.filter((c) => c.total > 0);
+    const i = comFoto.findIndex((c) => c.id === capituloAtivo);
+    if (i < 0) return null;
+    const proximo = comFoto[i + 1] ?? null;
+    return proximo
+      ? { texto: `Próximo capítulo: ${proximo.nome}`, para: enderecoNaGaleria("", { cap: proximo.apelido }) }
+      : { texto: "Ver a galeria inteira", para: enderecoNaGaleria("", { cap: null }) };
+  }, [capitulos, capituloAtivo]);
+
+  const fimDaGaleria = (
+    <>
+      {fatia && !acabou ? (
+        <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
+          {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
+        </div>
+      ) : null}
+      {/* Só depois que as fotos deste capítulo acabaram: oferecer a saída no
+          meio do carregamento é convidar a pessoa a sair antes de ver o que
+          ainda está vindo. */}
+      {saidaDoCapitulo && (!fatia || acabou) && (
+        <div className="my-10 text-center">
+          <Link
+            href={saidaDoCapitulo.para}
+            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm transition"
+            style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
+          >
+            {saidaDoCapitulo.texto}
+            <span aria-hidden>→</span>
+          </Link>
+        </div>
+      )}
+    </>
+  );
 
   // Arrastar para o lado troca de foto — o gesto que todo app de fotos tem.
   const swipe = useSwipe(proximo, anterior);

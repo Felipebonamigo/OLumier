@@ -1,172 +1,218 @@
 #!/usr/bin/env node
 /**
- * A ROLAGEM QUE NÃO TERMINA. Uso:
- *   node --env-file=.env.local --experimental-strip-types \
- *        --import ./scripts/registrar-ts.mjs scripts/testar-rolagem-infinita.mjs
+ * A rolagem infinita não pode fazer foto sumir. Uso:
+ *   node --env-file=.env.local --conditions=react-server \
+ *     --experimental-strip-types --import ./scripts/registrar-ts.mjs \
+ *     scripts/testar-rolagem-infinita.mjs
  *
- * ── O PEDIDO (16/09/2026) ─────────────────────────────────────────────────
+ * ── O DEFEITO (17/09/2026) ────────────────────────────────────────────────
  *
- * Felipe: "remover paginação dentro do mesmo capítulo, tem apenas que rolar até
- * o final".
+ * Juan, rolando o Making Of de um casamento entregue: "to descendo as fotos do
+ * making of e buga, vai para as fotos da decoração e diminui a página do making
+ * of".
  *
- * A paginação nasceu de um defeito real, em 11/09: a galeria da Ana & Kaio, com
- * 2108 fotos, dava 6,35 MB de DOCUMENTO e o Safari do iPhone estourava. O corte
- * em `FOTOS_POR_TELA` resolveu aquilo e trouxe "parte 3 de 4".
+ * Numa galeria acima do teto de uma tela, quando a segunda parte chegava o
+ * cliente RECALCULAVA os capítulos do zero, perguntando `it.secaoId === c.id`.
+ * As fotos da rota `/mais` traziam `secaoId`; as do documento inicial, não. No
+ * instante da primeira carga, as 600 primeiras deixavam de pertencer a capítulo
+ * nenhum e sumiam.
  *
- * ── POR QUE ISTO NÃO TRAZ O DEFEITO DE VOLTA ──────────────────────────────
+ * Medido num navegador de verdade: 601 imagens viravam 121, cinco capítulos
+ * viravam dois, e a página caía de 192.661 px para 42.275.
  *
- * Porque o que estourava era o DOCUMENTO. Cada foto custava ~3,2 KB de HTML
- * porque a URL assinada vinha escrita ali dentro. A rota `mais` entrega JSON,
- * lido e descartado: a página continua nascendo com uma tela de fotos, e as
- * seguintes viram nós do DOM sem passar pelo documento. A primeira etapa abaixo
- * é a que guarda isso.
+ * ── POR QUE A BATERIA INTEIRA PASSOU POR CIMA DISSO ──────────────────────
+ *
+ * Havia teste da rota `/mais` e teste da página. Cada um de um lado, os dois
+ * verdes. O defeito morava na COSTURA — no contrato entre o que a página manda
+ * e o que o cliente precisa —, e costura não aparece testando as pontas.
+ *
+ * Por isso as duas etapas daqui: uma pergunta se as duas fontes de foto falam a
+ * mesma língua, e a outra exercita a junção com o campo FALTANDO, que é a
+ * condição exata do defeito.
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
+import { capitulosComOsExtras } from "../src/lib/capitulos-da-rolagem.ts";
 import { FOTOS_POR_TELA } from "../src/config/fatia-galeria.ts";
 
 exigirBancoDeTeste();
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
-const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
-await db.connect();
 
 let falhou = false;
 const etapa = async (nome, fn) => {
   try {
-    const extra = await fn();
-    console.log(`  ✓ ${nome}${extra ? ` — ${extra}` : ""}`);
+    const d = await fn();
+    console.log(`  ✓ ${nome}${d ? ` — ${d}` : ""}`);
   } catch (e) {
     console.error(`  ✗ ${nome} — ${e.message}`);
     falhou = true;
   }
 };
 
-const ALEM = 150;
-const TOTAL = FOTOS_POR_TELA + ALEM;
+console.log("A rolagem infinita não perde foto\n");
+
+/* ── 1. A JUNÇÃO, COM O CAMPO FALTANDO ───────────────────────────────────── */
+
+/*
+ * A condição exata do defeito: as fotos iniciais SEM `secaoId`. Antes, isto
+ * devolvia capítulos vazios e a galeria sumia. A função não tem como fazer
+ * isso agora — ela nem olha para as fotos que já estavam lá.
+ */
+await etapa("foto que já está na tela não sai dela, nem sem secaoId", () => {
+  const capitulos = [
+    { id: "cap-a", indices: [0, 1, 2] },
+    { id: "cap-b", indices: [3, 4] },
+  ];
+  const extras = [{ secaoId: "cap-b" }, { secaoId: "cap-a" }];
+  const depois = capitulosComOsExtras(capitulos, 5, extras);
+
+  const antesTotal = capitulos.reduce((n, c) => n + c.indices.length, 0);
+  const depoisTotal = depois.reduce((n, c) => n + c.indices.length, 0);
+  if (depoisTotal !== antesTotal + extras.length) {
+    throw new Error(`eram ${antesTotal} + ${extras.length}, ficaram ${depoisTotal}`);
+  }
+  for (const c of capitulos) {
+    const novo = depois.find((d) => d.id === c.id);
+    for (const i of c.indices) {
+      if (!novo.indices.includes(i)) throw new Error(`o índice ${i} sumiu de ${c.id}`);
+    }
+  }
+  const a = depois.find((d) => d.id === "cap-a").indices;
+  const b = depois.find((d) => d.id === "cap-b").indices;
+  if (JSON.stringify(a) !== "[0,1,2,6]") throw new Error(`cap-a ficou ${JSON.stringify(a)}`);
+  if (JSON.stringify(b) !== "[3,4,5]") throw new Error(`cap-b ficou ${JSON.stringify(b)}`);
+  return "os índices do servidor ficam onde estavam";
+});
+
+await etapa("sem fotos novas, os capítulos são os MESMOS objetos", () => {
+  const capitulos = [{ id: "a", indices: [0] }];
+  if (capitulosComOsExtras(capitulos, 1, []) !== capitulos) {
+    throw new Error("devolveu outra lista — o React redesenharia a galeria à toa");
+  }
+  const so = capitulosComOsExtras(capitulos, 1, [{ secaoId: "outro" }]);
+  if (so[0] !== capitulos[0]) {
+    throw new Error("trocou um capítulo que não recebeu foto nenhuma");
+  }
+  return "só troca quem recebeu foto";
+});
+
+await etapa("foto sem capítulo cai no balde das soltas", () => {
+  const capitulos = [{ id: "sem-capitulo", indices: [] }, { id: "cap-a", indices: [] }];
+  const d = capitulosComOsExtras(capitulos, 0, [{ secaoId: null }, { secaoId: "cap-a" }, {}]);
+  const soltas = d.find((c) => c.id === "sem-capitulo").indices;
+  if (JSON.stringify(soltas) !== "[0,2]") throw new Error(`soltas ficaram ${JSON.stringify(soltas)}`);
+  return "null e ausente contam como solta";
+});
+
+/* ── 2. A COSTURA: AS DUAS FONTES FALAM A MESMA LÍNGUA? ──────────────────── */
+
+const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await db.connect();
 
 const g = await galeriaDaRodada(db, { nome: "rolagem", medias: 0, publicada: true });
 await db.query("update galerias set senha_hash = null where id = $1", [g.id]);
-await db.query("delete from medias where galeria_id = $1", [g.id]);
 
-/* Uma inserção só: 750 idas ao banco levariam mais que o teste inteiro. */
-const linhas = Array.from({ length: TOTAL }, (_, i) =>
-  `('${g.id}','${g.estudio.id}','x/${g.id}/${i}.jpg','x/${g.id}/${i}_thumb.webp','foto-${i}.jpg','foto','image/jpeg',1000,1200,1200,${i},true)`,
-);
-await db.query(
-  `insert into medias (galeria_id, tenant_id, chave, chave_thumb, nome_original, tipo, mime,
-                       bytes, largura, altura, ordem, pronto)
-   values ${linhas.join(",")}`,
-);
+const { criarSecao } = await import("../src/lib/secoes.ts");
+const cap = await criarSecao(g.id, g.estudio.id, "Making Of");
+const cap2 = await criarSecao(g.id, g.estudio.id, "Festa");
 
-const url = `${BASE}/g/${g.tslug}/${g.gslug}`;
-
-console.log("\nA rolagem da galeria grande:\n");
-
-await etapa("a página continua trazendo UMA tela de fotos, não a galeria inteira", async () => {
-  const html = await (await fetch(url, { cache: "no-store" })).text();
-  const distintas = new Set(html.match(/foto-\d+\.jpg/g) ?? []).size;
-  if (distintas > FOTOS_POR_TELA) {
-    throw new Error(`${distintas} fotos no documento — é o defeito de 11/09 de volta`);
+/* Acima do teto de uma tela: é a única situação em que a rolagem existe. */
+const QUANTAS = FOTOS_POR_TELA + 20;
+try {
+  for (let i = 0; i < QUANTAS; i++) {
+    await db.query(
+      `insert into medias (galeria_id,tenant_id,secao_id,chave,nome_original,tipo,mime,bytes,largura,altura,ordem,pronto)
+       values ($1,$2,$3,$4,$5,'foto','image/jpeg',1000,1200,1800,$6,true)`,
+      [g.id, g.estudio.id, i < FOTOS_POR_TELA ? cap.id : cap2.id, `x/${g.id}/${i}.jpg`, `f${i}.jpg`, i],
+    );
   }
-  if (distintas === 0) throw new Error("não veio foto nenhuma");
-  return `${distintas} de ${TOTAL} no documento`;
-});
 
-await etapa("a paginação SUMIU da página", async () => {
-  const html = await (await fetch(url, { cache: "no-store" })).text();
-  if (/parte \d+ de \d+/i.test(html)) throw new Error('ainda existe "parte N de N"');
-  if (/próxima parte/i.test(html)) throw new Error('ainda existe "próxima parte"');
-  return "sem pastilhas de parte";
-});
+  await etapa("a página e a rota /mais descrevem a foto do mesmo jeito", async () => {
+    const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+    const r = await fetch(`${BASE}/api/g/${g.id}/mais?desde=${FOTOS_POR_TELA}`, { cache: "no-store" });
+    if (!r.ok) throw new Error(`a rota /mais respondeu ${r.status}`);
+    const { fotos } = await r.json();
+    if (!fotos?.length) throw new Error("a rota não devolveu foto nenhuma — a etapa ficaria sem objeto");
 
-await etapa("a rota devolve o pedaço seguinte", async () => {
-  const r = await fetch(`${BASE}/api/g/${g.id}/mais?desde=${FOTOS_POR_TELA}`, {
-    cache: "no-store",
+    /*
+     * O `secaoId` das fotos da ROTA precisa existir também no documento, senão
+     * as duas metades da galeria se descrevem diferente — que é exatamente o
+     * defeito de 17/09/2026. Procurado no HTML porque é lá que o documento
+     * entrega os dados de hidratação.
+     */
+    if (!fotos[0].secaoId) throw new Error("a rota /mais parou de mandar secaoId");
+    if (!html.includes("secaoId")) {
+      throw new Error(
+        "o documento da galeria não manda secaoId, e a rota manda: as duas metades " +
+          "falam línguas diferentes, e a junção perde foto",
+      );
+    }
+    return "as duas mandam secaoId";
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const d = await r.json();
-  if (d.fotos.length === 0) throw new Error("veio vazio");
-  /* As fotos têm de ser as SEGUINTES, não as mesmas: repetir o primeiro pedaço
-     faria a galeria mostrar a foto 1 de novo no meio da rolagem. */
-  const nomes = d.fotos.map((f) => f.nome);
-  if (nomes.includes("foto-0.jpg")) throw new Error("repetiu o começo da galeria");
-  if (!nomes.includes(`foto-${FOTOS_POR_TELA}.jpg`)) {
-    throw new Error(`o pedaço não começa onde o anterior parou: ${nomes[0]}`);
+  /* ── 3. A SAÍDA DO FIM DO CAPÍTULO ─────────────────────────────────────
+   *
+   * Felipe: "no fim do capítulo tem que ter um botão: 'próximo capítulo' ou
+   * 'continuar'".
+   *
+   * Vendo UM capítulo, a última foto era um beco: a pessoa rolava, as fotos
+   * acabavam, e continuar exigia voltar ao menu lá em cima — num capítulo de
+   * 700 fotos, a galeria inteira de volta.
+   *
+   * A etapa usa a galeria PEQUENA de propósito. Nela não há fatia, e é
+   * justamente onde a primeira versão do botão não aparecia: ele saía de
+   * `fatia.capituloAtivo`, e `fatia` só existe acima de 600 fotos. O recorte
+   * por capítulo existe em qualquer galeria.
+   */
+  const pequena = await galeriaDaRodada(db, { nome: "saida", medias: 0, publicada: true });
+  await db.query("update galerias set senha_hash = null where id = $1", [pequena.id]);
+  const c1 = await criarSecao(pequena.id, pequena.estudio.id, "Making Of");
+  const c2 = await criarSecao(pequena.id, pequena.estudio.id, "Festa");
+  let n = 0;
+  for (const c of [c1, c2]) {
+    for (let i = 0; i < 4; i++, n++) {
+      await db.query(
+        `insert into medias (galeria_id,tenant_id,secao_id,chave,nome_original,tipo,mime,bytes,largura,altura,ordem,pronto)
+         values ($1,$2,$3,$4,$5,'foto','image/jpeg',1000,1200,1800,$6,true)`,
+        [pequena.id, pequena.estudio.id, c.id, `x/${pequena.id}/${n}.jpg`, `f${n}.jpg`, n],
+      );
+    }
   }
-  return `${d.fotos.length} fotos, ${d.restantes} restantes`;
-});
+  const pagina = async (consulta) =>
+    (await fetch(`${BASE}/g/${pequena.tslug}/${pequena.gslug}${consulta}`, { cache: "no-store" })).text();
 
-await etapa("a rota assina a miniatura, e traz o que a grade precisa", async () => {
-  const d = await (
-    await fetch(`${BASE}/api/g/${g.id}/mais?desde=${FOTOS_POR_TELA}`, { cache: "no-store" })
-  ).json();
-  const f = d.fotos[0];
-  for (const campo of ["id", "nome", "tipo", "url", "largura", "altura"]) {
-    if (f[campo] === undefined) throw new Error(`faltou "${campo}"`);
-  }
-  /* Sem `largura`/`altura` a grade não reserva o espaço e a página pula
-     enquanto as fotos chegam — o defeito que o mural de 04/09 já resolveu. */
-  if (!f.largura || !f.altura) throw new Error("veio sem as medidas da foto");
-  if (!/^https?:/.test(f.url)) throw new Error(`url estranha: ${f.url}`);
-  return "id, nome, tipo, url, medidas e capítulo";
-});
+  await etapa("no fim de um capítulo há como ir para o próximo", async () => {
+    const html = await pagina("?cap=making-of");
+    if (!html.includes("Próximo capítulo")) {
+      throw new Error("o capítulo termina num beco: nada leva ao seguinte");
+    }
+    if (!html.includes("Festa")) throw new Error("o botão não nomeia o capítulo de destino");
+    return "Próximo capítulo: Festa";
+  });
 
-await etapa("rolar até o fim chega na última foto", async () => {
-  /* O que o navegador faz, em passos: pede, soma, pede de novo. */
-  let tenho = FOTOS_POR_TELA;
-  let voltas = 0;
-  for (;;) {
-    const d = await (
-      await fetch(`${BASE}/api/g/${g.id}/mais?desde=${tenho}`, { cache: "no-store" })
-    ).json();
-    tenho += d.fotos.length;
-    voltas++;
-    if (d.restantes === 0 || d.fotos.length === 0) break;
-    if (voltas > 20) throw new Error("a rolagem não termina — laço infinito de verdade");
-  }
-  if (tenho !== TOTAL) throw new Error(`parou em ${tenho} de ${TOTAL}`);
-  return `${TOTAL} fotos em ${voltas} pedidos`;
-});
+  await etapa("no ÚLTIMO capítulo a saída é a galeria inteira", async () => {
+    const html = await pagina("?cap=festa");
+    if (html.includes("Próximo capítulo")) {
+      throw new Error("ofereceu um próximo capítulo que não existe");
+    }
+    if (!html.includes("Ver a galeria inteira")) {
+      throw new Error("o último capítulo ficou sem saída nenhuma");
+    }
+    return "volta para a galeria";
+  });
 
-await etapa("pedir além do fim devolve vazio, e não erro", async () => {
-  const d = await (
-    await fetch(`${BASE}/api/g/${g.id}/mais?desde=${TOTAL + 500}`, { cache: "no-store" })
-  ).json();
-  if (d.fotos.length !== 0) throw new Error(`veio ${d.fotos.length} foto(s) do além`);
-  if (d.restantes !== 0) throw new Error(`disse que restam ${d.restantes}`);
-  return "vazio, restantes 0";
-});
+  await etapa("na galeria inteira o botão não aparece", async () => {
+    const html = await pagina("");
+    if (/Próximo capítulo|Ver a galeria inteira/.test(html)) {
+      throw new Error("ofereceu saída de capítulo onde os capítulos já emendam um no outro");
+    }
+    return "a rolagem já faz esse papel";
+  });
+} finally {
+  await limparRodada(db);
+  await db.end();
+}
 
-/*
- * A RÉGUA É A DA PÁGINA. A rota entrega miniatura assinada da galeria inteira:
- * se ela afrouxar, o link secreto deixa de ser secreto.
- */
-await etapa("galeria com senha não entrega o resto sem a senha", async () => {
-  await db.query("update galerias set senha_hash = 'x' where id = $1", [g.id]);
-  try {
-    const r = await fetch(`${BASE}/api/g/${g.id}/mais?desde=0`, { cache: "no-store" });
-    if (r.ok) throw new Error(`HTTP ${r.status} — entregou sem a senha`);
-    return `HTTP ${r.status}`;
-  } finally {
-    await db.query("update galerias set senha_hash = null where id = $1", [g.id]);
-  }
-});
-
-await etapa("galeria fora do ar não entrega o resto", async () => {
-  await db.query("update galerias set publicada = false where id = $1", [g.id]);
-  try {
-    const r = await fetch(`${BASE}/api/g/${g.id}/mais?desde=0`, { cache: "no-store" });
-    if (r.ok) throw new Error("entregou com a galeria despublicada");
-    return `HTTP ${r.status}`;
-  } finally {
-    await db.query("update galerias set publicada = true where id = $1", [g.id]);
-  }
-});
-
-await limparRodada(db);
-await db.end();
-
-console.log(falhou ? "\n✗ a rolagem infinita tem problema" : "\n✓ rolagem infinita ok");
+console.log(falhou ? "\n✗ a rolagem infinita perde foto\n" : "\n✓ a rolagem não perde foto\n");
 process.exit(falhou ? 1 : 0);
