@@ -556,9 +556,21 @@ export default function Home() {
               },
               {
                 n: "2",
-                titulo: "Eles fecham juntos",
+                titulo: "Cada um com a sua lista",
+                /*
+                 * Dizia "a lista é uma só: a noiva no celular e o noivo no
+                 * notebook veem a mesma escolha" — e isso deixou de ser verdade
+                 * em 15/09/2026, quando cada pessoa passou a ter a sua, por
+                 * e-mail. A promessa pública ficou descrevendo o produto
+                 * anterior por dois dias.
+                 *
+                 * O "mesma escolha no celular e no notebook" continua valendo, e
+                 * é o que o e-mail garante — só que agora por PESSOA, que é o
+                 * ponto: fornecedor, convidado e família também abrem o link, e
+                 * nenhum deles desmarca a escolha da noiva.
+                 */
                 texto:
-                  "A lista é uma só: a noiva no celular e o noivo no notebook veem a mesma escolha. Quando terminam, eles encerram — e a lista trava, para o álbum não mudar depois de diagramado. Mudaram de ideia? Você reabre em um clique.",
+                  "Quem favorita se identifica por e-mail, e leva a própria lista para qualquer aparelho — fornecedor, convidado e família abrem o mesmo link sem mexer na escolha do casal. Quando terminam, eles encerram, e a lista trava para o álbum não mudar depois de diagramado. Mudaram de ideia? Você reabre em um clique.",
               },
               {
                 n: "3",

@@ -92,9 +92,20 @@ export function PainelSelecao({
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Favoritas do cliente</h2>
+          {/*
+            ── O TEXTO FICOU PARA TRÁS DO PRODUTO (17/09/2026) ─────────────
+
+            Dizia "a lista é uma só — o casal escolhe junto". Foi verdade até a
+            migração 033, em 15/09/2026, quando cada pessoa passou a ter a sua,
+            identificada por e-mail. Desde então a frase contradizia a lista por
+            pessoa desenhada dez linhas abaixo dela, na mesma tela.
+
+            Felipe leu o cartão e perguntou se o recurso tinha sido feito. Tinha
+            — só que a tela dizia que não, e é a tela que ele lê.
+          */}
           <p className="mt-0.5 text-xs text-texto-faint">
-            O cliente marca as favoritas na própria galeria. A lista é uma só — o casal escolhe
-            junto, de qualquer aparelho.
+            Cada pessoa marca as suas na própria galeria, identificada por e-mail. A noiva vê a
+            mesma lista no celular e no notebook, e ninguém desmarca a escolha de outro.
           </p>
         </div>
 

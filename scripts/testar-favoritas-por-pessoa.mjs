@@ -142,6 +142,50 @@ try {
   const r = await alternarDaPessoa(g.id, outra.midias[0].id, noiva.id);
   if (r === null) ok("id de foto de outra galeria é recusado");
   else erro(`foto alheia foi aceita: ${JSON.stringify(r)}`);
+  /*
+   * ── A TELA NÃO PODE DESMENTIR O PRODUTO (17/09/2026) ────────────────────
+   *
+   * Felipe mandou uma foto do cartão "Favoritas do cliente" perguntando se o
+   * recurso tinha sido feito. Tinha — desde 15/09/2026, com migração e com
+   * todas as etapas acima verdes. O que ele leu foi o parágrafo do cartão, que
+   * continuava dizendo "a lista é uma só — o casal escolhe junto", escrito
+   * quando era verdade e nunca revisto.
+   *
+   * A frase contradizia a lista POR PESSOA desenhada dez linhas abaixo dela, na
+   * mesma tela. Recurso que a tela desmente é recurso que ninguém usa: a pessoa
+   * acredita no texto, não no código.
+   *
+   * Esta etapa é a única aqui que não olha comportamento. É de propósito —
+   * nenhuma das outras pegaria uma descrição errada, e foi exatamente por aí
+   * que o produto e a tela se separaram.
+   */
+  {
+    const fonte = await import("node:fs/promises").then((fs) =>
+      fs.readFile("src/components/painel-selecao.tsx", "utf8"),
+    );
+    /* Os comentários saem antes: o arquivo EXPLICA o defeito citando a frase
+       antiga, e a conferência não pode confundir a explicação com ele. */
+    const texto = fonte.replace(/\/\*[^]*?\*\//g, "").replace(/\{\/\*[^]*?\*\/\}/g, "");
+    if (/lista é uma só/i.test(texto)) {
+      erro('o cartão ainda anuncia "a lista é uma só" — o produto mudou em 15/09/2026');
+    } else if (!/e-mail/i.test(texto)) {
+      erro("o cartão não diz que a identificação é por e-mail — é o que separa as listas");
+    } else {
+      ok("o cartão do painel descreve as listas por pessoa");
+    }
+  }
+
+  {
+    const home = await import("node:fs/promises").then((fs) =>
+      fs.readFile("src/app/page.tsx", "utf8"),
+    );
+    const texto = home.replace(/\/\*[^]*?\*\//g, "");
+    if (/lista é uma só/i.test(texto)) {
+      erro('a página de vendas ainda promete "a lista é uma só" — é promessa pública desatualizada');
+    } else {
+      ok("a página de vendas promete o que o produto faz");
+    }
+  }
 } finally {
   await limparRodada(db);
   await db.end();
