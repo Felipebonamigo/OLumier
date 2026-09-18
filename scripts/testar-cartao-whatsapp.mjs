@@ -164,7 +164,25 @@ async function cartaoDe(aparencia) {
   const html = await (await fetch(url, { cache: "no-store" })).text();
   const endereco = html.match(/property="og:image"\s+content="([^"]+)"/)?.[1];
   if (!endereco) throw new Error("a página não declara og:image");
-  const r = await fetch(new URL(endereco, BASE), { cache: "no-store" });
+  /*
+   * ── O CARTÃO É BUSCADO NA BANCADA, E NÃO EM PRODUÇÃO (18/09/2026) ───────
+   *
+   * `metadataBase` (em `app/layout.tsx`) torna toda URL de metadado ABSOLUTA
+   * contra o domínio de verdade — que é o certo para o WhatsApp, que lê a
+   * etiqueta de fora. Só que `new URL(absoluta, BASE)` ignora a base: este
+   * teste saía da bancada e ia buscar o cartão em galeriaatomo.com.br.
+   *
+   * Isso é errado de duas maneiras, e as duas apareceram: numa máquina com
+   * saída para a internet ele media A PRODUÇÃO em vez do build que acabou de
+   * ser construído — verde sobre código que ninguém testou; e numa máquina sem
+   * saída (a deste ambiente, que barra o domínio) ele reprovava por 403, com o
+   * cartão local respondendo 200 e um PNG de 1200×630 perfeito.
+   *
+   * O CAMINHO é o que interessa; a origem é a bancada.
+   */
+  const caminho = new URL(endereco, BASE);
+  const noBanco = new URL(caminho.pathname + caminho.search, BASE);
+  const r = await fetch(noBanco, { cache: "no-store" });
   if (!r.ok) throw new Error(`o cartão respondeu HTTP ${r.status}`);
   const tipo = r.headers.get("content-type") ?? "";
   if (!tipo.startsWith("image/png")) throw new Error(`o cartão veio como ${tipo}`);
