@@ -6,6 +6,7 @@ import {
   criarSecaoAction,
   criarCapitulosSugeridosAction,
   renomearSecaoAction,
+  renomearGrupoSoltoAction,
   apagarSecaoAction,
   moverSecaoAction,
   reordenarSecoesAction,
@@ -13,12 +14,23 @@ import {
   ordenarFotosDaSecaoAction,
 } from "@/app/painel/actions";
 import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
+import { nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
 
 export interface SecaoResumo {
   id: string;
   nome: string;
   total: number;
 }
+
+/**
+ * O id de mentira do grupo das fotos soltas, dentro desta tela.
+ *
+ * Ele não é uma seção e não tem linha no banco, mas divide a lista — e o campo
+ * de renomear — com os capítulos. Usa a mesma palavra que a galeria já usa na
+ * URL (`?cap=sem-capitulo`), para não existirem dois nomes para a mesma coisa;
+ * e como todo id de capítulo é UUID, não há como colidir.
+ */
+const SOLTAS = "sem-capitulo";
 
 /**
  * Capítulos da galeria (Making Of, Cerimônia, Festa…).
@@ -30,10 +42,13 @@ export function EditorSecoes({
   galeriaId,
   secoes,
   semCapitulo,
+  grupoSolto,
 }: {
   galeriaId: string;
   secoes: SecaoResumo[];
   semCapitulo: number;
+  /** Como o fotógrafo chamou o grupo das soltas. Nulo = "Outras fotos". */
+  grupoSolto: string | null;
 }) {
   const [novo, setNovo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -353,40 +368,124 @@ export function EditorSecoes({
 
           {semCapitulo > 0 && (
             <li className="flex flex-wrap items-center gap-2 bg-carbon-2/50 px-3 py-2.5">
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm text-texto-soft">Sem capítulo</span>
-                <span className="text-[11px] text-texto-faint">
-                  {semCapitulo} {semCapitulo === 1 ? "foto aparece" : "fotos aparecem"} como{" "}
-                  <strong className="font-normal text-texto-soft">Outras fotos</strong>, antes dos
-                  capítulos
-                </span>
-              </span>
               {/*
-                MOVER TODAS DE UMA VEZ — pedido do sócio em 04/09/2026: "as
-                fotos sem capítulo devem ir obrigatoriamente para um capítulo".
+                ── O GRUPO DAS SOLTAS TEM NOME, E O NOME É DO FOTÓGRAFO ───────
 
-                Obrigar no ENVIO seria atrito no pior momento: quem está subindo
-                600 fotos não quer responder pergunta. Um botão que arruma
-                depois entrega o mesmo resultado e não cobra nada de quem não se
-                importa — e quem não clicar não fica com pastilha sem nome na
-                galeria, porque o grupo agora se chama "Outras fotos".
+                Juan, 18/09/2026: "aqui fica aparecendo 'outras fotos', pelo que
+                eu vi é todas as fotos juntas, não tem como trocar pra esse
+                nome. Tipo galeria completa ou algo assim. Ou eu não sei se foi
+                eu que fiz algo de errado kkkk, mas não criei nenhuma pasta com
+                esse nome."
+
+                Ele não criou nada: o texto era NOSSO, escrito na página da
+                galeria desde 04/09/2026, e esta linha só o anunciava em negrito
+                — "suas fotos aparecem como Outras fotos" — sem oferecer como
+                trocar. Numa tela em que todo capítulo ao lado tem um botão
+                "renomear", ler isso é concluir que aquela pasta veio de algum
+                lugar que você não controla.
+
+                Então o mesmo botão e o mesmo campo. A diferença entre este
+                grupo e um capítulo é o que ele É — o que sobrou, calculado a
+                cada carregamento —, e não o direito de se chamar do que o dono
+                da galeria quiser.
               */}
-              <select
-                aria-label={`Mover as ${semCapitulo} fotos sem capítulo`}
-                disabled={ocupado}
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) executar(moverSoltasAction, { secao_id: e.target.value });
-                }}
-                className="rounded-lg border border-linha bg-void px-2 py-1 text-xs text-texto-soft focus:border-acento focus:outline-none disabled:opacity-50"
-              >
-                <option value="">mover todas para…</option>
-                {secoes.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nome}
-                  </option>
-                ))}
-              </select>
+              {editando === SOLTAS ? (
+                <>
+                  <input
+                    value={nomeEditado}
+                    onChange={(e) => setNomeEditado(e.target.value)}
+                    /* A marca-d'água é o nome de fábrica: apagar o campo volta
+                       para ele, e o campo vazio mostra qual é. */
+                    placeholder={nomeDoGrupoSolto(null)}
+                    aria-label="Nome do grupo das fotos sem capítulo"
+                    autoFocus
+                    className="min-w-0 flex-1 rounded-md border border-linha bg-void px-2 py-1 text-sm focus:border-acento focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    disabled={ocupado}
+                    onClick={() => {
+                      executar(renomearGrupoSoltoAction, { nome: nomeEditado });
+                      setEditando(null);
+                    }}
+                    className="rounded-md bg-acento px-3 py-1 text-xs font-semibold text-void"
+                  >
+                    ok
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditando(null)}
+                    className="rounded-md border border-linha px-3 py-1 text-xs text-texto-soft"
+                  >
+                    cancelar
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* `min-w` para o nome NÃO ser espremido: sem ele, o `flex-1`
+                      encolhe este bloco até caber ao lado dos dois controles, e
+                      num celular de 390 px o nome virava "Galer…" com a frase
+                      quebrando uma palavra por linha. Com piso, o `flex-wrap`
+                      manda os controles para a linha de baixo, que é o que as
+                      linhas dos capítulos já fazem. */}
+                  <span className="min-w-[11rem] flex-1">
+                    <span className="block truncate text-sm text-texto-soft">
+                      {nomeDoGrupoSolto(grupoSolto)}
+                    </span>
+                    <span className="text-[11px] text-texto-faint">
+                      {semCapitulo}{" "}
+                      {semCapitulo === 1 ? "foto sem capítulo aparece" : "fotos sem capítulo aparecem"}{" "}
+                      com esse nome, antes dos capítulos
+                    </span>
+                  </span>
+
+                  <span className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      disabled={ocupado}
+                      onClick={() => {
+                        setEditando(SOLTAS);
+                        /* Começa VAZIO enquanto o nome ainda é o nosso: o campo
+                           mostra "Outras fotos" como marca-d'água e ele digita o
+                           dele por cima, em vez de apagar um texto que não
+                           escreveu. */
+                        setNomeEditado(grupoSolto ?? "");
+                      }}
+                      className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2"
+                    >
+                      renomear
+                    </button>
+                    {/*
+                      MOVER TODAS DE UMA VEZ — pedido do sócio em 04/09/2026:
+                      "as fotos sem capítulo devem ir obrigatoriamente para um
+                      capítulo".
+
+                      Obrigar no ENVIO seria atrito no pior momento: quem está
+                      subindo 600 fotos não quer responder pergunta. Um botão
+                      que arruma depois entrega o mesmo resultado e não cobra
+                      nada de quem não se importa — e quem não clicar não fica
+                      com pastilha sem nome na galeria, porque o grupo tem um
+                      (o nosso, ou o que ele escreveu no botão ao lado).
+                    */}
+                    <select
+                      aria-label={`Mover as ${semCapitulo} fotos sem capítulo`}
+                      disabled={ocupado}
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) executar(moverSoltasAction, { secao_id: e.target.value });
+                      }}
+                      className="rounded-lg border border-linha bg-void px-2 py-1 text-xs text-texto-soft focus:border-acento focus:outline-none disabled:opacity-50"
+                    >
+                      <option value="">mover todas para…</option>
+                      {secoes.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </>
+              )}
             </li>
           )}
         </ul>

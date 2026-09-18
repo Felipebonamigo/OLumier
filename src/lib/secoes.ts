@@ -203,6 +203,33 @@ export async function renomearSecao(secaoId: string, tenantId: string, nome: str
   );
 }
 
+/**
+ * COMO SE CHAMA, NESTA GALERIA, O GRUPO DAS FOTOS SEM CAPÍTULO.
+ *
+ * ── DE ONDE VEIO (18/09/2026, migração 037) ──────────────────────────────
+ *
+ * Juan: "aqui fica aparecendo 'outras fotos' (…) não tem como trocar pra esse
+ * nome, tipo galeria completa ou algo assim. Não criei nenhuma pasta com esse
+ * nome." Não criou: o grupo é calculado — é o que sobra — e o texto era nosso.
+ *
+ * Não está em `renomearSecao` porque não é uma seção: não há linha para
+ * atualizar. O nome mora na galeria, e o grupo continua existindo (ou não)
+ * conforme haja foto solta.
+ *
+ * VAZIO APAGA. Limpar o campo grava `null`, e `nomeDoGrupoSolto` devolve
+ * "Outras fotos" de novo — voltar ao nome de fábrica não precisa de um botão
+ * próprio, e um texto vazio aqui faria a pastilha sem letra nenhuma que a
+ * mudança de 04/09/2026 veio tirar da tela.
+ */
+export async function renomearGrupoSolto(galeriaId: string, tenantId: string, nome: string) {
+  const limpo = nome.trim().slice(0, 60);
+  await consultar(`update galerias set grupo_solto = $1 where id = $2 and tenant_id = $3`, [
+    limpo || null,
+    galeriaId,
+    tenantId,
+  ]);
+}
+
 /** Compara como o fotógrafo espera: foto_2 antes de foto_10. */
 const colador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
 

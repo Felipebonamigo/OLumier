@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { armazemDe, urlDoOriginal } from "@/lib/armazem";
 import { dispositionSegura } from "@/lib/r2";
 import { registrarAcesso } from "@/lib/galerias-publicas";
-import { prepararEntrega } from "@/lib/entrega-da-galeria";
 import { GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
+import { prepararEntrega } from "@/lib/entrega-da-galeria";
 import { tamanhoDoZip, zipEmFluxo, type ArquivoDoZip } from "@/lib/zip-em-fluxo";
 
 /**
@@ -86,10 +86,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   /* ── As entradas do zip ─────────────────────────────────────────────────── */
   const usados = new Set<string>();
   const arquivos: ArquivoDoZip[] = escolhidas.map((m) => {
+    /* A pasta das soltas tem o nome que o fotógrafo deu (migração 037), e ele
+       passa pela MESMA limpeza dos capítulos: é um nome de pasta dentro do zip,
+       e o Windows recusa os mesmos caracteres nos dois. */
     const pasta = comPastas
-      ? m.secao_id
-        ? (nomeDoCapitulo.get(m.secao_id) ?? GRUPO_SEM_CAPITULO)
-        : GRUPO_SEM_CAPITULO
+      ? ((m.secao_id ? nomeDoCapitulo.get(m.secao_id) : null) ??
+        (semProibidos(entrega.grupoSolto) || GRUPO_SEM_CAPITULO))
       : "";
     const nome = semProibidos(m.nome_original) || `${m.id}.jpg`;
     return {

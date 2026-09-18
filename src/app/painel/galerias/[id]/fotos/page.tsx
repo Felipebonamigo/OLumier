@@ -120,6 +120,9 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
         galeriaId={galeria.id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
         semCapitulo={medias.filter((m) => !m.secao_id).length}
+        /* Como esta galeria chama o grupo das soltas (migração 037). Nulo é o
+           normal e quer dizer "Outras fotos". */
+        grupoSolto={galeria.grupo_solto}
       />
 
       <EnviarArquivos
