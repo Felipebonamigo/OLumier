@@ -48,6 +48,7 @@ import {
   moverSecao,
   reordenarSecoes,
   renomearSecao,
+  renomearGrupoSolto,
   ordenarFotosDaSecao,
   ORDENS_DAS_FOTOS,
   type OrdemDasFotos,
@@ -423,6 +424,20 @@ export async function renomearSecaoAction(form: FormData) {
   const tenantId = await exigirTenant();
   await renomearSecao(String(form.get("secao_id") ?? ""), tenantId, String(form.get("nome") ?? ""));
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+/**
+ * Renomeia o grupo das fotos sem capítulo — o que a galeria mostra como
+ * "Outras fotos" enquanto ninguém escrever outra coisa.
+ *
+ * Pedido do Juan em 18/09/2026. Campo vazio volta ao padrão; ver
+ * `renomearGrupoSolto`.
+ */
+export async function renomearGrupoSoltoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  await renomearGrupoSolto(galeriaId, tenantId, String(form.get("nome") ?? ""));
+  revalidatePath(`/painel/galerias/${galeriaId}`);
 }
 
 export async function apagarSecaoAction(form: FormData) {

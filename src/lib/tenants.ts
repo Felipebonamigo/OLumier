@@ -77,6 +77,9 @@ export interface Galeria {
      consentimento do fotógrafo; nula enquanto desligada. */
   rostos_ativos: boolean;
   rostos_ligados_em: Date | null;
+  /* Como o grupo das fotos sem capítulo se chama nesta galeria (migração 037).
+     Nulo — o normal — quer dizer "Outras fotos". Ver `nomeDoGrupoSolto`. */
+  grupo_solto: string | null;
   criado_em: Date;
   total_medias?: number;
 }

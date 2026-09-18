@@ -3,7 +3,7 @@ import { consultar, consultarUm } from "@/lib/db";
 import { temAcessoLiberado } from "@/lib/galerias-publicas";
 import { galeriasNoAr } from "@/lib/assinatura";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
-import { nomeComCapitulo, vaiPrefixar, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
+import { nomeComCapitulo, vaiPrefixar, nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
 
 /**
  * URLs do lightbox e do download, assinadas SOB DEMANDA.
@@ -125,19 +125,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
    * nome. É a mesma régua do menu de baixar, que também não oferece pasta
    * quando só existe uma.
    */
-  const grupos =
+  /* O nome do grupo das soltas sai na MESMA consulta: ele é do fotógrafo desde
+     a migração 037, e uma segunda ida ao banco por causa de um texto seria
+     consulta a mais em cada lote de download. */
+  const daGaleria =
     tipo === "download"
-      ? ((
-          await consultarUm<{ n: number }>(
-            `select count(*)::int as n
-               from (select secao_id from medias
-                      where galeria_id = $1 and pronto
-                      group by secao_id) g`,
-            [id],
-          )
-        )?.n ?? 1)
-      : 1;
-  const prefixar = vaiPrefixar(grupos);
+      ? await consultarUm<{ n: number; grupo_solto: string | null }>(
+          `select (select count(*)::int
+                     from (select secao_id from medias
+                            where galeria_id = $1 and pronto
+                            group by secao_id) g) as n,
+                  (select grupo_solto from galerias where id = $1) as grupo_solto`,
+          [id],
+        )
+      : null;
+  const prefixar = vaiPrefixar(daGaleria?.n ?? 1);
+  const grupoSolto = nomeDoGrupoSolto(daGaleria?.grupo_solto);
 
   const pares = await Promise.all(
     medias.map(async (m) => {
@@ -150,7 +153,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
               armazem,
               VALIDADE,
               prefixar
-                ? nomeComCapitulo(m.nome_original, m.capitulo ?? GRUPO_SEM_CAPITULO)
+                ? nomeComCapitulo(m.nome_original, m.capitulo ?? grupoSolto)
                 : m.nome_original,
             );
       return [m.id, url] as const;

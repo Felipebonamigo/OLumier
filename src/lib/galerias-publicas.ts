@@ -38,6 +38,11 @@ export interface GaleriaPublica {
   capa_foco_y: number;
   /** Busca por rosto ligada pelo fotógrafo (migração 028). */
   rostos_ativos: boolean;
+  /**
+   * Como o grupo das fotos sem capítulo se chama nesta galeria (migração 037).
+   * Nulo = "Outras fotos". Ver `nomeDoGrupoSolto`.
+   */
+  grupo_solto: string | null;
   // do estúdio dono — a marca que aparece é a dele, não a nossa
   estudio_nome: string;
   /* O contato do estúdio, como ele preencheu no site. A tela de consentimento
@@ -72,7 +77,7 @@ export async function buscarGaleriaPublica(
 ) {
   return consultarUm<GaleriaPublica>(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
-            g.permite_download, g.expira_em, g.aparencia, g.aparencia_rascunho, g.capa_media_id, g.capa_chave, g.capa_foco_x, g.capa_foco_y, g.rostos_ativos,
+            g.permite_download, g.expira_em, g.aparencia, g.aparencia_rascunho, g.capa_media_id, g.capa_chave, g.capa_foco_x, g.capa_foco_y, g.rostos_ativos, g.grupo_solto,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug, t.site as estudio_site,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
             t.fonte_chave as estudio_fonte, t.fonte_nome as estudio_fonte_nome,

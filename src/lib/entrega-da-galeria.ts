@@ -3,7 +3,7 @@ import { consultarUm } from "@/lib/db";
 import { listarMediasPublicas, temAcessoLiberado } from "@/lib/galerias-publicas";
 import { listarSecoes } from "@/lib/secoes";
 import { favoritasDaPessoa, pessoaAtual } from "@/lib/favoritas";
-import { GRUPO_SEM_CAPITULO, nomeComCapitulo, vaiPrefixar } from "@/lib/nome-de-arquivo";
+import { nomeComCapitulo, nomeDoGrupoSolto, vaiPrefixar } from "@/lib/nome-de-arquivo";
 import { galeriasNoAr } from "@/lib/assinatura";
 import { TETO_DE_ESCOLHIDAS } from "@/config/fatia-galeria";
 
@@ -40,6 +40,16 @@ export interface Entrega {
   tipo: "tudo" | "capitulo" | "favoritas" | "recorte";
   /** O nome do arquivo leva o capítulo? Mesma régua de `api/g/[id]/urls`. */
   prefixar: boolean;
+  /**
+   * Como as fotos sem capítulo se chamam NESTA galeria (migração 037).
+   *
+   * Viaja na entrega em vez de sair de uma constante porque o que o cliente
+   * escolhe no menu ("Galeria completa (318)") e o que ele recebe no nome do
+   * arquivo têm de ser a mesma palavra. Antes eram os dois `GRUPO_SEM_CAPITULO`
+   * e não tinham como divergir; agora que o texto é do fotógrafo, é a entrega
+   * que os mantém juntos.
+   */
+  grupoSolto: string;
 }
 
 export async function prepararEntrega(
@@ -52,10 +62,11 @@ export async function prepararEntrega(
     estado: string;
     permite_download: boolean;
     expira_em: string | null;
+    grupo_solto: string | null;
     estudio_status: string;
     estudio_trial_ate: string | null;
   }>(
-    `select g.titulo, g.senha_hash, g.estado, g.permite_download, g.expira_em,
+    `select g.titulo, g.senha_hash, g.estado, g.permite_download, g.expira_em, g.grupo_solto,
             t.status as estudio_status, t.trial_ate as estudio_trial_ate
        from galerias g join tenants t on t.id = g.tenant_id
       where g.id = $1 and g.publicada`,
@@ -96,6 +107,7 @@ export async function prepararEntrega(
   /* Grupos da GALERIA, não do pedido: a pasta Festa baixada sozinha continua
      levando "Festa - " no nome, como leva pelo link assinado. */
   const prefixar = vaiPrefixar(new Set(medias.map((m) => m.secao_id ?? null)).size);
+  const grupoSolto = nomeDoGrupoSolto(galeria.grupo_solto);
 
   if (querFavoritas) {
     const pessoa = await pessoaAtual(id);
@@ -110,6 +122,7 @@ export async function prepararEntrega(
       sufixo: " - favoritas",
       tipo: "favoritas",
       prefixar,
+      grupoSolto,
     };
   }
 
@@ -125,6 +138,7 @@ export async function prepararEntrega(
       sufixo: " - fotos escolhidas",
       tipo: "recorte",
       prefixar,
+      grupoSolto,
     };
   }
 
@@ -138,18 +152,27 @@ export async function prepararEntrega(
           ? medias.filter((m) => !m.secao_id)
           : medias.filter((m) => m.secao_id === cap),
       capitulos,
-      sufixo: ` - ${cap === "sem-capitulo" ? GRUPO_SEM_CAPITULO : (capitulos.get(cap) ?? "capítulo")}`,
+      sufixo: ` - ${cap === "sem-capitulo" ? grupoSolto : (capitulos.get(cap) ?? "capítulo")}`,
       tipo: "capitulo",
       prefixar,
+      grupoSolto,
     };
   }
 
-  return { titulo: galeria.titulo, fotos: medias, capitulos, sufixo: "", tipo: "tudo", prefixar };
+  return {
+    titulo: galeria.titulo,
+    fotos: medias,
+    capitulos,
+    sufixo: "",
+    tipo: "tudo",
+    prefixar,
+    grupoSolto,
+  };
 }
 
 /** O nome com que o arquivo chega — o mesmo do `Content-Disposition` assinado. */
 export function nomeNaEntrega(m: MediaDaEntrega, entrega: Entrega): string {
   if (!entrega.prefixar) return m.nome_original;
   const capitulo = m.secao_id ? entrega.capitulos.get(m.secao_id) : null;
-  return nomeComCapitulo(m.nome_original, capitulo ?? GRUPO_SEM_CAPITULO);
+  return nomeComCapitulo(m.nome_original, capitulo ?? entrega.grupoSolto);
 }

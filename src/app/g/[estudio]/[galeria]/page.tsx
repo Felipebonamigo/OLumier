@@ -21,6 +21,7 @@ import {
   registrarAcesso,
 } from "@/lib/galerias-publicas";
 import { listarSecoes, secaoPeloApelido } from "@/lib/secoes";
+import { nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
 import { fatiarGaleria, FOTOS_POR_TELA, TETO_DE_ESCOLHIDAS } from "@/config/fatia-galeria";
 import { sessaoAtual } from "@/lib/auth";
 import {
@@ -517,6 +518,15 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * mover as fotos sozinho (mexer no trabalho dele sem pedir): é dar nome ao
    * grupo quando ele precisa de um. Quem quiser arrumar tem, no painel, o
    * botão de mover todas de uma vez.
+   *
+   * ── E O NOME PASSOU A SER DELE (18/09/2026, migração 037) ───────────────
+   *
+   * Juan: "aqui fica aparecendo 'outras fotos' (…) não tem como trocar pra
+   * esse nome, tipo galeria completa ou algo assim. Não criei nenhuma pasta
+   * com esse nome". Não criou mesmo — este grupo é calculado, e até aqui o
+   * texto era nosso. `nomeDoGrupoSolto` devolve o que o fotógrafo escreveu no
+   * painel e cai em "Outras fotos" quando ele não escreveu nada, que é como
+   * todas as galerias de antes continuam.
    */
   /* Numa galeria fatiada a pergunta "há fotos soltas?" é sobre a GALERIA, não
      sobre a fatia: senão a pastilha "Outras fotos" apareceria e sumiria
@@ -529,7 +539,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       /* Já é curto e legível — este grupo nunca teve UUID, porque não é uma
          linha do banco: é um nome que esta página inventa. */
       apelido: "sem-capitulo",
-      nome: temCapitulo ? "Outras fotos" : "",
+      nome: temCapitulo ? nomeDoGrupoSolto(galeria.grupo_solto) : "",
       indices: semCapitulo,
       total: fatiada ? todasAsMedias.filter((m) => !m.secao_id).length : semCapitulo.length,
     });
