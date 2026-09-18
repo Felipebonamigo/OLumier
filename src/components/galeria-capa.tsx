@@ -1,10 +1,9 @@
-import type { CSSProperties } from "react";
+import { desenhoDoTitulo } from "@/lib/titulo-da-capa";
 import {
   FONTES_TITULO,
   alturaLogoPx,
   pesoDoTitulo,
   type Aparencia,
-  type LinhasTitulo,
 } from "@/config/aparencia";
 
 export interface DadosCapa {
@@ -49,71 +48,6 @@ const TITULO_MEDIO = [2, 7, 3.75] as const; //     32 → 60 px (convite, dividi
 const TITULO_MIUDO = [1.75, 7, 3] as const; //     28 → 48 px (redonda, arco, mínima)
 type BaseDoTitulo = typeof TITULO_GRANDE | typeof TITULO_MEDIO | typeof TITULO_MIUDO;
 
-/*
- * ── QUANTO O NOME MEDE, EM `em` DA PRÓPRIA FONTE ──────────────────────────
- *
- * Uma estimativa, e ela existe para uma coisa só: garantir que "1 linha" caiba
- * na tela. Com `white-space: nowrap` e um nome comprido, o navegador não
- * quebra nem encolhe — ele transborda, e a galeria inteira ganha rolagem
- * horizontal. Sabendo a largura aproximada do texto dá para pedir ao CSS o
- * MENOR entre "o tamanho que a pessoa escolheu" e "o tamanho que cabe".
- *
- * Os números são médias de serifada e sem-serifa; nenhuma fonte bate exato, e
- * não precisa — errar para menos só desenha um título um pouco menor do que
- * caberia, enquanto errar para mais quebra a página. Daí a folga de 6% no fim.
- */
-function larguraDoTituloEm(titulo: string): number {
-  let em = 0;
-  for (const c of titulo) {
-    if (c === " ") em += 0.26;
-    else if (c === "&") em += 0.7;
-    else if (c === c.toUpperCase() && c !== c.toLowerCase()) em += 0.72;
-    else if (/[0-9]/.test(c)) em += 0.5;
-    else if (/[ijltIl.,'’!|]/.test(c)) em += 0.28;
-    else em += 0.47;
-  }
-  return Math.max(1, em) * 1.06;
-}
-
-/*
- * ── A LARGURA QUE FAZ O NOME CAIR EM N LINHAS ─────────────────────────────
- *
- * Duas linhas é uma caixa com metade dos caracteres; três, com um terço. O
- * `text-wrap: balance` que o título já usa faz o resto — ele distribui as
- * palavras para as linhas saírem parecidas, em vez de deixar uma sobra solta.
- *
- * O piso é a MAIOR PALAVRA. Sem ele, "Nathalia & Matheus" em três linhas
- * pediria uma caixa de 6 caracteres, e "Nathalia" tem oito: a palavra não cabe,
- * não pode quebrar, e transborda a caixa — três linhas tortas em vez de três
- * linhas.
- *
- * Medido em `ch`, e o `ch` sai da fonte do elemento em que a regra está. Por
- * isso ela vai no `h1`, e não na `div` de fora como estava até aqui: lá o `ch`
- * era medido na fonte do CORPO, em 16 px, e um `max-w-[18ch]` que devia valer
- * uns 430 px de título valia 145. É o defeito que empilhava o nome em três.
- */
-function quebraDoTitulo(titulo: string, linhas: LinhasTitulo): CSSProperties {
-  const limpo = titulo.trim();
-  if (linhas === "uma") return { whiteSpace: "nowrap" };
-
-  /* `auto` continua sendo o navegador quebrando onde couber — só que agora
-     dentro de uma caixa medida na fonte certa. 22ch é o antigo 18ch corrigido
-     com folga: nome de casal cabe numa linha, e título longo vira bloco em vez
-     de uma linha de ponta a ponta da tela. */
-  if (linhas === "auto") return { maxWidth: "22ch" };
-
-  const n = linhas === "duas" ? 2 : 3;
-  const maiorPalavra = limpo.split(/\s+/).reduce((m, p) => Math.max(m, p.length), 0);
-  /* +1 de folga: o `ch` é a largura do "0", e letras de caixa alta são mais
-     largas que ele. Sem a folga, um nome no limite cai numa linha a mais. */
-  const porLinha = Math.max(Math.ceil(limpo.length / n), maiorPalavra) + 1;
-  return { maxWidth: `${porLinha}ch` };
-}
-
-/**
- * As quatro capas. Todas leem as mesmas variáveis de tema (--g-*), então trocar
- * o tema muda a capa junto, sem cada variante ter cores próprias.
- */
 export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia: Aparencia }) {
   const fonteTitulo = FONTES_TITULO[aparencia.tipografia];
   const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl, capaEscolhida } = dados;
@@ -282,8 +216,28 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    * deixaria o título menor do que a pessoa pediu sem motivo.
    */
   const fator = aparencia.tamanhoTitulo / 100;
-  const umaLinha = aparencia.linhasTitulo === "uma";
-  const larguraEm = larguraDoTituloEm(titulo);
+
+  /*
+   * ── AS LINHAS SÃO DECIDIDAS AQUI, NÃO PELA LARGURA (17/09/2026) ─────────
+   *
+   * Felipe, com "Júlia & Gustavo" e "3 linhas" marcado: "aqui o 3 linhas não
+   * está em 3, está apenas em 2".
+   *
+   * Largura não conta linha — ela impede a linha de passar de um tamanho, e o
+   * navegador usa quantas precisar, nunca mais. Ver `lib/titulo-da-capa.ts`.
+   *
+   * `null` é o `auto`: aí quem quebra é o navegador, dentro da caixa de 22ch,
+   * e o `text-balance` distribui. Com linhas decididas, o `nowrap` garante que
+   * cada uma fique inteira — e o tamanho da fonte é limitado pela MAIOR delas,
+   * pelo mesmo motivo que já limitava "1 linha": sem isso, um nome comprido
+   * transborda e a galeria ganha rolagem horizontal.
+   *
+   * `desenhoDoTitulo` é uma porta TOTAL: qualquer tropeço lá dentro devolve
+   * `linhas: null` e a capa desenha como sempre desenhou, em vez de a galeria
+   * inteira cair na tela de erro. Foi o que aconteceu em 17/09/2026 — ver o
+   * cabeçalho de `lib/titulo-da-capa.ts`.
+   */
+  const { linhas, larguraEm } = desenhoDoTitulo(titulo, aparencia.linhasTitulo);
 
   const Titulo = ({ base }: { base: BaseDoTitulo }) => {
     const [min, cresce, max] = base;
@@ -302,18 +256,27 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
        */
       <div style={{ containerType: "inline-size" }}>
         <h1
-          className={`text-balance ${alinharBloco}`}
+          className={`${linhas ? "" : "text-balance"} ${alinharBloco}`}
           style={{
             fontFamily: fonteTitulo,
             fontWeight: peso,
             lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05,
-            fontSize: umaLinha
+            fontSize: linhas
               ? `min(calc(${pedido}), calc(100cqw / ${larguraEm.toFixed(2)}))`
               : `calc(${pedido})`,
-            ...quebraDoTitulo(titulo, aparencia.linhasTitulo),
+            /* Sem linhas decididas vale a caixa de 22ch do `auto`; com elas, o
+               `nowrap` impede que uma linha vire duas por falta de espaço. */
+            ...(linhas ? { whiteSpace: "nowrap" as const } : { maxWidth: "22ch" }),
           }}
         >
-          {titulo}
+          {linhas
+            ? linhas.map((linha, i) => (
+                <span key={`${i}-${linha}`}>
+                  {i > 0 && <br />}
+                  {linha}
+                </span>
+              ))
+            : titulo}
         </h1>
       </div>
     );
