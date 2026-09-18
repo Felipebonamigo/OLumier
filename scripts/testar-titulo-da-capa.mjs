@@ -41,6 +41,7 @@ import {
   TAMANHO_TITULO,
   PRESETS,
 } from "../src/config/aparencia.ts";
+import { linhasDoTitulo, desenhoDoTitulo } from "../src/lib/titulo-da-capa.ts";
 
 exigirBancoDeTeste();
 
@@ -80,6 +81,19 @@ await db.query("update galerias set senha_hash = null, capa_media_id = $2 where 
 const base = { ...APARENCIA_PADRAO, capa: "redonda", tema: "claro", tipografia: "serifada" };
 
 /** Devolve a tag `<h1 …>` da capa com a aparência pedida. */
+/* O `<h1>` INTEIRO, e não só a tag: as linhas forçadas são conteúdo (`<br>`),
+   não atributo, e a tag de abertura não diz nada sobre elas. */
+const tituloInteiroCom = async (extra) => {
+  await db.query("update galerias set aparencia = $1 where id = $2", [
+    JSON.stringify({ ...base, ...extra }),
+    g.id,
+  ]);
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+  const h1 = html.match(/<h1[^]*?<\/h1>/)?.[0];
+  if (!h1) throw new Error("a capa não desenhou nenhum <h1>");
+  return h1;
+};
+
 const tituloCom = async (extra) => {
   await db.query("update galerias set aparencia = $1 where id = $2", [
     JSON.stringify({ ...base, ...extra }),
@@ -110,7 +124,9 @@ await etapa("nenhuma capa embrulha mais o título numa caixa medida na fonte do 
 });
 
 await etapa("o limite de largura chega no h1, e não num pai", async () => {
-  const h1 = await tituloCom({ linhasTitulo: "duas" });
+  /* Em `auto`, que é quem ainda usa caixa: desde 17/09/2026 "2 linhas" e "3
+     linhas" não são mais largura, são quebra explícita — ver a seção 3. */
+  const h1 = await tituloCom({ linhasTitulo: "auto" });
   if (!/max-width:\s*\d+ch/.test(h1)) throw new Error(`o h1 veio sem max-width em ch: ${h1}`);
   return h1.match(/max-width:\s*\d+ch/)[0];
 });
@@ -143,28 +159,191 @@ await etapa('"1 linha" não estreita a caixa — seria contradição', async () 
 
 /* ── 3. DUAS E TRÊS LINHAS ───────────────────────────────────────────────── */
 
-const larguraCh = (h1) => Number(h1.match(/max-width:\s*(\d+)ch/)?.[1] ?? NaN);
+/*
+ * ── LARGURA NÃO CONTA LINHA (17/09/2026) ─────────────────────────────────
+ *
+ * Felipe, com "Júlia & Gustavo" e "3 linhas" marcado: "aqui o 3 linhas não está
+ * em 3, está apenas em 2".
+ *
+ * As duas opções eram uma `max-width` estreita, na esperança de que o navegador
+ * quebrasse onde se queria. Largura IMPEDE a linha de passar de um tamanho; o
+ * navegador usa quantas linhas precisar, e nunca mais do que precisa. Três
+ * linhas pediam uma caixa de 5 caracteres, o piso da maior palavra ("Gustavo",
+ * sete) abria para oito, e em oito "Júlia &" cabe: duas linhas.
+ *
+ * ── E POR QUE O TESTE DEIXOU PASSAR ──────────────────────────────────────
+ *
+ * As etapas daqui conferiam que a caixa de três era mais estreita que a de
+ * duas, e que nenhuma ficava menor que a maior palavra. As duas eram verdade —
+ * sobre o MECANISMO. Nenhuma perguntava a única coisa que o Felipe pediu: em
+ * quantas linhas o título saiu.
+ *
+ * É o erro clássico de testar a implementação: quando a implementação estava
+ * certa e insuficiente, o teste concordou com ela.
+ */
 
-await etapa("três linhas pedem caixa mais estreita que duas", async () => {
-  const duas = larguraCh(await tituloCom({ linhasTitulo: "duas" }));
-  const tres = larguraCh(await tituloCom({ linhasTitulo: "tres" }));
-  if (!(tres <= duas)) throw new Error(`três (${tres}ch) não é mais estreita que duas (${duas}ch)`);
-  return `duas ${duas}ch · três ${tres}ch`;
+const quantasLinhas = (h1) => (h1.match(/<br\/?>/g) ?? []).length + 1;
+/* O texto como a pessoa lê, sem marcação e com o `&` desescapado. */
+const textoDoTitulo = (h1) =>
+  h1
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
+
+for (const [opcao, esperado] of [
+  ["duas", 2],
+  ["tres", 3],
+]) {
+  await etapa(`"${esperado} linhas" entrega ${esperado} linhas`, async () => {
+    const h1 = await tituloInteiroCom({ linhasTitulo: opcao });
+    const saiu = quantasLinhas(h1);
+    if (saiu !== esperado) {
+      throw new Error(`"${NOME}" saiu em ${saiu} — o pedido tem de virar o que ele diz ser`);
+    }
+    return textoDoTitulo(h1).replace(/ /g, " · ");
+  });
+}
+
+await etapa("a quebra não parte palavra nem troca a ordem", async () => {
+  for (const opcao of ["duas", "tres"]) {
+    const lido = textoDoTitulo(await tituloInteiroCom({ linhasTitulo: opcao }));
+    if (lido !== NOME) {
+      throw new Error(`${opcao}: a capa diz "${lido}" e o título é "${NOME}"`);
+    }
+  }
+  return `"${NOME}" inteiro nas duas`;
 });
 
 /*
- * O piso da maior palavra. "Nathalia & Matheus" tem 18 caracteres; em três
- * linhas a conta ingênua pediria 6ch, e "Nathalia" tem oito letras que não
- * podem quebrar. A caixa menor que a palavra não faz três linhas — faz três
- * linhas tortas com a primeira transbordando.
+ * Pedido impossível: menos palavras que linhas. Não se parte palavra no meio
+ * para fechar a conta — a alternativa seria "Casa-" / "men-" / "to".
  */
-await etapa("a caixa nunca fica menor que a maior palavra do nome", async () => {
-  const maiorPalavra = NOME.split(/\s+/).reduce((m, p) => Math.max(m, p.length), 0);
-  for (const linhas of ["duas", "tres"]) {
-    const ch = larguraCh(await tituloCom({ linhasTitulo: linhas }));
-    if (ch < maiorPalavra) throw new Error(`${linhas}: ${ch}ch para uma palavra de ${maiorPalavra}`);
+await etapa("nome de uma palavra em três linhas sai em uma, sem hífen", async () => {
+  await db.query("update galerias set titulo = 'Casamento' where id = $1", [g.id]);
+  try {
+    const h1 = await tituloInteiroCom({ linhasTitulo: "tres" });
+    const saiu = quantasLinhas(h1);
+    if (saiu !== 1) throw new Error(`"Casamento" saiu em ${saiu} linha(s)`);
+    if (textoDoTitulo(h1) !== "Casamento") throw new Error(`virou "${textoDoTitulo(h1)}"`);
+    return "uma palavra, uma linha";
+  } finally {
+    await db.query("update galerias set titulo = $2 where id = $1", [g.id, NOME]);
   }
-  return `"Nathalia" tem ${maiorPalavra} letras e cabe nas duas`;
+});
+
+/*
+ * Com a quebra decidida, cada linha precisa CABER — senão ela vira duas e o
+ * pedido de três entrega quatro. É o mesmo teto que "1 linha" já usava, agora
+ * medido contra a maior das linhas.
+ */
+await etapa("linha decidida não vira duas por falta de espaço", async () => {
+  for (const opcao of ["duas", "tres"]) {
+    const h1 = await tituloCom({ linhasTitulo: opcao });
+    if (!/white-space:\s*nowrap/.test(h1)) throw new Error(`${opcao}: sem nowrap — pode rewrapar`);
+    if (!h1.includes("cqw") || !/min\(/.test(h1)) {
+      throw new Error(`${opcao}: sem teto de largura, um nome comprido vaza a tela`);
+    }
+  }
+  return "nowrap + font-size: min(pedido, o que cabe)";
+});
+
+await etapa("com a quebra decidida, a caixa estreita sai de cena", async () => {
+  for (const opcao of ["duas", "tres"]) {
+    const h1 = await tituloCom({ linhasTitulo: opcao });
+    if (/max-width:\s*\d+ch/.test(h1)) {
+      throw new Error(`${opcao} ainda vem com caixa: ${h1.match(/max-width:[^;"]*/)[0]}`);
+    }
+  }
+  return "quem decide as linhas são as linhas";
+});
+
+/*
+ * A repartição é equilibrada, e isto NÃO é detalhe de gosto: a gulosa enche a
+ * primeira linha e deixa a sobra na última, que produz "Maria Eduarda &" /
+ * "Silva" onde o certo é "Maria Eduarda" / "& Silva".
+ */
+await etapa("as linhas saem parecidas, não uma cheia e uma sobra", () => {
+  const casos = [
+    ["Júlia & Gustavo", "tres", ["Júlia", "&", "Gustavo"]],
+    ["Júlia & Gustavo", "duas", ["Júlia &", "Gustavo"]],
+    ["Maria Eduarda & Silva", "duas", ["Maria Eduarda", "& Silva"]],
+  ];
+  for (const [texto, opcao, esperado] of casos) {
+    const deu = linhasDoTitulo(texto, opcao);
+    if (JSON.stringify(deu) !== JSON.stringify(esperado)) {
+      throw new Error(`"${texto}" em ${opcao}: ${JSON.stringify(deu)}`);
+    }
+  }
+  return `${casos.length} repartições conferidas`;
+});
+
+/*
+ * ── A CAPA NÃO PODE DERRUBAR A GALERIA (18/09/2026) ──────────────────────
+ *
+ * Em 17/09 esta mudança foi ao ar e o Felipe mandou a galeria de um casamento
+ * entregue mostrando "Alguma coisa saiu do lugar". Eu revertí tudo no mesmo dia
+ * sem nunca ter reproduzido a falha.
+ *
+ * Estas etapas não perguntam qual era o defeito. Elas prendem a hierarquia que
+ * torna a pergunta menos cara: onde o nome quebra é PREFERÊNCIA; a galeria é o
+ * produto. `desenhoDoTitulo` é total — devolve o automático em vez de estourar,
+ * aconteça o que acontecer com a entrada.
+ */
+await etapa("nenhuma entrada esquisita faz o desenho do título estourar", () => {
+  /* Títulos que o banco pode ter: galeria antiga com campo nulo, nome de uma
+     palavra só, emoji, nome maior que qualquer linha, espaço em branco puro,
+     200 caracteres, e um `&` sozinho. */
+  const titulos = [
+    "", " ", "   \n\t ", "Casamento", "Júlia & Gustavo", "&",
+    "Ana", "Ana & ", " & Pedro", "Maria Eduarda & Silva",
+    "Supercalifragilisticexpialidocious", "A".repeat(200),
+    "💍", "💍 & 🤍", "Ana\u00a0&\u00a0Pedro", "Ana  &   Pedro",
+    "Nathalia & Matheus & Família & Amigos & Fornecedores",
+    null, undefined, 42, {}, [],
+  ];
+  const opcoes = ["uma", "duas", "tres", "auto", "quatro", "", null, undefined];
+  let contas = 0;
+  for (const t of titulos) {
+    for (const o of opcoes) {
+      const r = desenhoDoTitulo(t, o);
+      contas++;
+      if (typeof r !== "object" || r === null) throw new Error(`${JSON.stringify(t)}/${o}: ${r}`);
+      if (!(typeof r.larguraEm === "number") || !Number.isFinite(r.larguraEm) || r.larguraEm <= 0) {
+        throw new Error(`${JSON.stringify(t)}/${o}: larguraEm = ${r.larguraEm}`);
+      }
+      if (r.linhas !== null) {
+        if (!Array.isArray(r.linhas) || r.linhas.length === 0) {
+          throw new Error(`${JSON.stringify(t)}/${o}: linhas = ${JSON.stringify(r.linhas)}`);
+        }
+        if (r.linhas.some((l) => typeof l !== "string")) {
+          throw new Error(`${JSON.stringify(t)}/${o}: linha que não é texto`);
+        }
+      }
+    }
+  }
+  return `${contas} combinações, nenhuma exceção`;
+});
+
+await etapa("se a repartição falhar, a capa cai no automático em vez de na tela de erro", () => {
+  /* Um título que estoura de propósito: `String(x)` num objeto sem `toString`
+     lança, e é o mais perto que dá para chegar de "algo inesperado lá dentro"
+     sem mexer no módulo. */
+  const veneno = Object.create(null);
+  const antes = console.error;
+  const ditos = [];
+  console.error = (...a) => ditos.push(a.map(String).join(" "));
+  try {
+    const r = desenhoDoTitulo(veneno, "tres");
+    if (r.linhas !== null) throw new Error(`devolveu ${JSON.stringify(r.linhas)} em vez de cair no automático`);
+    if (!Number.isFinite(r.larguraEm)) throw new Error(`larguraEm = ${r.larguraEm}`);
+    if (!ditos.some((d) => /desenhoDoTitulo falhou/.test(d))) {
+      throw new Error("caiu em silêncio — o log do servidor não saberia de nada");
+    }
+  } finally {
+    console.error = antes;
+  }
+  return "automático + console.error, sem exceção";
 });
 
 /* ── 4. A BARRINHA ───────────────────────────────────────────────────────── */
