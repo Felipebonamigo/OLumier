@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   HeadObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   CreateMultipartUploadCommand,
   UploadPartCommand,
   CompleteMultipartUploadCommand,
@@ -144,6 +145,37 @@ export async function conferirArquivo(chave: string) {
 
 export async function apagarArquivo(chave: string) {
   await s3().send(new DeleteObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave }));
+}
+
+/**
+ * Apaga muitos originais de uma vez — o gêmeo de `apagarObjetos` do R2.
+ *
+ * Mesma razão de lá: `DeleteObjects` leva até 1000 chaves por chamada. Uma
+ * galeria de 286 fotos são 286 requisições separadas contra uma — e a diferença
+ * apareceu como "Não foi possível apagar agora" na tela da Ana Carolina, em
+ * 18/09/2026.
+ *
+ * Não lança por objeto que já não existe: apagar o que já não está lá é o
+ * resultado desejado.
+ */
+export async function apagarArquivos(chaves: string[]) {
+  const unicas = [...new Set(chaves)].filter(Boolean);
+  for (let i = 0; i < unicas.length; i += 1000) {
+    const lote = unicas.slice(i, i + 1000);
+    const r = await s3().send(
+      new DeleteObjectsCommand({
+        Bucket: ARQUIVOS_BUCKET,
+        Delete: { Objects: lote.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    /* Com `Quiet: true` só voltam os que FALHARAM. Silêncio aqui esconderia
+       arquivo pago ficando para trás. */
+    if (r.Errors?.length) {
+      throw new Error(
+        `${r.Errors.length} arquivo(s) não foram apagados (ex.: ${r.Errors[0].Key} — ${r.Errors[0].Message})`,
+      );
+    }
+  }
 }
 
 /** true se o objeto já está aqui — usado pelo movedor para não copiar duas vezes. */
