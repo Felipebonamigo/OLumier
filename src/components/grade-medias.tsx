@@ -89,6 +89,33 @@ export function GradeMedias({
     }
   }
 
+  /**
+   * O QUE O SERVIDOR DISSE, ou o palpite mais útil que dá para fazer sem ele.
+   *
+   * ── DE ONDE VEIO (18/09/2026) ──────────────────────────────────────────
+   *
+   * Ana Carolina mandou a foto do aviso: "Não foi possível apagar agora. Tente
+   * de novo." Foi tudo o que a tela disse, e foi tudo o que sobrou para
+   * investigar — a rota respondia com `{ erro }` em 401 e em 404, e este
+   * `catch` jogava a resposta inteira fora antes de mostrar a frase fixa.
+   *
+   * "Tente de novo" é conselho quando o problema passa sozinho. Sessão
+   * expirada não passa sozinha: a pessoa tenta dez vezes e desiste achando que
+   * o sistema está quebrado. O texto do servidor cabe na mesma linha e diz o
+   * que fazer.
+   */
+  async function motivo(r: Response): Promise<string> {
+    try {
+      const corpo = await r.json();
+      if (typeof corpo?.erro === "string" && corpo.erro) return corpo.erro;
+    } catch {
+      /* Resposta sem JSON — 502 e 504 do proxy são HTML. Cai no genérico. */
+    }
+    if (r.status === 401) return "Sua sessão expirou — entre de novo.";
+    if (r.status === 504 || r.status === 502) return "O servidor demorou demais para responder. Tente de novo.";
+    return `Tente de novo. (erro ${r.status})`;
+  }
+
   async function apagarTodas() {
     const resposta = prompt(
       `Apagar TODAS as ${medias.length} fotos desta galeria? Não dá para desfazer.\n\n` +
@@ -98,11 +125,11 @@ export function GradeMedias({
     setApagandoTudo(true);
     try {
       const r = await fetch(`/api/galerias/${galeriaId}/medias`, { method: "DELETE" });
-      if (!r.ok) throw new Error();
+      if (!r.ok) throw new Error(await motivo(r));
       setSelecao(new Set());
       router.refresh();
-    } catch {
-      alert("Não foi possível apagar agora. Tente de novo.");
+    } catch (e) {
+      alert(`Não foi possível apagar agora. ${(e as Error).message}`);
     } finally {
       setApagandoTudo(false);
     }
@@ -113,10 +140,10 @@ export function GradeMedias({
     setRemovendo(m.id);
     try {
       const r = await fetch(`/api/medias/${m.id}/confirmar`, { method: "DELETE" });
-      if (!r.ok) throw new Error();
+      if (!r.ok) throw new Error(await motivo(r));
       router.refresh();
-    } catch {
-      alert("Não foi possível remover agora. Tente de novo.");
+    } catch (e) {
+      alert(`Não foi possível remover agora. ${(e as Error).message}`);
     } finally {
       setRemovendo(null);
     }

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sessaoAtual } from "@/lib/auth";
 import { apagarTodasAsMedias } from "@/lib/medias";
-import { apagarObjeto } from "@/lib/r2";
+import { apagarArquivosDasMedias } from "@/lib/armazem";
 
 /**
  * APAGAR TODAS AS FOTOS DA GALERIA DE UMA VEZ.
@@ -44,12 +44,25 @@ export async function DELETE(
     return NextResponse.json({ erro: "Galeria não encontrada." }, { status: 404 });
   }
 
-  await Promise.all(
-    apagadas
-      .flatMap((m) => [m.chave, m.chave_thumb, m.chave_preview])
-      .filter((c): c is string => Boolean(c))
-      .map((c) => apagarObjeto(c).catch(() => {})),
-  );
+  /*
+   * ── UMA REQUISIÇÃO POR LOTE, E NÃO POR CHAVE (18/09/2026) ───────────────
+   *
+   * Aqui saía um `DeleteObject` por chave, todos de uma vez. Numa galeria de
+   * 286 fotos são 858 chamadas simultâneas ao armazém — e a tela da Ana
+   * Carolina respondeu "Não foi possível apagar agora. Tente de novo.".
+   *
+   * `apagarArquivosDasMedias` agrupa em lotes de 1000 e ainda manda o ORIGINAL
+   * para o fornecedor certo: o `apagarObjeto` do R2 errava de balde no que já
+   * está no B2 e deixava arquivo pago para trás.
+   *
+   * Falha de bucket NÃO derruba a resposta: as linhas já foram, e dizer "não
+   * deu" para quem acabou de ver a galeria esvaziar é pior do que o órfão que
+   * `varrer-orfaos.mjs` recolhe depois.
+   */
+  const limpeza = await apagarArquivosDasMedias(apagadas);
+  if (limpeza.falhou) {
+    console.error(`apagar todas (galeria ${galeriaId}): ${limpeza.falhou}`);
+  }
 
   return NextResponse.json({ ok: true, apagadas: apagadas.length });
 }
