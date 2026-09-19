@@ -239,6 +239,8 @@ export function ProvedorDeEnvio({
     /** Já resolvido: a pasta vence o seletor da tela. */
     secaoId?: string;
     indice: number;
+    /** O envio de que esta tarefa faz parte. Ver `loteAtual`. */
+    lote?: string | null;
     medidor?: (bitmap: ImageBitmap) => Promise<RostoMedido[]>;
   };
   const pendentes = useRef<Tarefa[]>([]);
@@ -252,6 +254,19 @@ export function ProvedorDeEnvio({
    * embaralhada. O contador só zera quando a fila seca.
    */
   const proximoIndice = useRef(0);
+  /*
+   * O LOTE — um nome para ESTE envio, e o par do contador acima.
+   *
+   * O índice diz "sou o arquivo 37"; o lote diz "de qual envio". Sem os dois, o
+   * servidor não tem como saber onde a galeria terminava antes de o envio
+   * começar, e a base da posição escorrega conforme o lote vai ficando pronto —
+   * era o que embaralhava as 286 fotos do Juan. Ver `criarMediaPendente` e a
+   * migração 038.
+   *
+   * Nasce quando a fila sai do zero e zera junto com o contador, pelo mesmo
+   * motivo: enquanto houver arquivo subindo, é tudo o mesmo envio.
+   */
+  const loteAtual = useRef<string | null>(null);
 
   const enviarUm = useCallback(
     async (tarefa: Tarefa) => {
@@ -315,6 +330,9 @@ export function ProvedorDeEnvio({
                   secaoId: tarefa.secaoId,
                   // A ordem que o fotógrafo escolheu é a narrativa do casamento.
                   indice: tarefa.indice,
+                  /* E o lote é o que impede a base da posição de subir no meio
+                     do envio. Ver `criarMediaPendente` e a migração 038. */
+                  lote: tarefa.lote ?? undefined,
                 }),
               });
               const corpo = await preparo.json();
@@ -445,6 +463,7 @@ export function ProvedorDeEnvio({
     setRodando(false);
     setPausado(false);
     proximoIndice.current = 0;
+    loteAtual.current = null;
     /* O que ficou em "esperando" quando alguém parou não vai subir: dizer isso
        é melhor que deixar a linha girando para sempre. */
     if (paradoRef.current) {
@@ -524,6 +543,11 @@ export function ProvedorDeEnvio({
         }
       }
 
+      /* `randomUUID` exige contexto seguro; em http://…:3040 de bancada ele não
+         existe. Sem lote a conta volta a ser a antiga, que é pior mas funciona
+         — envio não pode falhar por causa disto. */
+      loteAtual.current ??= globalThis.crypto?.randomUUID?.() ?? null;
+
       const lote = itens.map((it, k) => {
         const item: ItemFila = {
           /* O `k` sozinho repetia entre lotes enfileirados no mesmo
@@ -544,6 +568,7 @@ export function ProvedorDeEnvio({
              capítulo, que é justamente o que esta mudança libera. */
           secaoId: porCaminho.get(it.caminho) || opcoes.destino || undefined,
           indice: proximoIndice.current + k,
+          lote: loteAtual.current,
           medidor,
         };
       });

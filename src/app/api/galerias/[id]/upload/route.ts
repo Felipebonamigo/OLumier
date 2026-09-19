@@ -44,6 +44,9 @@ function dataValida(bruto: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** Formato do `lote` que o navegador manda — ver `criarMediaPendente`. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   /*
    * Navegador (cookie) OU programa (chave de API com escopo `envio`).
@@ -88,6 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     largura?: number;
     altura?: number;
     indice?: number;
+    lote?: string;
   };
   try {
     corpo = await request.json();
@@ -232,6 +236,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     secaoId,
     // Posição na lista que o fotógrafo ordenou — ver criarMediaPendente.
     indice: Number.isInteger(corpo.indice) ? corpo.indice : undefined,
+    /* O envio a que este arquivo pertence (migração 038). Só serve para a base
+       da posição não escorregar no meio do lote, e é o navegador que o gera —
+       por isso vale conferir o formato: texto qualquer aqui viraria erro de
+       tipo no `::uuid` da consulta, e derrubaria o envio por causa de um campo
+       que não muda uma foto de lugar. */
+    lote: UUID.test(String(corpo.lote ?? "")) ? String(corpo.lote) : null,
   });
 
   const [urlThumb, urlPreview] = await Promise.all([

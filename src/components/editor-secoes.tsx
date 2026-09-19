@@ -78,6 +78,10 @@ export function EditorSecoes({
   const [ordem, setOrdem] = useState<string[] | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
 
+  /* Há capítulo de verdade nesta galeria? Muda o nome, o recado e quais
+     controles a linha das soltas oferece — ver a linha logo abaixo da lista. */
+  const temCapitulos = secoes.length > 0;
+
   const lista = ordem
     ? (ordem.map((id) => secoes.find((s) => s.id === id)).filter(Boolean) as SecaoResumo[])
     : secoes;
@@ -141,7 +145,7 @@ export function EditorSecoes({
         Dividem a galeria em momentos. O cliente ganha um menu para pular direto ao que quer ver.
       </p>
 
-      {secoes.length === 0 ? (
+      {secoes.length === 0 && (
         /*
          * BORDA SÓLIDA, E FUNDO PRÓPRIO — a tracejada é da área de SOLTAR.
          *
@@ -175,7 +179,25 @@ export function EditorSecoes({
             Making Of · Cerimônia · Decoração · Recepção · Festa · Ensaio
           </p>
         </div>
-      ) : (
+      )}
+
+      {/*
+        ── A LISTA NÃO DEPENDE MAIS DE HAVER CAPÍTULO (18/09/2026) ───────────
+
+        Juan: "não tem botão pra reorganizar a ordem das fotos. Essa opção só
+        aparece quando tem capítulos, quando não tem capítulo não aparece."
+
+        Era literal: a lista inteira vivia no `else` do "Nenhum capítulo ainda",
+        e com ela sumia a linha das fotos sem capítulo — que é onde mora o
+        "ordenar". Numa galeria de fluxo único, que o próprio cartão acima diz
+        que "também funciona bem", o fotógrafo ficava sem jeito nenhum de mexer
+        na ordem das 286 fotos que acabara de subir.
+
+        O cartão de vazio continua, porque ensina o que é capítulo. A lista
+        aparece ao lado dele quando há foto solta, que é quando ela tem o que
+        mostrar.
+      */}
+      {(lista.length > 0 || semCapitulo > 0) && (
         <ul className="mt-4 divide-y divide-linha rounded-lg border border-linha">
           {lista.map((s, i) => (
             <li
@@ -429,17 +451,75 @@ export function EditorSecoes({
                       manda os controles para a linha de baixo, que é o que as
                       linhas dos capítulos já fazem. */}
                   <span className="min-w-[11rem] flex-1">
+                    {/* Sem capítulo nenhum, estas fotos NÃO são "as outras" —
+                        são a galeria inteira, e a pastilha com nome nem existe
+                        (ver `nome: temCapitulo ? … : ""` na página do cliente).
+                        Chamá-las de "Outras fotos" aqui seria a tela inventar
+                        uma divisão que a galeria não tem. */}
                     <span className="block truncate text-sm text-texto-soft">
-                      {nomeDoGrupoSolto(grupoSolto)}
+                      {temCapitulos ? nomeDoGrupoSolto(grupoSolto) : "Todas as fotos"}
                     </span>
                     <span className="text-[11px] text-texto-faint">
-                      {semCapitulo}{" "}
-                      {semCapitulo === 1 ? "foto sem capítulo aparece" : "fotos sem capítulo aparecem"}{" "}
-                      com esse nome, antes dos capítulos
+                      {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                      {temCapitulos
+                        ? ` — ${semCapitulo === 1 ? "aparece" : "aparecem"} com esse nome, antes dos capítulos`
+                        : " — numa sequência só, na ordem abaixo"}
                     </span>
                   </span>
 
                   <span className="flex items-center gap-1">
+                    {/*
+                      ── ORDENAR TAMBÉM AQUI (18/09/2026) ────────────────────
+
+                      `ordenarFotosDaSecaoAction` aceita `secao_id` vazio desde
+                      que nasceu — "o grupo das soltas aparece na mesma lista da
+                      tela e tem o mesmo direito de ser ordenado", diz o
+                      comentário dela. Só que a tela nunca ofereceu o seletor, e
+                      a ação ficou sem porta: numa galeria sem capítulos não
+                      havia NENHUM jeito de mexer na ordem.
+
+                      Mesmo `disabled` dos capítulos, pelo mesmo motivo: com
+                      menos de duas fotos não há o que ordenar, e um controle que
+                      some deixa a coluna torta e some com o recurso.
+                    */}
+                    {(() => {
+                      const poucasFotos = semCapitulo < 2;
+                      return (
+                        <select
+                          aria-label={
+                            temCapitulos
+                              ? "Ordenar as fotos sem capítulo"
+                              : "Ordenar as fotos da galeria"
+                          }
+                          title={
+                            poucasFotos
+                              ? "Com menos de duas fotos não há o que ordenar"
+                              : undefined
+                          }
+                          disabled={ocupado || poucasFotos}
+                          value=""
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            /* `secao_id` vazio é o grupo das soltas — a ação
+                               entende, e é o que a torna útil aqui. */
+                            executar(ordenarFotosDaSecaoAction, {
+                              secao_id: "",
+                              criterio: e.target.value,
+                            });
+                            e.target.value = "";
+                          }}
+                          className="rounded-md border border-linha bg-void px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"
+                        >
+                          <option value="">ordenar…</option>
+                          {ORDENS_DAS_FOTOS.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.nome}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
+                    {temCapitulos && (
                     <button
                       type="button"
                       disabled={ocupado}
@@ -455,6 +535,7 @@ export function EditorSecoes({
                     >
                       renomear
                     </button>
+                    )}
                     {/*
                       MOVER TODAS DE UMA VEZ — pedido do sócio em 04/09/2026:
                       "as fotos sem capítulo devem ir obrigatoriamente para um
@@ -467,6 +548,7 @@ export function EditorSecoes({
                       com pastilha sem nome na galeria, porque o grupo tem um
                       (o nosso, ou o que ele escreveu no botão ao lado).
                     */}
+                    {temCapitulos && (
                     <select
                       aria-label={`Mover as ${semCapitulo} fotos sem capítulo`}
                       disabled={ocupado}
@@ -483,6 +565,7 @@ export function EditorSecoes({
                         </option>
                       ))}
                     </select>
+                    )}
                   </span>
                 </>
               )}
