@@ -148,6 +148,14 @@ export async function criarMediaPendente(dados: {
   secaoId?: string | null;
   /** Posição do arquivo na lista que o fotógrafo ordenou. */
   indice?: number;
+  /**
+   * O ENVIO de que este arquivo faz parte (migração 038).
+   *
+   * É o que segura a base da posição do começo ao fim do lote. Ausente, a conta
+   * volta a ser a de antes — o que mantém funcionando qualquer cliente antigo, e
+   * é por isso que ele é opcional.
+   */
+  lote?: string | null;
   /** DateTimeOriginal do EXIF. Ver migração 035. */
   tiradaEm?: Date | null;
   /**
@@ -160,28 +168,45 @@ export async function criarMediaPendente(dados: {
 }) {
   /*
    * A ORDEM vem do navegador (a posição do arquivo na lista já ordenada por
-   * nome), somada à última posição CONFIRMADA da galeria.
+   * nome), somada à última posição da galeria ANTES deste envio.
    *
    * O `max(ordem)` sozinho embaralhava: três arquivos sobem em paralelo, os três
    * leem o mesmo máximo e recebem a mesma posição — e "foto_1, foto_2, foto_3"
    * chegava ao casal fora de ordem. O fotógrafo ordena os arquivos de propósito
    * antes de enviar; essa ordem é a narrativa do casamento.
    *
-   * O filtro `pronto` é o que torna a base estável durante o envio: as linhas
-   * pendentes do próprio lote não mexem no cálculo, então os três paralelos
-   * chegam ao mesmo ponto de partida e cada um soma o seu índice.
+   * ── O `pronto` SOZINHO NÃO SEGURAVA A BASE (18/09/2026, migração 038) ───
+   *
+   * Aqui dizia que o filtro `pronto` tornava a base estável durante o envio,
+   * porque as linhas pendentes do próprio lote não entram no cálculo. Isso vale
+   * enquanto NENHUM arquivo do lote fica pronto — verdade num teste de três
+   * arquivos, e falso no casamento de 286 do Juan, que leva minutos e vai
+   * ficando pronto o tempo todo. A base subia, os índices continuavam contando
+   * do zero, e bastava um arquivo demorar no preparo do navegador (o RAW, o
+   * HEIC, o arquivo grande) para ele nascer com base alta e cair depois de
+   * arquivos que vinham atrás dele na lista.
+   *
+   * Juan: "minhas PB sempre são depois da colorida, mas aqui tá antes" — a
+   * preto-e-branco é o arquivo menor, prepara antes, e passava na frente.
+   *
+   * Excluir o PRÓPRIO LOTE é o que fecha isso: a base passa a ser o que a
+   * galeria tinha antes deste envio, e não muda mais até ele terminar.
+   * Reproduzido e conferido em `scripts/testar-ordem-do-envio.mjs`.
    */
   const proxima = await consultarUm<{ n: number }>(
-    "select coalesce(max(ordem), -1) + 1 as n from medias where galeria_id = $1 and pronto",
-    [dados.galeriaId],
+    `select coalesce(max(ordem), -1) + 1 as n
+       from medias
+      where galeria_id = $1 and pronto
+        and ($2::uuid is null or lote is distinct from $2::uuid)`,
+    [dados.galeriaId, dados.lote ?? null],
   );
   const posicao = (proxima?.n ?? 0) + (dados.indice ?? 0);
 
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
                          nome_original, tipo, mime, bytes, largura, altura, secao_id, ordem, pronto,
-                         armazem, tirada_em)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15)
+                         armazem, tirada_em, lote)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15, $16)
      returning *`,
     [
       dados.galeriaId,
@@ -199,6 +224,7 @@ export async function criarMediaPendente(dados: {
       posicao,
       dados.armazem ?? "r2",
       dados.tiradaEm ?? null,
+      dados.lote ?? null,
     ],
   );
 }
