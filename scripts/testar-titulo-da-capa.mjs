@@ -41,7 +41,7 @@ import {
   TAMANHO_TITULO,
   PRESETS,
 } from "../src/config/aparencia.ts";
-import { linhasDoTitulo, desenhoDoTitulo } from "../src/lib/titulo-da-capa.ts";
+import { linhasDoTitulo, desenhoDoTitulo, temPalavraQueNaoCabe } from "../src/lib/titulo-da-capa.ts";
 
 exigirBancoDeTeste();
 
@@ -344,6 +344,74 @@ await etapa("se a repartição falhar, a capa cai no automático em vez de na te
     console.error = antes;
   }
   return "automático + console.error, sem exceção";
+});
+
+/*
+ * ── A PALAVRA QUE NÃO TEM ONDE QUEBRAR (21/09/2026) ──────────────────────
+ *
+ * No `auto` quem quebra é o navegador, e ele só quebra nos ESPAÇOS. Título de
+ * uma palavra só — um nome composto digitado sem espaço — não tinha onde
+ * quebrar: passava da caixa de 22ch e levava a PÁGINA junto. Medido no
+ * navegador antes do conserto: 24 de 70 combinações de título × capa × largura
+ * davam rolagem horizontal na galeria inteira, e no celular a capa "convite"
+ * chegava a 799 px numa tela de 390.
+ */
+await etapa("palavra maior que a caixa é reconhecida, e nome normal não", () => {
+  const naoCabem = [
+    "Supercalifragilisticexpialidocious",
+    "Pneumonoultramicroscopicsilicovolcanoconiosis",
+    "MariaEduardaDeAlbuquerqueSilva",
+  ];
+  const cabem = ["Júlia & Gustavo", "Nathalia & Matheus", "Ana & Pedro", "Casamento", "", "&", null];
+  for (const t of naoCabem) {
+    if (!temPalavraQueNaoCabe(t)) throw new Error(`"${t}" devia precisar de quebra`);
+  }
+  for (const t of cabem) {
+    if (temPalavraQueNaoCabe(t)) throw new Error(`${JSON.stringify(t)} NÃO devia precisar de quebra`);
+  }
+  return `${naoCabem.length} quebram · ${cabem.length} seguem inteiras`;
+});
+
+await etapa("só o título com palavra grande ganha a quebra no meio", async () => {
+  await db.query("update galerias set titulo = $1 where id = $2", ["MariaEduardaDeAlbuquerqueSilva", g.id]);
+  const comQuebra = await tituloCom({ linhasTitulo: "auto" });
+  await db.query("update galerias set titulo = $1 where id = $2", [NOME, g.id]);
+  const semQuebra = await tituloCom({ linhasTitulo: "auto" });
+
+  if (!/overflow-wrap:\s*break-word/.test(comQuebra)) {
+    throw new Error("o nome sem espaço não recebeu a quebra — a página volta a rolar de lado");
+  }
+  if (/overflow-wrap:\s*break-word/.test(semQuebra)) {
+    throw new Error("nome normal recebeu quebra no meio da palavra sem precisar");
+  }
+  /* `text-balance` e quebra-no-meio não convivem: juntos, o balanceador escolhe
+     o mínimo e escreve o nome UMA LETRA POR LINHA. Visto em print. */
+  if (/text-balance/.test(comQuebra)) throw new Error("balance + quebra = nome na vertical");
+  if (!/text-balance/.test(semQuebra)) throw new Error("o título normal perdeu o balance");
+  return "quebra só onde precisa, e sem balance junto";
+});
+
+/*
+ * ── A CAIXA DE MEDIDA PRECISA TER LARGURA (21/09/2026) ───────────────────
+ *
+ * O `div` que carrega `container-type: inline-size` é quem define o `100cqw` do
+ * teto da fonte. Em capas que centralizam com `items-center` ele é um item
+ * flex que se mede pelo CONTEÚDO — e o conteúdo se mede pelo `cqw`. O ciclo
+ * fecha, o navegador resolve com zero, e a fonte vira `font-size: 0`.
+ *
+ * Não é hipótese: medido no navegador, a capa "convite" com "1 linha",
+ * "2 linhas" ou "3 linhas" desenhava o título com tamanho ZERO — invisível, em
+ * 24 das 224 combinações conferidas. `width: 100%` dá largura definida ao
+ * contêiner e desfaz o ciclo, sem mexer em nenhuma outra combinação.
+ */
+await etapa("a caixa que mede o título tem largura definida", async () => {
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+  const caixa = html.match(/<div[^>]*container-type:\s*inline-size[^>]*>/)?.[0];
+  if (!caixa) throw new Error("não achei o contêiner de medida do título");
+  if (!/width:\s*100%/.test(caixa)) {
+    throw new Error("o contêiner voltou a se medir pelo conteúdo — o título some nas capas centralizadas");
+  }
+  return "container-type + width:100%";
 });
 
 /* ── 4. A BARRINHA ───────────────────────────────────────────────────────── */
