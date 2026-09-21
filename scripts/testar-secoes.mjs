@@ -53,7 +53,8 @@ let capA, capB;
 
 await etapa("cria capítulos em ordem", async () => {
   const r = await db.query(
-    `insert into secoes (galeria_id, nome, ordem) values ($1,'Cerimônia',0), ($1,'Festa',1) returning id, nome`,
+    `insert into secoes (galeria_id, nome, ordem, slug)
+     values ($1,'Cerimônia',0,'cerimonia'), ($1,'Festa',1,'festa') returning id, nome, slug`,
     [galeriaId],
   );
   [capA, capB] = r.rows;
@@ -97,19 +98,29 @@ await etapa("fotos movidas aparecem sob o capítulo", async () => {
 /*
  * OS CAPÍTULOS MUDARAM DE CASA EM 10/09/2026. Eram uma barra própria, grudada
  * no topo; hoje são a segunda linha da BARRA DE MENUS que o Juan pediu — duas
- * faixas grudadas no mesmo lugar brigariam pelo topo da tela. O que este
- * arquivo cobra continua igual: as âncoras existem e ficam na barra.
+ * faixas grudadas no mesmo lugar brigariam pelo topo da tela.
+ *
+ * ── E DEIXARAM DE SER ÂNCORA EM 21/09/2026 ────────────────────────────────
+ *
+ * Juan: "quando chega no fim do capítulo ele está trocando sozinho". Felipe:
+ * "poderia encerrar o capítulo 'making of' e ter um botão 'próximo capítulo'".
+ *
+ * A pastilha era `#cap-<id>`: rolava até a seção e o visitante entrava no
+ * capítulo seguinte sem escolher. Agora ela é o ENDEREÇO do capítulo, que abre
+ * só ele — em qualquer tamanho de galeria, e não só acima do teto de 600.
  */
 const barraDeMenus = (html) =>
   html.match(/<nav[^>]*aria-label="Menu da galeria"[^]*?<\/nav>/)?.[0] ?? "";
 
 await etapa("menu de navegação aparece com 2+ capítulos", async () => {
   const html = await (await fetch(url, { cache: "no-store" })).text();
-  if (!html.includes(`#cap-${capA.id}`)) throw new Error("sem âncora para o capítulo");
+  if (html.includes(`#cap-${capA.id}"`)) throw new Error("a pastilha voltou a ser âncora");
+  const link = `/g/${tslug}/${gslug}/${capA.slug}`;
+  if (!html.includes(link)) throw new Error(`sem o endereço do capítulo (${link})`);
   const barra = barraDeMenus(html);
   if (!barra) throw new Error("sem a barra de menus");
-  if (!barra.includes(`#cap-${capA.id}`)) throw new Error("a âncora ficou fora da barra");
-  return "âncoras e menu presentes";
+  if (!barra.includes(link)) throw new Error("o endereço do capítulo ficou fora da barra");
+  return `${link} na barra`;
 });
 
 await etapa("ordem do fotógrafo é respeitada na página", async () => {

@@ -82,7 +82,6 @@ export function fatiarGaleria<T extends { secao_id?: string | null }>(
   teto = FOTOS_POR_TELA,
 ): Fatia<T> {
   const total = medias.length;
-  if (total <= teto) return { itens: medias, total, fatiada: false, restantes: 0 };
 
   /* `sem-capitulo` é o id que a página dá ao grupo das fotos que não estão em
      capítulo nenhum. Aqui ele vira o filtro "secao_id nulo". */
@@ -92,6 +91,24 @@ export function fatiarGaleria<T extends { secao_id?: string | null }>(
       : secaoId === "sem-capitulo"
         ? medias.filter((m) => !m.secao_id)
         : medias.filter((m) => m.secao_id === secaoId);
+
+  /*
+   * ── O CAPÍTULO ESCOLHIDO VALE EM QUALQUER TAMANHO (21/09/2026) ──────────
+   *
+   * Aqui a galeria que cabia inteira saía antes deste filtro: abaixo do teto
+   * `?cap=` não fazia nada, e a pastilha era só uma âncora que rolava até a
+   * seção. O visitante descia e entrava no capítulo seguinte sem escolher.
+   *
+   * Juan: "quando chega no fim do capítulo ele está trocando sozinho". Felipe:
+   * "poderia encerrar o capítulo 'making of' e ter um botão 'próximo
+   * capítulo'".
+   *
+   * O corte passou a valer sempre; `fatiada` continua dizendo só o que sempre
+   * disse — se a galeria passou do teto e o resto vai chegar rolando. São duas
+   * perguntas diferentes, e misturá-las é que fazia o comportamento do produto
+   * mudar entre 599 e 601 fotos.
+   */
+  if (total <= teto) return { itens: doCapitulo, total, fatiada: false, restantes: 0 };
 
   /*
    * O teto vale mesmo DENTRO do capítulo: nada impede um capítulo de 1500.

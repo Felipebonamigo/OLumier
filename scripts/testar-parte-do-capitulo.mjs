@@ -77,17 +77,44 @@ await etapa("galeria que cabe inteira não é fatiada", () => {
 });
 
 /*
- * O endereço de uma pastilha mexe SÓ no `cap`. A primeira versão montava
+ * O endereço de uma pastilha mexe SÓ no capítulo. A primeira versão montava
  * "?cap=X" do zero e jogava fora o "?previa=1" do dono: no rascunho o capítulo
  * dava 404, e na publicada contava um "abriu" do próprio fotógrafo na Atividade
  * do casal (revisão de 16/09/2026).
+ *
+ * ── E EM 21/09/2026 O CAPÍTULO VIROU CAMINHO ──────────────────────────────
+ *
+ * Juan: "se os noivos forem mandar pra alguém, provavelmente vão copiar e
+ * enviar. Daí vai ficar esse link cheio de coisa. Olha que feio." O `cap` saiu
+ * da consulta e virou pasta; o resto da consulta continua atravessando.
  */
-await etapa("o link do capítulo guarda a prévia do dono e larga o recorte", () => {
-  const e = enderecoNaGaleria("previa=1&fotos=a,b&cap=velho", { cap: "novo" });
-  const p = new URLSearchParams(e.replace(/^\?/, ""));
+await etapa("o link do capítulo é caminho, guarda a prévia do dono e larga o recorte", () => {
+  const base = "/g/sirius/julia-gustavo";
+  const e = enderecoNaGaleria(base, "previa=1&fotos=a,b&cap=velho", { cap: "novo" });
+  const [caminho, consulta = ""] = e.split("?");
+  if (caminho !== `${base}/novo`) throw new Error(`caminho errado: ${e}`);
+  const p = new URLSearchParams(consulta);
   if (p.get("previa") !== "1") throw new Error(`perdeu a prévia: ${e}`);
-  if (p.get("cap") !== "novo") throw new Error(`cap errado: ${e}`);
+  if (p.has("cap")) throw new Error(`o cap velho ficou na consulta: ${e}`);
   if (p.has("fotos")) throw new Error(`levou o recorte junto: ${e}`);
+  return e;
+});
+
+await etapa("sair do capítulo volta para o endereço da galeria, sem sobra", () => {
+  const base = "/g/sirius/julia-gustavo";
+  const e = enderecoNaGaleria(base, "cap=cerimonia", { cap: null });
+  if (e !== base) throw new Error(e);
+  return e;
+});
+
+/*
+ * No domínio próprio o visitante vê `/<galeria>` — a forma `/g/<estudio>/…` é
+ * interna e o proxy RECUSA servi-la naquele host. Por isso a base vem de fora:
+ * montá-la aqui quebraria justamente os estúdios que pagam pelo endereço.
+ */
+await etapa("a base de fora é respeitada — domínio próprio não vira olumier", () => {
+  const e = enderecoNaGaleria("/julia-gustavo", "", { cap: "cerimonia" });
+  if (e !== "/julia-gustavo/cerimonia") throw new Error(e);
   return e;
 });
 

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { marca } from "@/config/marca";
+import { CAMINHO_PUBLICO } from "@/proxy";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
@@ -327,6 +328,34 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const fatiada = !amostrando && fatia.fatiada;
 
   /*
+   * ── UM CAPÍTULO SÓ, EM QUALQUER TAMANHO (21/09/2026) ────────────────────
+   *
+   * `fatiada` responde "a galeria passou do teto e o resto chega rolando".
+   * Esta responde outra coisa: "a tela está mostrando UM capítulo, e não a
+   * galeria". Eram a mesma variável até hoje, e é por isso que o produto mudava
+   * de comportamento entre 599 e 601 fotos — abaixo do teto a pastilha era uma
+   * âncora, e o visitante entrava no capítulo seguinte sem escolher.
+   *
+   * Onde o menu precisa falar da GALERIA (quantas fotos cada capítulo tem, quais
+   * capítulos existem), as duas valem: nos dois casos `medias` é um pedaço.
+   */
+  /*
+   * ── O ENDEREÇO QUE O CASAL COPIA ────────────────────────────────────────
+   *
+   * `/g/<estudio>/<galeria>` é a forma INTERNA. Num estúdio com domínio próprio
+   * ou subdomínio o visitante vê só `/<galeria>`, e o proxy recusa servir `/g/`
+   * naquele host — montar link a partir dela quebraria justamente quem paga
+   * pelo endereço. Por isso quem sabe é o proxy, e ele diz no cabeçalho.
+   *
+   * Sem cabeçalho é o domínio principal, onde a forma interna É o endereço.
+   */
+  const enderecoBase =
+    (await headers()).get(CAMINHO_PUBLICO) ?? `/g/${estudio}/${galeriaSlug}`;
+
+  const soUmCapitulo = !amostrando && Boolean(capSecaoId);
+  const pedacoDaGaleria = fatiada || soUmCapitulo;
+
+  /*
    * Três tamanhos por foto, cada um no seu lugar:
    *   grade     → thumb (~50 KB) — é o que faz a galeria abrir rápido
    *   lightbox  → preview (~400 KB) — nítido em tela cheia
@@ -528,12 +557,12 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * painel e cai em "Outras fotos" quando ele não escreveu nada, que é como
    * todas as galerias de antes continuam.
    */
-  /* Numa galeria fatiada a pergunta "há fotos soltas?" é sobre a GALERIA, não
-     sobre a fatia: senão a pastilha "Outras fotos" apareceria e sumiria
+  /* Mostrando um pedaço, a pergunta "há fotos soltas?" é sobre a GALERIA, não
+     sobre o pedaço: senão a pastilha "Outras fotos" apareceria e sumiria
      conforme o capítulo aberto. */
   const haSoltasNaGaleria = todasAsMedias.some((m) => !m.secao_id);
-  if (semCapitulo.length > 0 || (fatiada && haSoltasNaGaleria)) {
-    const temCapitulo = (fatiada ? todasAsMedias : medias).some((m) => m.secao_id);
+  if (semCapitulo.length > 0 || (pedacoDaGaleria && haSoltasNaGaleria)) {
+    const temCapitulo = (pedacoDaGaleria ? todasAsMedias : medias).some((m) => m.secao_id);
     capitulos.push({
       id: "sem-capitulo",
       /* Já é curto e legível — este grupo nunca teve UUID, porque não é uma
@@ -541,7 +570,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       apelido: "sem-capitulo",
       nome: temCapitulo ? nomeDoGrupoSolto(galeria.grupo_solto) : "",
       indices: semCapitulo,
-      total: fatiada ? todasAsMedias.filter((m) => !m.secao_id).length : semCapitulo.length,
+      total: pedacoDaGaleria ? todasAsMedias.filter((m) => !m.secao_id).length : semCapitulo.length,
     });
   }
   for (const s of secoes) {
@@ -568,7 +597,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        o menu de baixar mostra, e mostrar `indices.length` fazia o capítulo que
        não veio aparecer como "(0)". */
     const total = todasAsMedias.filter((m) => m.secao_id === s.id).length;
-    if (indices.length > 0 || (fatiada && total > 0)) {
+    if (indices.length > 0 || (pedacoDaGaleria && total > 0)) {
       capitulos.push({ id: s.id, apelido: s.slug, nome: s.nome, indices, total });
     }
   }
@@ -757,6 +786,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               aparencia={aparencia}
               capitulos={[]}
               modoProvavel={modoProvavel}
+            enderecoBase={enderecoBase}
             />
           </>
         ) : itens.length === 0 ? (
@@ -778,6 +808,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             aparencia={aparencia}
             capitulos={capitulos}
             modoProvavel={modoProvavel}
+            enderecoBase={enderecoBase}
             buscaPorRosto={buscaPorRosto}
             bytesDaGaleria={bytesDaGaleria}
             recorte={escolhidas.size > 0 && !amostrando}
