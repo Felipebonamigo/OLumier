@@ -116,7 +116,23 @@ export async function proxy(request: NextRequest) {
 
       const galeria = pathname.replace(/^\/+|\/+$/g, "");
       const destino = galeria ? `/g/${estudio}/${galeria}` : `/e/${estudio}`;
-      return NextResponse.rewrite(new URL(destino + search, request.url));
+      /*
+       * ── O ENDEREÇO QUE A PESSOA VÊ, PARA QUEM PRECISA MONTAR LINK ────────
+       *
+       * Aqui dentro a galeria mora em `/g/<estudio>/<galeria>`; no domínio
+       * próprio o visitante vê `/<galeria>`, e a forma interna é justamente o
+       * que o bloco lá em cima recusa servir nesse host. Quem montar o link de
+       * um capítulo a partir de `/g/...` quebra exatamente nos estúdios que
+       * pagam pelo endereço deles.
+       *
+       * Só o primeiro pedaço: dentro de um capítulo o caminho já vem
+       * `/<galeria>/<capitulo>`, e a base continua sendo a galeria.
+       */
+      const cabecalhos = new Headers(request.headers);
+      if (galeria) cabecalhos.set(CAMINHO_PUBLICO, `/${galeria.split("/")[0]}`);
+      return NextResponse.rewrite(new URL(destino + search, request.url), {
+        request: { headers: cabecalhos },
+      });
     }
   }
 
@@ -136,6 +152,14 @@ export async function proxy(request: NextRequest) {
 
   return NextResponse.next();
 }
+
+/**
+ * O cabeçalho em que o proxy guarda o endereço público da galeria.
+ *
+ * Existe porque a reescrita esconde da página por qual endereço a pessoa
+ * chegou — e é esse endereço que os links de capítulo precisam ter como base.
+ */
+export const CAMINHO_PUBLICO = "x-caminho-publico";
 
 export const config = {
   // Precisa ver todas as rotas para reconhecer o subdomínio; as exceções ficam

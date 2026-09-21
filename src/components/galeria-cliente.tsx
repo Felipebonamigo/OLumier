@@ -136,6 +136,7 @@ export function GaleriaCliente({
   buscaPorRosto = null,
   fatia = null,
   capituloAberto = null,
+  enderecoBase,
   recorte = false,
   eu: euInicial = null,
 }: {
@@ -167,6 +168,15 @@ export function GaleriaCliente({
    * a saída do fim do capítulo sumir nas galerias pequenas.
    */
   capituloAberto?: string | null;
+  /**
+   * O endereço PÚBLICO desta galeria, sem capítulo — a base dos links das
+   * pastilhas e do botão de fim de capítulo.
+   *
+   * Vem da página porque só ela sabe: no domínio próprio o visitante vê
+   * `/<galeria>`, e a forma interna `/g/<estudio>/<galeria>` é recusada naquele
+   * host. Ver `lib/endereco-na-galeria.ts`.
+   */
+  enderecoBase: string;
   /**
    * A tela é um recorte por `?fotos=` — o resultado da busca por rosto numa
    * galeria fatiada. Aí `itens` são exatamente as fotos achadas, e o menu de
@@ -1083,8 +1093,11 @@ export function GaleriaCliente({
     if (i < 0) return null;
     const proximo = comFoto[i + 1] ?? null;
     return proximo
-      ? { texto: `Próximo capítulo: ${proximo.nome}`, para: enderecoNaGaleria("", { cap: proximo.apelido }) }
-      : { texto: "Ver a galeria inteira", para: enderecoNaGaleria("", { cap: null }) };
+      ? {
+          texto: `Próximo capítulo: ${proximo.nome}`,
+          para: enderecoNaGaleria(enderecoBase, "", { cap: proximo.apelido }),
+        }
+      : { texto: "Ver a galeria inteira", para: enderecoNaGaleria(enderecoBase, "", { cap: null }) };
   }, [capitulos, capituloAtivo]);
 
   const fimDaGaleria = (
@@ -1154,6 +1167,7 @@ export function GaleriaCliente({
         `recorte`.
       */}
       <MenusDaGaleria
+        enderecoBase={enderecoBase}
         capitulos={capitulos}
         fatia={fatia}
         tocarSlideshow={ordemVisivel.length > 1 ? tocarSlideshow : null}

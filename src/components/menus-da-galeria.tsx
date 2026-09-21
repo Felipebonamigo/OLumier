@@ -85,12 +85,15 @@ export type MenuBaixar = {
 
 export function MenusDaGaleria({
   capitulos,
+  enderecoBase,
   fatia = null,
   favoritas,
   baixar,
   tocarSlideshow,
 }: {
   capitulos: CapituloGaleria[];
+  /** O endereço público da galeria, sem capítulo. Ver `enderecoNaGaleria`. */
+  enderecoBase: string;
   /** Só numa galeria que não coube inteira — ver `config/fatia-galeria.ts`. */
   fatia?: { total: number; capituloAtivo: string | null } | null;
   /** Null quando não há o que oferecer: escolha encerrada e nenhuma marcada. */
@@ -474,11 +477,7 @@ export function MenusDaGaleria({
                   /* O APELIDO no link, o ID na âncora. O link é o que a
                      pessoa copia e manda; a âncora é interna. Ver
                      `CapituloGaleria.apelido` e a migração 034. */
-                  href={
-                    fatia
-                      ? enderecoNaGaleria(busca.toString(), { cap: c.apelido })
-                      : `#cap-${c.id}`
-                  }
+                  href={enderecoNaGaleria(enderecoBase, busca.toString(), { cap: c.apelido })}
                   aria-current={ativo ? "page" : undefined}
                   data-ativo={ativo ? "sim" : undefined}
                   className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
