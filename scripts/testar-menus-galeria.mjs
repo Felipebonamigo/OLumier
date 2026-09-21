@@ -162,6 +162,39 @@ await etapa("com mais de um capítulo, eles moram NA MESMA barra", async () => {
   }
 });
 
+/*
+ * ── A PASTILHA ACESA É A DO CAPÍTULO QUE OCUPA A TELA (21/09/2026) ────────
+ *
+ * Felipe, com o print da barra: "lá em cima tá marcado making of e ali aparece
+ * decoração. A pessoa já tá vendo o capítulo da decoração".
+ *
+ * A regra antiga era uma FAIXA (10% a 55% da tela) e, entre os capítulos que a
+ * cruzavam, o PRIMEIRO da galeria — bastava sobrar uma fileira do anterior lá
+ * em cima para ele vencer. Medido no navegador: 10 de 24 pontos ao longo de
+ * quatro capítulos acendiam a pastilha errada; com a regra por ÁREA VISÍVEL,
+ * 0 de 24.
+ *
+ * Esta etapa não abre navegador — ela prende o MECANISMO, porque o defeito era
+ * o mecanismo: quem decide não pode ser "o primeiro que cruza uma faixa".
+ */
+await etapa("o capítulo aceso é decidido por área visível, não por faixa", async () => {
+  const fonte = await import("node:fs/promises").then((fs) =>
+    fs.readFile("src/components/menus-da-galeria.tsx", "utf8"),
+  );
+  if (/rootMargin/.test(fonte)) {
+    throw new Error("voltou a decidir por faixa — a barra fica um capítulo atrás do que se lê");
+  }
+  if (!/Math\.min\(r\.bottom, base\) - Math\.max\(r\.top, topo\)/.test(fonte)) {
+    throw new Error("não achei a conta da área visível abaixo da barra");
+  }
+  /* Só limiares de visibilidade deixavam a barra parada quando a rolagem não
+     cruzava nenhum deles — medido, numa emenda em cada cinco. */
+  if (!/addEventListener\("scroll"/.test(fonte)) {
+    throw new Error("sem ouvir a rolagem, a pastilha trava entre um limiar e outro");
+  }
+  return "área visível + rolagem + observador";
+});
+
 await limparRodada(db);
 await db.end();
 

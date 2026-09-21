@@ -100,10 +100,10 @@ export function MenusDaGaleria({
   /** Null com menos de duas fotos à vista — tocar uma foto só é abri-la. */
   tocarSlideshow: (() => void) | null;
 }) {
-  const barra = useRef<HTMLElement | null>(null);
+  const barraRef = useRef<HTMLElement | null>(null);
   const busca = useSearchParams();
 
-  useFecharMenuAoClicarFora(barra);
+  useFecharMenuAoClicarFora(barraRef);
 
   /*
    * ── O CAPÍTULO EM QUE A PESSOA ESTÁ (16/09/2026) ────────────────────────
@@ -118,13 +118,9 @@ export function MenusDaGaleria({
    * nenhuma delas acendia nunca: a barra dizia onde dava para ir e não dizia
    * onde a pessoa estava.
    *
-   * O observador responde isso sem custo de rolagem: o navegador avisa quando
-   * uma seção entra ou sai, em vez de a gente medir posição a cada quadro.
-   *
-   * `rootMargin` de -45% embaixo põe a "linha de leitura" no terço superior da
-   * tela, e não no meio: com a barra grudada no topo, o capítulo que vale é o
-   * que está logo abaixo dela. Empate vai para o que está mais acima, que é o
-   * que a pessoa acabou de começar a ler.
+   * Qual capítulo é esse, e como se decide, está no efeito lá embaixo — a
+   * regra mudou em 21/09/2026, de "o primeiro que cruza uma faixa" para "o que
+   * ocupa mais tela abaixo da barra", e o porquê está escrito lá.
    */
   const [capituloVisivel, setCapituloVisivel] = useState<string | null>(null);
 
@@ -167,33 +163,92 @@ export function MenusDaGaleria({
   useEffect(() => {
     if (fatia || capitulos.length < 2) return;
     const secoes = capitulos
-      .map((c) => document.getElementById(`cap-${c.id}`))
-      .filter((el): el is HTMLElement => el !== null);
+      .map((c) => ({ id: c.id, el: document.getElementById(`cap-${c.id}`) }))
+      .filter((x): x is { id: string; el: HTMLElement } => x.el !== null);
     if (secoes.length === 0) return;
 
-    const visiveis = new Set<string>();
-    const observador = new IntersectionObserver(
-      (entradas) => {
-        for (const e of entradas) {
-          if (e.isIntersecting) visiveis.add(e.target.id);
-          else visiveis.delete(e.target.id);
+    /*
+     * ── QUAL CAPÍTULO A PESSOA ESTÁ VENDO (21/09/2026) ──────────────────────
+     *
+     * Felipe, com o print da barra: "lá em cima tá marcado making of e ali
+     * aparece decoração. A pessoa já tá vendo o capítulo da decoração".
+     *
+     * A regra antiga era uma FAIXA (10% a 55% da tela) e, entre os capítulos
+     * que a cruzavam, o PRIMEIRO da galeria. Bastava sobrar uma fileira do
+     * Making Of lá em cima para ele vencer a Decoração, que estava ocupando o
+     * resto da tela.
+     *
+     * Trocar a faixa por uma linha fina não resolve — só muda onde fica o
+     * empate. Medido: com a linha logo abaixo da barra, a emenda a 20%, 35% e
+     * 50% da tela continuava acendendo o capítulo de cima, porque a linha ainda
+     * estava dentro dele. O problema não era ONDE medir: era O QUE medir.
+     *
+     * O que a pessoa chama de "o capítulo que estou vendo" é o que OCUPA MAIS
+     * TELA abaixo da barra. Então é isso que se mede, e o observador serve para
+     * dizer QUANDO remedir, em vez de decidir sozinho.
+     */
+    const barra = barraRef.current;
+    const decidir = () => {
+      const topo = barra?.getBoundingClientRect().bottom ?? 0;
+      const base = window.innerHeight;
+      let escolhido: string | null = null;
+      let maior = 0;
+      for (const { id, el } of secoes) {
+        const r = el.getBoundingClientRect();
+        const visivel = Math.min(r.bottom, base) - Math.max(r.top, topo);
+        if (visivel > maior) {
+          maior = visivel;
+          escolhido = id;
         }
-        /* A ordem da barra é a ordem da galeria: o primeiro capítulo visível na
-           lista é o de cima da tela. */
-        const primeiro = capitulos.find((c) => visiveis.has(`cap-${c.id}`));
-        setCapituloVisivel(primeiro?.id ?? null);
-      },
-      { rootMargin: "-10% 0px -45% 0px" },
-    );
-    for (const el of secoes) observador.observe(el);
-    return () => observador.disconnect();
+      }
+      /* Nada à vista (a capa, o rodapé) fica com o último: apagar a pastilha ali
+         faria a barra piscar a cada emenda. */
+      if (escolhido) setCapituloVisivel(escolhido);
+    };
+
+    /*
+     * ── E QUEM AVISA SÃO OS DOIS ───────────────────────────────────────────
+     *
+     * A ROLAGEM, presa a um quadro: é ela que muda o que está na tela, e só
+     * limiares de visibilidade deixavam a barra parada quando a rolagem não
+     * cruzava nenhum deles — medido, numa emenda em cada cinco.
+     *
+     * O OBSERVADOR, para o que a rolagem não conta: imagem que carrega e
+     * empurra a grade, fotos novas chegando pela rolagem infinita, a tela que
+     * gira. Aí a página muda de altura sem ninguém rolar.
+     *
+     * `requestAnimationFrame` junta as duas fontes num quadro só, e a conta é
+     * meia dúzia de `getBoundingClientRect` — barata o suficiente para rodar
+     * durante a rolagem sem travar nada.
+     */
+    let pedido = 0;
+    const agendar = () => {
+      if (pedido) return;
+      pedido = requestAnimationFrame(() => {
+        pedido = 0;
+        decidir();
+      });
+    };
+    const observador = new IntersectionObserver(agendar, {
+      threshold: [0, 0.25, 0.5, 0.75, 1],
+    });
+    for (const { el } of secoes) observador.observe(el);
+    window.addEventListener("scroll", agendar, { passive: true });
+    window.addEventListener("resize", agendar, { passive: true });
+    decidir();
+    return () => {
+      observador.disconnect();
+      window.removeEventListener("scroll", agendar);
+      window.removeEventListener("resize", agendar);
+      if (pedido) cancelAnimationFrame(pedido);
+    };
   }, [capitulos, fatia]);
 
   if (!favoritas && !baixar && !tocarSlideshow && capitulos.length < 2) return null;
 
   return (
     <nav
-      ref={barra}
+      ref={barraRef}
       aria-label="Menu da galeria"
       /* `sticky` já é posição não-estática, então a barra serve de âncora para o
          painel dos menus no celular — ver o `max-[600px]:static` do `<details>`.
