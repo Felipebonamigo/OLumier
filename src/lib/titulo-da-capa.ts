@@ -137,6 +137,45 @@ export function linhasDoTitulo(titulo: string, linhas: LinhasTitulo): string[] |
 }
 
 /**
+ * A CAIXA DO `auto`, medida em `em`.
+ *
+ * A capa escreve `max-width: 22ch`, e `ch` é a largura do "0" — que na maioria
+ * das fontes fica perto de meio `em`. Então 22ch cabem uns 11 `em` de texto, e é
+ * esse o número contra o qual uma palavra precisa ser medida para se saber se
+ * ela cabe. Aproximado de propósito: o que se decide com ele é se vale QUEBRAR
+ * a palavra, e errar por pouco só muda o tratamento de um nome que já estava no
+ * limite.
+ */
+const CABE_NA_CAIXA_EM = 11;
+
+/**
+ * TEM PALAVRA QUE NÃO CABE NA CAIXA? — a que obriga a quebrar no meio.
+ *
+ * ── DE ONDE VEIO (21/09/2026) ─────────────────────────────────────────────
+ *
+ * Na opção `auto` quem quebra o título é o navegador, e ele só quebra nos
+ * ESPAÇOS. Título de uma palavra só — um nome composto digitado sem espaço, por
+ * exemplo — não tem onde quebrar: passava da caixa de 22ch e levava a PÁGINA
+ * junto. Medido antes do conserto: 24 de 70 combinações de título × capa ×
+ * largura davam rolagem horizontal na galeria inteira, e no celular a capa
+ * "convite" chegava a 799 px numa tela de 390 — o convidado arrastava a galeria
+ * de lado para ler o nome do casal.
+ *
+ * A resposta é deixar o navegador quebrar dentro da palavra. Só que isso não
+ * pode valer para TODO título: junto com `text-wrap: balance`, que a capa usa
+ * para repartir bem "Nathalia & Matheus", a permissão de quebrar em qualquer
+ * ponto faz o balanceador escolher o mínimo — e o nome sai UMA LETRA POR LINHA,
+ * escrito de cima para baixo. Medido também, com print.
+ *
+ * Por isso a pergunta: só o título que tem uma palavra maior que a caixa troca
+ * `balance` por quebra. Os outros continuam exatamente como estão.
+ */
+export function temPalavraQueNaoCabe(titulo: string): boolean {
+  const palavras = String(titulo ?? "").trim().split(/\s+/).filter(Boolean);
+  return palavras.some((p) => larguraDoTituloEm(p) > CABE_NA_CAIXA_EM);
+}
+
+/**
  * O DESENHO DO TÍTULO — e a promessa de que ele NUNCA derruba a galeria.
  *
  * ── DE ONDE VEIO (18/09/2026) ─────────────────────────────────────────────

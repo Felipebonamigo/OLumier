@@ -1,4 +1,4 @@
-import { desenhoDoTitulo } from "@/lib/titulo-da-capa";
+import { desenhoDoTitulo, temPalavraQueNaoCabe } from "@/lib/titulo-da-capa";
 import {
   FONTES_TITULO,
   alturaLogoPx,
@@ -238,6 +238,13 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    * cabeçalho de `lib/titulo-da-capa.ts`.
    */
   const { linhas, larguraEm } = desenhoDoTitulo(titulo, aparencia.linhasTitulo);
+  /*
+   * ── A PALAVRA QUE NÃO TEM ONDE QUEBRAR (21/09/2026) ────────────────────
+   *
+   * Só no `auto`, e só quando ela existe: ver `temPalavraQueNaoCabe`. Com
+   * linhas decididas o `nowrap` e o teto de fonte já cuidam disso.
+   */
+  const quebrarPalavra = !linhas && temPalavraQueNaoCabe(titulo);
 
   const Titulo = ({ base }: { base: BaseDoTitulo }) => {
     const [min, cresce, max] = base;
@@ -254,9 +261,12 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
        * do avesso no computador — uma capa entregue mudando de cara por causa
        * de uma `div` de medição.
        */
-      <div style={{ containerType: "inline-size" }}>
+      <div style={{ containerType: "inline-size", width: "100%" }}>
         <h1
-          className={`${linhas ? "" : "text-balance"} ${alinharBloco}`}
+          /* `text-balance` reparte bem um título de várias palavras — e, quando
+             a quebra DENTRO da palavra está liberada, o balanceador escolhe o
+             mínimo e escreve o nome uma letra por linha. Os dois não convivem. */
+          className={`${linhas || quebrarPalavra ? "" : "text-balance"} ${alinharBloco}`}
           style={{
             fontFamily: fonteTitulo,
             fontWeight: peso,
@@ -266,7 +276,15 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
               : `calc(${pedido})`,
             /* Sem linhas decididas vale a caixa de 22ch do `auto`; com elas, o
                `nowrap` impede que uma linha vire duas por falta de espaço. */
-            ...(linhas ? { whiteSpace: "nowrap" as const } : { maxWidth: "22ch" }),
+            ...(linhas
+              ? { whiteSpace: "nowrap" as const }
+              : {
+                  maxWidth: "22ch",
+                  /* Quebrar dentro da palavra é feio; a galeria inteira rolando
+                     de lado é pior, e era o que acontecia. Só entra quando há
+                     palavra que não cabe. */
+                  ...(quebrarPalavra ? { overflowWrap: "break-word" as const } : {}),
+                }),
           }}
         >
           {linhas
