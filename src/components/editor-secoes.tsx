@@ -138,210 +138,370 @@ export function EditorSecoes({
       aoTerminar?.();
     });
 
-  return (
-    <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
-      <h2 className="text-sm font-semibold">Capítulos</h2>
-      <p className="mt-0.5 text-xs text-texto-faint">
-        Dividem a galeria em momentos. O cliente ganha um menu para pular direto ao que quer ver.
-      </p>
 
-      {secoes.length === 0 && (
-        /*
-         * BORDA SÓLIDA, E FUNDO PRÓPRIO — a tracejada é da área de SOLTAR.
-         *
-         * Felipe, 16/09/2026: "essa parte dos capítulos ficou semelhante
-         * visualmente com a área de 'arrastar fotos para cá'. Eu até tentei
-         * jogar as fotos ali, mas vi que ali é a área dos capítulos."
-         *
-         * As duas caixas tinham exatamente as mesmas classes
-         * (`border-dashed border-linha-forte`), e a tracejada é uma convenção
-         * forte: em todo lugar da web ela quer dizer "arraste aqui". Aqui ela
-         * não aceita nada — o arrasto some no vazio, sem erro e sem resposta.
-         *
-         * A regra que fica: TRACEJADA É EXCLUSIVA DE ALVO DE ARRASTO. Esta
-         * caixa é um estado vazio, então ganha borda contínua e a superfície
-         * um degrau acima do painel — lê-se como cartão, não como buraco.
-         */
-        <div className="mt-4 rounded-lg border border-linha bg-carbon-2 px-4 py-6 text-center">
-          <p className="text-sm text-texto-soft">Nenhum capítulo ainda</p>
-          <p className="mx-auto mt-1 max-w-[42ch] text-xs text-texto-faint">
-            Sem capítulos, a galeria mostra tudo numa sequência só — o que também funciona bem.
-          </p>
-          <button
-            type="button"
-            disabled={ocupado}
-            onClick={() => executar(criarCapitulosSugeridosAction, {})}
-            className="mt-4 rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2 disabled:opacity-50"
+  /* Os dois blocos são constantes para poderem TROCAR DE LUGAR lá embaixo
+     sem virarem duas cópias do mesmo JSX. Ver o comentário do título. */
+  const caixaDeVazio =
+    secoes.length === 0 ? (
+      /*
+       * BORDA SÓLIDA, E FUNDO PRÓPRIO — a tracejada é da área de SOLTAR.
+       *
+       * Felipe, 16/09/2026: "essa parte dos capítulos ficou semelhante
+       * visualmente com a área de 'arrastar fotos para cá'. Eu até tentei
+       * jogar as fotos ali, mas vi que ali é a área dos capítulos."
+       *
+       * As duas caixas tinham exatamente as mesmas classes
+       * (`border-dashed border-linha-forte`), e a tracejada é uma convenção
+       * forte: em todo lugar da web ela quer dizer "arraste aqui". Aqui ela
+       * não aceita nada — o arrasto some no vazio, sem erro e sem resposta.
+       *
+       * A regra que fica: TRACEJADA É EXCLUSIVA DE ALVO DE ARRASTO. Esta
+       * caixa é um estado vazio, então ganha borda contínua e a superfície
+       * um degrau acima do painel — lê-se como cartão, não como buraco.
+       */
+      <div className="mt-4 rounded-lg border border-linha bg-carbon-2 px-4 py-6 text-center">
+        <p className="text-sm text-texto-soft">Nenhum capítulo ainda</p>
+        <p className="mx-auto mt-1 max-w-[42ch] text-xs text-texto-faint">
+          Sem capítulos, a galeria mostra tudo numa sequência só — o que também funciona bem.
+        </p>
+        <button
+          type="button"
+          disabled={ocupado}
+          onClick={() => executar(criarCapitulosSugeridosAction, {})}
+          className="mt-4 rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2 disabled:opacity-50"
+        >
+          Criar os capítulos de um casamento
+        </button>
+        <p className="mt-2 text-[11px] text-texto-faint">
+          Making Of · Cerimônia · Decoração · Recepção · Festa · Ensaio
+        </p>
+      </div>
+  ) : null;
+
+  /*
+      ── A LISTA NÃO DEPENDE MAIS DE HAVER CAPÍTULO (18/09/2026) ───────────
+
+      Juan: "não tem botão pra reorganizar a ordem das fotos. Essa opção só
+      aparece quando tem capítulos, quando não tem capítulo não aparece."
+
+      Era literal: a lista inteira vivia no `else` do "Nenhum capítulo ainda",
+      e com ela sumia a linha das fotos sem capítulo — que é onde mora o
+      "ordenar". Numa galeria de fluxo único, que o próprio cartão acima diz
+      que "também funciona bem", o fotógrafo ficava sem jeito nenhum de mexer
+      na ordem das 286 fotos que acabara de subir.
+
+      O cartão de vazio continua, porque ensina o que é capítulo. A lista
+      aparece ao lado dele quando há foto solta, que é quando ela tem o que
+      mostrar.
+  */
+  const listaDeGrupos =
+    lista.length > 0 || semCapitulo > 0 ? (
+      <ul className="mt-4 divide-y divide-linha rounded-lg border border-linha">
+        {lista.map((s, i) => (
+          <li
+            key={s.id}
+            draggable={!ocupado && editando !== s.id}
+            onDragStart={(e) => {
+              setArrastando(s.id);
+              setOrdem(lista.map((x) => x.id));
+              /* Sem `setData` o Firefox não inicia o arrasto. */
+              e.dataTransfer.setData("text/plain", s.id);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+              aoCruzar(s.id);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              aoSoltar();
+            }}
+            onDragEnd={aoSoltar}
+            className={`flex flex-wrap items-center gap-2 px-3 py-2.5 ${
+              arrastando === s.id ? "opacity-40" : ""
+            } ${editando === s.id ? "" : "cursor-grab active:cursor-grabbing"}`}
           >
-            Criar os capítulos de um casamento
-          </button>
-          <p className="mt-2 text-[11px] text-texto-faint">
-            Making Of · Cerimônia · Decoração · Recepção · Festa · Ensaio
-          </p>
-        </div>
-      )}
+            {editando === s.id ? (
+              <>
+                <input
+                  value={nomeEditado}
+                  onChange={(e) => setNomeEditado(e.target.value)}
+                  autoFocus
+                  className="min-w-0 flex-1 rounded-md border border-linha bg-void px-2 py-1 text-sm focus:border-acento focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={ocupado}
+                  onClick={() => {
+                    executar(renomearSecaoAction, { secao_id: s.id, nome: nomeEditado });
+                    setEditando(null);
+                  }}
+                  className="rounded-md bg-acento px-3 py-1 text-xs font-semibold text-void"
+                >
+                  ok
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditando(null)}
+                  className="rounded-md border border-linha px-3 py-1 text-xs text-texto-soft"
+                >
+                  cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                {/* O punho não é o que arrasta — a linha inteira é. Ele está
+                    aqui para DIZER que dá, que é o que faltava na tela da
+                    Carol: nada indicava que a linha podia ser pegada. */}
+                <span
+                  aria-hidden="true"
+                  className="select-none text-texto-faint"
+                  title="Arraste para reordenar"
+                >
+                  ⠿
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{s.nome}</span>
+                  <span className="text-[11px] text-texto-faint">
+                    {s.total} {s.total === 1 ? "foto" : "fotos"}
+                  </span>
+                </span>
 
-      {/*
-        ── A LISTA NÃO DEPENDE MAIS DE HAVER CAPÍTULO (18/09/2026) ───────────
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={ocupado || i === 0}
+                    onClick={() => executar(moverSecaoAction, { secao_id: s.id, direcao: "cima" })}
+                    aria-label={`Mover ${s.nome} para cima`}
+                    className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-30"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    disabled={ocupado || i === lista.length - 1}
+                    onClick={() => executar(moverSecaoAction, { secao_id: s.id, direcao: "baixo" })}
+                    aria-label={`Mover ${s.nome} para baixo`}
+                    className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-30"
+                  >
+                    ↓
+                  </button>
+                  {/*
+                    ── ORDENAR AS FOTOS DO CAPÍTULO (16/09/2026) ──────────
 
-        Juan: "não tem botão pra reorganizar a ordem das fotos. Essa opção só
-        aparece quando tem capítulos, quando não tem capítulo não aparece."
+                    Felipe: "poder organizar por ordem de upload/adição // por
+                    ordem cronológica // por nome A-Z // por nome Z-A".
 
-        Era literal: a lista inteira vivia no `else` do "Nenhum capítulo ainda",
-        e com ela sumia a linha das fotos sem capítulo — que é onde mora o
-        "ordenar". Numa galeria de fluxo único, que o próprio cartão acima diz
-        que "também funciona bem", o fotógrafo ficava sem jeito nenhum de mexer
-        na ordem das 286 fotos que acabara de subir.
+                    Um `select` e não quatro botões: são quatro opções
+                    EXCLUSIVAS, e quatro botões numa linha que já tem cinco
+                    controles viram parede. Volta para o rótulo depois de
+                    agir, porque a ordem não é um estado que a linha carrega —
+                    é uma ação que acabou de acontecer, e o resultado está na
+                    grade logo abaixo.
 
-        O cartão de vazio continua, porque ensina o que é capítulo. A lista
-        aparece ao lado dele quando há foto solta, que é quando ela tem o que
-        mostrar.
-      */}
-      {(lista.length > 0 || semCapitulo > 0) && (
-        <ul className="mt-4 divide-y divide-linha rounded-lg border border-linha">
-          {lista.map((s, i) => (
-            <li
-              key={s.id}
-              draggable={!ocupado && editando !== s.id}
-              onDragStart={(e) => {
-                setArrastando(s.id);
-                setOrdem(lista.map((x) => x.id));
-                /* Sem `setData` o Firefox não inicia o arrasto. */
-                e.dataTransfer.setData("text/plain", s.id);
-                e.dataTransfer.effectAllowed = "move";
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                aoCruzar(s.id);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                aoSoltar();
-              }}
-              onDragEnd={aoSoltar}
-              className={`flex flex-wrap items-center gap-2 px-3 py-2.5 ${
-                arrastando === s.id ? "opacity-40" : ""
-              } ${editando === s.id ? "" : "cursor-grab active:cursor-grabbing"}`}
-            >
-              {editando === s.id ? (
-                <>
-                  <input
-                    value={nomeEditado}
-                    onChange={(e) => setNomeEditado(e.target.value)}
-                    autoFocus
-                    className="min-w-0 flex-1 rounded-md border border-linha bg-void px-2 py-1 text-sm focus:border-acento focus:outline-none"
-                  />
+                    ── DESABILITADO, E NÃO ESCONDIDO (17/09/2026) ──────
+
+                    Ele SUMIA com menos de duas fotos, com o argumento de que
+                    ordenar zero fotos é um menu que não faz nada. Verdade
+                    sobre a ação, e errado sobre a tela, por dois motivos que
+                    o Felipe viu de uma vez: "a opção ordenar ficou só em um
+                    capítulo".
+
+                    1. Capítulo NASCE vazio. O caminho normal é criar Making
+                       Of, Cerimônia, Festa e só depois mandar as fotos — ou
+                       seja, na hora de conhecer a tela o recurso não está lá,
+                       e quem não o viu no começo não vai procurá-lo depois.
+
+                    2. A linha some, mas o espaço não: sem o select, os botões
+                       daquela linha escorregam para a esquerda e nenhuma
+                       coluna bate com a de cima. A lista inteira fica torta
+                       por causa de um controle a menos.
+
+                    Desabilitado resolve os dois: a coluna se mantém, o
+                    recurso se anuncia, e continua sem fazer nada quando não
+                    há o que ordenar — que era o ponto legítimo do argumento
+                    antigo. O `title` diz por que está apagado, senão vira
+                    botão morto sem explicação.
+                  */}
+                  {(() => {
+                    const poucasFotos = s.total < 2;
+                    return (
+                    <select
+                      aria-label={`Ordenar as fotos de ${s.nome}`}
+                      title={
+                        poucasFotos
+                          ? "Mande fotos para este capítulo — com menos de duas não há o que ordenar"
+                          : undefined
+                      }
+                      disabled={ocupado || poucasFotos}
+                      value=""
+                      onChange={(e) => {
+                        if (!e.target.value) return;
+                        executar(ordenarFotosDaSecaoAction, {
+                          secao_id: s.id,
+                          criterio: e.target.value,
+                        });
+                        e.target.value = "";
+                      }}
+                      className="rounded-md border border-linha bg-void px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"
+                    >
+                      <option value="">ordenar…</option>
+                      {ORDENS_DAS_FOTOS.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.nome}
+                        </option>
+                      ))}
+                    </select>
+                    );
+                  })()}
                   <button
                     type="button"
                     disabled={ocupado}
                     onClick={() => {
-                      executar(renomearSecaoAction, { secao_id: s.id, nome: nomeEditado });
-                      setEditando(null);
+                      setEditando(s.id);
+                      setNomeEditado(s.nome);
                     }}
-                    className="rounded-md bg-acento px-3 py-1 text-xs font-semibold text-void"
+                    className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2"
                   >
-                    ok
+                    renomear
                   </button>
                   <button
                     type="button"
-                    onClick={() => setEditando(null)}
-                    className="rounded-md border border-linha px-3 py-1 text-xs text-texto-soft"
+                    disabled={ocupado}
+                    onClick={() => {
+                      const aviso =
+                        s.total > 0
+                          ? `Apagar o capítulo “${s.nome}”?\n\nAs ${s.total} fotos NÃO são apagadas — elas voltam para "sem capítulo".`
+                          : `Apagar o capítulo “${s.nome}”?`;
+                      if (confirm(aviso)) executar(apagarSecaoAction, { secao_id: s.id });
+                    }}
+                    className="rounded-md border border-erro/40 px-2 py-1 text-xs text-erro transition hover:bg-erro/10"
                   >
-                    cancelar
+                    apagar
                   </button>
-                </>
-              ) : (
-                <>
-                  {/* O punho não é o que arrasta — a linha inteira é. Ele está
-                      aqui para DIZER que dá, que é o que faltava na tela da
-                      Carol: nada indicava que a linha podia ser pegada. */}
-                  <span
-                    aria-hidden="true"
-                    className="select-none text-texto-faint"
-                    title="Arraste para reordenar"
-                  >
-                    ⠿
+                </span>
+              </>
+            )}
+          </li>
+        ))}
+
+        {semCapitulo > 0 && (
+          <li className="flex flex-wrap items-center gap-2 bg-carbon-2/50 px-3 py-2.5">
+            {/*
+              ── O GRUPO DAS SOLTAS TEM NOME, E O NOME É DO FOTÓGRAFO ───────
+
+              Juan, 18/09/2026: "aqui fica aparecendo 'outras fotos', pelo que
+              eu vi é todas as fotos juntas, não tem como trocar pra esse
+              nome. Tipo galeria completa ou algo assim. Ou eu não sei se foi
+              eu que fiz algo de errado kkkk, mas não criei nenhuma pasta com
+              esse nome."
+
+              Ele não criou nada: o texto era NOSSO, escrito na página da
+              galeria desde 04/09/2026, e esta linha só o anunciava em negrito
+              — "suas fotos aparecem como Outras fotos" — sem oferecer como
+              trocar. Numa tela em que todo capítulo ao lado tem um botão
+              "renomear", ler isso é concluir que aquela pasta veio de algum
+              lugar que você não controla.
+
+              Então o mesmo botão e o mesmo campo. A diferença entre este
+              grupo e um capítulo é o que ele É — o que sobrou, calculado a
+              cada carregamento —, e não o direito de se chamar do que o dono
+              da galeria quiser.
+            */}
+            {editando === SOLTAS ? (
+              <>
+                <input
+                  value={nomeEditado}
+                  onChange={(e) => setNomeEditado(e.target.value)}
+                  /* A marca-d'água é o nome de fábrica: apagar o campo volta
+                     para ele, e o campo vazio mostra qual é. */
+                  placeholder={nomeDoGrupoSolto(null)}
+                  aria-label="Nome do grupo das fotos sem capítulo"
+                  autoFocus
+                  className="min-w-0 flex-1 rounded-md border border-linha bg-void px-2 py-1 text-sm focus:border-acento focus:outline-none"
+                />
+                <button
+                  type="button"
+                  disabled={ocupado}
+                  onClick={() => {
+                    executar(renomearGrupoSoltoAction, { nome: nomeEditado });
+                    setEditando(null);
+                  }}
+                  className="rounded-md bg-acento px-3 py-1 text-xs font-semibold text-void"
+                >
+                  ok
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditando(null)}
+                  className="rounded-md border border-linha px-3 py-1 text-xs text-texto-soft"
+                >
+                  cancelar
+                </button>
+              </>
+            ) : (
+              <>
+                {/* `min-w` para o nome NÃO ser espremido: sem ele, o `flex-1`
+                    encolhe este bloco até caber ao lado dos dois controles, e
+                    num celular de 390 px o nome virava "Galer…" com a frase
+                    quebrando uma palavra por linha. Com piso, o `flex-wrap`
+                    manda os controles para a linha de baixo, que é o que as
+                    linhas dos capítulos já fazem. */}
+                <span className="min-w-[11rem] flex-1">
+                  {/* Sem capítulo nenhum, estas fotos NÃO são "as outras" —
+                      são a galeria inteira, e a pastilha com nome nem existe
+                      (ver `nome: temCapitulo ? … : ""` na página do cliente).
+                      Chamá-las de "Outras fotos" aqui seria a tela inventar
+                      uma divisão que a galeria não tem. */}
+                  <span className="block truncate text-sm text-texto-soft">
+                    {temCapitulos ? nomeDoGrupoSolto(grupoSolto) : "Todas as fotos"}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{s.nome}</span>
-                    <span className="text-[11px] text-texto-faint">
-                      {s.total} {s.total === 1 ? "foto" : "fotos"}
-                    </span>
+                  <span className="text-[11px] text-texto-faint">
+                    {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                    {temCapitulos
+                      ? ` — ${semCapitulo === 1 ? "aparece" : "aparecem"} com esse nome, antes dos capítulos`
+                      : " — numa sequência só, na ordem abaixo"}
                   </span>
+                </span>
 
-                  <span className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={ocupado || i === 0}
-                      onClick={() => executar(moverSecaoAction, { secao_id: s.id, direcao: "cima" })}
-                      aria-label={`Mover ${s.nome} para cima`}
-                      className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-30"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      disabled={ocupado || i === lista.length - 1}
-                      onClick={() => executar(moverSecaoAction, { secao_id: s.id, direcao: "baixo" })}
-                      aria-label={`Mover ${s.nome} para baixo`}
-                      className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-30"
-                    >
-                      ↓
-                    </button>
-                    {/*
-                      ── ORDENAR AS FOTOS DO CAPÍTULO (16/09/2026) ──────────
+                <span className="flex items-center gap-1">
+                  {/*
+                    ── ORDENAR TAMBÉM AQUI (18/09/2026) ────────────────────
 
-                      Felipe: "poder organizar por ordem de upload/adição // por
-                      ordem cronológica // por nome A-Z // por nome Z-A".
+                    `ordenarFotosDaSecaoAction` aceita `secao_id` vazio desde
+                    que nasceu — "o grupo das soltas aparece na mesma lista da
+                    tela e tem o mesmo direito de ser ordenado", diz o
+                    comentário dela. Só que a tela nunca ofereceu o seletor, e
+                    a ação ficou sem porta: numa galeria sem capítulos não
+                    havia NENHUM jeito de mexer na ordem.
 
-                      Um `select` e não quatro botões: são quatro opções
-                      EXCLUSIVAS, e quatro botões numa linha que já tem cinco
-                      controles viram parede. Volta para o rótulo depois de
-                      agir, porque a ordem não é um estado que a linha carrega —
-                      é uma ação que acabou de acontecer, e o resultado está na
-                      grade logo abaixo.
-
-                      ── DESABILITADO, E NÃO ESCONDIDO (17/09/2026) ──────
-
-                      Ele SUMIA com menos de duas fotos, com o argumento de que
-                      ordenar zero fotos é um menu que não faz nada. Verdade
-                      sobre a ação, e errado sobre a tela, por dois motivos que
-                      o Felipe viu de uma vez: "a opção ordenar ficou só em um
-                      capítulo".
-
-                      1. Capítulo NASCE vazio. O caminho normal é criar Making
-                         Of, Cerimônia, Festa e só depois mandar as fotos — ou
-                         seja, na hora de conhecer a tela o recurso não está lá,
-                         e quem não o viu no começo não vai procurá-lo depois.
-
-                      2. A linha some, mas o espaço não: sem o select, os botões
-                         daquela linha escorregam para a esquerda e nenhuma
-                         coluna bate com a de cima. A lista inteira fica torta
-                         por causa de um controle a menos.
-
-                      Desabilitado resolve os dois: a coluna se mantém, o
-                      recurso se anuncia, e continua sem fazer nada quando não
-                      há o que ordenar — que era o ponto legítimo do argumento
-                      antigo. O `title` diz por que está apagado, senão vira
-                      botão morto sem explicação.
-                    */}
-                    {(() => {
-                      const poucasFotos = s.total < 2;
-                      return (
+                    Mesmo `disabled` dos capítulos, pelo mesmo motivo: com
+                    menos de duas fotos não há o que ordenar, e um controle que
+                    some deixa a coluna torta e some com o recurso.
+                  */}
+                  {(() => {
+                    const poucasFotos = semCapitulo < 2;
+                    return (
                       <select
-                        aria-label={`Ordenar as fotos de ${s.nome}`}
+                        aria-label={
+                          temCapitulos
+                            ? "Ordenar as fotos sem capítulo"
+                            : "Ordenar as fotos da galeria"
+                        }
                         title={
                           poucasFotos
-                            ? "Mande fotos para este capítulo — com menos de duas não há o que ordenar"
+                            ? "Com menos de duas fotos não há o que ordenar"
                             : undefined
                         }
                         disabled={ocupado || poucasFotos}
                         value=""
                         onChange={(e) => {
                           if (!e.target.value) return;
+                          /* `secao_id` vazio é o grupo das soltas — a ação
+                             entende, e é o que a torna útil aqui. */
                           executar(ordenarFotosDaSecaoAction, {
-                            secao_id: s.id,
+                            secao_id: "",
                             criterio: e.target.value,
                           });
                           e.target.value = "";
@@ -355,223 +515,97 @@ export function EditorSecoes({
                           </option>
                         ))}
                       </select>
-                      );
-                    })()}
-                    <button
-                      type="button"
-                      disabled={ocupado}
-                      onClick={() => {
-                        setEditando(s.id);
-                        setNomeEditado(s.nome);
-                      }}
-                      className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2"
-                    >
-                      renomear
-                    </button>
-                    <button
-                      type="button"
-                      disabled={ocupado}
-                      onClick={() => {
-                        const aviso =
-                          s.total > 0
-                            ? `Apagar o capítulo “${s.nome}”?\n\nAs ${s.total} fotos NÃO são apagadas — elas voltam para "sem capítulo".`
-                            : `Apagar o capítulo “${s.nome}”?`;
-                        if (confirm(aviso)) executar(apagarSecaoAction, { secao_id: s.id });
-                      }}
-                      className="rounded-md border border-erro/40 px-2 py-1 text-xs text-erro transition hover:bg-erro/10"
-                    >
-                      apagar
-                    </button>
-                  </span>
-                </>
-              )}
-            </li>
-          ))}
-
-          {semCapitulo > 0 && (
-            <li className="flex flex-wrap items-center gap-2 bg-carbon-2/50 px-3 py-2.5">
-              {/*
-                ── O GRUPO DAS SOLTAS TEM NOME, E O NOME É DO FOTÓGRAFO ───────
-
-                Juan, 18/09/2026: "aqui fica aparecendo 'outras fotos', pelo que
-                eu vi é todas as fotos juntas, não tem como trocar pra esse
-                nome. Tipo galeria completa ou algo assim. Ou eu não sei se foi
-                eu que fiz algo de errado kkkk, mas não criei nenhuma pasta com
-                esse nome."
-
-                Ele não criou nada: o texto era NOSSO, escrito na página da
-                galeria desde 04/09/2026, e esta linha só o anunciava em negrito
-                — "suas fotos aparecem como Outras fotos" — sem oferecer como
-                trocar. Numa tela em que todo capítulo ao lado tem um botão
-                "renomear", ler isso é concluir que aquela pasta veio de algum
-                lugar que você não controla.
-
-                Então o mesmo botão e o mesmo campo. A diferença entre este
-                grupo e um capítulo é o que ele É — o que sobrou, calculado a
-                cada carregamento —, e não o direito de se chamar do que o dono
-                da galeria quiser.
-              */}
-              {editando === SOLTAS ? (
-                <>
-                  <input
-                    value={nomeEditado}
-                    onChange={(e) => setNomeEditado(e.target.value)}
-                    /* A marca-d'água é o nome de fábrica: apagar o campo volta
-                       para ele, e o campo vazio mostra qual é. */
-                    placeholder={nomeDoGrupoSolto(null)}
-                    aria-label="Nome do grupo das fotos sem capítulo"
-                    autoFocus
-                    className="min-w-0 flex-1 rounded-md border border-linha bg-void px-2 py-1 text-sm focus:border-acento focus:outline-none"
-                  />
+                    );
+                  })()}
+                  {temCapitulos && (
                   <button
                     type="button"
                     disabled={ocupado}
                     onClick={() => {
-                      executar(renomearGrupoSoltoAction, { nome: nomeEditado });
-                      setEditando(null);
+                      setEditando(SOLTAS);
+                      /* Começa VAZIO enquanto o nome ainda é o nosso: o campo
+                         mostra "Outras fotos" como marca-d'água e ele digita o
+                         dele por cima, em vez de apagar um texto que não
+                         escreveu. */
+                      setNomeEditado(grupoSolto ?? "");
                     }}
-                    className="rounded-md bg-acento px-3 py-1 text-xs font-semibold text-void"
+                    className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2"
                   >
-                    ok
+                    renomear
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditando(null)}
-                    className="rounded-md border border-linha px-3 py-1 text-xs text-texto-soft"
+                  )}
+                  {/*
+                    MOVER TODAS DE UMA VEZ — pedido do sócio em 04/09/2026:
+                    "as fotos sem capítulo devem ir obrigatoriamente para um
+                    capítulo".
+
+                    Obrigar no ENVIO seria atrito no pior momento: quem está
+                    subindo 600 fotos não quer responder pergunta. Um botão
+                    que arruma depois entrega o mesmo resultado e não cobra
+                    nada de quem não se importa — e quem não clicar não fica
+                    com pastilha sem nome na galeria, porque o grupo tem um
+                    (o nosso, ou o que ele escreveu no botão ao lado).
+                  */}
+                  {temCapitulos && (
+                  <select
+                    aria-label={`Mover as ${semCapitulo} fotos sem capítulo`}
+                    disabled={ocupado}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) executar(moverSoltasAction, { secao_id: e.target.value });
+                    }}
+                    className="rounded-lg border border-linha bg-void px-2 py-1 text-xs text-texto-soft focus:border-acento focus:outline-none disabled:opacity-50"
                   >
-                    cancelar
-                  </button>
-                </>
-              ) : (
-                <>
-                  {/* `min-w` para o nome NÃO ser espremido: sem ele, o `flex-1`
-                      encolhe este bloco até caber ao lado dos dois controles, e
-                      num celular de 390 px o nome virava "Galer…" com a frase
-                      quebrando uma palavra por linha. Com piso, o `flex-wrap`
-                      manda os controles para a linha de baixo, que é o que as
-                      linhas dos capítulos já fazem. */}
-                  <span className="min-w-[11rem] flex-1">
-                    {/* Sem capítulo nenhum, estas fotos NÃO são "as outras" —
-                        são a galeria inteira, e a pastilha com nome nem existe
-                        (ver `nome: temCapitulo ? … : ""` na página do cliente).
-                        Chamá-las de "Outras fotos" aqui seria a tela inventar
-                        uma divisão que a galeria não tem. */}
-                    <span className="block truncate text-sm text-texto-soft">
-                      {temCapitulos ? nomeDoGrupoSolto(grupoSolto) : "Todas as fotos"}
-                    </span>
-                    <span className="text-[11px] text-texto-faint">
-                      {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
-                      {temCapitulos
-                        ? ` — ${semCapitulo === 1 ? "aparece" : "aparecem"} com esse nome, antes dos capítulos`
-                        : " — numa sequência só, na ordem abaixo"}
-                    </span>
-                  </span>
+                    <option value="">mover todas para…</option>
+                    {secoes.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.nome}
+                      </option>
+                    ))}
+                  </select>
+                  )}
+                </span>
+              </>
+            )}
+          </li>
+        )}
+      </ul>
+  ) : null;
 
-                  <span className="flex items-center gap-1">
-                    {/*
-                      ── ORDENAR TAMBÉM AQUI (18/09/2026) ────────────────────
+  return (
+    <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
+      {/*
+        ── O CARTÃO DIZ O QUE ELE FAZ, E NÃO SÓ O QUE ELE OFERECE ───────────
 
-                      `ordenarFotosDaSecaoAction` aceita `secao_id` vazio desde
-                      que nasceu — "o grupo das soltas aparece na mesma lista da
-                      tela e tem o mesmo direito de ser ordenado", diz o
-                      comentário dela. Só que a tela nunca ofereceu o seletor, e
-                      a ação ficou sem porta: numa galeria sem capítulos não
-                      havia NENHUM jeito de mexer na ordem.
+        Juan, 23/09/2026: "quando tá sem capítulo não tem onde reorganizar as
+        fotos por nome A-Z". O controle existia desde 18/09 — ele estava DENTRO
+        de um cartão chamado "Capítulos", abaixo de uma caixa que anuncia
+        "Nenhum capítulo ainda". Quem não tem capítulo não tem motivo nenhum
+        para ler esse cartão, e o vazio ainda confirma que ele não se aplica.
 
-                      Mesmo `disabled` dos capítulos, pelo mesmo motivo: com
-                      menos de duas fotos não há o que ordenar, e um controle que
-                      some deixa a coluna torta e some com o recurso.
-                    */}
-                    {(() => {
-                      const poucasFotos = semCapitulo < 2;
-                      return (
-                        <select
-                          aria-label={
-                            temCapitulos
-                              ? "Ordenar as fotos sem capítulo"
-                              : "Ordenar as fotos da galeria"
-                          }
-                          title={
-                            poucasFotos
-                              ? "Com menos de duas fotos não há o que ordenar"
-                              : undefined
-                          }
-                          disabled={ocupado || poucasFotos}
-                          value=""
-                          onChange={(e) => {
-                            if (!e.target.value) return;
-                            /* `secao_id` vazio é o grupo das soltas — a ação
-                               entende, e é o que a torna útil aqui. */
-                            executar(ordenarFotosDaSecaoAction, {
-                              secao_id: "",
-                              criterio: e.target.value,
-                            });
-                            e.target.value = "";
-                          }}
-                          className="rounded-md border border-linha bg-void px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"
-                        >
-                          <option value="">ordenar…</option>
-                          {ORDENS_DAS_FOTOS.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.nome}
-                            </option>
-                          ))}
-                        </select>
-                      );
-                    })()}
-                    {temCapitulos && (
-                    <button
-                      type="button"
-                      disabled={ocupado}
-                      onClick={() => {
-                        setEditando(SOLTAS);
-                        /* Começa VAZIO enquanto o nome ainda é o nosso: o campo
-                           mostra "Outras fotos" como marca-d'água e ele digita o
-                           dele por cima, em vez de apagar um texto que não
-                           escreveu. */
-                        setNomeEditado(grupoSolto ?? "");
-                      }}
-                      className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2"
-                    >
-                      renomear
-                    </button>
-                    )}
-                    {/*
-                      MOVER TODAS DE UMA VEZ — pedido do sócio em 04/09/2026:
-                      "as fotos sem capítulo devem ir obrigatoriamente para um
-                      capítulo".
+        Sem capítulo, o assunto deste cartão é a ORDEM das fotos, e criar
+        capítulos é a oferta. Então o título muda e, lá embaixo, a linha das
+        fotos sobe para cima do vazio.
+      */}
+      <h2 className="text-sm font-semibold">{temCapitulos ? "Capítulos" : "Ordem das fotos"}</h2>
+      <p className="mt-0.5 text-xs text-texto-faint">
+        {temCapitulos
+          ? "Dividem a galeria em momentos. O cliente ganha um menu para pular direto ao que quer ver."
+          : "A sequência em que o casal vai ver. Dá para ordenar por nome, por data da foto ou pela ordem de envio."}
+      </p>
 
-                      Obrigar no ENVIO seria atrito no pior momento: quem está
-                      subindo 600 fotos não quer responder pergunta. Um botão
-                      que arruma depois entrega o mesmo resultado e não cobra
-                      nada de quem não se importa — e quem não clicar não fica
-                      com pastilha sem nome na galeria, porque o grupo tem um
-                      (o nosso, ou o que ele escreveu no botão ao lado).
-                    */}
-                    {temCapitulos && (
-                    <select
-                      aria-label={`Mover as ${semCapitulo} fotos sem capítulo`}
-                      disabled={ocupado}
-                      value=""
-                      onChange={(e) => {
-                        if (e.target.value) executar(moverSoltasAction, { secao_id: e.target.value });
-                      }}
-                      className="rounded-lg border border-linha bg-void px-2 py-1 text-xs text-texto-soft focus:border-acento focus:outline-none disabled:opacity-50"
-                    >
-                      <option value="">mover todas para…</option>
-                      {secoes.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.nome}
-                        </option>
-                      ))}
-                    </select>
-                    )}
-                  </span>
-                </>
-              )}
-            </li>
-          )}
-        </ul>
+      {/* Sem capítulo, a LISTA vem primeiro: ela é o assunto, e a caixa de
+          criar capítulos é a oferta. Com capítulos o vazio nem aparece. */}
+      {temCapitulos ? (
+        <>
+          {caixaDeVazio}
+          {listaDeGrupos}
+        </>
+      ) : (
+        <>
+          {listaDeGrupos}
+          {caixaDeVazio}
+        </>
       )}
 
       <div className="mt-3 flex flex-wrap gap-2">

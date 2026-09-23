@@ -193,11 +193,40 @@ export async function criarMediaPendente(dados: {
    * galeria tinha antes deste envio, e não muda mais até ele terminar.
    * Reproduzido e conferido em `scripts/testar-ordem-do-envio.mjs`.
    */
+  /*
+   * ── E O `pronto` AINDA DEIXAVA DUAS PASTAS SE INTERCALAREM (23/09/2026) ──
+   *
+   * Juan, quatro dias depois da migração 038, com a mesma frase de antes:
+   * "as fotos não estão sendo apresentadas em ordem. Minha cópia PB da foto é
+   * depois da versão colorida, mas tá sendo mostrada antes".
+   *
+   * O conserto de 038 resolvia UM envio. O que faltava é o que o fotógrafo faz
+   * numa entrega grande: soltar a segunda pasta assim que a primeira PARECE ter
+   * acabado. A fila esvazia, o lote novo nasce — e a cauda do lote anterior
+   * ainda não ficou `pronto`, porque confirmar é uma segunda ida ao servidor
+   * depois de o arquivo subir.
+   *
+   * Com `and pronto` na base, essa cauda não entrava na conta: o lote novo
+   * começava EM CIMA dela, e as duas pastas se intercalavam. Medido em
+   * `testar-ordem-do-envio`: 4 de 40 fora do lugar, com a primeira foto da
+   * segunda pasta caindo na posição da 19ª da primeira.
+   *
+   * Uma linha pendente OCUPA a posição dela — ela vai ficar pronta. Então com
+   * lote a conta olha todas as linhas de fora do lote, prontas ou não.
+   *
+   * O `pronto` continua valendo para quem NÃO manda lote (cliente antigo, uma
+   * aba que não recarregou): ali ele ainda é o que impede as próprias linhas
+   * pendentes de empurrarem a base, que era o defeito original.
+   *
+   * O preço é um buraco na numeração quando um envio é abortado no meio. Não
+   * custa nada: dentro do capítulo só a posição RELATIVA importa.
+   */
   const proxima = await consultarUm<{ n: number }>(
     `select coalesce(max(ordem), -1) + 1 as n
        from medias
-      where galeria_id = $1 and pronto
-        and ($2::uuid is null or lote is distinct from $2::uuid)`,
+      where galeria_id = $1
+        and case when $2::uuid is null then pronto
+                 else lote is distinct from $2::uuid end`,
     [dados.galeriaId, dados.lote ?? null],
   );
   const posicao = (proxima?.n ?? 0) + (dados.indice ?? 0);

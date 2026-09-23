@@ -136,6 +136,34 @@ export type CantoFoto = "reto" | "suave" | "redondo" | "muito";
 export type FonteDoTexto = "padrao" | "propria";
 
 /**
+ * A FONTE DAS LETRINHAS DA CAPA — sobrancelha, data, assinatura e botão.
+ *
+ * Juan, 23/09/2026, com a foto da capa "Danielle e Sérgio": "as fontes dessas
+ * outras letrinhas não tem como trocar", e querem trocar.
+ *
+ * Ele está certo, e medi antes de mexer: na capa, o título obedecia à escolha
+ * de `tipografia` (saía em Cormorant Garamond) e TODO o resto saía em
+ * `ui-monospace` — a classe `font-mono` estava escrita no componente, e classe
+ * na própria tag ganha da fonte herdada do corpo. Ou seja: nem o eixo do
+ * título nem o do texto chegavam ali. Não havia defeito a corrigir; havia uma
+ * escolha que nunca existiu.
+ *
+ * ── POR QUE TRÊS OPÇÕES, E NÃO O CATÁLOGO INTEIRO ───────────────────────
+ *
+ * O catálogo de `tipografia` tem dezenas de famílias. Oferecê-lo uma terceira
+ * vez convidaria a TRÊS letras diferentes na mesma capa, que é a receita
+ * conhecida de capa amadora — e quem está pedindo isto é justamente quem vive
+ * de a capa não parecer amadora.
+ *
+ * As três que existem são as três que alguém quer de verdade: continuar como
+ * está, casar com o nome do casal, ou casar com o corpo da galeria.
+ *
+ * `mono` é o padrão e é EXATAMENTE o que está no ar hoje: nenhuma das galerias
+ * já entregues muda de cara.
+ */
+export type FonteDoDetalhe = "mono" | "titulo" | "texto";
+
+/**
  * Como o texto da capa se alinha.
  *
  * Juan, 05/09/2026: "me incomoda tudo estar torto. Não tá nem centralizado,
@@ -314,6 +342,23 @@ export interface CoresProprias {
   fundo?: string;
   texto?: string;
   destaque?: string;
+  /**
+   * A cor das LETRINHAS DA CAPA — sobrancelha, data e assinatura do estúdio.
+   *
+   * Felipe, 23/09/2026, logo depois do pedido da fonte: "e a cor também".
+   *
+   * É a quarta e não uma das três porque não é da mesma natureza. Fundo, texto
+   * e botão são a paleta: as cartelas escolhem as três juntas, e tudo o mais
+   * na galeria deriva delas. Esta pinta um punhado de palavras numa tela só.
+   *
+   * Sem ela, cada letrinha continua com o tom derivado que sempre teve —
+   * `--g-suave` na data e na assinatura, `--g-tenue` na sobrancelha, que é a
+   * hierarquia desenhada de propósito (a etiqueta é mais quieta que a data).
+   * COM ela, as três saem exatamente na cor escolhida: quem apontou uma cor
+   * quer aquela cor, e não uma interpretação nossa dela. A hierarquia então
+   * passa a ser a do tamanho da letra, que já as separa.
+   */
+  detalhe?: string;
 }
 
 export interface Aparencia {
@@ -327,6 +372,7 @@ export interface Aparencia {
   alturaCapa: AlturaCapa;
   canto: CantoFoto;
   fonteTexto: FonteDoTexto;
+  fonteDetalhe: FonteDoDetalhe;
   alinhamento: Alinhamento;
   /** Em quantas linhas o nome cai. Ver `LinhasTitulo`. */
   linhasTitulo: LinhasTitulo;
@@ -397,6 +443,9 @@ export const APARENCIA_PADRAO: Aparencia = {
      fonte própria antes deste eixo a escolheu PARA O TÍTULO, e o corpo dessas
      galerias não pode mudar sozinho. Ver o comentário de `FonteDoTexto`. */
   fonteTexto: "padrao",
+  /* `mono` e não `titulo`: é o que está desenhado em toda capa no ar. Ver
+     `FonteDoDetalhe` — o eixo nasce sem mudar nada de ninguém. */
+  fonteDetalhe: "mono",
   alinhamento: "centro",
   /* Os dois nasceram em 16/09/2026 sem mexer em nada: `auto` é a quebra que o
      navegador já fazia e 100% é o tamanho que a capa já desenhava. O que MUDA
@@ -520,6 +569,11 @@ export function lerAparencia(bruto: unknown): Aparencia {
     alturaCapa: valida(o.alturaCapa, OPCOES.alturaCapa.map((x) => x.id), APARENCIA_PADRAO.alturaCapa),
     canto: valida(o.canto, OPCOES.canto.map((x) => x.id), APARENCIA_PADRAO.canto),
     fonteTexto: valida(o.fonteTexto, OPCOES.fonteTexto.map((x) => x.id), APARENCIA_PADRAO.fonteTexto),
+    fonteDetalhe: valida(
+      o.fonteDetalhe,
+      OPCOES.fonteDetalhe.map((x) => x.id),
+      APARENCIA_PADRAO.fonteDetalhe,
+    ),
     alinhamento: valida(o.alinhamento, OPCOES.alinhamento.map((x) => x.id), APARENCIA_PADRAO.alinhamento),
     linhasTitulo: valida(o.linhasTitulo, OPCOES.linhasTitulo.map((x) => x.id), APARENCIA_PADRAO.linhasTitulo),
     capaFixa: valida(o.capaFixa, OPCOES.capaFixa.map((x) => x.id), APARENCIA_PADRAO.capaFixa),
@@ -571,7 +625,7 @@ function lerCores(bruto: unknown): CoresProprias | null {
   if (!bruto || typeof bruto !== "object") return null;
   const o = bruto as Record<string, unknown>;
   const cores: CoresProprias = {};
-  for (const chave of ["fundo", "texto", "destaque"] as const) {
+  for (const chave of ["fundo", "texto", "destaque", "detalhe"] as const) {
     const v = o[chave];
     if (typeof v !== "string") continue;
     const t = v.toLowerCase();
@@ -725,6 +779,14 @@ export const OPCOES = {
     { id: "padrao", nome: "A do sistema", desc: "Sem serifa, feita para ler em tela" },
     { id: "propria", nome: "A minha fonte", desc: "O arquivo que você enviou em Conta" },
   ],
+  /* Os rótulos apontam para outros dois eixos DESTA MESMA TELA de propósito:
+     "a do nome do casal" é a escolha logo acima, e "a do texto" é a de baixo.
+     Quem lê a lista entende o que vai acontecer sem precisar experimentar. */
+  fonteDetalhe: [
+    { id: "mono", nome: "Máquina de escrever", desc: "Letra de largura fixa — como está hoje" },
+    { id: "titulo", nome: "A do nome do casal", desc: "As letrinhas acompanham o título" },
+    { id: "texto", nome: "A do texto", desc: "As letrinhas acompanham o corpo da galeria" },
+  ],
   /* "Automático" primeiro porque é o padrão, e os números depois em ordem: a
      lista se lê como uma frase — quebra sozinho, ou em 1, 2, 3. O texto de
      ajuda de cada um fala do RESULTADO na capa, não do mecanismo. */
@@ -781,19 +843,19 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     /*
@@ -827,13 +889,13 @@ export const PRESETS: Preset[] = [
     id: "marfim",
     nome: "Marfim",
     desc: "Creme e manuscrita, mural rente. É o desenho da nossa página inicial.",
-    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     /*
@@ -850,7 +912,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -873,25 +935,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
 ];
 
@@ -1052,7 +1114,21 @@ export function variaveisDeForma(a: Aparencia): Record<string, string> {
 export function variaveisDoTema(a: Aparencia): Record<string, string> {
   const base = TEMAS[a.tema];
   const c = a.cores;
-  if (!c || Object.keys(c).length === 0) return base;
+  /*
+   * SÓ AS TRÊS DA PALETA ENTRAM AQUI — e a conta é por campo, não por
+   * "tem alguma cor".
+   *
+   * Era `Object.keys(c).length === 0`, e funcionava enquanto `cores` só tinha
+   * as três. Com a cor das letrinhas da capa (23/09/2026) passou a haver uma
+   * quarta que NÃO é do tema: quem mexesse só nela caía no recálculo abaixo, e
+   * o recálculo não devolve a tabela — ele DERIVA. `--g-superficie` saía
+   * `#f2f1f1` em vez do `#f6f4ef` escolhido à mão em `TEMAS`.
+   *
+   * O efeito seria escolher um tom para a data da capa e repintar, de leve, a
+   * superfície da galeria inteira. Ninguém pediria isso e ninguém entenderia
+   * de onde veio. Pego por `testar-letrinhas-da-capa`.
+   */
+  if (!c || (!c.fundo && !c.texto && !c.destaque)) return base;
 
   const fundo = c.fundo ?? base["--g-fundo"];
   const texto = c.texto ?? base["--g-texto"];
@@ -1112,6 +1188,19 @@ export const FONTES_TEXTO: Record<FonteDoTexto, string> = {
   padrao: 'var(--font-sans-app), system-ui, "Segoe UI", sans-serif',
   propria: '"FonteDoEstudio", var(--font-sans-app), system-ui, "Segoe UI", sans-serif',
 };
+
+/**
+ * A fonte das letrinhas da capa, já resolvida — ou `null` para deixar como está.
+ *
+ * `null` e não a pilha do mono de propósito: quem chama mantém a classe
+ * `font-mono` do Tailwind, que é o que está no ar hoje, e assim o padrão não
+ * depende de eu reescrever a pilha de fontes monoespaçadas igualzinha.
+ */
+export function fonteDoDetalhe(a: Aparencia): string | null {
+  if (a.fonteDetalhe === "titulo") return FONTES_TITULO[a.tipografia];
+  if (a.fonteDetalhe === "texto") return FONTES_TEXTO[a.fonteTexto];
+  return null;
+}
 
 export const FONTES_TITULO: Record<Tipografia, string> = {
   /* Não é uma fonte nossa: o nome da família é declarado pelo @font-face que a
@@ -1239,7 +1328,11 @@ export const LARGURA_DA_FOTO: Record<Densidade, number> = {
 export interface Paleta {
   id: string;
   nome: string;
-  cores: Required<CoresProprias>;
+  /* As TRÊS da paleta, escritas à mão e não `Required<CoresProprias>`: desde
+     que existe a cor das letrinhas, exigir o tipo inteiro obrigaria cada
+     cartela a opinar sobre um detalhe de capa que não é assunto dela. Uma
+     cartela é fundo, texto e botão — é isso que as pastilhas desenham. */
+  cores: Pick<Required<CoresProprias>, "fundo" | "texto" | "destaque">;
 }
 
 export const PALETAS: Paleta[] = [

@@ -178,6 +178,11 @@ const ROTULOS_DE_COR = [
   { chave: "fundo", variavel: "--g-fundo", titulo: "Fundo" },
   { chave: "texto", variavel: "--g-texto", titulo: "Texto" },
   { chave: "destaque", variavel: "--g-destaque", titulo: "Botões" },
+  /* Fica por último porque é a mais fina das quatro: as três de cima pintam a
+     galeria inteira, esta pinta a sobrancelha, a data e a assinatura da capa.
+     "Detalhes da capa" e não "Detalhes": a pessoa precisa saber ONDE vai ver o
+     efeito, senão escolhe uma cor e conclui que o seletor está quebrado. */
+  { chave: "detalhe", variavel: "--g-suave", titulo: "Detalhes da capa" },
 ] as const;
 
 function CoresProprias({ ap, mudar }: PecaProps) {
@@ -809,6 +814,12 @@ export function EditorAparencia({
                 mudar={mudar}
                 ocultar={temFontePropria ? undefined : ["propria"]}
               />
+              {/* E por fim as letrinhas — a sobrancelha, a data, a assinatura e
+                  o botão da capa. Vem depois das outras duas porque as duas
+                  opções interessantes dele APONTAM para elas: "a do nome do
+                  casal" é o primeiro eixo desta coluna, "a do texto" é o de
+                  cima. Escolher nesta ordem é ler a escada de baixo para cima. */}
+              <Eixo eixo="fonteDetalhe" titulo="Letrinhas da capa" ap={ap} mudar={mudar} />
             </>
           )}
           {grupo === "cor" && (

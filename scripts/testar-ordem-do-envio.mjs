@@ -178,6 +178,84 @@ try {
     }
     return `${N} arquivos, nenhum fora do lugar`;
   });
+
+  /*
+   * ── O CASO QUE O TESTE DE CIMA NÃO PEGA (23/09/2026) ────────────────────
+   *
+   * Juan, quatro dias depois da migração 038: "as fotos não estão sendo
+   * apresentadas em ordem. Minha cópia PB da foto é depois da versão colorida,
+   * mas tá sendo mostrada antes" — a MESMA frase de antes do conserto.
+   *
+   * O teste de cima sobe um lote só e sai limpo. Falta o que o fotógrafo faz
+   * de verdade numa entrega grande: soltar a segunda pasta assim que a primeira
+   * PARECE ter acabado. A fila esvazia, o `loteAtual` zera, o lote novo nasce —
+   * e algumas linhas do lote anterior ainda não ficaram `pronto`, porque o
+   * confirmar é uma segunda ida ao servidor depois do arquivo subir.
+   *
+   * A base do lote novo é `max(ordem)` entre as PRONTAS de outros lotes. Se a
+   * cauda do lote anterior ainda não entrou nessa conta, o lote novo começa em
+   * cima dela — e as duas metades se intercalam.
+   *
+   * É exatamente o sintoma da preto-e-branco: ela é o arquivo menor, sobe e
+   * confirma antes, e a colorida que vinha antes dela na lista chega depois.
+   */
+  await etapa("segunda pasta solta com a cauda da primeira ainda pendente", async () => {
+    const g3 = await galeriaDaRodada(db, { nome: "ordem-duas-pastas", medias: 0, publicada: true });
+    const LOTE_1 = "44444444-4444-4444-8444-444444444444";
+    const LOTE_2 = "55555555-5555-4555-8555-555555555555";
+    const N = 20;
+
+    const nome = (lote, i) => `pasta${lote}-${String(i + 1).padStart(3, "0")}.jpg`;
+    const subirEm = async (lote, i) =>
+      criarMediaPendente({
+        galeriaId: g3.id,
+        tenantId: est.id,
+        chave: `${est.id}/${g3.id}/${nome(lote, i)}`,
+        chaveThumb: null,
+        chavePreview: null,
+        nomeOriginal: nome(lote, i),
+        tipo: "foto",
+        mime: "image/jpeg",
+        bytes: 1000,
+        largura: 1000,
+        altura: 1500,
+        indice: i,
+        lote: lote === 1 ? LOTE_1 : LOTE_2,
+      });
+
+    /* Primeira pasta inteira, mas só as 17 primeiras confirmam: as três
+       últimas ficam penduradas, que é o estado real de um envio que "acabou"
+       na tela um instante antes de acabar no servidor. */
+    const primeira = [];
+    for (let i = 0; i < N; i++) primeira.push(await subirEm(1, i));
+    for (let i = 0; i < N - 3; i++) await confirmarMedia(primeira[i].id, est.id, 1000);
+
+    /* Agora a segunda pasta, com o lote novo. */
+    const segunda = [];
+    for (let i = 0; i < N; i++) segunda.push(await subirEm(2, i));
+
+    /* E a cauda da primeira enfim confirma. */
+    for (let i = N - 3; i < N; i++) await confirmarMedia(primeira[i].id, est.id, 1000);
+    for (const m of segunda) await confirmarMedia(m.id, est.id, 1000);
+
+    const { rows } = await db.query(
+      "select nome_original from medias where galeria_id = $1 and pronto order by ordem, criado_em",
+      [g3.id],
+    );
+    const veio = rows.map((r) => r.nome_original);
+    const esperado = [
+      ...Array.from({ length: N }, (_, i) => nome(1, i)),
+      ...Array.from({ length: N }, (_, i) => nome(2, i)),
+    ];
+    const fora = veio.filter((n, i) => n !== esperado[i]).length;
+    if (fora > 0) {
+      const p = veio.findIndex((n, i) => n !== esperado[i]);
+      throw new Error(
+        `${fora} de ${esperado.length} fora do lugar — na posição ${p} veio "${veio[p]}", esperava "${esperado[p]}"`,
+      );
+    }
+    return `${esperado.length} arquivos em duas pastas, nenhum fora do lugar`;
+  });
 } finally {
   await limparRodada(db);
   await db.end();
