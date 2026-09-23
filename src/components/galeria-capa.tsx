@@ -2,6 +2,7 @@ import { desenhoDoTitulo, temPalavraQueNaoCabe } from "@/lib/titulo-da-capa";
 import {
   FONTES_TITULO,
   alturaLogoPx,
+  fonteDoDetalhe,
   pesoDoTitulo,
   type Aparencia,
 } from "@/config/aparencia";
@@ -52,6 +53,28 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const fonteTitulo = FONTES_TITULO[aparencia.tipografia];
   const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl, capaEscolhida } = dados;
   const legenda = [dataFormatada, subtitulo].filter(Boolean).join(" · ");
+
+  /*
+   * ── AS LETRINHAS DA CAPA GANHARAM DONO (23/09/2026) ─────────────────────
+   *
+   * Juan: "as fontes dessas outras letrinhas não tem como trocar". Felipe, em
+   * seguida: "e a cor também".
+   *
+   * Medido antes de mexer, na capa jornal: o título saía em Cormorant Garamond
+   * (o eixo `tipografia`) e a sobrancelha, a data, a assinatura e o botão saíam
+   * todos em `ui-monospace`. A causa é o `font-mono` escrito nas cinco tags
+   * aqui embaixo — classe na própria tag ganha da fonte herdada do corpo, então
+   * nem o eixo do título nem o do texto alcançavam nada disso.
+   *
+   * `detalhe` é `null` quando o eixo está em `mono`, e aí a classe `font-mono`
+   * continua onde sempre esteve: capa entregue não muda de cara sozinha.
+   */
+  const fonteDetalhe = fonteDoDetalhe(aparencia);
+  const semMono = fonteDetalhe ? "" : "font-mono";
+  const estiloDetalhe = fonteDetalhe ? { fontFamily: fonteDetalhe } : {};
+  /* A cor escolhida vale para as três letrinhas de texto; sem ela, cada uma
+     mantém o tom derivado que sempre teve. Ver `CoresProprias.detalhe`. */
+  const corDetalhe = aparencia.cores?.detalhe;
 
   /*
    * A logo, quando existe, SUBSTITUI o nome em texto — não acompanha.
@@ -172,8 +195,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    */
   const TextoEstudio = ({ className = "" }: { className?: string }) => (
     <p
-      className={`font-mono text-[11px] uppercase tracking-[0.3em] ${className}`}
-      style={{ color: "var(--g-suave)" }}
+      className={`${semMono} text-[11px] uppercase tracking-[0.3em] ${className}`}
+      style={{ ...estiloDetalhe, color: corDetalhe ?? "var(--g-suave)" }}
     >
       {estudio}
     </p>
@@ -313,8 +336,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const Rotulo = () =>
     aparencia.rotulo ? (
       <p
-        className="font-mono text-[10px] uppercase tracking-[0.32em]"
-        style={{ color: "var(--g-tenue)" }}
+        className={`${semMono} text-[10px] uppercase tracking-[0.32em]`}
+        style={{ ...estiloDetalhe, color: corDetalhe ?? "var(--g-tenue)" }}
       >
         {aparencia.rotulo}
       </p>
@@ -323,8 +346,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const Legenda = () =>
     legenda ? (
       <p
-        className="font-mono text-[11px] uppercase tracking-[0.2em]"
-        style={{ color: "var(--g-suave)" }}
+        className={`${semMono} text-[11px] uppercase tracking-[0.2em]`}
+        style={{ ...estiloDetalhe, color: corDetalhe ?? "var(--g-suave)" }}
       >
         {legenda}
       </p>
@@ -386,8 +409,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         </div>
         <a
           href="#fotos"
-          className="mt-10 inline-block rounded-full px-8 py-3 font-mono text-[11px] uppercase tracking-[0.2em] transition hover:opacity-80"
-          style={{ border: "1px solid var(--g-destaque)", color: "var(--g-destaque)" }}
+          className={`mt-10 inline-block rounded-full px-8 py-3 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-80`}
+          style={{ ...estiloDetalhe, border: "1px solid var(--g-destaque)", color: "var(--g-destaque)" }}
         >
           Ver galeria
         </a>
@@ -482,8 +505,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             <Titulo base={TITULO_MEDIO} />
             <a
               href="#fotos"
-              className="mt-2 inline-block px-8 py-3 font-mono text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85"
-              style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+              className={`mt-2 inline-block px-8 py-3 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85`}
+              style={{ ...estiloDetalhe, background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
             >
               Ver galeria
             </a>
