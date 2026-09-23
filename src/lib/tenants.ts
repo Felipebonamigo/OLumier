@@ -180,15 +180,129 @@ export async function autenticar(email: string, senha: string): Promise<Tenant |
   return t && ok ? t : null;
 }
 
-export async function listarGalerias(tenantId: string) {
-  return consultar<Galeria>(
-    `select g.*,
-            (select count(*)::int from medias m where m.galeria_id = g.id and m.pronto) as total_medias
-       from galerias g
+/** Quantas galerias por tela. Ver `listarGalerias`. */
+export const GALERIAS_POR_TELA = 24;
+
+/*
+ * O FILTRO DA LISTA, ESCRITO UMA VEZ — `$1` estúdio, `$2` busca crua, `$3` termo.
+ *
+ * Eram duas cópias: a da tela e a da contagem de reserva. Duas cópias de um
+ * `where` são duas cópias que divergem — e no dia em que divergirem o painel
+ * vai dizer "página 3 de 7" e entregar uma tela vazia, porque a conta e a
+ * listagem terão respondido sobre conjuntos diferentes.
+ *
+ * ── O QUE ELE OLHA ────────────────────────────────────────────────────────
+ *
+ * Nome, local e endereço: os três jeitos de alguém lembrar de uma galeria — o
+ * nome do casal, onde foi, ou o link que mandou. Mais a DATA, que antes era
+ * achada por acaso (a lista trazia o texto já formatado no HTML) e aqui
+ * precisa ser dita: o fotógrafo procura "13/06/2026" e "2026".
+ *
+ * `sem_acento` (migração 039) no nome e no local: `ilike` ignora caixa, não
+ * acento, e quem procura "Júlia" digita "julia". Isso já funcionava por
+ * acidente — o ENDEREÇO nasce do título sem acento e entra na busca — e o
+ * acidente falha justamente em quem renomeia a galeria, porque o endereço não
+ * acompanha o novo nome de propósito: o link já foi para o WhatsApp do casal.
+ * O endereço fica fora do `sem_acento` porque já nasce sem nenhum.
+ *
+ * ── E O `g.id desc` NO FIM DA ORDEM NÃO É ENFEITE ─────────────────────────
+ *
+ * Sem ele a ordem entre galerias EMPATADAS é livre, e o Postgres pode devolver
+ * ordens diferentes para as duas consultas que desenham a página 1 e a página
+ * 2. O empate não é hipotético: são as galerias do mesmo dia, e `data_evento`
+ * é uma data sem hora. Basta o `criado_em` empatar também — o que acontece em
+ * qualquer importação, porque `now()` é um só para a transação inteira.
+ *
+ * O estrago é do tipo que ninguém liga à paginação: uma galeria aparece nas
+ * páginas 1 E 2, e outra não aparece em nenhuma. O fotógrafo procuraria um
+ * casamento que o painel jura não ter.
+ */
+const ONDE_A_BUSCA_CASA = `
       where g.tenant_id = $1 and g.estado <> 'lixeira'
-      order by coalesce(g.data_evento, g.criado_em::date) desc, g.criado_em desc`,
-    [tenantId],
+        and ($2 = ''
+             or sem_acento(g.titulo) ilike sem_acento($3)
+             or sem_acento(coalesce(g.subtitulo, '')) ilike sem_acento($3)
+             or g.slug ilike $3
+             or coalesce(to_char(g.data_evento, 'DD/MM/YYYY'), '') ilike $3
+             or coalesce(to_char(g.data_evento, 'YYYY-MM-DD'), '') ilike $3)`;
+
+/**
+ * UMA TELA DE GALERIAS — filtrada e contada pelo banco.
+ *
+ * ── DE ONDE VEIO (23/09/2026) ─────────────────────────────────────────────
+ *
+ * Felipe: "como fica quando ficar muitas galerias? a lista aqui."
+ *
+ * Ficava assim: TODAS, num documento só. Medido antes do conserto, com fotos
+ * em cada galeria:
+ *
+ *      20 galerias →  89 KB de HTML
+ *      60 galerias → 192 KB
+ *     150 galerias → 424 KB
+ *     300 galerias → 811 KB
+ *
+ * Linear, ~2,6 KB por galeria. O tempo de servidor nem mexia (~170 ms), e é por
+ * isso que ninguém tinha reclamado: o preço não está no relógio, está no
+ * TAMANHO — a mesma conta que estourou o Safari da Carol com 6,35 MB de
+ * galeria, em 11/09/2026. Um estúdio com cinco anos de casamentos chegaria lá.
+ *
+ * Junto vinha a subconsulta que conta as fotos DE CADA galeria: 300 galerias
+ * eram 300 dessas por carregamento de página. Com a tela de 24, são 24.
+ *
+ * ── A BUSCA VEIO JUNTO, COMO ESTAVA ESCRITO QUE VIRIA ─────────────────────
+ *
+ * Ela filtrava no navegador uma lista que já chegava inteira, e o comentário de
+ * `lista-galerias.tsx` já dizia: "se um dia a lista passar de umas centenas,
+ * isto vira paginação no servidor — e aí a busca vai junto". Filtrar no cliente
+ * uma tela de 24 esconderia a galeria que está na página 3.
+ *
+ * Os campos que ela olha estão em `ONDE_A_BUSCA_CASA`, logo acima.
+ *
+ * `count(*) over ()` devolve o total FILTRADO na mesma consulta: sem ele seria
+ * uma segunda ida ao banco só para desenhar "página 2 de 7".
+ */
+export async function listarGalerias(
+  tenantId: string,
+  opcoes: { busca?: string; pagina?: number; porTela?: number } = {},
+): Promise<{ itens: Galeria[]; total: number; pagina: number; paginas: number }> {
+  const porTela = Math.max(1, opcoes.porTela ?? GALERIAS_POR_TELA);
+  const busca = (opcoes.busca ?? "").trim();
+  /* `%` e `_` são curingas do `like`: quem digitar "50%" procura um nome com
+     "50%", e não "qualquer coisa começando com 50". */
+  const termo = `%${busca.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const pagina = Math.max(1, Math.floor(opcoes.pagina ?? 1));
+
+  const linhas = await consultar<Galeria & { total_filtrado: number }>(
+    `select g.*,
+            (select count(*)::int from medias m where m.galeria_id = g.id and m.pronto) as total_medias,
+            count(*) over ()::int as total_filtrado
+       from galerias g
+      ${ONDE_A_BUSCA_CASA}
+      order by coalesce(g.data_evento, g.criado_em::date) desc, g.criado_em desc, g.id desc
+      limit $4 offset $5`,
+    [tenantId, busca, termo, porTela, (pagina - 1) * porTela],
   );
+
+  /* A página fora do fim (um `?p=99` digitado à mão, ou a última galeria da
+     página 3 indo para a lixeira enquanto alguém a olhava) volta sem linhas —
+     e sem linhas não há `count(*) over ()` de onde tirar o total. Contar de
+     novo custa uma consulta num caso raro; não contar diria "0 galerias" para
+     quem tem 300, e o painel desenharia a tela de "crie sua primeira
+     galeria". */
+  let total = linhas[0]?.total_filtrado ?? 0;
+  if (linhas.length === 0 && pagina > 1) {
+    const conta = await consultarUm<{ n: number }>(
+      `select count(*)::int as n from galerias g ${ONDE_A_BUSCA_CASA}`,
+      [tenantId, busca, termo],
+    );
+    total = conta?.n ?? 0;
+  }
+  return {
+    itens: linhas,
+    total,
+    pagina,
+    paginas: Math.max(1, Math.ceil(total / porTela)),
+  };
 }
 
 export async function criarGaleria(dados: {

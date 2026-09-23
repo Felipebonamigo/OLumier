@@ -14,11 +14,25 @@ export const dynamic = "force-dynamic";
 const formatarData = (d: Date | null) =>
   d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : null;
 
-export default async function PainelPage() {
+export default async function PainelPage({
+  searchParams,
+}: {
+  /* A busca e a página vivem no ENDEREÇO, e não no estado do componente: assim
+     o fotógrafo pode mandar "olha na página 3" para o sócio, o voltar do
+     navegador funciona, e a tela é a mesma depois de publicar uma galeria e o
+     `router.refresh()` acontecer. */
+  searchParams: Promise<{ q?: string; p?: string }>;
+}) {
   const tenantId = await sessaoAtual();
   if (!tenantId) redirect("/entrar");
 
-  const galerias = await listarGalerias(tenantId);
+  const { q, p } = await searchParams;
+  const busca = (q ?? "").slice(0, 120);
+  const tela = await listarGalerias(tenantId, { busca, pagina: Number(p) || 1 });
+  const galerias = tela.itens;
+  /* "Nenhuma galeria ainda" e "nada encontrado" são telas diferentes: a
+     primeira é o começo do produto, a segunda é uma busca que não achou. */
+  const vazioDeVerdade = tela.total === 0 && !busca;
   /* O slug do estúdio entra por causa do atalho "copiar link": o endereço do
      cliente é /g/{estudio}/{galeria}, e sem a primeira metade o botão copiaria
      um link quebrado. Uma consulta a mais nesta página, não por galeria. */
@@ -26,7 +40,7 @@ export default async function PainelPage() {
   const lixeira = await listarLixeira(tenantId);
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
+    <main className="mx-auto max-w-7xl px-6 py-10">
       <div className="flex flex-wrap items-center justify-between gap-4">
         {/*
           A CONTA AO LADO DO TÍTULO, e não numa linha embaixo.
@@ -43,13 +57,13 @@ export default async function PainelPage() {
         <div>
           <h1 className="flex items-baseline gap-2.5 text-2xl font-bold tracking-tight">
             Galerias
-            {galerias.length > 0 && (
+            {tela.total > 0 && (
               <span className="text-base font-normal tabular-nums text-texto-faint">
-                {galerias.length}
+                {tela.total}
               </span>
             )}
           </h1>
-          {galerias.length === 0 && (
+          {vazioDeVerdade && (
             <p className="mt-1 text-sm text-texto-soft">Nenhuma galeria ainda.</p>
           )}
         </div>
@@ -61,7 +75,7 @@ export default async function PainelPage() {
         </Link>
       </div>
 
-      {galerias.length === 0 ? (
+      {vazioDeVerdade ? (
         <div className="mt-10 rounded-xl border border-dashed border-linha-forte bg-carbon px-6 py-14 text-center">
           <p className="text-base font-medium">Crie sua primeira galeria</p>
           <p className="mx-auto mt-2 max-w-[42ch] text-sm text-texto-soft">
@@ -77,6 +91,10 @@ export default async function PainelPage() {
         </div>
       ) : (
         <ListaGalerias
+          busca={busca}
+          pagina={tela.pagina}
+          paginas={tela.paginas}
+          total={tela.total}
           galerias={galerias.map((g) => ({
             id: g.id,
             titulo: g.titulo,

@@ -110,8 +110,8 @@ try {
 
   await etapa("some da lista do painel", async () => {
     const lista = await listarGalerias(tenantId);
-    if (lista.some((g) => g.id === galeriaId)) throw new Error("ainda aparece na listagem");
-    return `${lista.length} galeria(s) visível(is)`;
+    if (lista.itens.some((g) => g.id === galeriaId)) throw new Error("ainda aparece na listagem");
+    return `${lista.total} galeria(s) visível(is)`;
   });
 
   await etapa("aparece na lixeira, com os dias que faltam", async () => {
@@ -142,7 +142,7 @@ try {
     igual(rows[0].apagada_em, null, "apagada_em deveria voltar a ser nulo");
 
     const lista = await listarGalerias(tenantId);
-    if (!lista.some((g) => g.id === galeriaId)) throw new Error("não voltou para a listagem");
+    if (!lista.itens.some((g) => g.id === galeriaId)) throw new Error("não voltou para a listagem");
 
     const { rows: m } = await db.query("select count(*)::int as n from medias where galeria_id = $1", [
       galeriaId,
