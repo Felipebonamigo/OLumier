@@ -106,16 +106,27 @@ originais são abertos à frente do que está sendo escrito, porque o B2 está a
 2. DNS: `zip.galeriaatomo.com.br` → IP do servidor, **nuvem cinza** (DNS only).
    Com o proxy laranja da Cloudflare na frente, o ZIP cairia exatamente no caso
    restrito dos termos da CDN deles (arquivo grande de origem externa).
-3. Na máquina, como root:
+3. O repositório é privado: a máquina precisa de uma chave de leitura. Na
+   máquina, como root, gerar a chave e cadastrá-la no GitHub em
+   Settings → Deploy keys (sem permissão de escrita):
 
    ```
-   curl -fsSL https://raw.githubusercontent.com/Felipebonamigo/GaleriaAtomo/master/ops/instalar-servidor-zip.sh | bash
+   ssh-keygen -t ed25519 -N "" -f /root/.ssh/id_ed25519 -C zip-hetzner
+   cat /root/.ssh/id_ed25519.pub
    ```
 
-   Ele instala o Node, cria o usuário, clona o código, pergunta a URL do app e
-   o segredo (ou gera um), sobe a unidade `fotonio-zip` e configura o Caddy
-   com TLS. Rodar de novo atualiza o código.
-4. No app (`.env.production` do VPS), acrescentar e reiniciar:
+4. Ainda como root, clonar e rodar o instalador:
+
+   ```
+   ssh-keyscan github.com >> /root/.ssh/known_hosts
+   git clone --depth 1 git@github.com:Felipebonamigo/GaleriaAtomo.git /opt/fotonio-zip
+   bash /opt/fotonio-zip/ops/instalar-servidor-zip.sh
+   ```
+
+   Ele instala o Node, cria o usuário, pergunta a URL do app e o segredo (ou
+   gera um), sobe a unidade `fotonio-zip` e configura o Caddy com TLS. Rodar
+   de novo atualiza o código.
+5. No app (`.env.production` do VPS), acrescentar e reiniciar:
 
    ```
    ZIP_SERVIDOR_URL=https://zip.galeriaatomo.com.br
@@ -123,7 +134,7 @@ originais são abertos à frente do que está sendo escrito, porque o B2 está a
    ```
 
    O próximo clique em "baixar" já vai pelo servidor. Sem deploy.
-5. Conferir no painel de administração, bloco **Tráfego e custo da entrega**:
+6. Conferir no painel de administração, bloco **Tráfego e custo da entrega**:
    o aviso "servidor de ZIP não configurado" some, e os ZIPs passam a aparecer
    como montados/entregues com origem no servidor.
 
