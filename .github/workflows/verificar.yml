@@ -107,17 +107,66 @@ jobs:
       - name: Vulnerabilidade nas dependências
         run: npm audit --audit-level=high
 
+      # ── DE ONDE VEM O MINIO (23/09/2026) ────────────────────────────────
+      #
+      # Era `docker run ... minio/minio`, do Docker Hub, e funcionou até agosto.
+      # Parou: o runner recebe
+      #
+      #     pull access denied for minio/minio, repository does not exist
+      #     or may require 'docker login'
+      #
+      # Não é limite de taxa — limite devolve 429. Conferido contra o registro:
+      # o token anônimo de pull é emitido normalmente e o manifest responde
+      # 401. A MinIO fechou as imagens do Docker Hub para quem não autentica.
+      #
+      # Autenticar exigiria guardar credencial de terceiro num segredo do
+      # repositório, para subir um servidor de mentira — custo e superfície que
+      # uma bancada de teste não justifica.
+      #
+      # DUAS FONTES, e a segunda não é excesso de zelo: as duas primeiras são
+      # de FORA, e o portão inteiro para quando a de fora muda de política, que
+      # é exatamente o que acabou de acontecer. A primeira é o quay.io, o
+      # registro oficial alternativo da própria MinIO; a segunda é o binário
+      # que eles publicam em dl.min.io, que não passa por registro nenhum. Se
+      # as duas falharem, o passo morre alto — nunca segue sem armazém, porque
+      # aí treze suítes de arquivo passariam a pular em silêncio.
       - name: Subir o armazém (MinIO, que fala S3 como o R2)
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio server /data
-          # Espera responder antes de criar o bucket: `docker run -d` volta na
-          # hora, e o servidor leva alguns segundos.
+          set -euo pipefail
+
+          subiu=""
+          if docker pull -q quay.io/minio/minio:latest 2>/dev/null; then
+            docker run -d --name minio -p 9000:9000 \
+              -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+              quay.io/minio/minio server /data
+            subiu="quay.io"
+          else
+            echo "quay.io indisponível; caindo para o binário de dl.min.io"
+            curl -fsSL -o /tmp/minio https://dl.min.io/server/minio/release/linux-amd64/minio
+            chmod +x /tmp/minio
+            mkdir -p /tmp/minio-dados
+            MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
+              /tmp/minio server /tmp/minio-dados --address 127.0.0.1:9000 \
+              > /tmp/minio.log 2>&1 &
+            subiu="binário"
+          fi
+          echo "armazém: $subiu"
+
+          # Espera responder antes de criar o bucket: os dois caminhos voltam
+          # na hora e o servidor leva alguns segundos.
+          pronto=""
           for i in $(seq 1 30); do
-            curl -sf http://127.0.0.1:9000/minio/health/live && break
+            if curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              pronto="sim"; break
+            fi
             sleep 2
           done
+          if [ -z "$pronto" ]; then
+            echo "::error::o armazém não respondeu em 60s (fonte: $subiu)"
+            tail -40 /tmp/minio.log 2>/dev/null || true
+            docker logs minio 2>/dev/null | tail -40 || true
+            exit 1
+          fi
           # A AWS CLI já vem no runner. Endereço explícito e caminho no path:
           # MinIO local não tem DNS curinga para `bucket.host`.
           AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
