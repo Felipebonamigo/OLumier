@@ -16,7 +16,7 @@
 # Rodar o script de novo atualiza o código e reinicia o serviço.
 #
 # O que faz, na ordem:
-#   1. Node 22+ (o servidor roda TypeScript direto, com --experimental-strip-types)
+#   1. Node 22+ oficial, com suporte a TypeScript (o do Ubuntu vem sem)
 #   2. usuário de sistema `fotonio-zip`, sem shell, dono só do cache
 #   3. o código em /opt/fotonio-zip (clone raso do master; rodar de novo atualiza)
 #   4. /etc/fotonio-zip.env — pergunta o que falta, nunca sobrescreve o que existe
@@ -36,23 +36,28 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 echo "── 1. Node ──────────────────────────────────────────────────────────"
-versao_node() { command -v node >/dev/null && node -e 'console.log(process.versions.node.split(".")[0])' || echo 0; }
-if [[ "$(versao_node)" -lt 22 ]]; then
+# O servidor roda TypeScript direto (--experimental-strip-types), e isso exige
+# um Node compilado COM o suporte a TypeScript. O pacote `nodejs` do Ubuntu
+# (26.04, conferido em 23/09/2026) vem sem ele — sobe e morre com
+# ERR_NO_TYPESCRIPT. Por isso o binário oficial do nodejs.org, em /usr/local,
+# que é o mesmo em qualquer distribuição.
+node_serve() {
+  command -v node >/dev/null &&
+    [[ "$(node -e 'console.log(process.versions.node.split(".")[0])')" -ge 22 ]] &&
+    [[ "$(node -p 'process.features.typescript ? 1 : 0')" == "1" ]]
+}
+if ! node_serve; then
   apt-get update -qq
-  apt-get install -y -qq curl ca-certificates git >/dev/null
-  # O Ubuntu 26.04 já traz um Node recente no repositório dele; o NodeSource
-  # nem sempre tem pacote para a versão mais nova do Ubuntu. Tenta o do
-  # sistema primeiro, e só cai no NodeSource se ele for velho demais.
-  apt-get install -y -qq nodejs >/dev/null 2>&1 || true
-  if [[ "$(versao_node)" -lt 22 ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
-    apt-get install -y -qq nodejs >/dev/null
-  fi
+  apt-get install -y -qq curl ca-certificates git xz-utils >/dev/null
+  apt-get remove -y -qq nodejs >/dev/null 2>&1 || true
+  ARQUIVO=$(curl -fsSL https://nodejs.org/dist/latest-v22.x/ | grep -o 'node-v22[0-9.]*-linux-x64.tar.xz' | head -1)
+  curl -fsSL "https://nodejs.org/dist/latest-v22.x/$ARQUIVO" | tar -xJ -C /usr/local --strip-components=1
+  ln -sf /usr/local/bin/node /usr/bin/node
 fi
-if [[ "$(versao_node)" -lt 22 ]]; then
-  echo "   node $(node --version 2>/dev/null || echo ausente) — precisa de 22 ou mais"; exit 1
+if ! node_serve; then
+  echo "   node $(node --version 2>/dev/null || echo ausente) — precisa de 22+ com suporte a TypeScript"; exit 1
 fi
-echo "   node $(node --version)"
+echo "   node $(node --version), com TypeScript"
 
 echo "── 2. usuário ───────────────────────────────────────────────────────"
 id fotonio-zip >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin fotonio-zip
