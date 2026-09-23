@@ -1,0 +1,10 @@
+{
+  "name": "fotonio-servidor-zip",
+  "private": true,
+  "type": "module",
+  "description": "Monta e entrega os ZIPs das galerias fora do VPS. Ver docs/servidor-zip.md.",
+  "scripts": {
+    "start": "node --experimental-strip-types --env-file-if-exists=.env servidor.ts",
+    "tipos": "tsc -p tsconfig.json"
+  }
+}

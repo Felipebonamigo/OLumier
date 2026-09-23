@@ -1,11 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { armazemDe, urlDoOriginal } from "@/lib/armazem";
 import { dispositionSegura } from "@/lib/r2";
-import { registrarAcesso } from "@/lib/galerias-publicas";
 import { pessoaAtual } from "@/lib/favoritas";
-import { GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
+import { hashDeIp } from "@/lib/ip";
 import { prepararEntrega } from "@/lib/entrega-da-galeria";
+import { entradasDoZip } from "@/lib/entradas-do-zip";
 import { tamanhoDoZip, zipEmFluxo, type ArquivoDoZip } from "@/lib/zip-em-fluxo";
+import { assinarPedido, segredoDoZip, urlDoServidorDeZip, zipRemotoConfigurado } from "@/lib/zip-remoto";
+import { criarPedidoDeZip, registrarEntregaDeZip } from "@/lib/pedidos-zip";
 
 /**
  * A galeria, um capítulo ou as favoritas de quem escolheu — num ZIP só.
@@ -19,52 +21,34 @@ import { tamanhoDoZip, zipEmFluxo, type ArquivoDoZip } from "@/lib/zip-em-fluxo"
  *   /api/g/<id>/zip                 a galeria inteira, uma pasta por capítulo
  *   /api/g/<id>/zip?cap=<capítulo>  só aquele capítulo
  *   /api/g/<id>/zip?favoritas=1     as favoritas de quem está identificado
+ *   /api/g/<id>/zip?fotos=<ids>     as que a busca por rosto achou
  *
- * ── O CUSTO, DITO COM TODAS AS LETRAS ─────────────────────────────────────
+ * ── DOIS CAMINHOS, E QUAL VALE (23/09/2026) ───────────────────────────────
  *
- * Os bytes passam pelo VPS: cada original é buscado no balde e repassado para
- * o navegador. Não fica nada na memória nem no disco — é um cano, não um
- * depósito —, mas a banda é nossa. Foi a razão de não haver zip até aqui, e
- * continua sendo o preço dele.
+ * Com `ZIP_SERVIDOR_URL` e `ZIP_SEGREDO` no ambiente, esta rota NÃO carrega
+ * byte nenhum: aplica as travas, grava o pedido com a lista resolvida e
+ * redireciona o navegador para o servidor de ZIP, que monta o arquivo uma vez,
+ * o guarda e o entrega quantas vezes pedirem — com retomada. É o caminho de
+ * produção. Ver `lib/zip-remoto.ts` e docs/servidor-zip.md.
  *
- * Sem compressão: foto já é JPEG, e comprimir de novo gastaria a CPU do mesmo
- * servidor que atende as outras galerias. Ver `lib/zip-em-fluxo.ts`.
+ * Sem as variáveis, o ZIP é montado AQUI, em fluxo, como desde 16/09: cada
+ * original é buscado no balde e repassado ao navegador. Não fica nada na
+ * memória nem no disco, mas a banda é do VPS — que é dividido com os outros
+ * sites. Foi a razão de o servidor de ZIP existir, e continua sendo a razão
+ * de este caminho ser só reserva. Os bytes que saem por aqui são registrados
+ * com origem 'vps', para o painel de administração mostrar que a reserva está
+ * em uso.
+ *
+ * Sem compressão: foto já é JPEG. Ver `lib/zip-em-fluxo.ts`.
  */
 
 /*
- * Validade de cada link do original. Curta de propósito — ele é assinado na
- * VEZ da foto, não no começo do zip. Um capítulo de 2 GB leva meia hora; se
- * todas as URLs fossem assinadas antes, as últimas venceriam no caminho.
+ * Validade de cada link do original no caminho de reserva. Curta de
+ * propósito — ele é assinado na VEZ da foto, não no começo do zip. Um capítulo
+ * de 2 GB leva meia hora; se todas as URLs fossem assinadas antes, as últimas
+ * venceriam no caminho.
  */
 const VALIDADE_DE_CADA_FOTO = 15 * 60;
-
-/**
- * Nome único dentro do zip.
- *
- * Duas fotos "DSC_0001.jpg" no mesmo capítulo são comuns — câmera reiniciada,
- * dois fotógrafos. Dentro de um zip, nome repetido faz o descompactador
- * sobrescrever uma com a outra ou perguntar o que fazer para cada uma, e o
- * casal perde foto sem saber. A segunda vira "DSC_0001 (2).jpg".
- */
-function nomeUnico(nome: string, usados: Set<string>): string {
-  if (!usados.has(nome.toLowerCase())) {
-    usados.add(nome.toLowerCase());
-    return nome;
-  }
-  const ponto = nome.lastIndexOf(".");
-  const base = ponto > 0 ? nome.slice(0, ponto) : nome;
-  const ext = ponto > 0 ? nome.slice(ponto) : "";
-  for (let n = 2; ; n++) {
-    const tentativa = `${base} (${n})${ext}`;
-    if (!usados.has(tentativa.toLowerCase())) {
-      usados.add(tentativa.toLowerCase());
-      return tentativa;
-    }
-  }
-}
-
-/** Pasta ou nome de arquivo sem os caracteres que o Windows recusa. */
-const semProibidos = (s: string) => s.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -72,43 +56,60 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   /* ── As travas e a escolha das fotos: as mesmas da lista do celular ──── */
   const entrega = await prepararEntrega(id, request.nextUrl.searchParams);
   if (entrega instanceof NextResponse) return entrega;
-  const escolhidas = entrega.fotos;
-  const nomeDoCapitulo = new Map(
-    [...entrega.capitulos].map(([cid, nome]) => [cid, semProibidos(nome)]),
-  );
-  /* Pasta por capítulo só no zip da galeria inteira: num zip de UM capítulo a
-     pasta seria um nível a mais para abrir sem motivo. */
-  const comPastas = entrega.tipo === "tudo" && entrega.capitulos.size > 0;
-
-  if (escolhidas.length === 0) {
+  if (entrega.fotos.length === 0) {
     return NextResponse.json({ erro: "nada para baixar" }, { status: 404 });
   }
 
-  /* ── As entradas do zip ─────────────────────────────────────────────────── */
-  const usados = new Set<string>();
-  const arquivos: ArquivoDoZip[] = escolhidas.map((m) => {
-    /* A pasta das soltas tem o nome que o fotógrafo deu (migração 037), e ele
-       passa pela MESMA limpeza dos capítulos: é um nome de pasta dentro do zip,
-       e o Windows recusa os mesmos caracteres nos dois. */
-    const pasta = comPastas
-      ? ((m.secao_id ? nomeDoCapitulo.get(m.secao_id) : null) ??
-        (semProibidos(entrega.grupoSolto) || GRUPO_SEM_CAPITULO))
-      : "";
-    const nome = semProibidos(m.nome_original) || `${m.id}.jpg`;
-    return {
-      nome: nomeUnico(pasta ? `${pasta}/${nome}` : nome, usados),
-      tamanho: Number(m.bytes),
-      abrir: async function* () {
-        /* Assinado AGORA, na vez desta foto — ver VALIDADE_DE_CADA_FOTO. */
-        const endereco = await urlDoOriginal(m.chave, armazemDe(m.armazem), VALIDADE_DE_CADA_FOTO);
-        const r = await fetch(endereco);
-        if (!r.ok || !r.body) {
-          throw new Error(`o original de "${m.nome_original}" não veio (HTTP ${r.status})`);
-        }
-        for await (const pedaco of r.body as unknown as AsyncIterable<Uint8Array>) yield pedaco;
-      },
-    };
-  });
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const userAgent = request.headers.get("user-agent");
+
+  /*
+   * QUEM está baixando — lido aqui em cima porque serve aos DOIS caminhos, e
+   * porque é o único lugar onde dá para ler.
+   *
+   * `pessoaAtual` e NÃO `visitanteAtual`: o segundo devolve o id anônimo do
+   * navegador (modelo anterior à migração 033), que não existe em
+   * `pessoas_da_galeria` — a chave estrangeira recusaria em silêncio e todo
+   * download ficaria anônimo. Pego no navegador, não no teste.
+   *
+   * Pelo servidor de ZIP a leitura tem de acontecer AGORA e ir congelada no
+   * pedido (migração 041): quem confirma a entrega é uma rota interna chamada
+   * de volta pelo servidor, sem cookie e sem sessão.
+   */
+  const pessoaId = await pessoaAtual(id);
+
+  /* ── O caminho de produção: o servidor de ZIP ──────────────────────────── */
+  if (zipRemotoConfigurado()) {
+    const cap = request.nextUrl.searchParams.get("cap");
+    const pedido = await criarPedidoDeZip(
+      id,
+      entrega,
+      { ipHash: ip ? hashDeIp(ip) : null, userAgent, pessoaId },
+      /* `sem-capitulo` é o grupo das soltas: capítulo sem id. */
+      entrega.tipo === "capitulo" && cap && cap !== "sem-capitulo" ? cap : null,
+    );
+    const destino = `${urlDoServidorDeZip()}/z/${assinarPedido(pedido.id, segredoDoZip())}`;
+    return NextResponse.redirect(destino, {
+      status: 302,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  }
+
+  /* ── A reserva: o ZIP montado aqui, em fluxo ───────────────────────────── */
+  const { nomeDoZip, arquivos: entradas } = entradasDoZip(entrega);
+  const arquivos: ArquivoDoZip[] = entradas.map((e) => ({
+    nome: e.nome,
+    tamanho: e.tamanho,
+    abrir: async function* () {
+      /* Assinado AGORA, na vez desta foto — ver VALIDADE_DE_CADA_FOTO. */
+      const endereco = await urlDoOriginal(e.media.chave, armazemDe(e.media.armazem), VALIDADE_DE_CADA_FOTO);
+      const r = await fetch(endereco);
+      if (!r.ok || !r.body) {
+        throw new Error(`o original de "${e.media.nome_original}" não veio (HTTP ${r.status})`);
+      }
+      for await (const pedaco of r.body as unknown as AsyncIterable<Uint8Array>) yield pedaco;
+    },
+  }));
 
   /*
    * ── O REGISTRO ESPERA O FIM ──────────────────────────────────────────────
@@ -118,21 +119,32 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
    * fluxo sabe quando terminou. Se a pessoa cancelar o download no meio, o
    * gerador é interrompido antes desta linha e a Atividade não mente.
    */
-  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
-  const userAgent = request.headers.get("user-agent");
-  const acao = entrega.tipo === "tudo" ? "baixou_tudo" : "baixou";
-
-  /* Lido ANTES do fluxo começar: o gerador roda enquanto o zip é transmitido, e
-     ali dentro `cookies()` já não é mais o pedido desta rota. */
-  const pessoaId = await pessoaAtual(id);
+  const tamanho = tamanhoDoZip(arquivos);
+  const inicio = Date.now();
+  let entregues = 0;
+  let terminou = false;
+  const pedidoParaRegistro = {
+    id: null,
+    galeria_id: id,
+    tenant_id: entrega.tenantId,
+    tipo: entrega.tipo,
+    ip_hash: ip ? hashDeIp(ip) : null,
+    user_agent: userAgent,
+    pessoa_id: pessoaId,
+  };
 
   async function* comRegistro() {
-    yield* zipEmFluxo(arquivos);
-    await registrarAcesso({ galeriaId: id, acao, ip, userAgent, pessoaId });
+    for await (const pedaco of zipEmFluxo(arquivos)) {
+      entregues += pedaco.length;
+      yield pedaco;
+    }
+    terminou = true;
+    /* Pelo VPS cada download É uma montagem: leu o armazém inteiro de novo. O
+       'servido' é o que vira a linha de `acessos` que a Atividade mostra. */
+    const duracaoMs = Date.now() - inicio;
+    await registrarEntregaDeZip(pedidoParaRegistro, "vps", { evento: "montado", bytes: tamanho, doCache: false, duracaoMs });
+    await registrarEntregaDeZip(pedidoParaRegistro, "vps", { evento: "servido", bytes: tamanho, doCache: false, duracaoMs });
   }
-
-  const sufixo = semProibidos(entrega.sufixo.replace(/^ - /, ""));
-  const nomeDoZip = `${semProibidos(entrega.titulo) || "galeria"}${sufixo ? ` - ${sufixo}` : ""}.zip`;
 
   /*
    * Um pedaço por vez, SÓ quando o navegador pede o próximo (`pull`). É o que
@@ -161,6 +173,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     },
     async cancel() {
       await gerador.return(undefined);
+      if (!terminou) {
+        /* O desperdício que antes não deixava rastro: o que saiu até cair. */
+        await registrarEntregaDeZip(pedidoParaRegistro, "vps", {
+          evento: "abortado",
+          bytes: entregues,
+          doCache: false,
+          duracaoMs: Date.now() - inicio,
+        });
+      }
     },
   });
 
@@ -170,7 +191,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       "Content-Disposition": dispositionSegura(nomeDoZip),
       /* Exato, calculado antes do primeiro byte — é o que dá barra de progresso
          a um download de meia hora. Ver `tamanhoDoZip`. */
-      "Content-Length": String(tamanhoDoZip(arquivos)),
+      "Content-Length": String(tamanho),
       /* Sem cache: é um download pessoal, com a senha e a identificação de quem
          pediu, e um proxy no meio não pode guardar para o próximo. */
       "Cache-Control": "private, no-store",

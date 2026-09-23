@@ -1,6 +1,7 @@
 import "server-only";
 import { consultar, consultarUm } from "./db";
 import type { Evento } from "./eventos";
+import type { SomasDeEntrega } from "./metricas-entrega";
 
 /**
  * Os dados da visão de administrador.
@@ -193,6 +194,78 @@ export async function entregaRecente(dias = 30): Promise<ResumoDeEntrega> {
     [dias],
   );
   return linha ?? { abriu: 0, baixou: 0, baixou_tudo: 0, assistiu: 0 };
+}
+
+/**
+ * As somas de ENTREGA DE ZIP do mês corrente — o que `metricas-entrega.ts`
+ * transforma em franquias e avisos. Mês de calendário, e não "30 dias", porque
+ * é assim que o B2 e a Hetzner contam as franquias.
+ *
+ * `avulsos` são os `acessos` de 'baixou' que NÃO vieram de um ZIP: foto
+ * avulsa e lote no celular, que saem do B2 direto. Como esses não têm bytes
+ * registrados, a tela estima pelo tamanho médio de uma mídia — e diz que é
+ * estimativa.
+ */
+export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
+  const zip = await consultarUm<{
+    montados_n: number;
+    montados_bytes: string;
+    servidos_servidor_n: number;
+    servidos_servidor_bytes: string;
+    do_cache_n: number;
+    do_cache_bytes: string;
+    servidos_vps_n: number;
+    servidos_vps_bytes: string;
+    abortados_n: number;
+    abortados_bytes: string;
+    abortados_vps_bytes: string;
+    servidos_nao_tudo_n: number;
+  }>(
+    `select
+       count(*) filter (where evento = 'montado')::int                              as montados_n,
+       coalesce(sum(bytes) filter (where evento = 'montado'), 0)                    as montados_bytes,
+       count(*) filter (where evento = 'servido' and origem = 'servidor')::int      as servidos_servidor_n,
+       coalesce(sum(bytes) filter (where evento = 'servido' and origem = 'servidor'), 0) as servidos_servidor_bytes,
+       count(*) filter (where evento = 'servido' and origem = 'servidor' and do_cache)::int as do_cache_n,
+       coalesce(sum(bytes) filter (where evento = 'servido' and origem = 'servidor' and do_cache), 0) as do_cache_bytes,
+       count(*) filter (where evento = 'servido' and origem = 'vps')::int           as servidos_vps_n,
+       coalesce(sum(bytes) filter (where evento = 'servido' and origem = 'vps'), 0) as servidos_vps_bytes,
+       count(*) filter (where evento = 'abortado')::int                             as abortados_n,
+       coalesce(sum(bytes) filter (where evento = 'abortado'), 0)                   as abortados_bytes,
+       coalesce(sum(bytes) filter (where evento = 'abortado' and origem = 'vps'), 0) as abortados_vps_bytes,
+       count(*) filter (where evento = 'servido' and tipo <> 'tudo')::int           as servidos_nao_tudo_n
+     from entregas_zip
+    where criado_em >= date_trunc('month', now())`,
+  );
+  const acessos = await consultarUm<{ baixou: number }>(
+    `select count(*)::int as baixou from acessos
+      where acao = 'baixou' and criado_em >= date_trunc('month', now())`,
+  );
+  const media = await consultarUm<{ media: string | null }>(
+    `select avg(bytes)::bigint::text as media from medias where pronto`,
+  );
+  const z = zip ?? {
+    montados_n: 0, montados_bytes: "0", servidos_servidor_n: 0, servidos_servidor_bytes: "0",
+    do_cache_n: 0, do_cache_bytes: "0", servidos_vps_n: 0, servidos_vps_bytes: "0",
+    abortados_n: 0, abortados_bytes: "0", abortados_vps_bytes: "0", servidos_nao_tudo_n: 0,
+  };
+  return {
+    montadosN: z.montados_n,
+    montadosBytes: Number(z.montados_bytes),
+    servidosServidorN: z.servidos_servidor_n,
+    servidosServidorBytes: Number(z.servidos_servidor_bytes),
+    doCacheN: z.do_cache_n,
+    doCacheBytes: Number(z.do_cache_bytes),
+    servidosVpsN: z.servidos_vps_n,
+    servidosVpsBytes: Number(z.servidos_vps_bytes),
+    abortadosN: z.abortados_n,
+    abortadosBytes: Number(z.abortados_bytes),
+    abortadosVpsBytes: Number(z.abortados_vps_bytes),
+    /* Os 'baixou' de ZIP de capítulo/favoritas/recorte também viram acesso
+       (ver registrarEntregaDeZip); saem da conta para não contar duas vezes. */
+    avulsosN: Math.max(0, (acessos?.baixou ?? 0) - z.servidos_nao_tudo_n),
+    bytesPorMedia: Number(media?.media ?? 0),
+  };
 }
 
 /** O log de auditoria da plataforma inteira, do mais recente para trás. */

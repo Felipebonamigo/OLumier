@@ -338,7 +338,10 @@ export async function republicarMedia(
     `update medias
         set bytes = $3,
             largura = coalesce($4, largura),
-            altura = coalesce($5, altura)
+            altura = coalesce($5, altura),
+            /* A versão sobe a cada republicação: é o que tira de circulação o
+               ZIP guardado no servidor com a foto antiga (migração 039). */
+            versao = versao + 1
       where id = $1 and tenant_id = $2 and pronto
       returning *`,
     [mediaId, tenantId, dados.bytes, dados.largura ?? null, dados.altura ?? null],
