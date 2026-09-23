@@ -221,7 +221,12 @@ await etapa("dois cliques ao mesmo tempo: uma montagem, dois ZIPs iguais e compl
   igual(a.corpo.equals(b.corpo), true, "os dois receberam os mesmos bytes");
   if (!a.cabecalhos.get("content-disposition").includes("Ana")) throw new Error("sem nome");
   zipTudo = a.corpo;
-  await ate(() => relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length === 2);
+  /* Os relatos chegam por HTTP, cada um na sua hora: espera os três. */
+  await ate(
+    () =>
+      relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length === 2 &&
+      relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "montado").length >= 1,
+  );
   igual(relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "montado").length, 1, "montado uma vez");
   igual(pedidosAoBalde.get(0), 1, "original 0 buscado uma vez");
   return `${(zipTudo.length / 1024 / 1024).toFixed(1)} MB`;
