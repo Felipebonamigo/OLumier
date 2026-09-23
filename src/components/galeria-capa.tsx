@@ -496,16 +496,43 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
           ) : (
             <Estudio className={aEsquerda ? "self-start" : "self-center"} />
           )}
-          <div className={`flex flex-col gap-5 ${alinharItens} ${alinharTexto}`}>
-            <Legenda />
+          {/*
+            ── A ORDEM DO CONVITE ESTAVA INVERTIDA (23/09/2026) ──────────────
+
+            Juan: "essa distribuição do 'convite' das opções de capa tá com uma
+            estrutura desagradável. Muitas letras, cores diferentes. As
+            letrinhas de um jeito, o 'ver galeria' de outro". E, sobre a capa
+            mínima: "esse tá lindo, a distribuição das informações tão bonitas".
+
+            Ele achou um defeito nosso, não uma questão de gosto: CONVITE era a
+            única das cinco capas que punha a data ANTES da sobrancelha. As
+            outras quatro fazem sobrancelha → nome → data, que é a ordem da capa
+            que ele chamou de linda.
+
+            A sobrancelha é a etiqueta do nome ("ENSAIO PREWEDDING" diz o que é
+            aquele nome); ela pertence colada nele. A data e o local são
+            legenda, e legenda vem depois do que ela legenda. Com a data no
+            topo, a primeira coisa que o olho lia na entrega de um casamento era
+            um número.
+
+            O espaçamento acompanha: `gap-2` entre etiqueta e nome para os dois
+            lerem como um bloco só, e `mt-6` antes da legenda para separar o
+            bloco do que vem depois. Era `gap-5` entre tudo, e espaçamento
+            uniforme não agrupa nada — quatro coisas soltas, que é exatamente o
+            "muitas letras" da queixa.
+          */}
+          <div className={`flex flex-col gap-2 ${alinharItens} ${alinharTexto}`}>
             {/* Peso normal, e não negrito: a serifada de contraste alto (Bodoni,
                 Playfair) vive do traço fino, e o negrito fecha justamente o que
                 faz ela parecer papel de convite. */}
             <Rotulo />
             <Titulo base={TITULO_MEDIO} />
+            <div className="mt-6">
+              <Legenda />
+            </div>
             <a
               href="#fotos"
-              className={`mt-2 inline-block px-8 py-3 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85`}
+              className={`mt-6 inline-block px-8 py-3 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85`}
               style={{ ...estiloDetalhe, background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
             >
               Ver galeria
