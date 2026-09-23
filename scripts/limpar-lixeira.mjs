@@ -29,6 +29,12 @@ const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
 try {
+  /* Os pedidos de ZIP vencem em 12 h (migração 039) e não têm outro faxineiro.
+     As entregas registradas ficam: a FK põe null no pedido, e os bytes seguem
+     somando no painel. Corre sempre, mesmo sem --aplicar: é lixo, não galeria. */
+  const { rowCount: pedidos } = await db.query(`delete from pedidos_zip where expira_em < now()`);
+  if (pedidos) console.log(`pedidos de zip vencidos apagados: ${pedidos}`);
+
   const { rows: resumo } = await db.query(
     `select count(*)::int as na_lixeira,
             count(*) filter (where apagada_em < now() - ($1 || ' days')::interval)::int as vencidas
