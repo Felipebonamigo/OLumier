@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apagarGaleriaAction, salvarPublicacaoAction } from "@/app/painel/actions";
@@ -14,7 +14,7 @@ export interface GaleriaDaLista {
   estudioSlug: string;
   publicada: boolean;
   estado: string;
-  /** De onde a galeria veio, quando não nasceu no painel — migração 039.
+  /** De onde a galeria veio, quando não nasceu no painel — migração 041.
    *  `"atomatiza"` é a criada a partir de um contrato, pela chave de API. */
   origem: string | null;
   /** Dias até o cofre; `null` quando não há prazo. */
@@ -39,13 +39,23 @@ export interface GaleriaDaLista {
  * exigia abrir a galeria, e abrir a galeria era justamente o que ele não
  * conseguia decidir.
  *
- * ── POR QUE A BUSCA É NO CLIENTE ──────────────────────────────────────────
+ * ── CARTÕES EM GRADE, E NÃO LINHAS LARGAS (23/09/2026) ────────────────────
  *
- * A lista inteira já vem do servidor: um fotógrafo tem dezenas de galerias, não
- * milhares, e a página já as carrega todas para desenhar. Filtrar no servidor
- * seria uma ida e volta por tecla digitada para reordenar um array que já está
- * na memória. Se um dia a lista passar de umas centenas, isto vira paginação no
- * servidor — e aí a busca vai junto.
+ * Felipe, com a foto do painel numa tela grande: "como fica quando ficar
+ * muitas galerias? a lista aqui. E no sistema também, parece que nao
+ * aproveitamos a tela toda quando é desktop".
+ *
+ * Ele tinha razão nas duas metades. Medido antes desta mudança: numa tela de
+ * 1920 o conteúdo ocupava 1024 px — 47% da largura era margem vazia (29% em
+ * 1440). E cada galeria era uma linha que atravessava a tela inteira para
+ * carregar um título, uma data e dois números: quanto mais larga a tela, mais
+ * vazio entre o nome e a contagem de arquivos, e menos galerias cabiam de uma
+ * olhada.
+ *
+ * Em cartões, a largura vira galerias por tela em vez de espaço entre colunas:
+ * uma coluna no celular, duas a partir de `sm`, três a partir de `xl`. É a
+ * grade que precisa de espaço para crescer — por isso o painel foi para
+ * `max-w-7xl` junto.
  *
  * ── O MENU É UM <details>, E NÃO UM POPOVER ───────────────────────────────
  *
@@ -58,30 +68,79 @@ export interface GaleriaDaLista {
  * num arquivo só. Agora ele mora em `lib/fechar-menu-client.ts` e serve aos
  * dois, que é o que impede o terceiro menu de nascer sem.
  */
-export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
+export function ListaGalerias({
+  galerias,
+  busca: buscaAtual,
+  pagina,
+  paginas,
+  total,
+}: {
+  galerias: GaleriaDaLista[];
+  /** O termo que o SERVIDOR aplicou — ver `listarGalerias`. */
+  busca: string;
+  pagina: number;
+  paginas: number;
+  /** Quantas galerias casam com a busca, na conta inteira e não nesta tela. */
+  total: number;
+}) {
   /* O clique fora fecha o menu de três pontos. Ver `fechar-menu-client.ts`:
      era o mesmo efeito que a barra da galeria já tinha, e esta lista não. */
   const lista = useRef<HTMLDivElement | null>(null);
   useFecharMenuAoClicarFora(lista);
-  const [busca, setBusca] = useState("");
+  const router = useRouter();
+  const [enviando, iniciar] = useTransition();
+  /*
+   * ── A BUSCA FOI PARA O SERVIDOR (23/09/2026) ────────────────────────────
+   *
+   * Ela filtrava no navegador uma lista que chegava inteira. Com a tela de 24
+   * isso esconderia a galeria que está na página 3 — o comentário que ficava
+   * aqui já previa: "se um dia a lista passar de umas centenas, isto vira
+   * paginação no servidor, e aí a busca vai junto".
+   *
+   * O campo continua respondendo a cada tecla; o que mudou é que a resposta vem
+   * do banco. O `setTimeout` de 250 ms é o que impede uma consulta por tecla —
+   * quem digita "Paula" dispara uma, não cinco. `replace` e não `push`: a busca
+   * não é um lugar a que se volta com o botão do navegador, tecla por tecla.
+   *
+   * Buscar volta para a página 1 de propósito (o endereço sai sem `p`): quem
+   * está na página 3 e digita um nome quer o resultado, não a terceira fatia
+   * dele — que muitas vezes nem existe.
+   */
+  const [busca, setBusca] = useState(buscaAtual);
+  const [buscando, aoBuscar] = useTransition();
+
+  /*
+   * O ENDEREÇO MANDA NO CAMPO — e o acerto é no DESENHO, não num efeito.
+   *
+   * O campo precisa seguir a URL: quem volta no navegador depois de buscar tem
+   * de ver o termo anterior de volta, e não o que ficou digitado. Isso é o
+   * padrão "ajustar estado quando uma prop muda" da documentação do React, e o
+   * jeito certo é este — comparar com o que se viu da última vez, ali no meio
+   * do desenho. Num `useEffect` o React desenharia a tela com o texto velho,
+   * descobriria depois e desenharia de novo: um piscar, e o `eslint` reprova.
+   */
+  const [enderecoVisto, setEnderecoVisto] = useState(buscaAtual);
+  if (buscaAtual !== enderecoVisto) {
+    setEnderecoVisto(buscaAtual);
+    setBusca(buscaAtual);
+  }
+
+  /* Só vai ao servidor quando o que está no campo DIVERGE do que o endereço já
+     pediu — o que também elimina a consulta do primeiro desenho, quando os dois
+     nascem iguais. */
+  useEffect(() => {
+    if (busca === buscaAtual) return;
+    const t = setTimeout(() => {
+      const p = new URLSearchParams();
+      if (busca.trim()) p.set("q", busca.trim());
+      aoBuscar(() => router.replace(p.toString() ? `/painel?${p}` : "/painel", { scroll: false }));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [busca, buscaAtual, router]);
+
   const [apagando, setApagando] = useState<string | null>(null);
   const [digitado, setDigitado] = useState("");
   const [copiada, setCopiada] = useState<string | null>(null);
-  const [enviando, iniciar] = useTransition();
-  const router = useRouter();
-
-  const filtradas = useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    if (!termo) return galerias;
-    /* Título, subtítulo e endereço: são os três jeitos de a pessoa lembrar de
-       uma galeria — o nome do casal, o local, ou o link que ela mandou. */
-    return galerias.filter((g) =>
-      [g.titulo, g.subtitulo ?? "", g.slug, g.dataFormatada ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(termo),
-    );
-  }, [galerias, busca]);
 
   async function copiarLink(g: GaleriaDaLista) {
     const url = `${location.origin}/g/${g.estudioSlug}/${g.slug}`;
@@ -110,6 +169,17 @@ export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
   const alvo = galerias.find((g) => g.id === apagando) ?? null;
   const confere = alvo != null && digitado.trim() === alvo.titulo.trim();
 
+  /* A busca viaja junto na paginação: sem isto, ir para a página 2 de uma
+     busca devolveria a página 2 de TUDO — o fotógrafo veria galerias que não
+     casam com o que ele digitou e concluiria, com razão, que a busca é
+     mentirosa. */
+  const enderecoDaPagina = (n: number) => {
+    const p = new URLSearchParams();
+    if (buscaAtual.trim()) p.set("q", buscaAtual.trim());
+    if (n > 1) p.set("p", String(n));
+    return p.toString() ? `/painel?${p}` : "/painel";
+  };
+
   return (
     /* A `div` existe para o `ref`: o efeito de fechar menu precisa de um escopo,
        e sem ela a alternativa seria varrer o documento inteiro — o que fecharia
@@ -123,8 +193,12 @@ export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
         "Paula & Bruno". O que faz a busca valer não é a quantidade, é a
         semelhança entre os nomes, e fotógrafo repete nome de casal o tempo
         todo. Com uma galeria só não há o que buscar, e aí ela some.
+
+        `busca` entra na conta porque agora quem filtra é o servidor: uma busca
+        que sobra com um resultado só não pode fazer sumir o campo em que ela
+        foi digitada — seria impossível apagar o termo.
       */}
-      {galerias.length > 1 && (
+      {(total > 1 || busca !== "") && (
         <div className="mt-6">
           <input
             type="search"
@@ -137,45 +211,53 @@ export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
         </div>
       )}
 
-      <ul className="mt-4 grid gap-3">
-        {filtradas.map((g) => (
+      {/*
+        UMA COLUNA NO CELULAR, DUAS EM `sm`, TRÊS EM `xl`.
+
+        Três e não quatro: com quatro colunas dentro de `max-w-7xl` cada cartão
+        fica com ~300 px, e aí "Júlia & Gustavo — Casamento na Serra" quebra em
+        três linhas. O cartão precisa caber o nome de um casal, que é o que o
+        fotógrafo procura na tela.
+
+        `items-start` impede que o cartão com a confirmação de apagar aberta
+        estique os vizinhos da mesma linha da grade.
+      */}
+      <ul
+        aria-busy={buscando}
+        className={`mt-4 grid items-start gap-4 sm:grid-cols-2 xl:grid-cols-3 ${
+          buscando ? "opacity-60 transition-opacity" : ""
+        }`}
+      >
+        {galerias.map((g) => (
           <li
             key={g.id}
-            className="rounded-xl border border-linha bg-carbon transition hover:border-linha-forte"
+            /* `min-w-0`: item de grade nasce com `min-width: auto`, e aí ele se
+               recusa a ficar menor que o conteúdo. Com o `truncate` da linha
+               de baixo (que é `white-space: nowrap`) isso virou cartão de 418
+               px numa tela de 390 — rolagem horizontal no celular, medida.
+               Truncar SEM isto não trunca: empurra. */
+            className="flex min-w-0 flex-col rounded-xl border border-linha bg-carbon transition hover:border-linha-forte"
           >
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-5 py-4">
-              <Link href={`/painel/galerias/${g.id}`} className="min-w-0 flex-1 group">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium group-hover:text-acento">{g.titulo}</span>
-                  <Etiqueta galeria={g} />
-                  {/* Procedência, não estado — por isso fica ao lado da
-                    * `Etiqueta` e não dentro dela: aquela diz em que pé a
-                    * entrega está (rascunho, no ar, no cofre), esta diz de onde
-                    * a galeria veio. Só aparece quando veio de fora, e para
-                    * quem usa os dois produtos é o que explica uma galeria que
-                    * ele não lembra de ter criado. */}
-                  {g.origem === "atomatiza" && (
-                    <span
-                      title="Criada pelo Atomatiza, a partir de um contrato"
-                      className="rounded-full border border-linha px-2 py-0.5 text-[11px] text-texto-faint"
-                    >
-                      do contrato
-                    </span>
-                  )}
+            <div className="flex items-start gap-3 px-5 pt-4">
+              {/* `line-clamp-2` no nome e `truncate` na linha de baixo: sem os
+                  dois, um nome de casal com o local junto ("Vinícola Casa
+                  Valduga, Bento Gonçalves") faz UM cartão ficar mais alto que
+                  os vizinhos da mesma linha, e a grade sai com a régua de baixo
+                  desencontrada. O título ainda pode ter 120 caracteres — o
+                  limite do campo —, e duas linhas é onde ele para. */}
+              <Link href={`/painel/galerias/${g.id}`} className="group min-w-0 flex-1">
+                <span className="line-clamp-2 block font-medium leading-snug group-hover:text-acento">
+                  {g.titulo}
                 </span>
-                <span className="mt-0.5 block text-xs text-texto-faint">
+                <span
+                  className="mt-1 block truncate text-xs text-texto-faint"
+                  title={[g.dataFormatada, g.subtitulo].filter(Boolean).join(" · ")}
+                >
                   {[g.dataFormatada, g.subtitulo].filter(Boolean).join(" · ") || "sem data"}
                 </span>
               </Link>
 
-              <span className="text-right text-xs tabular-nums text-texto-soft">
-                <span className="block">
-                  {g.arquivos} {g.arquivos === 1 ? "arquivo" : "arquivos"}
-                </span>
-                <span className="block text-texto-faint">{g.tamanho}</span>
-              </span>
-
-              <details className="relative">
+              <details className="relative -mt-1 shrink-0">
                 <summary
                   aria-label={`Ações de ${g.titulo}`}
                   className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-lg border border-linha text-texto-soft transition hover:border-acento hover:bg-acento/5 hover:text-texto [&::-webkit-details-marker]:hidden"
@@ -230,13 +312,41 @@ export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
               </details>
             </div>
 
+            {/* O rodapé do cartão: etiqueta de um lado, o peso da entrega do
+                outro. `mt-auto` gruda no fundo para que os cartões de uma
+                mesma linha alinhem a régua de baixo mesmo com títulos de
+                alturas diferentes. */}
+            <div className="mt-auto flex flex-wrap items-center justify-between gap-2 px-5 pb-4 pt-3">
+              <span className="flex flex-wrap items-center gap-2">
+                <Etiqueta galeria={g} />
+                {/* Procedência, não estado — por isso fica ao LADO da
+                  * `Etiqueta` e não dentro dela: aquela diz em que pé a entrega
+                  * está (rascunho, no ar, no cofre), esta diz de onde a galeria
+                  * veio. Só aparece quando veio de fora, e para quem usa os
+                  * dois produtos é o que explica uma galeria que ele não lembra
+                  * de ter criado. */}
+                {g.origem === "atomatiza" && (
+                  <span
+                    title="Criada pelo Atomatiza, a partir de um contrato"
+                    className="rounded-full border border-linha px-2 py-0.5 text-[11px] text-texto-faint"
+                  >
+                    do contrato
+                  </span>
+                )}
+              </span>
+              <span className="text-xs tabular-nums text-texto-soft">
+                {g.arquivos} {g.arquivos === 1 ? "arquivo" : "arquivos"}
+                <span className="text-texto-faint"> · {g.tamanho}</span>
+              </span>
+            </div>
+
             {/*
               A CONFIRMAÇÃO É DIGITADA, e é a mesma da Conta.
 
-              Aqui as galerias estão empilhadas e os alvos ficam a poucos pixels
-              uns dos outros; um `confirm()` seria um "OK" que a mão dá sozinha,
-              e o alvo do clique errado é a entrega de um casamento. No caso do
-              Juan é literal: duas galerias chamadas "Paula & Bruno".
+              Aqui as galerias estão lado a lado e os alvos ficam a poucos
+              pixels uns dos outros; um `confirm()` seria um "OK" que a mão dá
+              sozinha, e o alvo do clique errado é a entrega de um casamento. No
+              caso do Juan é literal: duas galerias chamadas "Paula & Bruno".
 
               Vai para a LIXEIRA, onde fica 30 dias — e o texto diz isso, porque
               aviso mais assustador que a verdade ensina a ignorar avisos.
@@ -285,10 +395,62 @@ export function ListaGalerias({ galerias }: { galerias: GaleriaDaLista[] }) {
         ))}
       </ul>
 
-      {filtradas.length === 0 && (
+      {total === 0 && busca !== "" && (
         <p className="mt-6 text-center text-sm text-texto-faint">
           Nenhuma galeria com “{busca}”.
         </p>
+      )}
+
+      {/*
+        ── A PAGINAÇÃO É DE LINKS, E NÃO DE BOTÕES ─────────────────────────
+        Página é um lugar: o `p=3` no endereço é o que faz o "olha na página 3"
+        mandado para o sócio funcionar, o voltar do navegador voltar uma página
+        de verdade, e a tela continuar a mesma depois de publicar uma galeria e
+        o `router.refresh()` acontecer. Botão com estado no componente não faz
+        nenhuma das três.
+
+        Anterior/Próxima e não a régua de números: 24 por tela dá 7 páginas para
+        os 168 casamentos que um estúdio movimentado entrega num ano. Quem
+        precisa de mais alcance que isso está procurando um nome — e para
+        procurar nome existe a busca, que é uma linha acima.
+      */}
+      {paginas > 1 && (
+        <nav
+          aria-label="Páginas de galerias"
+          className="mt-6 flex items-center justify-center gap-3 text-sm"
+        >
+          {pagina > 1 ? (
+            <Link
+              href={enderecoDaPagina(pagina - 1)}
+              rel="prev"
+              className="rounded-lg border border-linha px-3 py-2 text-texto-soft transition hover:border-acento hover:text-texto"
+            >
+              ← Anterior
+            </Link>
+          ) : (
+            <span className="rounded-lg border border-linha px-3 py-2 text-texto-faint opacity-40">
+              ← Anterior
+            </span>
+          )}
+
+          <span className="tabular-nums text-texto-faint">
+            Página {pagina} de {paginas}
+          </span>
+
+          {pagina < paginas ? (
+            <Link
+              href={enderecoDaPagina(pagina + 1)}
+              rel="next"
+              className="rounded-lg border border-linha px-3 py-2 text-texto-soft transition hover:border-acento hover:text-texto"
+            >
+              Próxima →
+            </Link>
+          ) : (
+            <span className="rounded-lg border border-linha px-3 py-2 text-texto-faint opacity-40">
+              Próxima →
+            </span>
+          )}
+        </nav>
       )}
     </div>
   );

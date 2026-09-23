@@ -22,7 +22,7 @@ import { enderecoDaGaleria } from "@/config/marca";
  * o MEU registro tal" — hoje, um contrato do Atomatiza. A rota guarda isso em
  * (origem, origem_ref) e passa a responder de forma IDEMPOTENTE: o mesmo
  * contrato pedindo de novo recebe a galeria que já existe (200), não uma
- * "ana-pedro-2" ao lado (ver migração 039). A referência é opaca — a gente
+ * "ana-pedro-2" ao lado (ver migração 041). A referência é opaca — a gente
  * guarda e devolve, nunca interpreta.
  */
 
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
 
   /*
    * IDEMPOTÊNCIA, do jeito burro que funciona: procurar antes, e deixar o
-   * índice único da migração 039 segurar a corrida entre duas chamadas
+   * índice único da migração 041 segurar a corrida entre duas chamadas
    * simultâneas. Quem chegar segundo na corrida recebe 23505 do banco e
    * devolve a galeria do primeiro — o chamador não distingue, e é o ponto.
    */

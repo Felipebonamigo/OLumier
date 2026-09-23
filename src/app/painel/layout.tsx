@@ -47,7 +47,7 @@ export default async function PainelLayout({ children }: { children: React.React
   return (
     <div className="min-h-dvh">
       <header className="border-b border-linha">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-6 py-4">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-4 px-6 py-4">
           {/* Sem o descritor: aqui ele repetia o título da tela — ver
               `MarcaLockup`. */}
           <Link href="/painel">
@@ -105,7 +105,7 @@ export default async function PainelLayout({ children }: { children: React.React
         </div>
 
         {/* Espaço usado: é a quota do cliente e, do nosso lado, o custo. Fica sempre visível. */}
-        <div className="mx-auto max-w-5xl px-6 pb-4">
+        <div className="mx-auto max-w-7xl px-6 pb-4">
           <div className="flex items-baseline justify-between text-xs">
             <span className="text-texto-soft">
               {tenant.nome_estudio} · {formatarBytes(usado)}

@@ -75,6 +75,13 @@ export const CUSTOS_FIXOS: CustoFixo[] = [
     nota: "Estimativa: ~R$ 40/ano no Registro.br, diluídos em 12 meses. Conferir na renovação. É o único item 100% da plataforma.",
   },
   {
+    id: "servidor-zip",
+    nome: "Servidor de ZIP (Hetzner Cloud)",
+    centavosPorMes: 6500,
+    confirmado: false,
+    nota: "Estimativa: ~€ 9 a 10/mês (servidor pequeno mais disco para os ZIPs prontos) a R$ 6,30/€, com IOF. Conferir na fatura da Hetzner. É 100% da plataforma: monta e entrega os ZIPs fora do VPS — ver docs/servidor-zip.md.",
+  },
+  {
     id: "contabilidade",
     nome: "Contabilidade",
     centavosPorMes: 0,

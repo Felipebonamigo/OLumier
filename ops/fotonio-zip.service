@@ -1,0 +1,28 @@
+[Unit]
+Description=Fotonio - servidor de ZIP (monta e entrega os ZIPs das galerias)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=fotonio-zip
+Group=fotonio-zip
+WorkingDirectory=/opt/fotonio-zip/servidor-zip
+EnvironmentFile=/etc/fotonio-zip.env
+ExecStart=/usr/bin/node --experimental-strip-types --no-warnings servidor.ts
+Restart=always
+RestartSec=3
+# Ao parar (deploy), o servidor deixa de aceitar e espera os downloads em
+# andamento terminarem. Um ZIP de 20 GB numa conexão lenta leva horas.
+KillSignal=SIGTERM
+TimeoutStopSec=6h
+# O cache dos ZIPs prontos; o resto do sistema é só leitura para o processo.
+ReadWritePaths=/var/lib/fotonio-zip
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
