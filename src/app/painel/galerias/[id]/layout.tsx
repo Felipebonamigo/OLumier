@@ -70,7 +70,15 @@ export default async function GaleriaLayout({
   const temAparenciaPendente = galeria.aparencia_rascunho !== null;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
+    /* `max-w-7xl` é a largura do painel inteiro — a mesma da barra de cima e da
+       lista de galerias. Ela nasceu de um pedido do Felipe (23/09/2026): "no
+       sistema também, parece que nao aproveitamos a tela toda quando é
+       desktop". Aqui ela vale duas vezes, porque esta é a tela onde se passa a
+       tarde: mais largura é mais miniatura por linha na grade de fotos.
+
+       Se esta linha voltar a divergir da barra de cima, o cabeçalho fica 128 px
+       mais largo que o conteúdo e o "← Galerias" some para dentro da página. */
+    <main className="mx-auto max-w-7xl px-6 py-10">
       <Link href="/painel" className="text-sm text-texto-soft hover:text-texto">
         ← Galerias
       </Link>
