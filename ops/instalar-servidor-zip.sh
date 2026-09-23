@@ -106,6 +106,15 @@ fi
 
 echo "── 5. systemd ───────────────────────────────────────────────────────"
 cp "$DESTINO/ops/fotonio-zip.service" /etc/systemd/system/fotonio-zip.service
+# A unidade roda com ProtectSystem=strict: só escreve onde ReadWritePaths
+# permite. Se o cache foi movido para um volume (ZIP_CACHE_DIR fora de
+# /var/lib/fotonio-zip), a permissão vai num drop-in gerado a partir do .env —
+# num arquivo à parte, que a cópia da unidade acima não apaga. Sem isto o
+# servidor sobe, mas toda montagem morre com EROFS (23/09/2026).
+CACHE_DIR=$(grep -E '^ZIP_CACHE_DIR=' "$ENV" | cut -d= -f2-)
+mkdir -p /etc/systemd/system/fotonio-zip.service.d
+printf '[Service]\nReadWritePaths=%s\n' "${CACHE_DIR:-$CACHE}" > /etc/systemd/system/fotonio-zip.service.d/cache.conf
+mkdir -p "${CACHE_DIR:-$CACHE}" && chown fotonio-zip:fotonio-zip "${CACHE_DIR:-$CACHE}"
 systemctl daemon-reload
 systemctl enable fotonio-zip -q
 systemctl restart fotonio-zip
