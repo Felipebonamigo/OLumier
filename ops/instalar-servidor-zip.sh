@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 # Instala (ou atualiza) o servidor de ZIP numa máquina Debian/Ubuntu limpa.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Felipebonamigo/GaleriaAtomo/master/ops/instalar-servidor-zip.sh | sudo bash
+# O repositório é PRIVADO, então a máquina precisa de uma chave de leitura antes
+# de qualquer coisa (deploy key no GitHub — ver docs/servidor-zip.md):
 #
-# ou, com o repositório já clonado:  sudo ops/instalar-servidor-zip.sh
+#   ssh-keygen -t ed25519 -N "" -f /root/.ssh/id_ed25519 -C zip-hetzner
+#   cat /root/.ssh/id_ed25519.pub     → colar em Settings → Deploy keys (só leitura)
+#
+# Depois, como root:
+#
+#   ssh-keyscan github.com >> /root/.ssh/known_hosts
+#   git clone --depth 1 git@github.com:Felipebonamigo/GaleriaAtomo.git /opt/fotonio-zip
+#   bash /opt/fotonio-zip/ops/instalar-servidor-zip.sh
+#
+# Rodar o script de novo atualiza o código e reinicia o serviço.
 #
 # O que faz, na ordem:
-#   1. Node 22 (o servidor roda TypeScript direto, com --experimental-strip-types)
+#   1. Node 22+ (o servidor roda TypeScript direto, com --experimental-strip-types)
 #   2. usuário de sistema `fotonio-zip`, sem shell, dono só do cache
 #   3. o código em /opt/fotonio-zip (clone raso do master; rodar de novo atualiza)
 #   4. /etc/fotonio-zip.env — pergunta o que falta, nunca sobrescreve o que existe
@@ -16,7 +26,7 @@
 # Rodar de novo é seguro: cada passo confere antes de fazer.
 set -euo pipefail
 
-REPO="https://github.com/Felipebonamigo/GaleriaAtomo.git"
+REPO="git@github.com:Felipebonamigo/GaleriaAtomo.git"
 DESTINO=/opt/fotonio-zip
 ENV=/etc/fotonio-zip.env
 CACHE=/var/lib/fotonio-zip
@@ -26,11 +36,21 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 echo "── 1. Node ──────────────────────────────────────────────────────────"
-if ! command -v node >/dev/null || [[ "$(node -e 'console.log(process.versions.node.split(".")[0])')" -lt 22 ]]; then
+versao_node() { command -v node >/dev/null && node -e 'console.log(process.versions.node.split(".")[0])' || echo 0; }
+if [[ "$(versao_node)" -lt 22 ]]; then
   apt-get update -qq
   apt-get install -y -qq curl ca-certificates git >/dev/null
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
-  apt-get install -y -qq nodejs >/dev/null
+  # O Ubuntu 26.04 já traz um Node recente no repositório dele; o NodeSource
+  # nem sempre tem pacote para a versão mais nova do Ubuntu. Tenta o do
+  # sistema primeiro, e só cai no NodeSource se ele for velho demais.
+  apt-get install -y -qq nodejs >/dev/null 2>&1 || true
+  if [[ "$(versao_node)" -lt 22 ]]; then
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
+    apt-get install -y -qq nodejs >/dev/null
+  fi
+fi
+if [[ "$(versao_node)" -lt 22 ]]; then
+  echo "   node $(node --version 2>/dev/null || echo ausente) — precisa de 22 ou mais"; exit 1
 fi
 echo "   node $(node --version)"
 
@@ -42,6 +62,9 @@ chmod 750 "$CACHE"
 
 echo "── 3. código ────────────────────────────────────────────────────────"
 command -v git >/dev/null || apt-get install -y -qq git >/dev/null
+# O clone é por SSH, com a deploy key da máquina (ver o cabeçalho).
+mkdir -p /root/.ssh && chmod 700 /root/.ssh
+grep -q "github.com" /root/.ssh/known_hosts 2>/dev/null || ssh-keyscan github.com >> /root/.ssh/known_hosts 2>/dev/null
 if [[ -d "$DESTINO/.git" ]]; then
   git -C "$DESTINO" fetch --depth 1 origin master -q
   git -C "$DESTINO" reset --hard origin/master -q
