@@ -39,13 +39,15 @@ export interface PedidoDeZip {
   nome_do_zip: string;
   ip_hash: string | null;
   user_agent: string | null;
+  /** Quem clicou em baixar. Ver migração 041. */
+  pessoa_id: string | null;
   expira_em: string;
 }
 
 export async function criarPedidoDeZip(
   galeriaId: string,
   entrega: Entrega,
-  quem: { ipHash: string | null; userAgent: string | null },
+  quem: { ipHash: string | null; userAgent: string | null; pessoaId?: string | null },
   secaoId: string | null,
 ): Promise<{ id: string; nomeDoZip: string }> {
   const { nomeDoZip, arquivos } = entradasDoZip(entrega);
@@ -56,8 +58,8 @@ export async function criarPedidoDeZip(
     versao: a.media.versao ?? 1,
   }));
   const linha = await consultarUm<{ id: string }>(
-    `insert into pedidos_zip (galeria_id, tipo, secao_id, entradas, nome_do_zip, ip_hash, user_agent)
-     values ($1, $2, $3, $4::jsonb, $5, $6, $7)
+    `insert into pedidos_zip (galeria_id, tipo, secao_id, entradas, nome_do_zip, ip_hash, user_agent, pessoa_id)
+     values ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
      returning id`,
     [
       galeriaId,
@@ -67,6 +69,7 @@ export async function criarPedidoDeZip(
       nomeDoZip,
       quem.ipHash,
       quem.userAgent?.slice(0, 300) ?? null,
+      quem.pessoaId ?? null,
     ],
   );
   if (!linha) throw new Error("o pedido de zip não foi gravado");
@@ -76,7 +79,7 @@ export async function criarPedidoDeZip(
 export async function lerPedidoDeZip(id: string): Promise<PedidoDeZip | null> {
   return consultarUm<PedidoDeZip>(
     `select p.id, p.galeria_id, g.tenant_id, p.tipo, p.secao_id, p.entradas,
-            p.nome_do_zip, p.ip_hash, p.user_agent, p.expira_em
+            p.nome_do_zip, p.ip_hash, p.user_agent, p.pessoa_id, p.expira_em
        from pedidos_zip p join galerias g on g.id = p.galeria_id
       where p.id = $1`,
     [id],
@@ -154,7 +157,10 @@ export async function manifestoDoPedido(
  * Registrar só no fim é a lição de 05/09/2026: o clique não é o download.
  */
 export async function registrarEntregaDeZip(
-  pedido: Pick<PedidoDeZip, "galeria_id" | "tenant_id" | "tipo" | "ip_hash" | "user_agent"> & {
+  pedido: Pick<
+    PedidoDeZip,
+    "galeria_id" | "tenant_id" | "tipo" | "ip_hash" | "user_agent" | "pessoa_id"
+  > & {
     /** Nulo no caminho de reserva: lá não há pedido, o ZIP nasce e morre na rota. */
     id: string | null;
   },
@@ -179,12 +185,17 @@ export async function registrarEntregaDeZip(
     );
     if (relato.evento === "servido") {
       await consultar(
-        `insert into acessos (galeria_id, acao, ip_hash, user_agent) values ($1, $2, $3, $4)`,
+        /* `pessoa_id` fecha o circuito da migração 041: pelo servidor de ZIP
+           esta chamada vem de uma rota interna, sem cookie, e o dono só existe
+           porque foi congelado no pedido quando a pessoa clicou. */
+        `insert into acessos (galeria_id, acao, ip_hash, user_agent, pessoa_id)
+         values ($1, $2, $3, $4, $5)`,
         [
           pedido.galeria_id,
           pedido.tipo === "tudo" ? "baixou_tudo" : "baixou",
           pedido.ip_hash,
           pedido.user_agent,
+          pedido.pessoa_id,
         ],
       );
     }
