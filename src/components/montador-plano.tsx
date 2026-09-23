@@ -4,6 +4,8 @@ import { useState, type ReactNode } from "react";
 import {
   SEGMENTOS,
   ESPACOS,
+  TB_ADICIONAL_CENTAVOS,
+  ESPACO_MAXIMO_GB,
   montar,
   formatarGb,
   formatarReais,
@@ -14,6 +16,19 @@ import {
   type Plano,
   type Segmento,
 } from "@/config/planos";
+
+/**
+ * Os três tamanhos que viram botão, e o teto deles.
+ *
+ * Derivados de `ESPACOS` e não escritos à mão: a régua é "até 1 TB", e o dia
+ * em que a tabela ganhar uma faixa de 750 GB ela aparece aqui sozinha. Acima
+ * disso a escolha passa a ser o passo de tera.
+ */
+const BASES = ESPACOS.filter((e) => e.gb <= 1000);
+/* `at(-1)!` porque a tabela nunca é vazia — ela é uma constante deste
+   repositório, não dado de fora. O compilador não sabe disso; um `?? 1000`
+   aqui esconderia uma tabela quebrada atrás de um número plausível. */
+const TETO_BASE = BASES.at(-1)!.gb;
 
 /**
  * O que vem em qualquer tamanho.
@@ -71,6 +86,36 @@ function Numero({ n }: { n: number }) {
   );
 }
 
+/**
+ * Um passo de tera: "−" e "+".
+ *
+ * Botão quadrado com rótulo acessível, e não uma seta desenhada dentro do
+ * texto: quem usa leitor de tela precisa ouvir "mais um tera", não "mais".
+ */
+function PassoTb({
+  rotulo,
+  sinal,
+  desabilitado,
+  onClick,
+}: {
+  rotulo: string;
+  sinal: string;
+  desabilitado: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={rotulo}
+      disabled={desabilitado}
+      onClick={onClick}
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-linha text-base transition hover:border-acento hover:bg-acento/5 disabled:opacity-30 disabled:hover:border-linha disabled:hover:bg-transparent"
+    >
+      {sinal}
+    </button>
+  );
+}
+
 function Peca({
   ativo,
   onClick,
@@ -117,6 +162,11 @@ export function MontadorPlano({
   const [segmento, setSegmento] = useState<Segmento>(inicial?.segmento ?? "foto");
   const [espacoGb, setEspacoGb] = useState(inicial?.espacoGb ?? 1000);
   const [ciclo, setCiclo] = useState<Ciclo>("mensal");
+
+  /* Quantos teras acima do maior tamanho-base. DERIVADO do espaço escolhido,
+     nunca um estado próprio: dois estados para o mesmo número discordam no
+     primeiro clique, e aí a tela mostra "+2 TB" sobre um plano de 4 TB. */
+  const terasAdicionais = Math.max(0, (espacoGb - TETO_BASE) / 1000);
 
   const plano = montar({ segmento, espacoGb });
 
@@ -170,9 +220,27 @@ export function MontadorPlano({
         </p>
       </div>
 
-      {/* Oito colunas para oito faixas. Mudou ESPACOS? confira a contagem. */}
-      <div className="mt-4 grid gap-2 sm:grid-cols-4 lg:grid-cols-8">
-        {ESPACOS.map((e) => (
+      {/*
+        ── TRÊS TAMANHOS, E DEPOIS TERA ADICIONAL (05/09/2026) ──────────────
+
+        O Felipe pediu duas vezes: "deixando apenas 3 e depois plano adicional
+        por 1TB". Até aqui este seletor desenhava um botão por faixa da tabela
+        — sete cartões em duas fileiras, e o de 10 TB com o mesmo peso visual
+        do de 250 GB, que é a faixa que quase todo mundo compra.
+
+        Sete opções não são sete escolhas: são sete contas a fazer antes de
+        decidir. Com três, a pergunta vira uma ("cabe em 1 TB?"), e quem
+        responde "não" mexe no passo — que é a mesma tabela, apresentada como o
+        que ela sempre foi acima de 1 TB: um preço fixo por tera.
+
+        O passo NÃO é uma segunda estrutura de cobrança. O preço de cada clique
+        sai de `montar`, que lê a tabela enquanto ela existe e segue a mesma reta
+        de R$ 80 acima do último degrau escrito — nunca de uma conta feita aqui.
+        Foi para isso que os degraus de 4, 6, 7, 8 e 9 TB entraram na tabela:
+        sem eles, "+1 TB" a partir de 3 TB pousaria em 5.
+      */}
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {BASES.map((e) => (
           <Peca
             key={e.gb}
             ativo={espacoGb === e.gb}
@@ -181,6 +249,54 @@ export function MontadorPlano({
             preco={formatarReais(e.precoCentavos)}
           />
         ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-linha bg-void/60 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Precisa de mais que 1 TB?</p>
+          <p className="mt-0.5 text-xs text-texto-faint">
+            Cada tera a mais custa{" "}
+            <strong className="font-medium text-texto-soft">
+              {formatarReais(TB_ADICIONAL_CENTAVOS)}
+            </strong>{" "}
+            por mês — sem adicional por hora de vídeo, sem cobrança por galeria.
+          </p>
+        </div>
+
+        {/* Os dois botões e o número no meio, e não um <input type="number">:
+            o passo é sempre 1 TB, e um campo livre convidaria a digitar 47 —
+            um número que a tabela não tem. */}
+        <div className="flex items-center gap-2">
+          <PassoTb
+            rotulo="Menos um tera"
+            sinal="−"
+            desabilitado={terasAdicionais === 0}
+            onClick={() => setEspacoGb(TETO_BASE + (terasAdicionais - 1) * 1000)}
+          />
+          <span className="min-w-[7.5rem] text-center text-sm tabular-nums">
+            {terasAdicionais === 0 ? (
+              <span className="text-texto-faint">nenhum tera a mais</span>
+            ) : (
+              <>
+                <strong className="font-medium">+{terasAdicionais} TB</strong>{" "}
+                <span className="text-texto-faint">({formatarGb(espacoGb)})</span>
+              </>
+            )}
+          </span>
+          {/* Sem topo desde 06/09/2026: o passo não para no último degrau
+              escrito em `ESPACOS`, porque acima dele a escada continua pela
+              mesma reta de R$ 80. O `desabilitado` só encosta em
+              `ESPACO_MAXIMO_GB`, que é guarda de entrada e não teto de venda —
+              nenhum cliente real chega a 100 TB. */}
+          <PassoTb
+            rotulo="Mais um tera"
+            sinal="+"
+            desabilitado={espacoGb >= ESPACO_MAXIMO_GB}
+            onClick={() =>
+              setEspacoGb(Math.min(ESPACO_MAXIMO_GB, Math.max(TETO_BASE, espacoGb) + 1000))
+            }
+          />
+        </div>
       </div>
 
       {/* ── peça 3: como pagar ─────────────────────────────────────────── */}

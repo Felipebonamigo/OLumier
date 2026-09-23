@@ -1,0 +1,309 @@
+# PUBLICAR: o merge no master vai para produção.
+#
+# Felipe, 16/09/2026: "vc sempre publicou, o que aconteceu q n consegue agora".
+# O que aconteceu é que a sessão mudou de lugar. O `deploy.sh` fala SSH com o
+# VPS, e o Claude Code na web roda num contêiner sem `ssh`, sem chave e sem
+# rota para a porta 22. Publicar voltou a depender de alguém com um terminal.
+#
+# Aqui o runner tem `ssh`, alcança o VPS, e a chave mora num segredo do
+# repositório em vez de numa máquina só.
+#
+# ── ELE NÃO REIMPLEMENTA O DEPLOY ──────────────────────────────────────────
+#
+# A tentação era escrever os passos de publicação aqui. Seriam DUAS fontes de
+# verdade para o código mais perigoso do repositório, e a segunda envelheceria
+# em silêncio: o `deploy.sh` ganharia um portão novo e este arquivo seguiria
+# publicando sem ele.
+#
+# Então isto só monta a bancada e chama `bash deploy.sh --sim`. Os portões
+# (tipos, suíte com --exigir-tudo, dump antes da migração, trava no servidor,
+# troca atômica do symlink) são os mesmos que rodam quando o Felipe publica da
+# máquina dele.
+#
+# ── A BANCADA É DE MENTIRA, E ISSO É O CERTO ───────────────────────────────
+#
+# Este arquivo herda a receita de `verificar.yml`, escrito para o CI em 29/08 e
+# que rodou verde: banco de serviço, MinIO no lugar do R2, e segredos
+# inventados. Nenhuma suíte precisa de segredo real — e um segredo real aqui
+# seria um segredo a mais para vazar, com o agravante de que as chaves de
+# produção deste projeto abrem as fotos dos clientes.
+#
+# Por isso o ÚNICO segredo que este workflow pede é a chave do VPS, que não tem
+# como ser de mentira: é ela que abre a porta onde o site mora.
+#
+# ── O QUE PRECISA ESTAR GUARDADO ───────────────────────────────────────────
+#
+# Settings → Secrets and variables → Actions:
+#
+#   CHAVE_SSH_VPS   a chave privada que abre root@179.197.233.184, sem
+#                   passphrase (não há ninguém para digitá-la no runner).
+#   HOST_KEY_VPS    (opcional) a saída de `ssh-keyscan 179.197.233.184`. Sem
+#                   ela o runner aceita o host na primeira vista.
+#
+# Sem a primeira o workflow para no primeiro passo, dizendo isso, e nada é
+# publicado.
+name: Publicar
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Só leitura: este job faz `npm ci` e build com o token do repositório ao
+# alcance. Mesma regra do `verificar.yml`.
+permissions:
+  contents: read
+
+# Uma publicação por vez. A trava que vale é a do servidor
+# (scripts/trava-publicacao.sh), porque duas máquinas diferentes passariam por
+# qualquer trava local e colidiriam no `ln -sfn` de lá. Esta existe só para não
+# gastar o portão inteiro num commit que o próximo da fila substitui.
+concurrency:
+  group: publicar-producao
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          # TERMINA em `_teste` de propósito: `scripts/guarda-producao.mjs`
+          # recusa rodar suíte destrutiva contra banco que não pareça de teste,
+          # e essa guarda tem de valer aqui como vale na máquina de qualquer um.
+          POSTGRES_DB: fotonio_teste
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+        ports:
+          - 5432:5432
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/fotonio_teste
+      # Segredos de MENTIRA, longos o bastante para as guardas de tamanho do
+      # próprio código aceitarem. Nada aqui fala com o Asaas.
+      SESSION_SECRET: segredo-de-sessao-so-do-ci-0123456789abcdef
+      ASAAS_WEBHOOK_TOKEN: token-de-webhook-so-do-ci-0123456789abcdef
+      # `R2_ACCOUNT_ID` precisa existir porque é dele que sai o
+      # `armazenamentoConfigurado` do `src/lib/r2.ts` — sem ele o healthz
+      # responde 503 com "armazenamento=credenciais ausentes" e o servidor do
+      # portão nunca é considerado saudável. O valor não é usado: `R2_ENDPOINT`
+      # substitui o endereço inteiro.
+      R2_ACCOUNT_ID: conta-de-mentira-do-ci
+      R2_ENDPOINT: http://127.0.0.1:9000
+      R2_ACCESS_KEY_ID: minioadmin
+      R2_SECRET_ACCESS_KEY: minioadmin
+      R2_BUCKET: galerias
+      # Servidor local não tem DNS curinga: sem isto o cliente S3 procura
+      # `galerias.127.0.0.1`. Em produção esta variável não existe.
+      ARMAZEM_CAMINHO_NO_ENDERECO: "1"
+      # O ARMAZÉM DOS ORIGINAIS, LIGADO — e a volta atrás de uma volta atrás.
+      #
+      # Em 17/09/2026 de manhã eu o DESLIGUEI aqui para a bateria ficar verde. O
+      # `testar-armazem` reprovava com ele ligado, e a leitura foi que a bancada
+      # estava inventando um estado que a máquina do Felipe não tem.
+      #
+      # Estava errada. O defeito era do TESTE: o detector dele usava o retorno de
+      # `abrirEnvioDoOriginal` como se fosse uma URL, e ele devolve um id de
+      # upload. Com as ARQUIVOS_* ausentes ninguém percebia, porque o ramo do
+      # estouro respondia antes.
+      #
+      # Desligar deixou a suíte verde e o caminho dos ORIGINAIS — o que carrega a
+      # foto de verdade, e o único caminho que existe em produção — sem ser
+      # exercitado em lugar nenhum. Verde por não olhar.
+      #
+      # Consertado o detector (a prova agora é em qual BALDE o arquivo foi
+      # parar), ele volta a ligar. Mesmo MinIO, balde separado: é a separação dos
+      # dois armazéns que se quer exercitar, e ela só aparece quando os dois
+      # existem.
+      ARQUIVOS_ENDPOINT: http://127.0.0.1:9000
+      ARQUIVOS_ACCESS_KEY_ID: minioadmin
+      ARQUIVOS_SECRET_ACCESS_KEY: minioadmin
+      # O NOME NÃO É ESCOLHA: `testar-marca-plataforma` confere que
+      # ARQUIVOS_BUCKET é "olumier-arquivos", porque bucket é onde o arquivo mora
+      # e apontar para um balde que não existe abre a galeria do casal vazia.
+      ARQUIVOS_BUCKET: olumier-arquivos
+      ARQUIVOS_REGIAO: us-east-1
+
+    steps:
+      - name: Conferir o segredo antes de gastar tempo
+        env:
+          CHAVE_SSH_VPS: ${{ secrets.CHAVE_SSH_VPS }}
+        run: |
+          if [ -z "$CHAVE_SSH_VPS" ]; then
+            echo "✗ falta o segredo CHAVE_SSH_VPS no repositório."
+            echo "  Settings → Secrets and variables → Actions → New repository secret"
+            echo "  É a chave privada que abre root@179.197.233.184, sem passphrase."
+            exit 1
+          fi
+          echo "segredo no lugar"
+
+      # Actions presas ao sha, não à tag: tag é PONTEIRO, e quem controla o
+      # repositório da action reaponta `v4` para outro commit sem que uma linha
+      # daqui mude. Mesma regra do `verificar.yml`.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # `portao-origin.sh` compara HEAD com origin/master e `git archive
+          # HEAD` empacota a árvore: os dois precisam do histórico.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # `--ignore-scripts`: o postinstall de qualquer pacote da árvore rodaria
+      # no runner, que tem o token do repositório à mão. Nada aqui precisa deles.
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+        env:
+          NODE_ENV: development
+
+      # DO QUAY, NÃO DO DOCKER HUB. O `verificar.yml` puxava `minio/minio` do
+      # Hub e isso funcionou em agosto; em 16/09/2026 a mesma linha devolve
+      # "pull access denied ... may require 'docker login'" — o Hub deixou de
+      # servir essa imagem para quem não está autenticado. O quay.io é o outro
+      # registro oficial do MinIO e não pede login, então a bancada não fica
+      # dependendo de uma credencial de terceiro para subir.
+      - name: Subir o armazém (MinIO, que fala S3 como o R2)
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            quay.io/minio/minio server /data
+          # `docker run -d` volta na hora e o servidor leva alguns segundos.
+          # Falha DIZENDO o porquê: sem isto o armazém morto só aparece no
+          # comando seguinte, como um erro de bucket que não explica nada.
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null && break
+            sleep 2
+          done
+          if ! curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null; then
+            echo "✗ o MinIO não respondeu — a suíte não teria armazém."
+            docker logs minio 2>&1 | tail -30
+            exit 1
+          fi
+          for balde in galerias olumier-arquivos; do
+            AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
+              aws --endpoint-url http://127.0.0.1:9000 --region us-east-1 \
+                  s3 mb "s3://$balde"
+          done
+
+      # As suítes recebem o ambiente por `--env-file=.env.local` (é o que o
+      # `testar-tudo.mjs` passa a cada filho), então o arquivo precisa existir.
+      # `.env*` está no .gitignore, então isto não suja a árvore — o que importa
+      # porque o deploy.sh pergunta sobre árvore suja.
+      - name: Montar o .env.local da bancada
+        run: |
+          {
+            echo "DATABASE_URL=$DATABASE_URL"
+            echo "SESSION_SECRET=$SESSION_SECRET"
+            echo "ASAAS_WEBHOOK_TOKEN=$ASAAS_WEBHOOK_TOKEN"
+            echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID"
+            echo "R2_ENDPOINT=$R2_ENDPOINT"
+            echo "ARMAZEM_CAMINHO_NO_ENDERECO=$ARMAZEM_CAMINHO_NO_ENDERECO"
+            echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
+            echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
+            echo "R2_BUCKET=$R2_BUCKET"
+            echo "ARQUIVOS_ENDPOINT=$ARQUIVOS_ENDPOINT"
+            echo "ARQUIVOS_ACCESS_KEY_ID=$ARQUIVOS_ACCESS_KEY_ID"
+            echo "ARQUIVOS_SECRET_ACCESS_KEY=$ARQUIVOS_SECRET_ACCESS_KEY"
+            echo "ARQUIVOS_BUCKET=$ARQUIVOS_BUCKET"
+            echo "ARQUIVOS_REGIAO=$ARQUIVOS_REGIAO"
+          } > .env.local
+
+      # A RECEITA DO BANCO NOVO É DE DUAS PARTES, e a primeira execução deste
+      # workflow morreu por eu ter escrito só a segunda: `001-derivadas.sql`
+      # reprovou com `relation "medias" does not exist`. `db/schema.sql` é o
+      # retrato até a migração 008 e as numeradas vêm por cima — só o retrato
+      # deixaria o banco anos atrasado, só as migrações não teriam o que migrar.
+      #
+      # O `deploy.sh` também migra a bancada antes do portão, e ali isso é um
+      # no-op: o banco daqui já nasce em dia. Os dois existem porque resolvem
+      # coisas diferentes — aqui a bancada é VAZIA, na máquina do Felipe ela é
+      # VELHA.
+      - name: Levantar o banco (retrato + migrações)
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d fotonio_teste \
+            -v ON_ERROR_STOP=1 -q -f db/schema.sql
+          node scripts/migrar.mjs --aplicar
+
+      - name: Chave do VPS
+        env:
+          CHAVE_SSH_VPS: ${{ secrets.CHAVE_SSH_VPS }}
+          HOST_KEY_VPS: ${{ secrets.HOST_KEY_VPS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          # `tr -d '\r'`: a chave costuma ser copiada de um terminal no Windows,
+          # e os fins de linha vêm junto. O OpenSSH não perdoa — ele recusa o
+          # arquivo inteiro com "error in libcrypto", que não diz nada sobre
+          # fim de linha. Custou uma rodada para descobrir.
+          printf '%s\n' "$CHAVE_SSH_VPS" | tr -d '\r' > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+
+          # LER A CHAVE ANTES DE USÁ-LA. Sem isto, chave ilegível vira
+          # "Permission denied (publickey)" lá adiante, que manda procurar no
+          # lugar errado — no servidor, nas autorizações — quando o problema
+          # está no arquivo aqui. `ssh-keygen -y` só deriva a pública: não fala
+          # com ninguém, e falha na hora se o formato ou a senha estiverem no
+          # caminho.
+          # A mensagem do ssh-keygen vai junto: é ela que distingue "formato
+          # inválido" de "senha incorreta", e escondê-la deixa o diagnóstico
+          # pela metade — exatamente o que este bloco existe para evitar.
+          if ! erro=$(ssh-keygen -y -f ~/.ssh/id_deploy 2>&1 > /dev/null); then
+            echo "✗ o segredo CHAVE_SSH_VPS não é uma chave privada utilizável."
+            echo "  ssh-keygen disse: $erro"
+            echo
+            echo "  Conferência rápida na sua máquina, no Git Bash:"
+            echo "    ssh-keygen -y -f ~/.ssh/id_ed25519"
+            echo "  Se pedir senha, é a causa 2. Se imprimir 'ssh-ed25519 AAAA…',"
+            echo "  a chave presta e o que se perdeu foi o texto na cópia —"
+            echo "  refaça com:  cat ~/.ssh/id_ed25519 | clip"
+            echo
+            echo "  Três causas, em ordem de probabilidade:"
+            echo "   1. faltou parte do texto — tem de ir da linha"
+            echo "      '-----BEGIN OPENSSH PRIVATE KEY-----' à '-----END ...-----',"
+            echo "      inclusive as duas, e com as quebras de linha preservadas;"
+            echo "   2. a chave tem senha (passphrase) — aqui não há quem a digite;"
+            echo "   3. é a chave PÚBLICA (.pub) em vez da privada."
+            exit 1
+          fi
+          echo "chave lida: $(ssh-keygen -lf ~/.ssh/id_deploy | awk '{print $1, $2, $4}')"
+
+          # Sem senha e sem interação: o servidor oferece autenticação por senha
+          # e o ssh fica tentando, o que no log vira "Permission denied, please
+          # try again" três vezes e esconde a causa real.
+          {
+            printf 'Host 179.197.233.184\n'
+            printf '  IdentityFile ~/.ssh/id_deploy\n'
+            printf '  IdentitiesOnly yes\n'
+            printf '  BatchMode yes\n'
+            printf '  PasswordAuthentication no\n'
+          } > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+          if [ -n "$HOST_KEY_VPS" ]; then
+            printf '%s\n' "$HOST_KEY_VPS" > ~/.ssh/known_hosts
+            echo "host conferido pela chave guardada"
+          else
+            # CONFIANÇA NA PRIMEIRA VISTA: quem estiver no meio do caminho neste
+            # instante vira o servidor para este runner, e o que ele recebe é a
+            # árvore inteira e o acesso root do deploy. Guardar HOST_KEY_VPS
+            # (saída de `ssh-keyscan 179.197.233.184`) fecha isso.
+            echo "! HOST_KEY_VPS não guardada — aceitando o host na primeira vista"
+            ssh-keyscan 179.197.233.184 >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Publicar
+        run: bash deploy.sh --sim
+
+      # O portão reprovado é o caso em que o log interessa mais, e é justamente
+      # quando ninguém está olhando a tela.
+      - name: Log do servidor do portão (só quando falha)
+        if: failure()
+        run: tail -100 /tmp/portao-servidor-*.log || true

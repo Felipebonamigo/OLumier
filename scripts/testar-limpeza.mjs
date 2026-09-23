@@ -12,7 +12,12 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
-import { estudioDaRodada, galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
+import {
+  estudioDaRodada,
+  segundoEstudioDaRodada,
+  galeriaDaRodada,
+  limparRodada,
+} from "./fixture-de-teste.mjs";
 import { apagarObjetos, listarChaves, objetoExiste, BUCKET } from "../src/lib/r2.ts";
 /*
  * A regra de "quem tem dono" vem do módulo compartilhado, NÃO de uma consulta
@@ -38,10 +43,12 @@ const etapa = async (nome, fn) => {
   }
 };
 
+
+/* O endereço do armazém vem do `lib/r2.ts`: eram cinco cópias desta conta,
+   e as cópias não acompanharam o dia em que o armazém mudou de lugar. */
+const { OPCOES_DO_CLIENTE } = await import("../src/lib/r2.ts");
 const s3 = new S3Client({
-  region: "auto",
-  endpoint: process.env.R2_ENDPOINT || `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  forcePathStyle: Boolean(process.env.R2_ENDPOINT),
+  ...OPCOES_DO_CLIENTE,
   credentials: {
     accessKeyId: process.env.R2_ACCESS_KEY_ID,
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
@@ -207,16 +214,25 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
   const { apagarGaleria } = await import("../src/lib/tenants.ts");
   const t = [await estudioDaRodada(db)];
 
-  const outro = await db.query(
-    /* O e-mail também vai com carimbo, não só o slug: `tenants.email` é ÚNICO, e
-     * com valor fixo a segunda execução nesta mesma base morria em
-     * "duplicate key" — bastava uma rodada anterior ter caído no meio, antes da
-     * limpeza. Vermelho por sobra da rodada passada é o pior tipo: some quando
-     * se investiga (a pessoa limpa o banco) e volta depois. */
-    `insert into tenants (slug,nome_estudio,email,senha_hash)
-     values ($1,'Outro',$2,'x') returning id`,
-    [`outro-limpeza-${Date.now()}`, `outro-limpeza-${Date.now()}@teste`],
-  );
+  /*
+   * ── O VIZINHO VEM DA BANCADA, NÃO DAQUI (17/09/2026) ────────────────────
+   *
+   * Este estúdio era criado à mão com o e-mail FIXO `outro-limpeza@teste`. O
+   * `finally` lá embaixo o apagava — quando chegava lá. Qualquer rodada que
+   * morresse antes (um Postgres que cai, um Ctrl+C, uma etapa acima que
+   * estoura) deixava a linha para trás, e daí em diante TODA execução futura
+   * reprovava com `duplicate key value violates unique constraint
+   * "tenants_email_key"`.
+   *
+   * É o vermelho que não fala do código: o teste passa a acusar o ambiente, e
+   * quem for depurar vai procurar defeito na limpeza de arquivos, que está
+   * certa. Aconteceu de verdade nesta bancada.
+   *
+   * `segundoEstudioDaRodada` existe exatamente para isto: nome único por
+   * execução, e `limparRodada` no fim do arquivo leva o estúdio e tudo que
+   * pendura nele — inclusive quando uma etapa estoura no meio.
+   */
+  const outro = { rows: [await segundoEstudioDaRodada(db)] };
   const g = await db.query(
     `insert into galerias (tenant_id, slug, titulo) values ($1,'alheia','Alheia') returning id`,
     [outro.rows[0].id],
@@ -239,7 +255,8 @@ await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async
     if (!(await objetoExiste(chave))) throw new Error("apagou ARQUIVO de outro estúdio!");
     return "galeria e arquivo intactos";
   } finally {
-    await db.query("delete from tenants where id = $1", [outro.rows[0].id]);
+    /* O estúdio NÃO é apagado aqui: ele é da bancada, e quem o leva é o
+       `limparRodada` no fim do arquivo. O objeto sim, porque subiu por cima. */
     await apagarObjetos([chave]);
   }
 });

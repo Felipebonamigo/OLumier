@@ -11,6 +11,10 @@ export interface Tenant {
   email: string;
   /** Chave do objeto no bucket — não é URL. O link é assinado na hora de exibir. */
   logo_chave: string | null;
+  /* A fonte própria do estúdio (migração 026). Nulas para quem nunca enviou —
+     e nesse caso a opção nem aparece no seletor de tipografia. */
+  fonte_chave: string | null;
+  fonte_nome: string | null;
   cor_destaque: string;
   /** Conteúdo da vitrine `/e/<slug>`. Formato garantido só por `lerSite`. */
   site: unknown;
@@ -58,10 +62,27 @@ export interface Galeria {
   expira_em: Date | null;
   arquivada_em: Date | null;
   aparencia: unknown;
+  /* O que o fotógrafo está experimentando e ainda não publicou (migração 027).
+     O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
+  aparencia_rascunho: unknown;
   capa_media_id: string | null;
-  /** De onde a galeria veio, quando não nasceu no painel — ver migração 026. */
+  /** De onde a galeria veio, quando não nasceu no painel — ver migração 039. */
   origem: string | null;
   origem_ref: string | null;
+  /* Capa enviada como arquivo (migração 029). Vence capa_media_id, e não é uma
+     linha em `medias`: não aparece na galeria nem conta como entrega. */
+  capa_chave: string | null;
+  /* Onde a capa deve ser cortada, em porcentagem — 50/50 é o centro, que é o
+   * que o `object-cover` já fazia sozinho. Ver a migração 031. */
+  capa_foco_x: number;
+  capa_foco_y: number;
+  /* Busca por rosto (migração 028). `rostos_ligados_em` é a prova do
+     consentimento do fotógrafo; nula enquanto desligada. */
+  rostos_ativos: boolean;
+  rostos_ligados_em: Date | null;
+  /* Como o grupo das fotos sem capítulo se chama nesta galeria (migração 037).
+     Nulo — o normal — quer dizer "Outras fotos". Ver `nomeDoGrupoSolto`. */
+  grupo_solto: string | null;
   criado_em: Date;
   total_medias?: number;
 }
@@ -179,7 +200,7 @@ export async function criarGaleria(dados: {
   subtitulo?: string;
   dataEvento?: string;
   /**
-   * Quem criou de fora, e a partir de quê — ver migração 026. O painel e o
+   * Quem criou de fora, e a partir de quê — ver migração 039. O painel e o
    * plugin do Lightroom não passam nada aqui; hoje só o Atomatiza passa, pela
    * rota `POST /api/galerias`, que também é quem garante a idempotência.
    */
@@ -292,7 +313,7 @@ export async function restaurarGaleria(tenantId: string, galeriaId: string, ip?:
   /*
    * A referência de origem pode ter dona nova. Entre apagar e restaurar, o
    * Atomatiza pode ter recriado a galeria do mesmo contrato — o índice parcial
-   * da migração 026 deixa a lixeira de fora justamente para permitir isso. Se
+   * da migração 039 deixa a lixeira de fora justamente para permitir isso. Se
    * a restauração mantivesse o vínculo, o índice a recusaria e o fotógrafo
    * veria a lixeira "quebrada" no pior momento. A restaurada volta inteira,
    * só que sem a procedência: das duas, a que representa o contrato hoje é a

@@ -60,7 +60,10 @@ export default function Erro({
       )}
 
       <p className="mt-2 text-xs text-texto-faint">
-        Se continuar, fale com {marca.email}
+        Se continuar, chame no{" "}
+        <a href={marca.whatsappLink} className="underline underline-offset-4">
+          WhatsApp {marca.whatsappVisivel}
+        </a>
       </p>
     </main>
   );

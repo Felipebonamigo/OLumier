@@ -70,6 +70,18 @@ jobs:
       R2_ACCESS_KEY_ID: minioadmin
       R2_SECRET_ACCESS_KEY: minioadmin
       R2_BUCKET: galerias
+      # O bucket vai no CAMINHO, não no subdomínio.
+      #
+      # Entrou no merge com o master de 22/09/2026: lá o `forcePathStyle` deixou
+      # de ligar sozinho junto com o endereço e passou a ter chave própria, para
+      # um fornecedor futuro poder usar endereço próprio e continuar no estilo
+      # virtual. A troca é boa e cobra esta linha: R2 e B2 atendem em
+      # `bucket.host`, e o MinIO local não tem DNS curinga para isso — sem ela o
+      # cliente S3 procura `galerias.127.0.0.1`, não acha ninguém, e TODA rota de
+      # arquivo cai com erro de DNS, que não diz nada sobre bucket nenhum.
+      #
+      # Em produção a variável não existe e nada muda.
+      ARMAZEM_CAMINHO_NO_ENDERECO: "1"
 
     steps:
       # Actions presas ao sha do commit, não à tag: tag é PONTEIRO, e quem
@@ -125,6 +137,7 @@ jobs:
             echo "R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID"
             echo "R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY"
             echo "R2_BUCKET=$R2_BUCKET"
+            echo "ARMAZEM_CAMINHO_NO_ENDERECO=$ARMAZEM_CAMINHO_NO_ENDERECO"
           } > .env.local
 
       # A receita do banco NOVO, e ela é de duas partes: `db/schema.sql` é o

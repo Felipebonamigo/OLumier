@@ -178,19 +178,32 @@ await etapa("com download bloqueado, o original de foto COM prévia não vai no 
   return `${rows.length} original(is) fora do HTML`;
 });
 
-await etapa("com download liberado, a URL do original volta a aparecer", async () => {
+/*
+ * Desde 03/09/2026 o original NUNCA vai no HTML, nem com download liberado:
+ * ele é assinado sob demanda, na rota `/api/g/<id>/urls`, quando alguém clica
+ * em baixar. O que este passo prende é que a rota ENTREGA quando o download
+ * está liberado — o passo anterior prende que o HTML não vaza quando não está,
+ * e `testar-urls-sob-demanda.mjs` prende que a rota recusa nesse caso.
+ */
+await etapa("com download liberado, a rota assina o original quando pedido", async () => {
   await db.query("update galerias set permite_download = true where id = $1", [galeriaId]);
-  const bruto = await (await fetch(url)).text();
   const { rows } = await db.query(
-    `select chave from medias
+    `select id, chave from medias
       where galeria_id = $1 and pronto and chave_preview is not null limit 1`,
     [galeriaId],
   );
+  const r = await fetch(`${BASE}/api/g/${galeriaId}/urls`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids: [rows[0].id], tipo: "download" }),
+  });
+  const corpo = await r.json();
+  if (!r.ok) throw new Error(corpo.erro ?? `HTTP ${r.status}`);
   const original = encodeURIComponent(rows[0].chave).replace(/%2F/g, "/");
-  if (!bruto.includes(original)) {
-    throw new Error("o download está liberado mas o link não foi gerado");
+  if (!corpo.urls[rows[0].id]?.includes(original)) {
+    throw new Error("o download está liberado mas a rota não assinou o original");
   }
-  return "link presente quando deve estar";
+  return "assinado sob demanda, fora do HTML";
 });
 
 /*

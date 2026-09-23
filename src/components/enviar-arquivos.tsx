@@ -1,34 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { gerarDerivadas } from "@/lib/derivadas-client";
-import { enviarEmPartes } from "@/lib/multipart-client";
+import { useState } from "react";
 import {
   PARALELOS,
   type ArquivoComCaminho,
   arquivosDeArrasto,
-  arquivoAceito,
   comCaminhoDoInput,
-  comRetentativa,
-  emParalelo,
-  manterAcordado,
-  ordenarNaturalPorCaminho,
+  separarRepetidos,
 } from "@/lib/fila-upload";
-import { capitulosDaPasta } from "@/lib/capitulos-pasta";
-import { garantirSecoesAction } from "@/app/painel/actions";
-
-type Situacao = "esperando" | "preparando" | "enviando" | "pronto" | "erro";
-
-interface ItemFila {
-  id: string;
-  nome: string;
-  bytes: number;
-  progresso: number;
-  situacao: Situacao;
-  tentativa: number;
-  erro?: string;
-}
+import { useEnvio } from "@/components/envio-em-curso";
 
 export interface SecaoDestino {
   id: string;
@@ -36,278 +16,87 @@ export interface SecaoDestino {
 }
 
 /**
- * Envia o arquivo direto para o bucket com XMLHttpRequest.
- * O `fetch` seria mais moderno, mas não reporta progresso de upload — e para
- * arquivo grande, barra de progresso não é enfeite: sem ela o usuário acha que
- * travou e recarrega a página no meio.
+ * A zona de arrastar — e SÓ ela.
+ *
+ * A fila mora em `envio-em-curso.tsx`, montada no layout da galeria, porque o
+ * envio precisa continuar quando a pessoa vai para o Design. Este componente
+ * escolhe os arquivos, faz a pergunta sobre nomes repetidos e entrega a lista.
+ * Nada de estado de envio aqui: era o estado morando nesta rota que matava o
+ * upload na troca de aba (ver o comentário de `ProvedorDeEnvio`).
  */
-function enviarComProgresso(url: string, arquivo: Blob, aoProgredir: (pct: number) => void) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", arquivo.type);
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable) aoProgredir(Math.round((e.loaded / e.total) * 100));
-    });
-    xhr.addEventListener("load", () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`falha no envio (HTTP ${xhr.status})`)),
-    );
-    xhr.addEventListener("error", () => reject(new Error("conexão interrompida")));
-    xhr.addEventListener("abort", () => reject(new Error("envio cancelado")));
-    xhr.send(arquivo);
-  });
-}
-
-const formatar = (b: number) => {
-  if (b < 1024) return `${b} B`;
-  const u = ["KB", "MB", "GB"];
-  let v = b / 1024;
-  let i = 0;
-  while (v >= 1024 && i < u.length - 1) {
-    v /= 1024;
-    i++;
-  }
-  return `${v.toFixed(v < 10 ? 1 : 0)} ${u[i]}`;
-};
-
-const duracao = (ms: number) => {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  return m < 60 ? `${m}min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
-};
-
 export function EnviarArquivos({
-  galeriaId,
   secoes,
+  rostosAtivos,
+  nomesNaGaleria,
 }: {
-  galeriaId: string;
   secoes: SecaoDestino[];
+  /** A busca por rosto está ligada: cada foto é medida durante o envio. */
+  rostosAtivos: boolean;
+  /** Nomes de arquivo que já estão na galeria — a base da pergunta de repetido. */
+  nomesNaGaleria: string[];
 }) {
-  const [fila, setFila] = useState<ItemFila[]>([]);
   const [arrastando, setArrastando] = useState(false);
-  const [rodando, setRodando] = useState(false);
   const [destino, setDestino] = useState("");
-  const [inicio, setInicio] = useState<number | null>(null);
-  /* Começa em 0, não em Date.now(): ler o relógio durante a renderização é
-   * impuro (o servidor e o cliente leem instantes diferentes) e o valor era
-   * lixo de qualquer forma — só serve depois que a fila começa, e é lá que ele
-   * é acertado, junto com `inicio`. */
-  const [agora, setAgora] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const pastaRef = useRef<HTMLInputElement>(null);
-  const router = useRouter();
+  /* A pergunta fica pendurada aqui até a pessoa responder. Guardar as duas
+     listas separadas é o que permite as três respostas sem recontar nada. */
+  const [pergunta, setPergunta] = useState<{
+    novos: ArquivoComCaminho[];
+    repetidos: ArquivoComCaminho[];
+  } | null>(null);
+  const envio = useEnvio();
 
-  const atualizar = (id: string, mudanca: Partial<ItemFila>) =>
-    setFila((f) => f.map((i) => (i.id === id ? { ...i, ...mudanca } : i)));
+  const mandar = (itens: ArquivoComCaminho[]) =>
+    envio.enfileirar(itens, { destino: destino || undefined, rostosAtivos });
 
-  // Relógio só enquanto a fila roda — alimenta a estimativa de tempo restante.
-  useEffect(() => {
-    if (!rodando) return;
-    const t = setInterval(() => setAgora(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [rodando]);
-
-  // Fechar a aba no meio de 600 fotos perde o que faltava: avisa antes.
-  useEffect(() => {
-    if (!rodando) return;
-    const avisar = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", avisar);
-    return () => window.removeEventListener("beforeunload", avisar);
-  }, [rodando]);
-
-  const processar = useCallback(
-    async (brutos: ArquivoComCaminho[]) => {
-      const itens = ordenarNaturalPorCaminho(brutos.filter((b) => arquivoAceito(b.arquivo)));
-      if (itens.length === 0) return;
-
-      /*
-       * A pasta do fotógrafo JÁ está organizada — "01 Making Of", "02 Cerimônia".
-       * Ler isso aqui é o que evita ele refazer no painel o que já fez no disco.
-       *
-       * Acontece antes do primeiro arquivo subir, numa chamada só: descobrir o
-       * capítulo arquivo a arquivo seriam centenas de idas ao servidor.
-       * Se falhar, o envio segue para o destino escolhido na tela — perder o
-       * capítulo é chato, perder o casamento inteiro é inaceitável.
-       */
-      const porCaminho = new Map<string, string>();
-      const capitulos = capitulosDaPasta(itens.map((i) => i.caminho));
-      if (capitulos.length > 0) {
-        try {
-          const criados = await garantirSecoesAction(
-            galeriaId,
-            capitulos.map((c) => c.nome),
-          );
-          const idPorNome = new Map(criados.map((c) => [c.nome, c.id]));
-          for (const c of capitulos) {
-            const id = idPorNome.get(c.nome);
-            if (id) for (const caminho of c.caminhos) porCaminho.set(caminho, id);
-          }
-        } catch {
-          // segue sem capítulo; o fotógrafo move depois, e nada se perde
-        }
-      }
-
-      const arquivos = itens.map((i) => i.arquivo);
-      const novos: ItemFila[] = arquivos.map((a, i) => ({
-        id: `${Date.now()}-${i}-${a.name}`,
-        nome: a.name,
-        bytes: a.size,
-        progresso: 0,
-        situacao: "esperando",
-        tentativa: 0,
-      }));
-      setFila((f) => [...f, ...novos]);
-      setRodando(true);
-      setInicio((atual) => atual ?? Date.now());
-      setAgora(Date.now()); // sem isto, o primeiro segundo mostraria tempo negativo
-
-      const soltar = await manterAcordado();
-
-      // Vários ao mesmo tempo: um por vez faria 600 fotos levarem horas.
-      await emParalelo(arquivos, PARALELOS, async (arquivo, i) => {
-        const item = novos[i];
-
-        /*
-         * O preparo acontece UMA vez, mesmo com várias tentativas.
-         *
-         * Antes ele estava dentro do `comRetentativa`: uma queda de rede durante
-         * o envio fazia a tentativa seguinte chamar /upload de novo e nascer uma
-         * SEGUNDA linha em `medias`. A primeira ficava pendente para sempre,
-         * segurando espaço da quota por um arquivo que nunca existiu — e o dono
-         * não tinha como ver nem soltar isso pelo painel.
-         */
-        // União discriminada em vez de campos opcionais: `url` só existe no
-        // envio simples e `tamanhoParte` só no envio em partes. Assim o
-        // compilador cobra a checagem do `emPartes` antes de usar cada um.
-        type Preparo = { mediaId: string; urlThumb?: string; urlPreview?: string } & (
-          | { emPartes: true; tamanhoParte: number }
-          | { emPartes: false; url: string }
-        );
-        let preparado: Preparo | null = null;
-
-        try {
-          await comRetentativa(
-            async () => {
-              atualizar(item.id, { situacao: "preparando", progresso: 0 });
-              const derivadas = await gerarDerivadas(arquivo);
-
-              atualizar(item.id, { situacao: "enviando" });
-
-              if (!preparado) {
-                const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    nome: arquivo.name,
-                    mime: arquivo.type,
-                    bytes: arquivo.size,
-                    comDerivadas: Boolean(derivadas),
-                    largura: derivadas?.largura,
-                    altura: derivadas?.altura,
-                    /* A pasta manda: o capítulo lido do disco vence o seletor da
-                     * tela, que é o palpite para quem soltou arquivos soltos. */
-                    secaoId: porCaminho.get(itens[i].caminho) || destino || undefined,
-                    // A ordem que o fotógrafo escolheu é a narrativa do casamento.
-                    indice: i,
-                  }),
-                });
-                const corpo = await preparo.json();
-                if (!preparo.ok) {
-                  // Sem espaço, tipo recusado ou grande demais: insistir não resolve.
-                  if (preparo.status === 507 || preparo.status === 415 || preparo.status === 413) {
-                    throw Object.assign(new Error(corpo.erro), { definitivo: true });
-                  }
-                  throw new Error(corpo.erro ?? "não foi possível preparar o envio");
-                }
-                preparado = corpo;
-              }
-              const dados = preparado!;
-
-              // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
-              if (dados.emPartes) {
-                await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
-                  atualizar(item.id, { progresso: pct }),
-                );
-              } else {
-                await enviarComProgresso(dados.url, arquivo, (pct) =>
-                  atualizar(item.id, { progresso: pct }),
-                );
-              }
-
-              // Derivadas juntas: somam ~5% do original e não travam a fila se falharem.
-              if (derivadas && dados.urlThumb && dados.urlPreview) {
-                await Promise.allSettled([
-                  enviarComProgresso(dados.urlThumb, derivadas.thumb, () => {}),
-                  enviarComProgresso(dados.urlPreview, derivadas.preview, () => {}),
-                ]);
-              }
-
-              // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
-              if (!dados.emPartes) {
-                const conf = await fetch(`/api/medias/${dados.mediaId}/confirmar`, { method: "POST" });
-                if (!conf.ok) {
-                  const c = await conf.json();
-                  throw new Error(c.erro ?? "o arquivo não foi confirmado");
-                }
-              }
-            },
-            (tentativa) => atualizar(item.id, { tentativa, situacao: "esperando", progresso: 0 }),
-          );
-
-          atualizar(item.id, { situacao: "pronto", progresso: 100 });
-        } catch (e) {
-          /*
-           * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
-           * preso até a limpeza diária passar. Quem acabou de ver um envio
-           * falhar costuma tentar de novo no minuto seguinte — e encontrar
-           * "sem espaço" por causa da tentativa anterior seria absurdo.
-           */
-          const p = preparado as { mediaId: string; emPartes: boolean } | null;
-          if (p?.mediaId) {
-            const rota = p.emPartes
-              ? `/api/medias/${p.mediaId}/partes`
-              : `/api/medias/${p.mediaId}/confirmar`;
-            await fetch(rota, { method: "DELETE" }).catch(() => {});
-          }
-          atualizar(item.id, {
-            situacao: "erro",
-            erro: e instanceof Error ? e.message : "falhou",
-          });
-        }
-      });
-
-      soltar();
-      setRodando(false);
-      router.refresh();
-    },
-    [galeriaId, destino, router],
-  );
-
-  const enviados = fila.filter((i) => i.situacao === "pronto").length;
-  const comErro = fila.filter((i) => i.situacao === "erro");
-  const restantes = fila.length - enviados - comErro.length;
-  const bytesEnviados = fila
-    .filter((i) => i.situacao === "pronto")
-    .reduce((s, i) => s + i.bytes, 0);
-
-  // Estimativa pela média já observada — mais honesta que fingir precisão.
-  const decorrido = inicio ? agora - inicio : 0;
-  const restante =
-    enviados >= 2 && restantes > 0 ? duracao((decorrido / enviados) * restantes) : null;
+  /**
+   * ── A PERGUNTA DO NOME REPETIDO ────────────────────────────────────────
+   *
+   * Juan, 05/09/2026: "impedir que subam fotos com o mesmo nome, pra não ficar
+   * repetidas" e, logo depois, "adicionar um aviso que tem fotos com o mesmo
+   * nome e dar as opções: subir mesmo assim, ignorar as repetidas e subir o
+   * restante".
+   *
+   * O segundo pedido corrige o primeiro, e ele tem razão: IMPEDIR seria errado.
+   * Duas fotos diferentes podem se chamar `DSC_0001.jpg` — uma da câmera do
+   * primeiro fotógrafo, outra da do segundo — e recusar em silêncio faria
+   * sumir foto de casamento. Perguntar deixa a decisão com quem sabe.
+   *
+   * Sem repetido a pergunta não aparece: quem arrasta uma pasta nova não
+   * merece um diálogo no caminho.
+   */
+  function conferirEEnviar(brutos: ArquivoComCaminho[]) {
+    if (brutos.length === 0) return;
+    const { novos, repetidos } = separarRepetidos(brutos, nomesNaGaleria);
+    if (repetidos.length === 0) mandar(brutos);
+    else setPergunta({ novos, repetidos });
+  }
 
   return (
     <section className="mt-8">
       {secoes.length > 0 && (
         <label className="mb-3 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-texto-soft">Enviar para o capítulo:</span>
+          {/*
+            LIVRE DURANTE O ENVIO (16/09/2026).
+
+            Era `disabled={envio.rodando}`, e a trava tinha razão de ser: a fila
+            de envio era uma corrida fechada por lote, e mandar um segundo lote
+            no meio do primeiro criava duas corridas disputando a mesma rede.
+
+            Felipe topou com isso: "não consigo enviar simultaneamente fotos
+            para making of, cerimônia, decoração… tenho que esperar subir as
+            fotos de um dos capítulos". E depois, direto: "não bloquear o
+            'enviar para capítulo'".
+
+            A fila virou fila de verdade — um consumidor só, lista que cresce
+            (ver `emParaleloDeFila`). O capítulo de cada arquivo é resolvido no
+            momento em que ele ENTRA na fila e viaja com ele, então trocar o
+            seletor agora não mexe no que já está subindo.
+          */}
           <select
             value={destino}
             onChange={(e) => setDestino(e.target.value)}
-            disabled={rodando}
-            className="rounded-lg border border-linha bg-void px-3 py-1.5 text-sm focus:border-acento focus:outline-none disabled:opacity-50"
+            className="rounded-lg border border-linha bg-void px-3 py-1.5 text-sm focus:border-acento focus:outline-none"
           >
             <option value="">— sem capítulo —</option>
             {secoes.map((s) => (
@@ -316,7 +105,9 @@ export function EnviarArquivos({
               </option>
             ))}
           </select>
-          <span className="text-xs text-texto-faint">dá para mover depois</span>
+          <span className="text-xs text-texto-faint">
+            dá para trocar e mandar outro capítulo sem esperar este terminar
+          </span>
         </label>
       )}
 
@@ -329,7 +120,7 @@ export function EnviarArquivos({
         onDrop={async (e) => {
           e.preventDefault();
           setArrastando(false);
-          processar(await arquivosDeArrasto(e.dataTransfer));
+          conferirEEnviar(await arquivosDeArrasto(e.dataTransfer));
         }}
         className={`rounded-xl border border-dashed px-6 py-12 text-center transition ${
           arrastando ? "border-acento bg-acento/5" : "border-linha-forte bg-carbon"
@@ -344,14 +135,14 @@ export function EnviarArquivos({
         <div className="mt-5 flex flex-wrap justify-center gap-2">
           <button
             type="button"
-            onClick={() => pastaRef.current?.click()}
+            onClick={() => document.getElementById("escolher-pasta")?.click()}
             className="rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto"
           >
             Escolher pasta
           </button>
           <button
             type="button"
-            onClick={() => inputRef.current?.click()}
+            onClick={() => document.getElementById("escolher-arquivos")?.click()}
             className="rounded-lg border border-linha-forte px-4 py-2.5 text-sm transition hover:bg-carbon-2"
           >
             Escolher arquivos
@@ -359,109 +150,87 @@ export function EnviarArquivos({
         </div>
 
         <input
-          ref={pastaRef}
+          id="escolher-pasta"
           type="file"
           multiple
           {...({ webkitdirectory: "", directory: "" } as Record<string, string>)}
           className="hidden"
           onChange={(e) => {
-            processar([...(e.target.files ?? [])].map(comCaminhoDoInput));
+            conferirEEnviar([...(e.target.files ?? [])].map(comCaminhoDoInput));
             e.target.value = "";
           }}
         />
         <input
-          ref={inputRef}
+          id="escolher-arquivos"
           type="file"
           multiple
           accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
           className="hidden"
           onChange={(e) => {
-            processar([...(e.target.files ?? [])].map(comCaminhoDoInput));
+            conferirEEnviar([...(e.target.files ?? [])].map(comCaminhoDoInput));
             e.target.value = "";
           }}
         />
 
         <p className="mt-4 text-xs text-texto-faint">
-          JPG, PNG, WEBP, HEIC · MP4, MOV, WEBM · filmes de até 100 GB · {PARALELOS} de cada vez
+          JPG, PNG, WEBP, HEIC · MP4, MOV, WEBM · filmes de até 100 GB · {PARALELOS} de cada vez ·
+          o envio continua enquanto você mexe nas outras abas
         </p>
       </div>
 
-      {fila.length > 0 && (
-        <div className="mt-4 rounded-xl border border-linha bg-carbon p-4">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <span className="text-sm font-medium">
-              {rodando
-                ? "Enviando…"
-                : comErro.length > 0
-                  ? "Envio concluído com falhas"
-                  : "Envio concluído"}
-            </span>
-            <span className="text-xs tabular-nums text-texto-soft">
-              {enviados} de {fila.length}
-              {comErro.length > 0 ? ` · ${comErro.length} com erro` : ""}
-              {restante ? ` · ~${restante} restantes` : ""}
-            </span>
-          </div>
-
-          {/* Progresso do conjunto: numa fila de 600, o total importa mais que cada linha. */}
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-carbon-2">
-            <div
-              className="h-full rounded-full bg-acento transition-[width]"
-              style={{ width: `${fila.length ? (enviados / fila.length) * 100 : 0}%` }}
-            />
-          </div>
-          <p className="mt-1.5 text-[11px] text-texto-faint">
-            {formatar(bytesEnviados)} enviados
-            {rodando && " · mantenha esta aba aberta"}
+      {pergunta && (
+        <div
+          role="alertdialog"
+          aria-label="Arquivos com nome repetido"
+          className="mt-4 rounded-xl border border-alerta/40 bg-alerta/10 p-4"
+        >
+          <p className="text-sm font-medium text-alerta">
+            {pergunta.repetidos.length}{" "}
+            {pergunta.repetidos.length === 1
+              ? "arquivo tem nome igual ao de um que já está na galeria"
+              : "arquivos têm nome igual ao de outros que já estão na galeria"}
           </p>
-
-          {/* Lista com altura limitada: sem isso, 600 itens esticariam a página sem fim. */}
-          <ul className="mt-3 flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
-            {fila.map((item) => (
-              <li key={item.id} className="text-xs">
-                <div className="flex items-baseline justify-between gap-3">
-                  <span className="min-w-0 flex-1 truncate">{item.nome}</span>
-                  <span className="shrink-0 tabular-nums text-texto-faint">
-                    {item.situacao === "erro" ? (
-                      <span className="text-erro">{item.erro}</span>
-                    ) : item.situacao === "pronto" ? (
-                      <span className="text-ok">enviado</span>
-                    ) : item.tentativa > 0 ? (
-                      <span className="text-alerta">tentando de novo ({item.tentativa})…</span>
-                    ) : item.situacao === "preparando" ? (
-                      "preparando…"
-                    ) : (
-                      `${item.progresso}% · ${formatar(item.bytes)}`
-                    )}
-                  </span>
-                </div>
-                <div className="mt-1 h-0.5 overflow-hidden rounded-full bg-carbon-2">
-                  <div
-                    className={`h-full transition-[width] ${
-                      item.situacao === "erro"
-                        ? "bg-erro"
-                        : item.situacao === "pronto"
-                          ? "bg-ok"
-                          : "bg-acento"
-                    }`}
-                    style={{ width: `${item.situacao === "erro" ? 100 : item.progresso}%` }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-
-          {!rodando && comErro.length > 0 && (
+          <p className="mt-1 text-xs text-texto-soft">
+            {pergunta.repetidos
+              .slice(0, 6)
+              .map((r) => r.arquivo.name)
+              .join(", ")}
+            {pergunta.repetidos.length > 6 && ` e mais ${pergunta.repetidos.length - 6}`}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={() => setFila((f) => f.filter((i) => i.situacao !== "erro"))}
-              className="mt-3 rounded-lg border border-linha px-3 py-1.5 text-xs text-texto-soft transition hover:bg-carbon-2"
+              onClick={() => {
+                mandar([...pergunta.novos, ...pergunta.repetidos]);
+                setPergunta(null);
+              }}
+              className="rounded-lg border border-linha-forte px-3 py-1.5 text-xs transition hover:bg-carbon-2"
             >
-              Limpar os que falharam
+              Enviar mesmo assim ({pergunta.novos.length + pergunta.repetidos.length})
             </button>
-          )}
+            <button
+              type="button"
+              onClick={() => {
+                if (pergunta.novos.length) mandar(pergunta.novos);
+                setPergunta(null);
+              }}
+              disabled={pergunta.novos.length === 0}
+              className="rounded-lg bg-acento px-3 py-1.5 text-xs font-semibold text-void transition hover:bg-acento-alto disabled:opacity-50"
+            >
+              Ignorar as repetidas e enviar {pergunta.novos.length}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPergunta(null)}
+              className="rounded-lg px-3 py-1.5 text-xs text-texto-soft underline underline-offset-4 transition hover:text-texto"
+            >
+              cancelar
+            </button>
+          </div>
         </div>
       )}
+
+      {envio.avisoRostos && <p className="mt-3 text-xs text-alerta">{envio.avisoRostos}</p>}
     </section>
   );
 }

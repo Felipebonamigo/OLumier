@@ -1,7 +1,8 @@
 # Ligar a cobrança — passo a passo
 
-*A cobrança está **adormecida**: sem `ASAAS_API_KEY` no ambiente, nada é cobrado
-e o uso segue liberado. Este documento é o roteiro para quando você quiser ligar.*
+*A cobrança está **ligada em produção** desde 01/09/2026, com split para as três
+carteiras. Nenhum cliente pagante existe ainda, então nada foi cobrado nem
+distribuído até agora. Este documento descreve como está e por quê.*
 
 > ⚠️ **Correção de 20/08/2026.** Este documento dizia "pronto e testado" e estava
 > errado, de um jeito que só apareceria no pior momento: o `scripts/testar-cobranca.mjs`
@@ -14,23 +15,132 @@ e o uso segue liberado. Este documento é o roteiro para quando você quiser lig
 > a criação de assinatura só terá sido provada de verdade quando rodar contra a
 > API real.
 
-## Estado de hoje (20/08/2026)
+## Estado de hoje (05/09/2026)
 
 | Item | Situação |
 |---|---|
 | Webhook e matemática do split | ✅ testado (`scripts/testar-cobranca.mjs`) |
-| Criar cliente/assinatura no Asaas | ⚠️ código pronto, **nunca rodou contra a API** |
+| Criar cliente/assinatura no Asaas | ✅ provado no sandbox (`scripts/ensaio-cartao-sandbox.mjs`, 05/09/2026) |
+| Cartão salvo e captura automática | ✅ provado: cartão fica com token, e assinatura com o token nasce CONFIRMED sem abrir fatura |
+| Webhook | ✅ URL, 9 eventos e **token** conferidos em 05/09/2026 |
+| Assinaturas reais | ❌ **zero** — nada foi cobrado ainda |
 | CPF/CNPJ do titular | ✅ coletado e validado ao ativar a assinatura |
 | Trial vencido / inadimplência travam o envio | ✅ `src/lib/assinatura.ts` |
 | Conta do Asaas | usar a **mesma do Atomatiza** (decisão do Felipe) |
-| Carteiras dos sócios | ❌ Carol e Sirius ainda não têm conta no Asaas |
-| Percentuais do lucro | ⚠️ 50/25/25 é **proposta**, não acordo |
-| Ambiente | `sandbox` (não move dinheiro) |
+| Carteiras dos sócios | ✅ os três têm conta e mandaram o `walletId` (31/08/2026) |
+| Base do split | **lucro** — a reserva de custo sai antes, ver abaixo |
+| Percentuais | 50/25/25 do lucro |
+| Rateio do custo | **igual** — o custo todo dividido em 3 partes iguais (acordo de 01/09/2026) |
+| Caixa da operação | **conta principal** (decisão do Felipe, 01/09/2026) — `ASAAS_CARTEIRA_OPERACAO` fica vazia |
+| Ambiente | `producao` |
+| Variáveis no servidor | ✅ as três `ASAAS_CARTEIRA_*` gravadas em 01/09/2026, split conferido no ar |
 
-**Comportamento enquanto está assim:** o split fica vazio e **100% do valor
-permanece na conta principal**. Nenhuma cobrança falha por causa disso — foi
-escrito assim de propósito, porque cobrança que quebra por configuração
-incompleta é muito pior que dinheiro parado esperando distribuição.
+## Como o dinheiro é dividido
+
+O acordo, nas palavras do Felipe em 01/09/2026: **o custo todo é dividido em 3
+partes iguais, e o lucro é 50/25/25.**
+
+Em conta, cada sócio recebe `fatia × líquido − custo ÷ 3`. Com R$ 1.000 de
+receita e R$ 529 de custo:
+
+| | recebe |
+|---|---|
+| Felipe | R$ 323,67 |
+| Carol | R$ 73,67 |
+| Sirius | R$ 73,67 |
+| **soma** | **R$ 471,00** (o lucro inteiro) |
+
+A reserva de custo sai antes e fica parada na conta principal até a fatura da
+Backblaze e da Cloudflare chegar. Ninguém adianta dinheiro e ninguém cobra
+ninguém.
+
+### O que isso faz com a divisão do lucro
+
+Com o custo em partes iguais, **o lucro deixa de sair 50/25/25**. No exemplo
+acima o Felipe fica com 68,7% do lucro, e cada um dos outros com 15,6% — porque
+ele banca um terço de um custo que a fatia dele geraria em metade. É consequência
+aritmética do acordo, não defeito. Quem quiser 50/25/25 do lucro precisa do
+rateio `proporcional`, que é uma palavra em `RATEIO_DO_CUSTO`.
+
+### Onde o acordo encosta no limite
+
+Quando o custo passa de **75% da receita**, um terço dele fica maior que a fatia
+de quem tem 25% — ou seja, a Carol e o Sirius deveriam PAGAR. Split negativo não
+existe, então a fatia deles trava em zero e o que sobra vai para o Felipe (nunca
+para a reserva: essa é intocável).
+
+Acontece em seis planos, todos anuais: 5 TB e 10 TB nos três segmentos. Num anual
+de 10 TB (R$ 7.999,90) a Carol e o Sirius ficam com **zero** e o Felipe com
+R$ 840,82. `scripts/testar-planos.mjs` lista esses planos a cada execução, para
+a consequência não sumir de vista.
+
+Em 31/08/2026 o Felipe pediu a divisão da receita cheia, com o custo acertado por
+fora. Ficou um dia assim e voltou, por causa deste número: da faixa de 2 TB para
+cima, no pior caso (espaço 100% cheio), metade da receita é **menos** que a
+reserva do plano — e num ano de 10 TB o descoberto chega a **R$ 5.501,75**,
+adiantados por quem opera. `scripts/testar-planos.mjs` continua medindo e
+imprimindo esse número quando a base é `receita`, para a conta não sumir junto
+com a decisão.
+
+Trocar de volta é uma palavra: `BASE_DO_SPLIT` em `src/config/socios.ts`.
+
+### A reserva varia MUITO com o plano
+
+Não é distorção, é o custo real de cada faixa — e foi o que matou a divisão da
+receita a percentual fixo: nenhum número único é seguro em 10 TB e justo em
+100 GB.
+
+| faixa | reserva | % da receita líquida | Felipe | Carol | Sirius |
+|---|---|---|---|---|---|
+| 100 GB | R$ 5,96 | 12,7% | 43,7% | 21,8% | 21,8% |
+| 500 GB | R$ 29,82 | 27,9% | 36,1% | 18,0% | 18,0% |
+| 1 TB | R$ 59,63 | 43,5% | 28,2% | 14,1% | 14,1% |
+| 2 TB | R$ 119,27 | 55,0% | 22,5% | 11,3% | 11,3% |
+| 10 TB | R$ 596,34 | 74,8% | 12,6% | 6,3% | 6,3% |
+
+Os percentuais são calculados por plano, na criação da assinatura. Cada sócio
+recebe sempre a mesma fatia **do lucro**; o que muda de faixa para faixa é quanto
+do preço é lucro.
+
+### O caixa da operação (opcional)
+
+Sem `ASAAS_CARTEIRA_OPERACAO`, a reserva fica na conta principal — o Asaas deixa
+lá o que não foi distribuído. Funciona, e é o padrão.
+
+Com a variável preenchida, a reserva vira uma **linha com nome** no split: sai da
+cobrança na frente dos três, todo mês, para uma conta que não é de ninguém em
+particular. A conta é a mesma; o que muda é que ela deixa de depender da palavra
+de quem opera — dinheiro parado na conta de um sócio *parece* margem dele.
+
+A reserva usa o pior caso, então ela **sobra** de propósito. O que sobrar no fim
+do ano é lucro a distribuir, e isso precisa estar combinado por escrito.
+
+### Por que tudo vai em percentual, e nunca em valor fixo
+
+O Asaas valida o split contra o valor **líquido**, e a taxa depende do meio de
+pagamento, que o cliente só escolhe depois (`billingType: "UNDEFINED"`). Valor
+fixo seria chutar a taxa; chute baixo estoura o líquido, o Asaas bloqueia a
+cobrança (`PAYMENT_SPLIT_DIVERGENCE_BLOCK`), dá 2 dias úteis e cancela os splits.
+Em percentual quem aplica é o Asaas, sobre o líquido que ele mesmo calculou.
+`scripts/testar-split.mjs` prende isso.
+
+**Sócio sem carteira configurada é pulado**, e a fatia dele fica na conta
+principal em vez de virar erro na cobrança — e em vez de ser redistribuída entre
+os outros. É de propósito nas duas pontas: cobrança que quebra por configuração
+incompleta é pior que dinheiro parado esperando dono, e quem ainda não se
+cadastrou continua tendo direito ao que é dele.
+
+## O que o split NÃO cobre
+
+A reserva cobre só o **armazenamento** (Backblaze e Cloudflare) mais a taxa do
+Asaas. O custo fixo — DAS-MEI, VPS e domínio, R$ 129,33/mês — **não entra**: ele
+não pertence a cobrança nenhuma e não teria como ser rateado por cobrança sem
+mudar de valor a cada cliente novo (ver `src/config/custos-fixos.ts`).
+
+Se o acordo entre os sócios divide o custo fixo, ele precisa ser acertado **por
+fora, uma vez por mês** — R$ 43,11 para cada um, com a lista de três. Nenhum
+split de pagamento resolve isso, porque o Asaas divide cobrança por cobrança e
+não conhece o total do mês.
 
 ## Passo 1 — Cada sócio cria conta no Asaas
 
@@ -79,13 +189,52 @@ Depois: `systemctl restart fotonio`.
 ⚠️ Comece com `ASAAS_AMBIENTE=sandbox` e faça uma assinatura de teste antes de
 apontar para produção.
 
-## Passo 4 — Webhook no painel do Asaas
+## Passo 4 — Webhook no painel do Asaas ✅ feito
 
-Adicionar uma URL **nova** (sem mexer na que o Atomatiza já usa):
+Configurado e conferido em 05/09/2026:
 
-- URL: `https://olumier.com.br/api/asaas/webhook`
-- Token: o mesmo do `ASAAS_WEBHOOK_TOKEN`
-- Eventos: pagamento confirmado/recebido, vencido, estornado, assinatura removida
+- Nome: `galeriaatomo` · id `0d8a68bd-95ef-4a87-af3b-da4ae555ada5`
+- URL: `https://galeriaatomo.com.br/api/asaas/webhook`
+- Token: o mesmo do `ASAAS_WEBHOOK_TOKEN` do servidor
+- 9 eventos · `SEQUENTIALLY` · fila ok · `penalizedRequestsCount: 0`
+
+### O token faltava, e isso era um bloqueio silencioso
+
+Até 05/09 o webhook existia, apontava certo e estava ativo — mas **sem token**. A
+rota exige o header `asaas-access-token` e devolvia **401** a toda entrega.
+
+O efeito não seria "webhook falhando": seria **o cliente pagar e continuar
+bloqueado**. O cartão é capturado, o dinheiro entra, o Asaas avisa, e o sistema
+recusa o aviso — sem ninguém perceber, porque nada na tela diz que um aviso foi
+recusado.
+
+E passava do nosso quintal: o Asaas repete entrega que falha e **suspende a fila
+da conta** depois de falhas seguidas. A conta é compartilhada com o Atomatiza,
+que tem cliente pagando. A primeira assinatura aqui poderia derrubar a cobrança
+de lá.
+
+Não tinha mordido só porque ninguém havia pagado ainda.
+
+### Como conferir que o token dos dois lados é o mesmo
+
+O Asaas **nunca devolve** o valor do token — só o booleano `hasAuthToken` no
+recurso individual (`GET /v3/webhooks/{id}`; na LISTA nem o booleano aparece,
+que foi o que me fez achar que a gravação tinha falhado). Então `hasAuthToken:
+true` prova que existe um token, não que é o certo.
+
+A prova de verdade é bater na rota, do próprio servidor:
+
+```bash
+T=$(grep -m1 "^ASAAS_WEBHOOK_TOKEN=" /opt/fotonio-shared/.env.production | cut -d= -f2-)
+curl -s -o /dev/null -w "sem token:  %{http_code}
+" -X POST   -H "Content-Type: application/json"   -d "{\"event\":\"PAYMENT_CONFIRMED\",\"payment\":{\"externalReference\":\"nao-existe:0000\"}}"   https://galeriaatomo.com.br/api/asaas/webhook
+curl -s -w "com token:  %{http_code}
+" -X POST   -H "Content-Type: application/json" -H "asaas-access-token: $T"   -d "{\"event\":\"PAYMENT_CONFIRMED\",\"payment\":{\"externalReference\":\"nao-existe:0000\"}}"   https://galeriaatomo.com.br/api/asaas/webhook
+```
+
+Medido em 05/09/2026: **401** sem token, **200** com token, e o corpo
+`{"ok":true,"ignorado":"outro produto"}` — que de quebra prova a proteção do
+Atomatiza funcionando, já que a referência não tem o prefixo nosso.
 
 ## ⚠️ O cuidado que não pode ser esquecido
 

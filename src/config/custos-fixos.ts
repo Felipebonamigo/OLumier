@@ -24,7 +24,7 @@ import {
   montar,
   type Montagem,
 } from "./planos";
-import { TAXA_COBRANCA } from "./socios";
+import { taxaCobrancaCentavos } from "./socios";
 
 export interface CustoFixo {
   id: string;
@@ -123,7 +123,13 @@ export const SPREAD_CARTAO = 0.03;
  */
 export function custoVariavelRealCentavos(m: Montagem, ocupacao = 1): number {
   const armazenamento = custoArmazenamentoCentavos(m) * ocupacao;
-  return armazenamento * (1 + IOF) * (1 + SPREAD_CARTAO) + TAXA_COBRANCA;
+  /* A taxa do Asaas depende do PREÇO, não é mais um valor fixo: R$ 0,49 + 2,99%
+     no cartão, que é o meio mais caro e o que a reserva tem de aguentar. Ver
+     `taxaCobrancaCentavos` em socios.ts. Por isso ela sai do preço do plano
+     montado, e não de uma constante. */
+  return (
+    armazenamento * (1 + IOF) * (1 + SPREAD_CARTAO) + taxaCobrancaCentavos(montar(m).precoCentavos)
+  );
 }
 
 /** Quanto sobra de cada cliente para pagar o custo fixo. */

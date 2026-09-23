@@ -42,6 +42,102 @@ await etapa("envia em paralelo, respeitando o limite", async () => {
   return `12 arquivos, pico de ${pico} simultâneos`;
 });
 
+/*
+ * ── DOIS CAPÍTULOS AO MESMO TEMPO (16/09/2026) ───────────────────────────
+ *
+ * Felipe: "não consigo enviar simultaneamente fotos para making of, cerimônia,
+ * decoração, etc. Tenho que esperar subir as fotos de um dos capítulos."
+ *
+ * O seletor de capítulo ficava travado durante o envio porque a fila era uma
+ * corrida FECHADA por lote: `emParalelo` recebe um array pronto, e um segundo
+ * lote virava uma segunda corrida — o dobro dos envios simultâneos que a rede
+ * aguenta, e a primeira a acabar apagando o estado da outra.
+ *
+ * `emParaleloDeFila` troca o array por uma função que entrega o próximo item.
+ * As três etapas abaixo são a promessa disso: o lote novo entra na MESMA
+ * corrida, o limite continua valendo com a fila crescendo, e ninguém pega o
+ * mesmo item duas vezes.
+ */
+await etapa("um lote enfileirado NO MEIO do primeiro entra na mesma corrida", async () => {
+  const pendentes = [1, 2, 3, 4, 5, 6];
+  const feitos = [];
+  let simultaneos = 0;
+  let pico = 0;
+  let empurrou = false;
+
+  await mod.emParaleloDeFila(
+    () => pendentes.shift() ?? null,
+    mod.PARALELOS,
+    async (item) => {
+      simultaneos++;
+      pico = Math.max(pico, simultaneos);
+      await new Promise((r) => setTimeout(r, 20));
+      feitos.push(item);
+      /* O segundo lote chega com a corrida já andando — é o gesto do Felipe
+         trocando o capítulo e soltando outra pasta. */
+      if (!empurrou && feitos.length >= 3) {
+        empurrou = true;
+        pendentes.push(7, 8, 9);
+      }
+      simultaneos--;
+    },
+  );
+
+  if (feitos.length !== 9) throw new Error(`terminou com ${feitos.length} de 9`);
+  if (new Set(feitos).size !== 9) throw new Error("algum item foi processado duas vezes");
+  if (pico > mod.PARALELOS) throw new Error(`passou do limite com a fila crescendo: ${pico}`);
+  return `9 arquivos em dois lotes, pico de ${pico} simultâneos`;
+});
+
+await etapa("fila vazia não deixa trabalhador girando", async () => {
+  let chamou = 0;
+  await mod.emParaleloDeFila(
+    () => null,
+    mod.PARALELOS,
+    async () => {
+      chamou++;
+    },
+  );
+  if (chamou !== 0) throw new Error(`chamou a tarefa ${chamou} vezes sem item nenhum`);
+  return "voltou na hora";
+});
+
+await etapa("um arquivo com defeito não derruba os que faltam", async () => {
+  /* Diferença deliberada em relação a `emParalelo`: lá, um erro derruba a
+     corrida inteira, porque a lista é um lote indivisível. Aqui a lista é a
+     fila do dia — uma foto corrompida no meio de 600 não pode levar junto as
+     400 que faltam. */
+  const pendentes = [1, 2, 3, 4, 5];
+  const feitos = [];
+  await mod.emParaleloDeFila(
+    () => pendentes.shift() ?? null,
+    mod.PARALELOS,
+    async (item) => {
+      if (item === 2) throw new Error("arquivo corrompido");
+      feitos.push(item);
+    },
+  );
+  if (feitos.length !== 4) throw new Error(`só ${feitos.length} de 4 sobreviveram ao erro`);
+  return "4 de 5, e o erro ficou no arquivo";
+});
+
+await etapa("o portão para a fila crescente também", async () => {
+  const pendentes = [1, 2, 3, 4, 5, 6];
+  const feitos = [];
+  let parar = false;
+  await mod.emParaleloDeFila(
+    () => pendentes.shift() ?? null,
+    1,
+    async (item) => {
+      feitos.push(item);
+      if (feitos.length === 2) parar = true;
+    },
+    async () => (parar ? "parar" : "seguir"),
+  );
+  if (feitos.length !== 2) throw new Error(`parou em ${feitos.length}, esperava 2`);
+  return "parou onde mandaram";
+});
+
 await etapa("processa TODOS os itens da fila", async () => {
   const feitos = new Set();
   const itens = Array.from({ length: 25 }, (_, i) => i);
@@ -122,6 +218,61 @@ await etapa("desiste depois do limite, sem travar a fila", async () => {
   }
   if (tentativas !== mod.TENTATIVAS) throw new Error(`tentou ${tentativas}`);
   return `${tentativas} tentativas em ${((Date.now() - t0) / 1000).toFixed(1)}s (espera crescente)`;
+});
+
+/*
+ * ── PAUSAR, PARAR E NOMES REPETIDOS (05/09/2026) ──────────────────────────
+ *
+ * Três pedidos do Juan na manhã de 05/09, todos do mesmo episódio: ele soltou
+ * a pasta do casamento, trocou de aba, o envio morreu, e ele quis desfazer o
+ * que tinha subido pela metade para refazer. Sem parar, sem pausar e sem
+ * aviso de repetido, a saída dele era esperar 519 arquivos subirem para então
+ * remover um a um.
+ */
+console.log("\nPausar, parar e nomes repetidos:\n");
+
+await etapa("o portão pausa a fila sem perder o que falta", async () => {
+  const feitos = [];
+  let solto = false;
+  const p = mod.emParalelo([1, 2, 3, 4], 2, async (n) => void feitos.push(n), async () =>
+    solto ? "seguir" : "esperar",
+  );
+  await new Promise((r) => setTimeout(r, 30));
+  if (feitos.length !== 0) throw new Error(`pausado e ainda assim enviou ${feitos.length}`);
+  solto = true;
+  await p;
+  if (feitos.length !== 4) throw new Error(`retomou e entregou ${feitos.length} de 4`);
+  return "0 durante a pausa, 4 depois";
+});
+
+await etapa("o portão para a fila e o resto não sobe", async () => {
+  const feitos = [];
+  await mod.emParalelo([1, 2, 3, 4, 5, 6], 1, async (n) => void feitos.push(n), async () =>
+    feitos.length >= 2 ? "parar" : "seguir",
+  );
+  if (feitos.length !== 2) throw new Error(`parou e mesmo assim entregou ${feitos.length}`);
+  return "2 de 6";
+});
+
+await etapa("separa os nomes que já estão na galeria", () => {
+  const itens = ["a.jpg", "B.JPG", "c.jpg"].map((nome) => ({ arquivo: { name: nome } }));
+  const { novos, repetidos } = mod.separarRepetidos(itens, ["b.jpg"]);
+  if (repetidos.length !== 1 || repetidos[0].arquivo.name !== "B.JPG") {
+    throw new Error(`repetidos veio ${JSON.stringify(repetidos.map((r) => r.arquivo.name))}`);
+  }
+  if (novos.length !== 2) throw new Error(`novos veio ${novos.length}, esperava 2`);
+  return "sem diferenciar maiúscula de minúscula";
+});
+
+/* Duas cópias na MESMA pasta arrastada também são repetição: subiriam as duas
+   e a galeria mostraria a foto duas vezes, que é o que o Juan quer evitar. */
+await etapa("dois arquivos de mesmo nome na mesma leva contam como repetidos", () => {
+  const itens = ["a.jpg", "a.jpg", "b.jpg"].map((nome) => ({ arquivo: { name: nome } }));
+  const { novos, repetidos } = mod.separarRepetidos(itens, []);
+  if (novos.length !== 2 || repetidos.length !== 1) {
+    throw new Error(`novos ${novos.length}, repetidos ${repetidos.length} — esperava 2 e 1`);
+  }
+  return "a segunda cópia é a repetida";
 });
 
 console.log("\nPasta arrastada:\n");

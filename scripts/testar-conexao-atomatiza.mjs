@@ -10,7 +10,7 @@
  * e depois pergunta como ela está. Três coisas precisam ficar presas:
  *
  *   - IDEMPOTÊNCIA: o mesmo contrato pedindo duas vezes recebe a MESMA galeria
- *     (migração 026). Botão clicado duas vezes não pode fabricar "ana-pedro-2".
+ *     (migração 039). Botão clicado duas vezes não pode fabricar "ana-pedro-2".
  *   - ISOLAMENTO: a referência é única POR ESTÚDIO, nunca global — dois
  *     estúdios podem ter contratos com o mesmo id lá.
  *   - `noAr` CALCULADO: o outro lado vai dizer "as fotos estão prontas" a um

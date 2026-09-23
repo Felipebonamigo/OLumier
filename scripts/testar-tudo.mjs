@@ -195,16 +195,66 @@ if (!servidorNoAr) {
   console.log("  as suítes que dependem dele serão puladas — rode `npm run dev` para cobrir tudo\n");
 }
 
-if (!temArmazem) {
-  console.log("⚠ sem credenciais do armazém (R2_*)");
-  console.log("  as suítes que mexem no bucket serão puladas\n");
+/*
+ * ── AS QUE CONFEREM O BUCKET DE VERDADE, E SÓ ELE (17/09/2026) ────────────
+ *
+ * Estas duas não testam código: testam se o BUCKET lá fora está configurado.
+ * `testar-cors-arquivos` chama `GetBucketCors` no bucket dos originais, e o
+ * `testar-cors` faz um preflight contra o endereço do armazém. Contra um
+ * servidor de mentira elas respondem sobre o servidor de mentira — e o próprio
+ * `deploy.sh` já diz isso, no bloco que roda a conferência de CORS NO VPS
+ * depois de publicar: "em dev o B2 não está configurado e a suíte se pula
+ * sozinha. Foi assim que o bucket ficou SEM CORS NENHUM com a bateria inteira
+ * verde".
+ *
+ * Na máquina do Felipe elas rodam e valem, porque lá o armazém é o de verdade.
+ * Numa bancada de mentira — a do CI, com `R2_ENDPOINT` apontando para outro
+ * lugar — elas NÃO SE APLICAM, e isso é diferente de "pulada": pulada quer
+ * dizer "dava para rodar e ninguém rodou", que é o que o `--exigir-tudo`
+ * existe para punir.
+ *
+ * A lista é curta e fechada de propósito. Se ela crescer, a pergunta a fazer é
+ * se a bancada não deveria ser de verdade — e não se cabe mais uma exceção.
+ */
+const SO_CONTRA_ARMAZEM_DE_VERDADE = new Set(["testar-cors", "testar-cors-arquivos"]);
+
+/*
+ * ── ESTE ARQUIVO PRECISA LER O `.env.local` (17/09/2026) ──────────────────
+ *
+ * As suítes recebem `--env-file=.env.local` do `spawnSync` lá embaixo, mas ESTE
+ * processo não recebia nada — `npm test` o chama seco. Então a decisão logo
+ * abaixo enxergava só o que estivesse no ambiente do shell.
+ *
+ * No CI isso funcionava por acidente: o workflow declara as variáveis em `env:`
+ * do job, e elas chegam no ambiente de verdade. Na máquina de qualquer um, onde
+ * elas moram só no `.env.local`, a mesma bateria decidia diferente — as duas
+ * suítes de CORS iam a um armazém de mentira achando que era o de verdade, e
+ * saíam VERMELHAS em vez de "não se aplica".
+ *
+ * O mesmo comando tem de dar a mesma resposta nos dois lugares, senão o CI e a
+ * máquina discordam e ninguém sabe qual está certo.
+ */
+try {
+  process.loadEnvFile(path.join(AQUI, "..", ".env.local"));
+} catch {
+  /* Sem `.env.local` (uma instalação recém-clonada) a bancada é o ambiente, e é
+     isso mesmo: o que não existe não pode ser lido. */
 }
+
+const armazemDeMentira = Boolean(process.env.R2_ENDPOINT);
 
 const verdes = [];
 const vermelhas = [];
 const pulados = [];
+const naoSeAplicam = [];
 
 for (const nome of suites) {
+  if (armazemDeMentira && SO_CONTRA_ARMAZEM_DE_VERDADE.has(nome)) {
+    naoSeAplicam.push(nome);
+    console.log(`  · ${nome} (não se aplica: o armazém desta bancada não é o de verdade)`);
+    continue;
+  }
+
   if (PRECISAM_DO_SERVIDOR.has(nome) && !servidorNoAr) {
     pulados.push(nome);
     console.log(`  – ${nome} (pulado: sem servidor)`);
@@ -253,8 +303,17 @@ for (const nome of suites) {
 console.log(
   `\n${verdes.length} passaram · ${vermelhas.length} falharam${
     pulados.length ? ` · ${pulados.length} pulados` : ""
-  }`,
+  }${naoSeAplicam.length ? ` · ${naoSeAplicam.length} não se aplicam a esta bancada` : ""}`,
 );
+
+/* Alto, e não em nota de rodapé: quem lê "verde" precisa saber o que ficou de
+   fora, ou a bancada de mentira vira uma promessa que ninguém fez. */
+if (naoSeAplicam.length) {
+  console.log(
+    `\n· ${naoSeAplicam.join(", ")} — só valem contra o armazém de verdade.\n` +
+      `  O deploy.sh confere o CORS no VPS depois de publicar; ver o bloco final dele.`,
+  );
+}
 
 if (vermelhas.length) console.error(`\n✗ ${vermelhas.join(", ")}\n`);
 

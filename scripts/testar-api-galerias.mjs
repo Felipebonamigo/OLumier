@@ -25,12 +25,6 @@ import { gerarChave, revogarChave } from "../src/lib/chaves-api.ts";
 import { buscarTenantPorId } from "../src/lib/tenants.ts";
 import { situacaoDoTenant } from "../src/lib/assinatura.ts";
 import { asaasConfigurado } from "../src/lib/asaas.ts";
-import {
-  estudioDaRodada,
-  segundoEstudioDaRodada,
-  galeriaDaRodada,
-  limparRodada,
-} from "./fixture-de-teste.mjs";
 
 await exigirBancoDeTeste();
 
@@ -52,21 +46,18 @@ const igual = (a, b, o) => {
   if (a !== b) throw new Error(`${o}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 
-/*
- * A bancada é desta execução — os dois estúdios e a galeria do vizinho.
+/* A BANCADA CRIA OS DOIS, em vez de pegar emprestado do banco.
  *
- * Até 29/08/2026 os dois vinham de `select ... from tenants order by criado_em
- * limit 2`, e isso tinha dois preços. Num banco novo (o do CI, o de quem acabou
- * de clonar) não existiam dois e o teste desistia inteiro. E num banco com
- * histórico, as duas provas de isolamento abaixo dependiam de o segundo estúdio
- * POR ACASO ter galeria: sem isso elas passavam sem comparar nada.
- *
- * A galeria do vizinho existe para que haja o que vazar. Prova de vazamento com
- * o outro lado vazio é prova de nada.
- */
+ * Isto aqui era `select id from tenants order by criado_em limit 2`: os dois
+ * estúdios mais antigos que por acaso existissem. Num banco recém-criado — o do
+ * CI, o de quem acabou de clonar — não existem dois, e a suíte desistia antes da
+ * primeira etapa. Só passava porque a máquina de quem rodava tinha sobra de
+ * rodadas anteriores. Ver `segundoEstudioDaRodada` em fixture-de-teste.mjs. */
+const { estudioDaRodada, segundoEstudioDaRodada, galeriaDaRodada, limparRodada } = await import(
+  "./fixture-de-teste.mjs"
+);
 const estudio = await estudioDaRodada(db);
 const outro = await segundoEstudioDaRodada(db);
-await galeriaDaRodada(db, { nome: "do vizinho", dono: outro, medias: 1 });
 
 /*
  * Um estúdio descartável e JÁ CANCELADO, só para o portão de cobrança.
@@ -191,11 +182,18 @@ await etapa("capítulo repetido é recusado, mesmo com outra caixa", async () =>
 });
 
 await etapa("capítulo em galeria de outro estúdio não é criado", async () => {
-  const { rows } = await db.query("select id from galerias where tenant_id = $1 limit 1", [outro.id]);
-  /* A bancada dá uma galeria ao vizinho; sem ela esta etapa não prova nada, e
-   * passar em silêncio seria pior do que reprovar. */
-  if (rows.length === 0) throw new Error("o vizinho ficou sem galeria — nada a invadir");
-  const r = await chamar(`/api/galerias/${rows[0].id}/secoes`, {
+  /* A GALERIA DO VIZINHO É CRIADA AQUI, e não procurada no banco.
+   *
+   * Isto perguntava se o outro estúdio POR ACASO tinha galeria e, quando não
+   * tinha, saía com "nada a provar" — verde. Uma prova de vazamento que passa
+   * sem comparar nada é pior que vermelha: ela ocupa o lugar da prova e ninguém
+   * desconfia. Com a bancada criando o vizinho, a galeria dele existe sempre. */
+  const dela = await galeriaDaRodada(db, {
+    nome: "do-vizinho",
+    medias: 1,
+    dono: outro,
+  });
+  const r = await chamar(`/api/galerias/${dela.id}/secoes`, {
     metodo: "POST",
     chave: deEnvio,
     corpo: { nome: "Invasão" },

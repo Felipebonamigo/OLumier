@@ -1,10 +1,27 @@
 import "server-only";
 import { consultar, consultarUm } from "./db";
+import { gerarSlug } from "./tenants";
+import { ORDENS_DAS_FOTOS, type OrdemDasFotos } from "@/config/ordens-das-fotos";
+
+export { ORDENS_DAS_FOTOS, type OrdemDasFotos };
 
 export interface Secao {
   id: string;
   galeria_id: string;
   nome: string;
+  /**
+   * O APELIDO DO CAPÍTULO — a parte que vai no link (`?cap=cerimonia`).
+   *
+   * Felipe, 16/09/2026: "o link do capítulo está muito extenso, temos que
+   * diminuir e ficar mais simples, para quando mandar". Era o id da seção, 36
+   * caracteres de UUID para dizer "Cerimônia" — e um UUID no meio de uma
+   * mensagem de WhatsApp parece link de rastreamento.
+   *
+   * Coluna e não derivação do nome na hora, por dois motivos escritos na
+   * migração 034: dois nomes podem gerar o mesmo apelido, e renomear o capítulo
+   * mudaria o link já entregue em silêncio.
+   */
+  slug: string;
   ordem: number;
   total?: number;
 }
@@ -66,9 +83,60 @@ export async function criarSecao(galeriaId: string, tenantId: string, nome: stri
     [galeriaId],
   );
   return consultarUm<Secao>(
-    "insert into secoes (galeria_id, nome, ordem) values ($1, $2, $3) returning *",
-    [galeriaId, limpo, prox?.n ?? 0],
+    "insert into secoes (galeria_id, nome, slug, ordem) values ($1, $2, $3, $4) returning *",
+    [galeriaId, limpo, await apelidoLivre(galeriaId, limpo), prox?.n ?? 0],
   );
+}
+
+/**
+ * Um apelido que ainda não existe nesta galeria.
+ *
+ * O nome já foi recusado se repetido, mas o APELIDO ainda pode colidir: "Making
+ * Of" e "Making-of" são nomes diferentes e dão o mesmo `making-of`. O índice
+ * único da migração 034 recusaria a segunda inserção, e o fotógrafo veria o
+ * capítulo simplesmente não ser criado — por causa de um hífen que ele não
+ * digitou.
+ *
+ * O sufixo numérico é o mesmo desempate do endereço do estúdio (`gerarSlug` +
+ * `-2`, `-3`): feio de ler e melhor que a criação falhar.
+ *
+ * Sem letra nenhuma no nome (um capítulo chamado só "🎉") o apelido sai do id,
+ * como no backfill da migração.
+ */
+async function apelidoLivre(galeriaId: string, nome: string): Promise<string> {
+  const base = gerarSlug(nome);
+  if (!base) return `cap-${Date.now().toString(36)}`;
+  let tentativa = base;
+  for (let i = 2; ; i++) {
+    const ocupado = await consultarUm(
+      "select 1 from secoes where galeria_id = $1 and slug = $2",
+      [galeriaId, tentativa],
+    );
+    if (!ocupado) return tentativa;
+    tentativa = `${base}-${i}`;
+  }
+}
+
+/**
+ * De quem é este `?cap=` — apelido ou id.
+ *
+ * O apelido vem primeiro porque é o link de hoje. O id continua sendo aceito
+ * porque os links de ontem o carregam, e link de capítulo entregue ao casal não
+ * se reenvia — mesma razão dos apelidos de endereço (migrações 025 e 030).
+ *
+ * `sem-capitulo` atravessa intocado: é um nome que a página inventa para o
+ * grupo das fotos soltas, não um capítulo do banco.
+ */
+export async function secaoPeloApelido(
+  galeriaId: string,
+  pedido: string,
+): Promise<string | null> {
+  if (!pedido || pedido === "sem-capitulo") return pedido || null;
+  const achada = await consultarUm<{ id: string }>(
+    "select id from secoes where galeria_id = $1 and (slug = $2 or id::text = $2) limit 1",
+    [galeriaId, pedido],
+  );
+  return achada?.id ?? null;
 }
 
 /**
@@ -118,6 +186,12 @@ export async function garantirSecoes(
   return saida;
 }
 
+/*
+ * Renomear NÃO mexe no apelido, e isso é a promessa da migração 034: o
+ * fotógrafo troca "Festa" por "Festa 🎉" e o link que ele mandou ontem para o
+ * casal continua abrindo. O apelido é do capítulo, não do texto que por acaso
+ * está nele hoje.
+ */
 export async function renomearSecao(secaoId: string, tenantId: string, nome: string) {
   const limpo = nome.trim().slice(0, 60);
   if (!limpo) return;
@@ -129,6 +203,110 @@ export async function renomearSecao(secaoId: string, tenantId: string, nome: str
   );
 }
 
+/**
+ * COMO SE CHAMA, NESTA GALERIA, O GRUPO DAS FOTOS SEM CAPÍTULO.
+ *
+ * ── DE ONDE VEIO (18/09/2026, migração 037) ──────────────────────────────
+ *
+ * Juan: "aqui fica aparecendo 'outras fotos' (…) não tem como trocar pra esse
+ * nome, tipo galeria completa ou algo assim. Não criei nenhuma pasta com esse
+ * nome." Não criou: o grupo é calculado — é o que sobra — e o texto era nosso.
+ *
+ * Não está em `renomearSecao` porque não é uma seção: não há linha para
+ * atualizar. O nome mora na galeria, e o grupo continua existindo (ou não)
+ * conforme haja foto solta.
+ *
+ * VAZIO APAGA. Limpar o campo grava `null`, e `nomeDoGrupoSolto` devolve
+ * "Outras fotos" de novo — voltar ao nome de fábrica não precisa de um botão
+ * próprio, e um texto vazio aqui faria a pastilha sem letra nenhuma que a
+ * mudança de 04/09/2026 veio tirar da tela.
+ */
+export async function renomearGrupoSolto(galeriaId: string, tenantId: string, nome: string) {
+  const limpo = nome.trim().slice(0, 60);
+  await consultar(`update galerias set grupo_solto = $1 where id = $2 and tenant_id = $3`, [
+    limpo || null,
+    galeriaId,
+    tenantId,
+  ]);
+}
+
+/** Compara como o fotógrafo espera: foto_2 antes de foto_10. */
+const colador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
+
+/**
+ * Reordena as fotos de um capítulo (ou as sem capítulo) por um critério.
+ *
+ * ── POR QUE A ORDENAÇÃO ACONTECE EM JAVASCRIPT ───────────────────────────
+ *
+ * Por causa do A→Z. O fotógrafo espera `foto_2` antes de `foto_10`, e é isso
+ * que o `Intl.Collator` com `numeric` faz — a MESMA função que ordena os
+ * arquivos no envio (`ordenarNaturalPorCaminho`). O Postgres não tem ordenação
+ * natural: um `order by nome_original` põe `foto_10` antes de `foto_2`, e
+ * chegar perto disso em SQL exigiria uma função de chave que envelheceria
+ * separada da do envio. São algumas centenas de linhas por capítulo, já
+ * trazidas por `galeria_id`.
+ *
+ * ── A ESCRITA É UMA SÓ ───────────────────────────────────────────────────
+ *
+ * Um `update` por foto seriam 600 idas ao banco por clique. O `unnest` manda a
+ * lista inteira numa instrução: cada id recebe a posição que a ordenação lhe
+ * deu.
+ *
+ * Renumerar de 0 a N-1 é seguro porque a galeria ordena por capítulo ANTES de
+ * `ordem` (ver `listarMediasPublicas`): dentro do capítulo só a posição
+ * relativa importa, e entre capítulos quem manda é `secoes.ordem`.
+ */
+export async function ordenarFotosDaSecao(
+  galeriaId: string,
+  tenantId: string,
+  secaoId: string | null,
+  criterio: OrdemDasFotos,
+): Promise<{ ok: boolean; quantas: number; semData: number }> {
+  if (!(await galeriaDoTenant(galeriaId, tenantId))) return { ok: false, quantas: 0, semData: 0 };
+
+  const fotos = await consultar<{
+    id: string;
+    nome_original: string;
+    criado_em: Date;
+    tirada_em: Date | null;
+  }>(
+    `select id, nome_original, criado_em, tirada_em
+       from medias
+      where galeria_id = $1 and ${secaoId === null ? "secao_id is null" : "secao_id = $2"}`,
+    secaoId === null ? [galeriaId] : [galeriaId, secaoId],
+  );
+  if (fotos.length === 0) return { ok: true, quantas: 0, semData: 0 };
+
+  const quando = (f: (typeof fotos)[number]) =>
+    (criterio === "cronologica" ? (f.tirada_em ?? f.criado_em) : f.criado_em).getTime();
+
+  const ordenadas = [...fotos].sort((a, b) => {
+    if (criterio === "nome") return colador.compare(a.nome_original, b.nome_original);
+    if (criterio === "nome-invertido") return colador.compare(b.nome_original, a.nome_original);
+    /* Empate de horário — rajada de câmera grava várias no mesmo segundo — cai
+       no nome, que dentro de uma câmera é a sequência do disparo. */
+    const dif = quando(a) - quando(b);
+    return dif !== 0 ? dif : colador.compare(a.nome_original, b.nome_original);
+  });
+
+  await consultar(
+    `update medias m
+        set ordem = nova.posicao
+       from unnest($1::uuid[], $2::int[]) as nova(id, posicao)
+      where m.id = nova.id and m.galeria_id = $3`,
+    [ordenadas.map((f) => f.id), ordenadas.map((_, i) => i), galeriaId],
+  );
+
+  return {
+    ok: true,
+    quantas: ordenadas.length,
+    /* Quantas não tinham data da câmera. A tela usa este número para avisar
+       que aquelas caíram na data de envio, em vez de fingir que a ordem
+       cronológica valeu para todas. */
+    semData: criterio === "cronologica" ? fotos.filter((f) => !f.tirada_em).length : 0,
+  };
+}
+
 /** Apaga o capítulo; as fotos ficam (viram "sem capítulo") pelo on delete set null. */
 export async function apagarSecao(secaoId: string, tenantId: string) {
   await consultar(
@@ -136,6 +314,78 @@ export async function apagarSecao(secaoId: string, tenantId: string) {
       using galerias g
       where s.id = $1 and s.galeria_id = g.id and g.tenant_id = $2`,
     [secaoId, tenantId],
+  );
+}
+
+/**
+ * Grava a ordem inteira dos capítulos de uma vez.
+ *
+ * ── POR QUE ISTO EXISTE AO LADO DE `moverSecao` (11/09/2026) ──────────────
+ *
+ * Carol: "tem que clicar na flechinha e ir subindo um por um pra organizar,
+ * não tem como fazer algo tipo pra segurar e arrastar? Quero subir a pasta da
+ * festa lá pra cima". Sete capítulos, "Festa" no fim: seis cliques, seis idas
+ * ao servidor, a página recarregando embaixo do dedo a cada uma.
+ *
+ * `moverSecao` continua — é a operação de um passo, e é o que as setas fazem;
+ * elas ficam para quem usa teclado e para o toque, onde `draggable` do HTML
+ * não existe. Arrastar, porém, não é um passo: é uma ordem nova inteira, e
+ * pedir seis trocas de vizinho para descrever um gesto seria reimplementar o
+ * gesto em cima da peça errada.
+ *
+ * ── A LISTA VEM DO NAVEGADOR ──────────────────────────────────────────────
+ *
+ * E por isso nada dela é usado antes de passar pelo banco. O `where` amarra
+ * cada id à galeria E ao tenant numa consulta só: id de capítulo de outro
+ * estúdio simplesmente não aparece no resultado, e o que não aparece não é
+ * gravado. Sem isso, "reordene esta lista" seria "reordene a galeria de quem
+ * eu quiser" — `scripts/testar-ordem-capitulos.mjs` tenta exatamente isso.
+ *
+ * Capítulo que a lista não mencionou não some nem embaralha: vai para depois
+ * dos enviados, na ordem que já tinha. É o que mantém a tela coerente quando o
+ * navegador manda uma lista defasada — alguém criou um capítulo noutra aba
+ * enquanto esta arrastava.
+ */
+export async function reordenarSecoes(galeriaId: string, tenantId: string, ids: string[]) {
+  if (!Array.isArray(ids) || ids.length === 0) return;
+
+  /* As que EXISTEM e são desta galeria deste tenant. A lista de fora serve
+     só para ordenar o que o banco confirmou. */
+  const minhas = await consultar<Secao>(
+    `select s.id, s.ordem from secoes s
+       join galerias g on g.id = s.galeria_id
+      where s.galeria_id = $1 and g.tenant_id = $2
+      order by s.ordem, s.criado_em`,
+    [galeriaId, tenantId],
+  );
+  if (minhas.length === 0) return;
+
+  const validos = new Set(minhas.map((s) => s.id));
+  const pedidos: string[] = [];
+  for (const id of ids) {
+    /* `Set` de ida e volta resolve o id repetido sem um passo à parte: a
+       segunda aparição não acha mais o id em `validos`. */
+    if (validos.has(id)) {
+      pedidos.push(id);
+      validos.delete(id);
+    }
+  }
+  if (pedidos.length === 0) return;
+
+  /* Os que sobraram mantêm a ordem antiga entre si, atrás dos pedidos. */
+  const finais = [...pedidos, ...minhas.filter((s) => validos.has(s.id)).map((s) => s.id)];
+
+  /*
+   * Uma consulta só, e não uma por capítulo: sete UPDATEs em sequência abrem
+   * sete janelas em que a galeria tem duas seções com a mesma `ordem`, e a
+   * página do cliente pode ser montada no meio delas.
+   */
+  await consultar(
+    `update secoes s set ordem = novo.ordem
+       from (select unnest($3::uuid[]) as id, generate_subscripts($3::uuid[], 1) - 1 as ordem) novo
+      where s.id = novo.id and s.galeria_id = $1
+        and exists (select 1 from galerias g where g.id = s.galeria_id and g.tenant_id = $2)`,
+    [galeriaId, tenantId, finais],
   );
 }
 
@@ -196,4 +446,47 @@ export async function moverMediasParaSecao(
       where id = any($2::uuid[]) and tenant_id = $3`,
     [secaoId, mediaIds, tenantId],
   );
+}
+
+/**
+ * Manda TODAS as fotos sem capítulo desta galeria para um capítulo.
+ *
+ * ── POR QUE NÃO REUSA `moverMediasParaSecao` ───────────────────────────────
+ *
+ * Aquela recebe uma lista de ids, e a lista teria de ser montada antes — o
+ * painel precisaria carregar as mídias só para descobrir quais estão soltas, e
+ * a aba Fotos de um casamento tem 600 delas. Aqui o "quais" é uma condição
+ * (`secao_id is null`), e o banco resolve num UPDATE só.
+ *
+ * As duas travas de sempre, e as duas importam:
+ *
+ *   o CAPÍTULO tem de ser desta galeria E deste estúdio — senão um id de
+ *   capítulo alheio no formulário jogaria as fotos para a conta de outro;
+ *   a GALERIA tem de ser deste estúdio — o update filtra por `tenant_id`
+ *   também nas mídias, e não só pela galeria.
+ *
+ * Devolve quantas moveu. Zero quando o capítulo não é válido para esta
+ * galeria: quem chama trata como "não fiz nada", que é a verdade.
+ */
+export async function moverSoltasParaSecao(
+  galeriaId: string,
+  secaoId: string,
+  tenantId: string,
+): Promise<number> {
+  const destino = await consultarUm<{ id: string }>(
+    `select s.id
+       from secoes s
+       join galerias g on g.id = s.galeria_id
+      where s.id = $1 and s.galeria_id = $2 and g.tenant_id = $3`,
+    [secaoId, galeriaId, tenantId],
+  );
+  if (!destino) return 0;
+
+  const movidas = await consultar<{ id: string }>(
+    `update medias set secao_id = $1
+      where galeria_id = $2 and tenant_id = $3 and secao_id is null
+      returning id`,
+    [secaoId, galeriaId, tenantId],
+  );
+  return movidas.length;
 }

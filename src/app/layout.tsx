@@ -32,12 +32,25 @@ const montserrat = Montserrat({
   display: "swap",
 });
 
-// A serifada é usada só no título da galeria pública — a página que o casal vê.
-// Ali o tom é de convite, não de painel.
+/*
+ * A serifada é usada só no título da galeria pública — a página que o casal vê.
+ * Ali o tom é de convite, não de painel.
+ *
+ * ── SEM `weight`, DE PROPÓSITO (16/09/2026) ──────────────────────────────
+ *
+ * Eram três arquivos estáticos: 400, 600 e 700. Felipe, olhando o eixo de
+ * grossura: "a normal pra fina não muda nada, só muda da normal para forte".
+ * Ele estava certo, e a causa estava aqui: "Fina" pede 300, e 300 não estava
+ * entre os três — o navegador escolhe o mais próximo que EXISTE, que era o 400
+ * da "Normal". O eixo tinha três botões e duas respostas.
+ *
+ * Omitir `weight` faz o `next/font` servir a versão VARIÁVEL da família, cujo
+ * eixo vai de 300 a 700. Além de devolver a resposta que faltava, troca três
+ * arquivos por um: a galeria baixa menos do que baixava antes, não mais.
+ */
 const cormorant = Cormorant_Garamond({
   variable: "--font-serif-app",
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
   display: "swap",
 });
 

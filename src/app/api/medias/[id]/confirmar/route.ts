@@ -10,8 +10,8 @@ import {
   bytesUsados,
 } from "@/lib/medias";
 import { buscarTenantPorId } from "@/lib/tenants";
-import { apagarObjeto, objetoExiste } from "@/lib/r2";
-import { armazemDe, conferirOriginal } from "@/lib/armazem";
+import { objetoExiste } from "@/lib/r2";
+import { armazemDe, conferirOriginal, apagarArquivosDasMedias } from "@/lib/armazem";
 
 /**
  * Confirma que o arquivo chegou ao bucket.
@@ -34,16 +34,30 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (media.pronto) return NextResponse.json({ ok: true, bytes: Number(media.bytes) });
 
   try {
-    /* O original pode estar no B2; as derivadas, conferidas abaixo, nunca —
-     * elas ficam no R2 sempre (ver lib/armazem.ts). */
-    const { bytes } = await conferirOriginal(media.chave, armazemDe(media.armazem));
+    /*
+     * As QUATRO perguntas de uma vez: o original chegou (HEAD no B2 ou R2),
+     * as duas derivadas chegaram (HEAD no R2) e quem é o dono (banco).
+     *
+     * Eram feitas em série, e cada HEAD é uma ida e volta até o bucket. Medido
+     * em 03/09/2026: 600 ms por confirmação, para uma foto cujo envio inteiro
+     * levava 1,2 s — a confirmação custava metade do envio. As perguntas não
+     * dependem uma da outra; só a resposta é lida em ordem.
+     *
+     * O original pode estar no B2; as derivadas, nunca — ficam sempre no R2
+     * (ver lib/armazem.ts).
+     */
+    const [{ bytes }, temThumb, temPreview, tenant] = await Promise.all([
+      conferirOriginal(media.chave, armazemDe(media.armazem)),
+      media.chave_thumb ? objetoExiste(media.chave_thumb) : Promise.resolve(true),
+      media.chave_preview ? objetoExiste(media.chave_preview) : Promise.resolve(true),
+      buscarTenantPorId(tenantId),
+    ]);
 
     // O tamanho declarado no preparo era um palpite do navegador; ESTE é o real.
     // Reconferir a quota agora é o que fecha o furo: sem isso bastava declarar
     // "1 byte", subir 50 GB e confirmar — a linha virava pronta com 50 GB e o
     // plano era estourado. Só o `exceto` importa: a reserva desta mídia ainda
     // está somada com o valor declarado e contaria em dobro.
-    const tenant = await buscarTenantPorId(tenantId);
     if (!tenant) return NextResponse.json({ erro: "Conta não encontrada." }, { status: 401 });
 
     const outros = await bytesUsados(tenantId, mediaId);
@@ -51,11 +65,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       // Recusar e limpar: deixar o objeto no bucket seria pagar por um arquivo
       // que o dono não pode usar.
       await apagarMedia(mediaId, tenantId);
-      await Promise.all(
-        [media.chave, media.chave_thumb, media.chave_preview]
-          .filter((c): c is string => Boolean(c))
-          .map((c) => apagarObjeto(c).catch(() => {})),
-      );
+      /* Pelo despachante: o original desta mídia pode estar no B2, e o
+         `apagarObjeto` do R2 errava de balde — deixando pago justamente o
+         arquivo que acabou de ser recusado por falta de espaço. */
+      await apagarArquivosDasMedias([media]);
       return NextResponse.json(
         {
           erro: `“${media.nome_original}” tem ${(bytes / 1024 ** 3).toFixed(1)} GB e não cabe no espaço que sobrou do seu plano.`,
@@ -66,10 +79,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Derivada que não chegou vira null: a grade cai no original em vez de
     // mostrar imagem quebrada. Uma falha aqui NÃO invalida o upload.
-    const [temThumb, temPreview] = await Promise.all([
-      media.chave_thumb ? objetoExiste(media.chave_thumb) : Promise.resolve(true),
-      media.chave_preview ? objetoExiste(media.chave_preview) : Promise.resolve(true),
-    ]);
     if (!temThumb || !temPreview) {
       await anularDerivadas(mediaId, { thumb: !temThumb, preview: !temPreview });
     }
@@ -107,13 +116,12 @@ export async function DELETE(
   const removida = await apagarMedia(mediaId, tenantId);
   if (!removida) return NextResponse.json({ erro: "Arquivo não encontrado." }, { status: 404 });
 
-  // O banco é a fonte da verdade: se o objeto já não existir no bucket, tudo bem.
-  // Apaga a família inteira (original + derivadas) para não deixar lixo pago.
-  await Promise.all(
-    [removida.chave, removida.chave_thumb, removida.chave_preview]
-      .filter((c): c is string => Boolean(c))
-      .map((c) => apagarObjeto(c).catch(() => {})),
-  );
+  /* O banco é a fonte da verdade: se o objeto já não existir no bucket, tudo bem.
+     Apaga a família inteira (original + derivadas) para não deixar lixo pago —
+     e pelo despachante, porque o original pode estar no B2, onde o `apagarObjeto`
+     do R2 errava de balde e sumia no `.catch`. Ver `apagarArquivosDasMedias`. */
+  const limpeza = await apagarArquivosDasMedias([removida]);
+  if (limpeza.falhou) console.error(`remover ${mediaId}: ${limpeza.falhou}`);
 
   return NextResponse.json({ ok: true });
 }

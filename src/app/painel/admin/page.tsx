@@ -14,9 +14,11 @@ import {
   trialsVencidos,
   precoMensalDoEstudio,
   mensalEquivalenteCentavos,
+  custoMensalDoEstudioCentavos,
+  custoDasCortesiasCentavos,
 } from "@/lib/metricas-admin";
 import { planoPorId, formatarReais, cicloDe, GB } from "@/config/planos";
-import { quotaEfetivaBytes } from "@/config/trial";
+import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import {
   Cartao,
   Bloco,
@@ -138,6 +140,14 @@ export default async function AdminPage() {
             rotulo="Armazenamento"
             valor={formatarReais(r.custoMensalCentavos)}
             nota={`teto ${formatarReais(r.custoTetoCentavos)} se todos encherem`}
+          />
+          {/* Pedido do Felipe em 16/09/2026: as contas dos sócios (cortesia) não
+              pagam pelo sistema e não têm limite de espaço — o custo do que
+              elas guardam é acertado por fora. Este é o total a cobrar. */}
+          <Cartao
+            rotulo="Cortesias"
+            valor={formatarReais(custoDasCortesiasCentavos(estudios))}
+            nota="a cobrar por fora — armazenamento das contas dos sócios"
           />
           <Cartao
             rotulo="Custo fixo"
@@ -349,6 +359,7 @@ export default async function AdminPage() {
                     "Situação",
                     "Plano",
                     "Paga",
+                    "Custa por mês",
                     "Espaço",
                     "Conteúdo",
                     "Entrega",
@@ -371,7 +382,10 @@ export default async function AdminPage() {
                   const guardado = BigInt(e.bytes_no_cofre);
                   const usado = noAr + guardado;
                   const quota = quotaEfetivaBytes(e);
-                  const fracao = quota === BigInt(0) ? 0 : Number(usado) / Number(quota);
+                  const semLimite = espacoSemLimite(e);
+                  const fracao =
+                    semLimite || quota === BigInt(0) ? 0 : Number(usado) / Number(quota);
+                  const custa = custoMensalDoEstudioCentavos(e);
                   const paga =
                     e.status === "ativo"
                       ? mensalEquivalenteCentavos(precoMensalDoEstudio(e), e.ciclo_cobranca)
@@ -418,14 +432,26 @@ export default async function AdminPage() {
                           </span>
                         )}
                       </td>
+                      {/* O custo de CADA conta: o que Backblaze e Cloudflare cobram
+                          pelo que ela guarda. Nas cortesias é o valor a cobrar. */}
+                      <td className="px-4 py-3 text-xs tabular-nums">
+                        {formatarReais(custa)}
+                        {e.status === "cortesia" && (
+                          <span className="mt-0.5 block text-[11px] text-alerta">a cobrar por fora</span>
+                        )}
+                      </td>
                       <td className="w-40 px-4 py-3 font-mono text-xs tabular-nums">
                         <span className={fracao > 0.85 ? "text-alerta" : ""}>
                           {formatarBytes(usado)}
                         </span>
-                        <span className="text-texto-faint"> / {formatarBytes(quota)}</span>
-                        <span className="mt-1 block">
-                          <Barra fracao={fracao} tom={fracao > 0.85 ? "alerta" : "acento"} />
+                        <span className="text-texto-faint">
+                          {semLimite ? " · sem limite" : ` / ${formatarBytes(quota)}`}
                         </span>
+                        {!semLimite && (
+                          <span className="mt-1 block">
+                            <Barra fracao={fracao} tom={fracao > 0.85 ? "alerta" : "acento"} />
+                          </span>
+                        )}
                         <span className="mt-1 block text-[11px] text-texto-faint">
                           {formatarBytes(guardado)} no cofre
                         </span>

@@ -105,10 +105,29 @@ await etapa("a GRADE serve a miniatura (o ganho de velocidade)", async () => {
   const r = await fetch(`${BASE}/g/${tslug}/${gslug}`);
   const html = await r.text();
   const temThumbNaGrade = html.includes("_thumb.webp");
-  const temPreview = html.includes("_prev.webp");
   if (!temThumbNaGrade) throw new Error("a grade ainda aponta para o original");
-  if (!temPreview) throw new Error("o lightbox não recebeu a versão preview");
-  return "grade → _thumb.webp · lightbox → _prev.webp";
+  /* O preview NÃO vai mais no HTML: desde 03/09/2026 ele é assinado quando o
+   * lightbox abre (`/api/g/<id>/urls`). A única exceção é a capa, que é a
+   * primeira foto da bancada — não esta. Aqui se confere que o preview DESTA
+   * mídia ficou fora e que a rota o entrega; a régua completa está em
+   * testar-urls-sob-demanda. */
+  const { rows: [enviada] } = await db.query(
+    "select chave_preview from medias where id = $1",
+    [preparo.mediaId],
+  );
+  if (html.includes(enviada.chave_preview.split("/").pop())) {
+    throw new Error("o preview desta foto voltou a ir no HTML");
+  }
+  const r2 = await fetch(`${BASE}/api/g/${galeriaId}/urls`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ids: [preparo.mediaId], tipo: "preview" }),
+  });
+  const corpo = await r2.json();
+  if (!r2.ok || !corpo.urls?.[preparo.mediaId]?.includes("_prev.webp")) {
+    throw new Error("o lightbox não consegue o preview pela rota");
+  }
+  return "grade → _thumb.webp · lightbox → _prev.webp sob demanda";
 });
 
 await etapa("derivada ausente cai no original, sem quebrar", async () => {

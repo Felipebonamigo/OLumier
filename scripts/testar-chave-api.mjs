@@ -29,7 +29,6 @@ import {
   revogarChave,
 } from "../src/lib/chaves-api.ts";
 import { tenantDaRequisicao } from "../src/lib/auth-api.ts";
-import { estudioDaRodada, segundoEstudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 await exigirBancoDeTeste();
 
@@ -51,11 +50,17 @@ const igual = (a, b, o) => {
 };
 
 /* Dois estúdios: o teste de isolamento entre contas é o que mais importa aqui,
- * e ele precisa de um segundo tenant de verdade, não de um id inventado.
+ * e ele precisa de um segundo tenant de verdade, não de um id inventado. */
+/* A BANCADA CRIA OS DOIS, em vez de pegar emprestado do banco.
  *
- * Os DOIS são desta execução. Até 29/08/2026 este teste pegava os dois mais
- * antigos do banco, e num banco recém-criado não havia dois — ele desistia
- * antes da primeira etapa. Ver `segundoEstudioDaRodada` em fixture-de-teste.mjs. */
+ * Isto aqui era `select id from tenants order by criado_em limit 2`: os dois
+ * estúdios mais antigos que por acaso existissem. Num banco recém-criado — o do
+ * CI, o de quem acabou de clonar — não existem dois, e a suíte desistia antes da
+ * primeira etapa. Só passava porque a máquina de quem rodava tinha sobra de
+ * rodadas anteriores. Ver `segundoEstudioDaRodada` em fixture-de-teste.mjs. */
+const { estudioDaRodada, segundoEstudioDaRodada, limparRodada } = await import(
+  "./fixture-de-teste.mjs"
+);
 const estudio = await estudioDaRodada(db);
 const outro = await segundoEstudioDaRodada(db);
 

@@ -1,6 +1,6 @@
 import "server-only";
-import { createHash } from "node:crypto";
 import { consultar } from "./db";
+import { hashDeIp } from "./ip";
 
 /**
  * AUDITORIA — quem fez o quê, e quando.
@@ -48,6 +48,11 @@ export const ACOES = {
    * resposta precisa sobreviver à galeria. Criação pelo painel continua sem
    * evento — registrar cada clique é telemetria, e telemetria não mora aqui. */
   GALERIA_CRIADA_DE_FORA: "galeria.criada-de-fora",
+  /* Consentimento para dado biométrico (LGPD art. 11): ligar é o aceite, e o
+   * registro é a prova de quando; desligar apaga os vetores e o registro diz
+   * quantos. Sem isto, "quando o estúdio consentiu?" não teria resposta. */
+  ROSTOS_LIGADOS: "rostos.ligados",
+  ROSTOS_DESLIGADOS: "rostos.desligados",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque
@@ -69,11 +74,14 @@ export interface Evento {
   criado_em: Date;
 }
 
-/** Mesmo segredo e mesmo formato usados pela tabela `acessos`. */
-function hashDeIp(ip: string): string {
-  const segredo = process.env.SESSAO_SEGREDO ?? "sem-segredo";
-  return createHash("sha256").update(segredo + ip).digest("hex").slice(0, 32);
-}
+/*
+ * O hash de IP mora em `./ip`, e é a MESMA função que a tabela `acessos` usa.
+ *
+ * Havia uma cópia aqui, com este mesmo comentário afirmando que era igual à de
+ * lá — e não era: ela lia `SESSAO_SEGREDO ?? "sem-segredo"`, uma variável que
+ * nunca existiu em ambiente nenhum. O sal era sempre a string do código, e as
+ * duas tabelas nunca casaram. Ver o cabeçalho de `lib/ip.ts`.
+ */
 
 export interface DadosEvento {
   tenantId?: string | null;

@@ -78,6 +78,11 @@ export function Situacao({ status }: { status: string }) {
     {
       trial: "border-acento/40 bg-acento/10 text-acento",
       ativo: "border-ok/40 bg-ok/10 text-ok",
+      /* Cortesia tem cor PRÓPRIA, e não a do ativo, de propósito: as duas se
+         parecem no acesso e são opostas no dinheiro. O painel existe para o
+         dono responder "quanto entra", e duas linhas verdes iguais em que uma
+         paga e a outra não é a leitura errada que ele mais paga caro. */
+      cortesia: "border-acento-alto/40 bg-acento-alto/10 text-acento-alto",
       inadimplente: "border-alerta/40 bg-alerta/10 text-alerta",
       cancelado: "border-erro/40 bg-erro/10 text-erro",
     }[status] ?? "border-linha text-texto-soft";

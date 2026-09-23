@@ -1,5 +1,5 @@
 import "server-only";
-import { consultar, consultarUm } from "./db";
+import { consultar, consultarUm, emTransacao } from "./db";
 
 /**
  * O endereço do estúdio, e o apelido que sobrevive à troca.
@@ -158,26 +158,19 @@ export async function trocarEndereco(
   );
   if (!retomando && (jaTem?.n ?? 0) >= LIMITE_TROCAS) return { erro: RECADOS.limite };
 
-  await consultar("begin");
-  try {
-    await consultar(
+  /* `emTransacao` e não três `consultar` seguidos: cada `consultar` pede uma
+     conexão ao pool, então o `begin` podia abrir transação numa conexão que
+     nunca receberia o `update`. Com o pool ocioso o mesmo cliente volta sempre
+     e o erro não aparece — ele apareceria no dia de movimento. Ver `lib/db.ts`. */
+  await emTransacao(async (q) => {
+    await q(
       `insert into enderecos_antigos (slug, tenant_id) values ($1, $2)
        on conflict (slug) do nothing`,
       [tenant.slug, tenantId],
     );
-    await consultar("delete from enderecos_antigos where slug = $1 and tenant_id = $2", [
-      slug,
-      tenantId,
-    ]);
-    await consultar("update tenants set slug = $1, atualizado_em = now() where id = $2", [
-      slug,
-      tenantId,
-    ]);
-    await consultar("commit");
-  } catch (e) {
-    await consultar("rollback");
-    throw e;
-  }
+    await q("delete from enderecos_antigos where slug = $1 and tenant_id = $2", [slug, tenantId]);
+    await q("update tenants set slug = $1, atualizado_em = now() where id = $2", [slug, tenantId]);
+  });
 
   return { slug };
 }

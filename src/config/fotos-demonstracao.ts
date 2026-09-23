@@ -71,7 +71,9 @@ export interface FotoDemonstracao {
   altura: number;
   url: string;
   urlGrande: string;
-  urlDownload: null;
+  /* Sempre `true`: são SVG desenhados aqui, e a galeria só usa esta marca para
+     não pendurar um arquivo de vídeo num `<img>`. Ver `ItemGaleria.temPoster`. */
+  temPoster: true;
   secaoId: null;
 }
 
@@ -90,12 +92,12 @@ export function fotosDeDemonstracao(tema: Tema): FotoDemonstracao[] {
       id: `demo:${i}`,
       nome: c.nome,
       tipo: "foto" as const,
+      temPoster: true as const,
       bytes: 0,
       largura: c.largura,
       altura: c.altura,
       url: imagem,
       urlGrande: imagem,
-      urlDownload: null,
       secaoId: null,
     };
   });

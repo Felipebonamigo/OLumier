@@ -7,7 +7,7 @@ import { marca } from "@/config/marca";
 import { MontadorPlano } from "@/components/montador-plano";
 import { MarcaTile, SeloBeta } from "@/components/marca-tile";
 import { SeletorTema } from "@/components/seletor-tema";
-import { TEMAS } from "@/config/aparencia";
+import { TEMAS, PRESETS, OPCOES } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
 import { ESPACOS, formatarGb } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
@@ -58,7 +58,20 @@ export const metadata: Metadata = {
  * escrito na página é o número da grade.
  */
 const MENOR_ESPACO = ESPACOS[0];
-const MAIOR_ESPACO = ESPACOS[ESPACOS.length - 1];
+/*
+ * O MAIOR NÃO SE ANUNCIA MAIS (06/09/2026).
+ *
+ * A frase era "de 250 GB a 10 TB", e o 10 TB vinha do último degrau escrito em
+ * `ESPACOS`. Ele deixou de ser teto: acima dele a escada continua de tera em
+ * tera, pela mesma reta de R$ 80 (ver `precoDoEspacoCentavos`). Anunciar o
+ * último degrau como limite passou a ser uma mentira calada na direção pior —
+ * a que faz o cliente grande achar que o produto não serve para ele.
+ *
+ * Continua sem a palavra "ilimitado", e isso é escolha do Felipe em 06/09/2026,
+ * não descuido: existe um limite de sanidade em `ESPACO_MAXIMO_GB`, e uma
+ * palavra que o contrato desmente é a que o cliente cobra. "Para cima" é
+ * verdade em qualquer tamanho que a gente venda.
+ */
 
 /*
  * A FAQ.
@@ -176,7 +189,7 @@ const FAQ_LD = {
 const PERGUNTAS = [
   {
     pergunta: "Quanto cabe, no total?",
-    aqui: `De ${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)} — e o número é seu, não do pacote.`,
+    aqui: `De ${formatarGb(MENOR_ESPACO.gb)} para cima, de tera em tera — e o número é seu, não do pacote.`,
     olhar:
       "Onde o espaço vem embutido num plano, o teto costuma estar na casa das dezenas de GB. Um casamento fotografado e filmado passa disso sozinho, e teto não se compra separado: quando enche, a saída é mudar de serviço no meio da temporada.",
   },
@@ -198,7 +211,7 @@ const PERGUNTAS = [
  * real (`ESPACOS`) — se ela mudar, a ficha acompanha sozinha. */
 const FICHA: [string, string][] = [
   ["mídia", "foto e filme 4K"],
-  ["espaço", `${formatarGb(MENOR_ESPACO.gb)} a ${formatarGb(MAIOR_ESPACO.gb)}`],
+  ["espaço", `a partir de ${formatarGb(MENOR_ESPACO.gb)}`],
   ["downloads", "sem limite"],
   ["álbum", "escolha com trava"],
   ["endereço", "seu, com sua marca"],
@@ -300,17 +313,31 @@ export default function Home() {
         />
 
         <div className="mx-auto w-full max-w-6xl px-6 pb-16 pt-40">
+          {/* A sobrancelha e o parágrafo abaixo saíram do Felipe em 16/09/2026,
+              nas palavras dele: "colocar: galerias inteligentes de alto padrão
+              visual" e "usar slogan: uma galeria brasileira, intuitiva e feita
+              para fotógrafos & filmmakers/storymakers".
+
+              A sobrancelha lê `marca.descricao` em vez de repetir a frase: ela
+              é a mesma que sai no `<meta description>` e no cartão do link, e
+              duas cópias da promessa da marca é exatamente o tipo de coisa que
+              envelhece separada. */}
           <p className="text-[13px] tracking-[0.22em] text-texto-soft uppercase">
-            Galerias de entrega para fotógrafos e filmakers
+            {marca.descricao.replace(/\.$/, "")}
           </p>
+          {/* As duas linhas juntas são `marca.tagline`, e não por acaso:
+              `testar-marca-plataforma.mjs` exige a igualdade. O corte fica aqui
+              porque a segunda metade é a que recebe o âmbar, e derivar isso de
+              uma string exigiria uma regra que a próxima frase desobedeceria. */}
           <h1 className="mt-5 font-serif text-6xl font-bold leading-[0.98] tracking-tight sm:text-8xl">
-            O dia passa.
+            Onde o instante
             <br />
-            <span className="text-acento-alto">As fotos ficam.</span>
+            <span className="text-acento-alto">permanece.</span>
           </h1>
           <p className="mt-7 max-w-[46ch] text-lg leading-relaxed text-texto sm:text-xl">
-            {marca.nome} é o lugar onde o seu trabalho chega ao seu cliente: com a sua marca,
-            no seu endereço, direto na galeria do celular dele.
+            Uma galeria brasileira, intuitiva e feita para fotógrafos, filmmakers e
+            storymakers: o seu trabalho chega ao seu cliente com a sua marca, no seu
+            endereço, direto no celular dele.
           </p>
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link href="/cadastrar" className={CTA}>
@@ -375,9 +402,21 @@ export default function Home() {
             },
             {
               n: "2",
-              titulo: "Escolha a cara da entrega",
+              titulo: "Deixe com a sua cara",
+              /*
+                O número dos estilos sai de `PRESETS`, e o das fontes de
+                `OPCOES.tipografia`: escritos à mão, os dois já estavam
+                desatualizados — a página prometia "quatro estilos prontos" com
+                dez no ar e "nove fontes" com vinte e uma. Número escrito à mão
+                numa página de vendas envelhece calado, e quem descobre é o
+                cliente, depois de assinar.
+              */
               texto:
-                "Quatro estilos prontos ou a sua combinação: capa, cores, grade, espaçamento e nove fontes de título — cada uma mostrada nela mesma. A prévia já abre com fotos, para você decidir vendo, e a sua logo assina o topo.",
+                `${PRESETS.length} estilos prontos ou a sua combinação: capa, cores, grade, ` +
+                `espaçamento e ${OPCOES.tipografia.length} fontes de título — cada uma mostrada ` +
+                `nela mesma. A sua logo assina o topo, a sua fonte pode ser a do título e do ` +
+                `texto, e a sua cor pinta os botões. Salvou o desenho como padrão, toda entrega ` +
+                `nova já nasce assim. A prévia é a galeria de verdade: você decide vendo.`,
             },
             {
               n: "3",
@@ -517,9 +556,21 @@ export default function Home() {
               },
               {
                 n: "2",
-                titulo: "Eles fecham juntos",
+                titulo: "Cada um com a sua lista",
+                /*
+                 * Dizia "a lista é uma só: a noiva no celular e o noivo no
+                 * notebook veem a mesma escolha" — e isso deixou de ser verdade
+                 * em 15/09/2026, quando cada pessoa passou a ter a sua, por
+                 * e-mail. A promessa pública ficou descrevendo o produto
+                 * anterior por dois dias.
+                 *
+                 * O "mesma escolha no celular e no notebook" continua valendo, e
+                 * é o que o e-mail garante — só que agora por PESSOA, que é o
+                 * ponto: fornecedor, convidado e família também abrem o link, e
+                 * nenhum deles desmarca a escolha da noiva.
+                 */
                 texto:
-                  "A lista é uma só: a noiva no celular e o noivo no notebook veem a mesma escolha. Quando terminam, eles encerram — e a lista trava, para o álbum não mudar depois de diagramado. Mudaram de ideia? Você reabre em um clique.",
+                  "Quem favorita se identifica por e-mail, e leva a própria lista para qualquer aparelho — fornecedor, convidado e família abrem o mesmo link sem mexer na escolha do casal. Quando terminam, eles encerram, e a lista trava para o álbum não mudar depois de diagramado. Mudaram de ideia? Você reabre em um clique.",
               },
               {
                 n: "3",
@@ -544,10 +595,69 @@ export default function Home() {
         </div>
       </section>
 
+      {/*
+        ── ato 3¾: de onde ela vem ──────────────────────────────────────────
+
+        Felipe, 16/09/2026: "na página de vendas, precisa ficar claro como
+        funciona a galeria, que ela é personalizável com a identidade do
+        fotógrafo, que ela é intuitiva, uma galeria brasileira feita por
+        fotógrafos, um suporte brasileiro que facilita tudo".
+
+        O "como funciona" e o "personalizável" estão no ato 2, que é onde a
+        pessoa ainda está decidindo se continua lendo. O que faltava é o que
+        esta seção diz: de onde o produto vem, e por que isso muda a entrega.
+
+        ── A REGRA DE CONTEÚDO É A DA PÁGINA INTEIRA ──────────────────────
+
+        Só entra o que EXISTE. Esta página não tem barra de logos nem
+        depoimento porque o produto tem zero estúdios pagantes hoje, e o mesmo
+        critério vale aqui: cada frase abaixo é conferível.
+
+        "Feita junto com quem entrega casamento" é literal — o histórico deste
+        repositório é uma sequência de queixas datadas de fotógrafos em serviço,
+        e cada uma virou uma linha de código. "Em português" e "em real" são
+        fatos do produto. Sobre o atendimento, a frase promete o que dá para
+        cumprir: quem responde é gente da equipe, e não uma central. Não há
+        promessa de prazo, porque prazo é coisa que se cumpre, não que se
+        anuncia.
+      */}
+      <section className="border-b border-linha">
+        <div className="mx-auto max-w-6xl px-6 py-28">
+          <Revelar>
+            <Marcador n="04" rotulo="De onde ela vem" />
+            <h2 className="mt-5 max-w-[20ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
+              Brasileira, e feita junto com quem entrega casamento.
+            </h2>
+          </Revelar>
+
+          <div className="mt-14 grid gap-px overflow-hidden rounded-2xl border border-linha bg-linha sm:grid-cols-3">
+            {[
+              [
+                "Nasceu dentro de um estúdio",
+                "Cada tela daqui começou numa reclamação de quem estava entregando um casamento naquele dia — a pasta que não virou capítulo, o link que não dava para arrumar, a foto que abria fora de ordem. Não é um produto importado e traduzido.",
+              ],
+              [
+                "Intuitiva porque foi cortada",
+                "A entrega inteira são três gestos, e o que não cabia neles saiu. Quem sobe as fotos não responde formulário, não escolhe formato e não aprende palavra nova: arrasta a pasta e manda o link.",
+              ],
+              [
+                "Em português, e em real",
+                "Painel, e-mail do casal e atendimento na sua língua. Preço em real, no Pix ou no cartão, sem conversão de dólar no meio do mês. E quem responde quando você escrever é alguém da equipe que fez isto.",
+              ],
+            ].map(([t, d]) => (
+              <div key={t} className="bg-void px-6 py-8">
+                <h3 className="font-serif text-xl font-semibold tracking-tight">{t}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-texto-soft">{d}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── ato 4: a ferramenta — índice de catálogo, linha a linha ────── */}
       <section className="mx-auto max-w-6xl px-6 py-28">
         <Revelar>
-          <Marcador n="04" rotulo="Do seu lado do balcão" />
+          <Marcador n="05" rotulo="Do seu lado do balcão" />
           <h2 className="mt-5 max-w-[24ch] font-serif text-4xl font-bold tracking-tight sm:text-5xl">
             O estúdio continua seu. Só o trabalho pesado muda de dono.
           </h2>
@@ -711,7 +821,7 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-6 py-28">
           <Revelar>
             <div className="max-w-2xl">
-              <Marcador n="05" rotulo="Planos" />
+              <Marcador n="06" rotulo="Planos" />
               <h2 className="mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl">
                 Um número só: quanto espaço você quer
               </h2>
@@ -821,8 +931,8 @@ export default function Home() {
 
           <p className="mt-8 text-sm text-texto-soft">
             Ficou faltando alguma?{" "}
-            <a href={`mailto:${marca.email}`} className="text-acento underline underline-offset-4">
-              {marca.email}
+            <a href={marca.whatsappLink} className="text-acento underline underline-offset-4">
+              WhatsApp {marca.whatsappVisivel}
             </a>{" "}
             — respondemos com detalhe técnico se você quiser.
           </p>
@@ -877,8 +987,8 @@ export default function Home() {
               Termos de uso
             </Link>
             {" · "}
-            <a href={`mailto:${marca.email}`} className="hover:text-texto-soft">
-              {marca.email}
+            <a href={marca.whatsappLink} className="hover:text-texto-soft">
+              WhatsApp {marca.whatsappVisivel}
             </a>
           </p>
           <p>© {new Date().getFullYear()}</p>

@@ -20,6 +20,9 @@ import {
   bytesGuardados,
   quotaVendidaBytes,
   custoDoGuardadoCentavos,
+  custoDoTetoCentavos,
+  custoMensalDoEstudioCentavos,
+  custoDasCortesiasCentavos,
   contagemPorStatus,
   trialsVencendo,
   novosDesde,
@@ -148,6 +151,43 @@ await etapa("a quota do trial é o teto, não a do plano", () => {
 
 await etapa("a quota de quem paga é a do plano", () => {
   igual(String(quotaVendidaBytes([estudio({ quota_bytes: bytes(2000) })])), bytes(2000), "quota");
+});
+
+/*
+ * ── CORTESIA NÃO TEM LIMITE (16/09/2026) ─────────────────────────────────
+ *
+ * As contas dos sócios passaram a não ter teto de espaço. A quota efetiva
+ * delas virou um número astronômico — e somado à "quota vendida" ele faria o
+ * pior caso do painel dizer que a plataforma custaria bilhões se todos
+ * enchessem. Para a cortesia, o teto honesto é o que ela já guarda.
+ */
+await etapa("cortesia entra na quota vendida pelo que guarda, não pelo sem-limite", () => {
+  const linhas = [estudio({ status: "cortesia", quota_bytes: bytes(1250), bytes_no_ar: bytes(18) })];
+  igual(String(quotaVendidaBytes(linhas)), bytes(18), "quota vendida da cortesia");
+  igual(custoDoTetoCentavos(linhas), custoDoGuardadoCentavos(linhas), "teto = guardado");
+});
+
+console.log("\no custo de cada conta");
+
+/*
+ * Pedido do Felipe em 16/09/2026: "deixe no painel admin o custo de cada login,
+ * para que eu possa cobrá-los separado". O custo de UMA conta é o mesmo cálculo
+ * do custo da plataforma, só que sobre o que ela guarda.
+ */
+await etapa("o custo de uma conta é o do que ela guarda, no ar e no cofre", () => {
+  const e = estudio({ bytes_no_ar: bytes(10), bytes_no_cofre: bytes(8) });
+  igual(custoMensalDoEstudioCentavos(e), custoDoGuardadoCentavos([e]), "custo da conta");
+  if (custoMensalDoEstudioCentavos(e) <= 0) throw new Error("18 GB não podem custar zero");
+  return `18 GB = ${custoMensalDoEstudioCentavos(e)} centavos/mês`;
+});
+
+await etapa("o total a cobrar por fora soma só as cortesias", () => {
+  const cortesiaA = estudio({ status: "cortesia", bytes_no_ar: bytes(18) });
+  const cortesiaB = estudio({ status: "cortesia", bytes_no_ar: bytes(4) });
+  const pagante = estudio({ status: "ativo", bytes_no_ar: bytes(500) });
+  const total = custoDasCortesiasCentavos([cortesiaA, pagante, cortesiaB]);
+  igual(total, custoMensalDoEstudioCentavos(cortesiaA) + custoMensalDoEstudioCentavos(cortesiaB), "total");
+  return `${total} centavos`;
 });
 
 console.log("\nas contagens");

@@ -85,18 +85,55 @@ export function Erro({ mensagem }: { mensagem?: string }) {
   );
 }
 
+/*
+ * ── A FORMA DE UM BOTÃO MORA AQUI (16/09/2026) ────────────────────────────
+ *
+ * Felipe, com a foto do assistente de nova galeria: "botões estranhos e em
+ * tamanhos diferentes". "Continuar" tinha `py-2`, "Criar mesmo assim" tinha
+ * `py-2.5` e ainda um `mt-2` — lado a lado, um mais alto que o outro e os dois
+ * desencontrados na linha de base.
+ *
+ * Não era descuido de ninguém: cada tela escrevia as classes do próprio botão,
+ * e classe copiada envelhece separada. Com a forma num lugar só, dois botões
+ * vizinhos não têm COMO sair de tamanhos diferentes.
+ *
+ * Primário e secundário existem porque duas ações do mesmo peso, uma ao lado da
+ * outra, não dizem qual é o caminho. "Continuar" é o caminho; "Criar mesmo
+ * assim" é a saída de emergência — mesma altura, ênfase diferente.
+ */
+export const BOTAO_BASE =
+  "rounded-lg px-4 py-2.5 text-sm font-semibold transition " +
+  "disabled:cursor-not-allowed disabled:opacity-60";
+
+export const BOTAO_PRIMARIO = `${BOTAO_BASE} bg-acento text-void hover:bg-acento-alto`;
+
+export const BOTAO_SECUNDARIO =
+  `${BOTAO_BASE} border border-linha-forte font-medium text-texto-soft hover:bg-carbon-2 hover:text-texto`;
+
 export function BotaoEnviar({
   children,
   carregando,
+  /**
+   * `mt-2` é o respiro de quem vem logo abaixo de um campo, que é o caso da
+   * maioria dos formulários. Numa FILEIRA de botões ele vira desalinhamento:
+   * o botão de enviar desce dois pixels em relação aos vizinhos. Ver a foto de
+   * 16/09/2026 no comentário acima.
+   */
+  emLinha = false,
+  variante = "primario",
 }: {
   children: ReactNode;
   carregando?: boolean;
+  emLinha?: boolean;
+  variante?: "primario" | "secundario";
 }) {
   return (
     <button
       type="submit"
       disabled={carregando}
-      className="mt-2 rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto disabled:cursor-not-allowed disabled:opacity-60"
+      className={`${emLinha ? "" : "mt-2 "}${
+        variante === "primario" ? BOTAO_PRIMARIO : BOTAO_SECUNDARIO
+      }`}
     >
       {carregando ? "Aguarde…" : children}
     </button>

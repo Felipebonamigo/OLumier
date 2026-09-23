@@ -34,6 +34,7 @@ export function PainelSelecao({
   aberta,
   motivo,
   lista,
+  pessoas = [],
 }: {
   galeriaId: string;
   total: number;
@@ -43,6 +44,14 @@ export function PainelSelecao({
   aberta: boolean;
   motivo: "fechada" | "prazo" | null;
   lista: { nome: string; capitulo: string | null }[];
+  /**
+   * Quem escolheu, e quantas — migração 033.
+   *
+   * Vazio nas galerias entregues antes de 15/09/2026: lá a lista era uma só e
+   * ninguém se identificava. O bloco some nesse caso, em vez de desenhar um
+   * "0 pessoas" que faria o fotógrafo procurar um defeito que não existe.
+   */
+  pessoas?: { id: string; email: string; nome: string | null; quantas: number }[];
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -83,9 +92,20 @@ export function PainelSelecao({
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold">Favoritas do cliente</h2>
+          {/*
+            ── O TEXTO FICOU PARA TRÁS DO PRODUTO (17/09/2026) ─────────────
+
+            Dizia "a lista é uma só — o casal escolhe junto". Foi verdade até a
+            migração 033, em 15/09/2026, quando cada pessoa passou a ter a sua,
+            identificada por e-mail. Desde então a frase contradizia a lista por
+            pessoa desenhada dez linhas abaixo dela, na mesma tela.
+
+            Felipe leu o cartão e perguntou se o recurso tinha sido feito. Tinha
+            — só que a tela dizia que não, e é a tela que ele lê.
+          */}
           <p className="mt-0.5 text-xs text-texto-faint">
-            O cliente marca as favoritas na própria galeria. A lista é uma só — o casal escolhe
-            junto, de qualquer aparelho.
+            Cada pessoa marca as suas na própria galeria, identificada por e-mail. A noiva vê a
+            mesma lista no celular e no notebook, e ninguém desmarca a escolha de outro.
           </p>
         </div>
 
@@ -102,11 +122,25 @@ export function PainelSelecao({
         </span>
       </div>
 
-      {/* O número primeiro: é o que ele abre a tela para ver. */}
+      {/*
+        O número primeiro: é o que ele abre a tela para ver.
+
+        ── "DE 40" SAIU DAQUI (17/09/2026) ─────────────────────────────────
+
+        Este total é o da GALERIA INTEIRA, e o limite é POR PESSOA — quem
+        aplica é `alternarDaPessoa`, que conta as favoritas de quem está
+        marcando. Escrever "90 de 40" juntava os dois números como se fossem a
+        mesma conta e dizia ao fotógrafo que o combinado tinha estourado
+        quando três pessoas escolheram 30 cada, dentro do combinado.
+
+        O limite agora aparece onde ele de fato vale: ao lado de cada pessoa,
+        logo abaixo. Aqui fica só o que este número é — a soma.
+      */}
       <p className="mt-4 text-sm text-texto-soft">
         <strong className="text-texto">{total}</strong>{" "}
         {total === 1 ? "foto escolhida" : "fotos escolhidas"}
-        {limite !== null && <> de {limite}</>}
+        {pessoas.length > 1 && <> por {pessoas.length} pessoas</>}
+        {limite !== null && <> · até {limite} por pessoa</>}
         {motivo === "fechada" && fechadaEm && <> · encerrada em {dataBonita(fechadaEm)}</>}
       </p>
 
@@ -139,6 +173,39 @@ export function PainelSelecao({
         </div>
       )}
 
+      {/*
+        ── QUEM ESCOLHEU (15/09/2026, migração 033) ────────────────────────
+
+        Antes a seleção era um número só, porque a lista era uma só. Agora cada
+        pessoa tem a sua, e o total sem os nomes esconderia justamente o que o
+        fotógrafo precisa para montar o álbum: se as 60 fotos são a escolha de
+        uma pessoa ou a soma de duas listas de 30 que se sobrepõem.
+
+        O e-mail aparece porque é o que identifica; o nome, quando foi dado,
+        vem na frente porque é como o fotógrafo conhece a pessoa.
+      */}
+      {pessoas.length > 0 && (
+        <ul className="mt-3 flex flex-wrap gap-2">
+          {pessoas.map((p) => (
+            <li
+              key={p.id}
+              className="rounded-lg border border-linha px-3 py-1.5 text-xs text-texto-soft"
+              title={p.email}
+            >
+              <span className="font-medium text-texto">{p.nome || p.email}</span>
+              {p.nome && <span className="ml-1.5 text-texto-faint">{p.email}</span>}
+              {/* Com limite, a conta de cada uma é contra o limite DELA — que é
+                  como o produto aplica, e o que o fotógrafo precisa saber para
+                  cobrar o combinado. */}
+              <span className="ml-2 text-texto-faint">
+                {p.quantas} {p.quantas === 1 ? "foto" : "fotos"}
+                {limite !== null && <> de {limite}</>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {mostrandoLista && total > 0 && (
         <pre className="mt-3 max-h-64 overflow-auto rounded-lg border border-linha bg-void p-3 text-xs leading-relaxed text-texto-soft">
           {lista.map((l) => (l.capitulo ? `${l.nome}\t${l.capitulo}` : l.nome)).join("\n")}
@@ -148,7 +215,7 @@ export function PainelSelecao({
       {/* Regras */}
       <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-linha pt-5">
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-texto-soft">Quantas fotos o cliente escolhe</span>
+          <span className="text-xs font-medium text-texto-soft">Quantas fotos cada pessoa escolhe</span>
           <input
             type="number"
             min={1}
@@ -196,9 +263,20 @@ export function PainelSelecao({
         )}
       </div>
 
+      {/*
+        ── ESTE PARÁGRAFO DIZIA O CONTRÁRIO DO CÓDIGO (17/09/2026) ─────────
+
+        "O limite vale para a galeria inteira, não por pessoa" foi verdade até a
+        migração 033. Desde então quem aplica é `alternarDaPessoa`, contra a
+        contagem de quem está marcando: o limite é POR PESSOA.
+
+        Felipe apontou o cartão dizendo que "ali está comunicando outro recado".
+        Não era só redação: um fotógrafo que lesse isto combinaria 40 fotos com
+        o casal achando que 40 era o teto da galeria, e receberia 120.
+      */}
       <p className="mt-2 text-xs text-texto-faint">
-        Deixe em branco para não limitar. O limite vale para a galeria inteira, não por pessoa —
-        e baixar o limite nunca apaga escolha que já foi feita.
+        Deixe em branco para não limitar. O limite vale <strong>por pessoa</strong> — cada uma
+        escolhe até esse número —, e baixar o limite nunca apaga escolha que já foi feita.
       </p>
 
       {erro && <p className="mt-3 text-sm text-erro">{erro}</p>}

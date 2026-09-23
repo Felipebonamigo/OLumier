@@ -72,6 +72,54 @@ export async function garantirVisitante(galeriaId: string): Promise<string> {
   return novo;
 }
 
+/*
+ * ── O COOKIE DE QUEM SE IDENTIFICOU (15/09/2026) ──────────────────────────
+ *
+ * Segundo cookie, ao lado do `fav_`, e não uma troca: o primeiro identifica o
+ * NAVEGADOR e existe desde a 010; este guarda a PESSOA, que é o que o e-mail
+ * estabeleceu. São coisas diferentes e vivem separadas — a noiva no celular e
+ * no notebook tem dois navegadores e uma pessoa só.
+ *
+ * Assinado pela mesma razão do outro: sem assinatura, bastaria trocar o id à
+ * mão para abrir a lista de outra pessoa. Com ela, mexer no cookie só derruba
+ * a própria identificação.
+ */
+const nomeCookiePessoa = (galeriaId: string) => `pes_${galeriaId.slice(0, 8)}`;
+
+export async function pessoaAtual(galeriaId: string): Promise<string | null> {
+  const jar = await cookies();
+  const valor = jar.get(nomeCookiePessoa(galeriaId))?.value;
+  if (!valor) return null;
+
+  const corte = valor.lastIndexOf(".");
+  if (corte < 1) return null;
+  const pessoa = valor.slice(0, corte);
+  const assinatura = valor.slice(corte + 1);
+
+  const esperada = assinar(galeriaId, pessoa);
+  const a = Buffer.from(assinatura);
+  const b = Buffer.from(esperada);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  return pessoa;
+}
+
+export async function lembrarPessoa(galeriaId: string, pessoaId: string): Promise<void> {
+  const jar = await cookies();
+  jar.set(nomeCookiePessoa(galeriaId), `${pessoaId}.${assinar(galeriaId, pessoaId)}`, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: DURACAO_DIAS * 24 * 60 * 60,
+  });
+}
+
+/** Sair da própria identificação — o "não sou eu" da tela. */
+export async function esquecerPessoa(galeriaId: string): Promise<void> {
+  const jar = await cookies();
+  jar.delete(nomeCookiePessoa(galeriaId));
+}
+
 /** Por que a seleção não aceita mudança agora. `null` = está aberta. */
 export type MotivoFechada = "fechada" | "prazo";
 
@@ -94,7 +142,108 @@ export interface EstadoSelecao {
  * na madrugada seguinte aceitaria escolha depois do combinado, e o fotógrafo
  * descobriria pelo cliente. Comparar a data na leitura custa nada e nunca atrasa.
  */
-export async function estadoSelecao(galeriaId: string): Promise<EstadoSelecao> {
+/**
+ * ── QUEM ESCOLHEU (15/09/2026, migração 033) ──────────────────────────────
+ *
+ * A identidade é o E-MAIL, não o cookie. O cookie identifica o NAVEGADOR, e a
+ * noiva abre no celular e no notebook: dois cookies, uma pessoa só. O que ele
+ * passa a guardar é "quem você disse que é", para ela não redigitar.
+ *
+ * O e-mail não é conferido — decisão do Felipe em 15/09/2026. Isto separa
+ * listas por honestidade, não por segurança, e é o bastante para o problema
+ * real: o convidado que desmarcava a escolha da noiva sem querer.
+ */
+export interface PessoaDaGaleria {
+  id: string;
+  email: string;
+  nome: string | null;
+}
+
+/** A pessoa deste e-mail nesta galeria, criando na primeira vez. */
+export async function pessoaPorEmail(
+  galeriaId: string,
+  email: string,
+  nome?: string | null,
+): Promise<PessoaDaGaleria | null> {
+  const limpo = String(email ?? "").trim().slice(0, 160);
+  /* A régua mais burra que separa engano de endereço: algo, arroba, algo,
+     ponto, algo. Não é validação de e-mail — ninguém valida e-mail sem mandar
+     um —, é só o filtro que impede "ana" e "ana@" de virarem listas órfãs. */
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(limpo)) return null;
+
+  const limpoNome = nome ? String(nome).trim().slice(0, 80) || null : null;
+
+  /*
+   * `on conflict` em cima do índice de `lower(email)`: duas abas da mesma
+   * pessoa chegando juntas não podem virar duas listas. O `do update` existe
+   * para o nome poder ser corrigido depois, e o `coalesce` impede que uma
+   * segunda entrada sem nome apague o nome já dado.
+   */
+  const linha = await consultarUm<PessoaDaGaleria>(
+    `insert into pessoas_da_galeria (galeria_id, email, nome)
+          values ($1, $2, $3)
+     on conflict (galeria_id, lower(email))
+     do update set nome = coalesce(excluded.nome, pessoas_da_galeria.nome)
+       returning id, email, nome`,
+    [galeriaId, limpo, limpoNome],
+  );
+  return linha ?? null;
+}
+
+/** Nome e e-mail de quem está identificado, para a tela dizer "você é fulano". */
+export async function dadosDaPessoa(
+  galeriaId: string,
+  pessoaId: string,
+): Promise<PessoaDaGaleria | null> {
+  return consultarUm<PessoaDaGaleria>(
+    "select id, email, nome from pessoas_da_galeria where id = $1 and galeria_id = $2",
+    [pessoaId, galeriaId],
+  );
+}
+
+/** As fotos que ESTA pessoa escolheu. Sem pessoa, lista vazia. */
+export async function favoritasDaPessoa(
+  galeriaId: string,
+  pessoaId: string | null,
+): Promise<string[]> {
+  if (!pessoaId) return [];
+  const linhas = await consultar<{ media_id: string }>(
+    "select media_id from favoritas where galeria_id = $1 and pessoa_id = $2",
+    [galeriaId, pessoaId],
+  );
+  return linhas.map((l) => l.media_id);
+}
+
+/** Quem escolheu o quê, para o painel do fotógrafo. */
+export async function resumoPorPessoa(
+  galeriaId: string,
+): Promise<{ id: string; email: string; nome: string | null; quantas: number }[]> {
+  return consultar<{ id: string; email: string; nome: string | null; quantas: number }>(
+    `select p.id, p.email, p.nome, count(f.id)::int as quantas
+       from pessoas_da_galeria p
+       left join favoritas f on f.pessoa_id = p.id
+      where p.galeria_id = $1
+      group by p.id, p.email, p.nome, p.criado_em
+      order by count(f.id) desc, p.criado_em`,
+    [galeriaId],
+  );
+}
+
+export async function estadoSelecao(
+  galeriaId: string,
+  /*
+   * O LIMITE PASSA A CONTAR POR PESSOA (15/09/2026).
+   *
+   * Com listas separadas é a única leitura coerente: "escolha até 30" dito a
+   * quatro pessoas não pode virar 30 no total, ou a primeira a abrir consome a
+   * cota das outras. O efeito colateral é real e o fotógrafo precisa saber: se
+   * ele combinou 30 fotos no álbum, a noiva escolhe 30 e o noivo outras 30.
+   *
+   * Sem pessoa, conta a galeria inteira — é o que o painel do fotógrafo lê, e
+   * o que a lista antiga (`pessoa_id` nulo) sempre foi.
+   */
+  pessoaId?: string | null,
+): Promise<EstadoSelecao> {
   const linha = await consultarUm<{
     limite: number | null;
     prazo: Date | null;
@@ -103,9 +252,11 @@ export async function estadoSelecao(galeriaId: string): Promise<EstadoSelecao> {
   }>(
     `select g.selecao_limite as limite, g.selecao_prazo as prazo,
             g.selecao_fechada_em as fechada_em,
-            (select count(*)::int from favoritas f where f.galeria_id = g.id) as total
+            (select count(*)::int from favoritas f
+              where f.galeria_id = g.id
+                and ($2::uuid is null or f.pessoa_id = $2)) as total
        from galerias g where g.id = $1`,
-    [galeriaId],
+    [galeriaId, pessoaId ?? null],
   );
 
   if (!linha) {
@@ -144,55 +295,7 @@ export async function estadoSelecao(galeriaId: string): Promise<EstadoSelecao> {
  * sem poder trocar uma foto por outra, que é justamente o que se faz no fim de
  * uma seleção.
  */
-export async function alternar(
-  galeriaId: string,
-  mediaId: string,
-  visitante: string,
-): Promise<{ favorita: boolean; total: number } | { erro: MotivoFechada | "cheia" } | null> {
-  const media = await consultarUm<{ id: string }>(
-    "select id from medias where id = $1 and galeria_id = $2 and pronto",
-    [mediaId, galeriaId],
-  );
-  if (!media) return null;
 
-  const estado = await estadoSelecao(galeriaId);
-  if (!estado.aberta) return { erro: estado.motivo! };
-
-  const removidas = await consultar<{ id: string }>(
-    "delete from favoritas where galeria_id = $1 and media_id = $2 returning id",
-    [galeriaId, mediaId],
-  );
-  if (removidas.length > 0) return { favorita: false, total: estado.total - 1 };
-
-  if (estado.cheia) return { erro: "cheia" };
-
-  /*
-   * `on conflict do nothing` fecha a corrida: dois cliques quase juntos (ou uma
-   * rede que reenvia) chegariam aqui duas vezes, e sem isto o segundo estouraria
-   * no índice único e viraria erro 500 numa ação que, para a pessoa, deu certo.
-   */
-  await consultar(
-    `insert into favoritas (galeria_id, media_id, visitante)
-     values ($1, $2, $3) on conflict (galeria_id, media_id) do nothing`,
-    [galeriaId, mediaId, visitante],
-  );
-  return { favorita: true, total: estado.total + 1 };
-}
-
-/**
- * As fotos escolhidas na galeria — a lista é uma só, compartilhada.
- *
- * O nome ficou de quando cada visitante tinha a sua (migração 010). Continua
- * aqui porque é o que a página pública chama, e trocar o nome sem trocar o
- * comportamento seria churn; o comportamento mudou na 019.
- */
-export async function minhasFavoritas(galeriaId: string): Promise<string[]> {
-  const linhas = await consultar<{ media_id: string }>(
-    "select media_id from favoritas where galeria_id = $1",
-    [galeriaId],
-  );
-  return linhas.map((l) => l.media_id);
-}
 
 export interface ResumoFavoritas {
   /** media_id → quantas pessoas marcaram */
@@ -201,6 +304,56 @@ export interface ResumoFavoritas {
   fotos: number;
   /** quantas listas diferentes existem (celular da noiva e notebook do noivo contam 2) */
   pessoas: number;
+}
+
+/**
+ * Marca ou desmarca NA LISTA DESTA PESSOA.
+ *
+ * O `delete` leva `pessoa_id` no `where`, e é essa linha que resolve o pedido
+ * inteiro. Filtrar só a LEITURA por pessoa mostraria listas separadas e deixaria
+ * um continuar apagando a do outro — o defeito original, agora invisível.
+ * `scripts/testar-favoritas-por-pessoa.mjs` gasta metade das etapas nisso.
+ *
+ * A media precisa ser DESTA galeria: sem essa conferência, um id chutado
+ * marcaria foto de outra galeria, e ela apareceria na lista do fotógrafo errado.
+ *
+ * O limite é conferido AQUI, não na tela: qualquer pessoa com o link chama a
+ * rota direto do console do navegador, e limite que só existe no botão é
+ * sugestão. DESmarcar passa mesmo com a lista cheia — senão a pessoa fica presa
+ * no limite sem poder trocar uma foto por outra, que é o que se faz no fim.
+ */
+export async function alternarDaPessoa(
+  galeriaId: string,
+  mediaId: string,
+  pessoaId: string,
+): Promise<{ favorita: boolean; total: number } | { erro: MotivoFechada | "cheia" } | null> {
+  const media = await consultarUm<{ id: string }>(
+    "select id from medias where id = $1 and galeria_id = $2 and pronto",
+    [mediaId, galeriaId],
+  );
+  if (!media) return null;
+
+  const estado = await estadoSelecao(galeriaId, pessoaId);
+  if (!estado.aberta) return { erro: estado.motivo! };
+
+  const removidas = await consultar<{ id: string }>(
+    "delete from favoritas where galeria_id = $1 and media_id = $2 and pessoa_id = $3 returning id",
+    [galeriaId, mediaId, pessoaId],
+  );
+  if (removidas.length > 0) return { favorita: false, total: estado.total - 1 };
+
+  if (estado.cheia) return { erro: "cheia" };
+
+  /* `visitante` continua preenchido porque a coluna é `not null` desde a 010 —
+     e continua sendo o que sempre foi: de ONDE veio a marcação. Quem ela É
+     agora mora em `pessoa_id`. */
+  await consultar(
+    `insert into favoritas (galeria_id, media_id, visitante, pessoa_id)
+     values ($1, $2, $3::text, $4::uuid)
+     on conflict (galeria_id, media_id, pessoa_id) where pessoa_id is not null do nothing`,
+    [galeriaId, mediaId, pessoaId, pessoaId],
+  );
+  return { favorita: true, total: estado.total + 1 };
 }
 
 /**

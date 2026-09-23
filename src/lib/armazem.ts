@@ -6,6 +6,7 @@ import {
   urlDaParte,
   fecharEnvioEmPartes,
   abortarEnvioEmPartes,
+  apagarObjetos,
 } from "./r2";
 import {
   urlDeLeituraArquivo,
@@ -16,6 +17,7 @@ import {
   urlDaParteArquivo,
   fecharEnvioEmPartesArquivo,
   abortarEnvioEmPartesArquivo,
+  apagarArquivos,
 } from "./b2";
 
 /**
@@ -202,4 +204,70 @@ export function abortarEnvioDoOriginal(
   return armazem === "b2"
     ? abortarEnvioEmPartesArquivo(chave, uploadId)
     : abortarEnvioEmPartes(chave, uploadId);
+}
+
+/**
+ * APAGAR OS ARQUIVOS DE UM LOTE DE MÍDIAS — no fornecedor certo, em poucas
+ * requisições.
+ *
+ * ── DE ONDE VEIO (18/09/2026) ─────────────────────────────────────────────
+ *
+ * Ana Carolina, com a foto do aviso do navegador: "Não foi possível apagar
+ * agora. Tente de novo." — "as fotos não subiram em ordem e to tentando apagar
+ * elas da galeria e da erro".
+ *
+ * A rota do "apagar todas" disparava UMA requisição por chave, todas de uma
+ * vez: numa galeria de 286 fotos são 858 chamadas simultâneas ao armazém, de um
+ * VPS pequeno, atrás de um proxy com tempo limite. O `DeleteObjects` existia
+ * desde sempre em `r2.apagarObjetos` — escrito com esta conta no comentário —
+ * e a rota não o usava.
+ *
+ * ── E O ORIGINAL NO B2 NÃO ERA APAGADO ────────────────────────────────────
+ *
+ * As duas rotas de apagar chamavam `r2.apagarObjeto` para TODAS as chaves,
+ * inclusive a do original. Desde a fase 3 da obra o original pode morar no B2 —
+ * e ali a chamada erra de balde, some no `.catch(() => {})` e deixa arquivo
+ * PAGO para trás, sem linha no banco que o mencione. Ninguém veria: a galeria
+ * fica certa, só a fatura cresce.
+ *
+ * Quem sabe onde cada arquivo mora é este módulo. Então é aqui que o apagar
+ * mora também.
+ *
+ * ── O QUE ELA NÃO FAZ: DERRUBAR O PEDIDO ──────────────────────────────────
+ *
+ * Devolve o que falhou em vez de lançar. Quem chama já apagou as LINHAS — o
+ * banco é a fonte da verdade — e transformar uma falha de bucket em erro na
+ * tela é dizer "não deu" para quem acabou de ver a galeria esvaziar. O pior
+ * caso é objeto órfão, que `scripts/varrer-orfaos.mjs` recolhe depois.
+ */
+export async function apagarArquivosDasMedias(
+  medias: readonly {
+    chave: string;
+    chave_thumb?: string | null;
+    chave_preview?: string | null;
+    armazem?: string | null;
+  }[],
+): Promise<{ apagadas: number; falhou: string | null }> {
+  const noR2: string[] = [];
+  const noB2: string[] = [];
+
+  for (const m of medias) {
+    /* As DERIVADAS ficam sempre no R2 — é a regra deste módulo inteiro. */
+    if (m.chave_thumb) noR2.push(m.chave_thumb);
+    if (m.chave_preview) noR2.push(m.chave_preview);
+    if (m.chave) (armazemDe(m.armazem) === "b2" ? noB2 : noR2).push(m.chave);
+  }
+
+  const problemas: string[] = [];
+  /* Os dois fornecedores em paralelo, mas cada um em lotes de 1000 por dentro:
+     é a diferença entre 2 requisições e 858. */
+  await Promise.all([
+    noR2.length ? apagarObjetos(noR2).catch((e) => problemas.push(`R2: ${e.message}`)) : null,
+    noB2.length ? apagarArquivos(noB2).catch((e) => problemas.push(`B2: ${e.message}`)) : null,
+  ]);
+
+  return {
+    apagadas: noR2.length + noB2.length,
+    falhou: problemas.length ? problemas.join(" · ") : null,
+  };
 }

@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
-import { quotaEfetivaBytes } from "@/config/trial";
+import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais } from "@/config/planos";
-import { asaasConfigurado, asaasEmProducao, proximaCobranca } from "@/lib/asaas";
+import {
+  asaasConfigurado,
+  asaasEmProducao,
+  proximaCobranca,
+  buscarAssinatura,
+} from "@/lib/asaas";
+import { rotuloDoCartao } from "@/lib/cartao-salvo";
 import { conferirConfiguracao } from "@/config/socios";
 import { AssinaturaBotao } from "@/components/assinatura-botao";
 import { situacaoDoTenant } from "@/lib/assinatura";
@@ -92,6 +98,20 @@ export default async function ContaPage() {
       ? await proximaCobranca(tenant.asaas_assinatura_id).catch(() => null)
       : null;
 
+  /*
+   * O cartão que o Asaas guardou, se guardou.
+   *
+   * `.catch(() => null)` e não `throw`: a tela de Conta mostra espaço usado,
+   * marca, senha, endereço e chaves de API — derrubar tudo isso porque o Asaas
+   * demorou a responder seria trocar um aviso por uma página de erro. Sem
+   * resposta, a tela simplesmente não promete cobrança automática, que é o
+   * comportamento certo. Ver a regra de silêncio em `lib/cartao-salvo.ts`.
+   */
+  const cartaoSalvo =
+    asaasConfigurado() && tenant.asaas_assinatura_id
+      ? rotuloDoCartao(await buscarAssinatura(tenant.asaas_assinatura_id).catch(() => null))
+      : null;
+
   // Estado da divisão entre sócios — carteira faltando não quebra a cobrança,
   // mas precisa ficar visível para não passar despercebido.
   const { ok: splitOk, avisos: avisosSplit } = conferirConfiguracao();
@@ -136,13 +156,21 @@ export default async function ContaPage() {
               {new Date(cobranca.dueDate).toLocaleDateString("pt-BR")} ·{" "}
               {formatarReais(Math.round(cobranca.value * 100))}
             </p>
+            {/* A promessa só aparece quando dá para mostrar EM QUAL cartão —
+                prometer "automático" sem provar faria quem paga por Pix parar
+                de pagar. Ver `lib/cartao-salvo.ts`. */}
+            {cartaoSalvo ? (
+              <p className="mt-1 text-xs text-ok">
+                Cobrança automática no {cartaoSalvo} — você não precisa fazer nada.
+              </p>
+            ) : null}
             <a
               href={cobranca.invoiceUrl}
               target="_blank"
               rel="noreferrer"
               className="mt-2 inline-block text-sm text-acento underline underline-offset-4"
             >
-              Ver e pagar ↗
+              {cartaoSalvo ? "Ver a fatura ↗" : "Ver e pagar ↗"}
             </a>
           </div>
         ) : (
@@ -150,6 +178,10 @@ export default async function ContaPage() {
             temAssinatura={Boolean(tenant.asaas_assinatura_id)}
             cobrancaLigada={asaasConfigurado()}
             documentoSalvo={tenant.cpf_cnpj}
+            /* Só o MENSAL da faixa. O anual é derivado na tela a partir de
+               `MESES_PAGOS_NO_ANO`, para não existir um segundo lugar guardando
+               preço — e para o desconto na tela nunca discordar do cobrado. */
+            precoMensalCentavos={plano?.precoCentavos ?? 0}
           />
         )}
 
@@ -215,7 +247,7 @@ export default async function ContaPage() {
           <Balde
             rotulo="Espaço do estúdio"
             usado={uso.noAr + uso.noCofre}
-            limite={quotaEfetivaBytes(tenant)}
+            limite={espacoSemLimite(tenant) ? null : quotaEfetivaBytes(tenant)}
             nota="Galerias no ar e entregas guardadas usam o mesmo espaço."
           />
           <p className="mt-3 font-mono text-[11px] tabular-nums text-texto-faint">
@@ -229,6 +261,7 @@ export default async function ContaPage() {
         nomeEstudio={tenant.nome_estudio}
         corDestaque={tenant.cor_destaque}
         urlLogo={urlLogo}
+        fonteNome={tenant.fonte_nome}
         slug={tenant.slug}
       />
 
@@ -310,11 +343,12 @@ function Balde({
 }: {
   rotulo: string;
   usado: bigint;
-  limite: bigint;
+  /** `null` = sem limite (conta de cortesia). */
+  limite: bigint | null;
   nota: string;
 }) {
-  const pct = limite > BigInt(0) ? Number((usado * BigInt(1000)) / limite) / 10 : 0;
-  const estourou = usado > limite;
+  const pct = limite && limite > BigInt(0) ? Number((usado * BigInt(1000)) / limite) / 10 : 0;
+  const estourou = limite !== null && usado > limite;
   const apertado = pct >= 85;
 
   return (
@@ -326,8 +360,10 @@ function Balde({
             estourou ? "text-erro" : apertado ? "text-alerta" : "text-texto-faint"
           }`}
         >
-          {formatarBytes(usado)} de {formatarBytes(limite)}
-          {limite > BigInt(0) && ` · ${pct.toFixed(0)}%`}
+          {limite === null
+            ? `${formatarBytes(usado)} · sem limite`
+            : `${formatarBytes(usado)} de ${formatarBytes(limite)}`}
+          {limite !== null && limite > BigInt(0) && ` · ${pct.toFixed(0)}%`}
         </span>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-void">

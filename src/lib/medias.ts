@@ -19,6 +19,16 @@ export interface Media {
   pronto: boolean;
   criado_em: Date;
   /**
+   * Quando a CÂMERA gravou a foto (DateTimeOriginal do EXIF), ou null.
+   *
+   * Nulo é comum e não é falha: vídeo não tem, PNG normalmente não traz, foto
+   * exportada sem metadados também não, e nada que subiu antes da migração 035
+   * tem como ganhar — o original está no bucket, e baixá-lo de volta para ler o
+   * cabeçalho custaria banda por arquivo. Quem ordena por data cai em
+   * `criado_em` nesses casos, e a tela diz isso.
+   */
+  tirada_em: Date | null;
+  /**
    * Em qual fornecedor o ORIGINAL mora: 'r2' (padrão) ou 'b2'. As derivadas
    * ficam sempre no r2 — ver `lib/armazem.ts`, que é quem decide de onde ler.
    */
@@ -139,6 +149,16 @@ export async function criarMediaPendente(dados: {
   /** Posição do arquivo na lista que o fotógrafo ordenou. */
   indice?: number;
   /**
+   * O ENVIO de que este arquivo faz parte (migração 038).
+   *
+   * É o que segura a base da posição do começo ao fim do lote. Ausente, a conta
+   * volta a ser a de antes — o que mantém funcionando qualquer cliente antigo, e
+   * é por isso que ele é opcional.
+   */
+  lote?: string | null;
+  /** DateTimeOriginal do EXIF. Ver migração 035. */
+  tiradaEm?: Date | null;
+  /**
    * Onde o ORIGINAL vai nascer. Gravado na linha na hora da criação, e não
    * consultado depois: um vídeo de 30 GB pode levar horas subindo, e se a
    * credencial do B2 entrar no ambiente no meio do envio, as partes seguintes
@@ -148,28 +168,45 @@ export async function criarMediaPendente(dados: {
 }) {
   /*
    * A ORDEM vem do navegador (a posição do arquivo na lista já ordenada por
-   * nome), somada à última posição CONFIRMADA da galeria.
+   * nome), somada à última posição da galeria ANTES deste envio.
    *
    * O `max(ordem)` sozinho embaralhava: três arquivos sobem em paralelo, os três
    * leem o mesmo máximo e recebem a mesma posição — e "foto_1, foto_2, foto_3"
    * chegava ao casal fora de ordem. O fotógrafo ordena os arquivos de propósito
    * antes de enviar; essa ordem é a narrativa do casamento.
    *
-   * O filtro `pronto` é o que torna a base estável durante o envio: as linhas
-   * pendentes do próprio lote não mexem no cálculo, então os três paralelos
-   * chegam ao mesmo ponto de partida e cada um soma o seu índice.
+   * ── O `pronto` SOZINHO NÃO SEGURAVA A BASE (18/09/2026, migração 038) ───
+   *
+   * Aqui dizia que o filtro `pronto` tornava a base estável durante o envio,
+   * porque as linhas pendentes do próprio lote não entram no cálculo. Isso vale
+   * enquanto NENHUM arquivo do lote fica pronto — verdade num teste de três
+   * arquivos, e falso no casamento de 286 do Juan, que leva minutos e vai
+   * ficando pronto o tempo todo. A base subia, os índices continuavam contando
+   * do zero, e bastava um arquivo demorar no preparo do navegador (o RAW, o
+   * HEIC, o arquivo grande) para ele nascer com base alta e cair depois de
+   * arquivos que vinham atrás dele na lista.
+   *
+   * Juan: "minhas PB sempre são depois da colorida, mas aqui tá antes" — a
+   * preto-e-branco é o arquivo menor, prepara antes, e passava na frente.
+   *
+   * Excluir o PRÓPRIO LOTE é o que fecha isso: a base passa a ser o que a
+   * galeria tinha antes deste envio, e não muda mais até ele terminar.
+   * Reproduzido e conferido em `scripts/testar-ordem-do-envio.mjs`.
    */
   const proxima = await consultarUm<{ n: number }>(
-    "select coalesce(max(ordem), -1) + 1 as n from medias where galeria_id = $1 and pronto",
-    [dados.galeriaId],
+    `select coalesce(max(ordem), -1) + 1 as n
+       from medias
+      where galeria_id = $1 and pronto
+        and ($2::uuid is null or lote is distinct from $2::uuid)`,
+    [dados.galeriaId, dados.lote ?? null],
   );
   const posicao = (proxima?.n ?? 0) + (dados.indice ?? 0);
 
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
                          nome_original, tipo, mime, bytes, largura, altura, secao_id, ordem, pronto,
-                         armazem)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14)
+                         armazem, tirada_em, lote)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15, $16)
      returning *`,
     [
       dados.galeriaId,
@@ -186,6 +223,8 @@ export async function criarMediaPendente(dados: {
       dados.secaoId ?? null,
       posicao,
       dados.armazem ?? "r2",
+      dados.tiradaEm ?? null,
+      dados.lote ?? null,
     ],
   );
 }
@@ -275,4 +314,53 @@ export async function republicarMedia(
       returning *`,
     [mediaId, tenantId, dados.bytes, dados.largura ?? null, dados.altura ?? null],
   );
+}
+
+/**
+ * Apaga TODAS as fotos de uma galeria e devolve as chaves para o bucket limpar.
+ *
+ * `null` quando a galeria não é do estúdio que pediu — quem chama traduz isso
+ * em 404. Lista vazia é sucesso: galeria sem foto apagou o que tinha a apagar.
+ *
+ * ── UM EVENTO, E NÃO 519 ──────────────────────────────────────────────────
+ *
+ * `apagarMedia` registra um evento por foto, e ali faz sentido: apagar uma foto
+ * no meio da seleção é um ato isolado, e o registro é a única memória de que
+ * aquele arquivo existiu. Aqui o ato é OUTRO — "esvaziei a galeria" — e 519
+ * linhas iguais no histórico esconderiam justamente essa decisão no meio do
+ * ruído. Um evento, com a contagem e o nome da galeria dentro.
+ *
+ * O filtro por tenant está no próprio DELETE, e não numa consulta antes: entre
+ * conferir e apagar cabe uma troca de dono, e o banco não deixa essa fresta.
+ */
+export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
+  const galeria = await consultarUm<{ id: string; titulo: string }>(
+    "select id, titulo from galerias where id = $1 and tenant_id = $2",
+    [galeriaId, tenantId],
+  );
+  if (!galeria) return null;
+
+  const apagadas = await consultar<Media>(
+    "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
+    [galeriaId, tenantId],
+  );
+
+  if (apagadas.length > 0) {
+    const { registrarEvento, ACOES } = await import("./eventos");
+    await registrarEvento({
+      tenantId,
+      ator: "estudio",
+      acao: ACOES.MEDIA_APAGADA,
+      alvoTipo: "galeria",
+      alvoId: galeriaId,
+      detalhe: {
+        galeria: galeria.titulo,
+        quantas: String(apagadas.length),
+        bytes: String(apagadas.reduce((s, m) => s + Number(m.bytes), 0)),
+        motivo: "todas de uma vez",
+      },
+    });
+  }
+
+  return apagadas;
 }

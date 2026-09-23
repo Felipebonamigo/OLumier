@@ -1,6 +1,22 @@
 import "server-only";
-import { montarFatias } from "@/config/socios";
+import { montarFatias, type FatiaSocio } from "@/config/socios";
 import type { Ciclo } from "@/config/planos";
+import type { FormaAssinatura } from "@/config/forma-assinatura";
+
+/**
+ * Traduz uma fatia para o formato do split do Asaas.
+ *
+ * Duas formas, e a escolha não é de estilo: dividindo o LUCRO o valor é conhecido
+ * e vai em `fixedValue`; dividindo a RECEITA ele não é — a taxa depende do meio
+ * de pagamento, que o cliente só escolhe depois — e vai em `percentualValue`,
+ * para o próprio Asaas aplicar sobre o líquido. O porquê inteiro está em
+ * `montarFatias` e em `scripts/testar-split.mjs`.
+ */
+function montarFatiaAsaas(f: FatiaSocio) {
+  return f.percentual !== undefined
+    ? { walletId: f.carteira, percentualValue: f.percentual }
+    : { walletId: f.carteira, fixedValue: f.centavos / 100 };
+}
 
 /**
  * Cliente do Asaas — cobrança recorrente com split.
@@ -134,6 +150,15 @@ export interface AssinaturaAsaas {
   value: number;
   /** O Asaas devolve a assinatura apagada com este campo — ver `criarAssinatura`. */
   deleted?: boolean;
+  /**
+   * Aparece só depois de a primeira fatura ser paga com cartão: é a prova de
+   * que o Asaas guardou o cartão e vai cobrar sozinho. Nunca traz o número
+   * inteiro — só bandeira e os quatro últimos. Ver `lib/cartao-salvo.ts`.
+   */
+  creditCard?: {
+    creditCardNumber?: string | null;
+    creditCardBrand?: string | null;
+  } | null;
 }
 
 /**
@@ -152,6 +177,8 @@ export async function criarAssinatura(dados: {
   ciclo: Ciclo;
   descricao: string;
   primeiroVencimento: Date;
+  /** Como o estúdio escolheu pagar. Ver `config/forma-assinatura.ts`. */
+  forma: FormaAssinatura;
 }): Promise<AssinaturaAsaas> {
   /* O ciclo entra no split porque a reserva de custo depende dele: o anual
    * cobra uma vez e ocupa disco por doze meses. Ver `lucroCentavos`. */
@@ -188,16 +215,32 @@ export async function criarAssinatura(dados: {
     method: "POST",
     body: JSON.stringify({
       customer: dados.clienteAsaasId,
-      billingType: "UNDEFINED", // o cliente escolhe entre Pix, boleto ou cartão
+      /*
+       * QUEM ESCOLHE É O ESTÚDIO, e a diferença é grande:
+       *
+       *   UNDEFINED    a fatura abre com Pix, boleto e cartão lado a lado, e ele
+       *                paga cada mês na mão. Era o único jeito até 05/09/2026.
+       *   CREDIT_CARD  a primeira fatura pede o cartão, o Asaas GUARDA o cartão,
+       *                e as mensalidades seguintes são capturadas sozinhas.
+       *
+       * Medido no sandbox pelo Atomatiza em 03/09/2026, porque a documentação
+       * não responde: criar a assinatura SEM dados de cartão é aceito (200) e a
+       * fatura pede o cartão; ao pagar, a assinatura passa a ter `creditCard`
+       * com token, e as cobranças seguintes nascem confirmadas sem ninguém abrir
+       * fatura nenhuma.
+       *
+       * Nada de cartão passa por aqui: o número é digitado na página do Asaas, e
+       * é isso que mantém o sistema fora do escopo de PCI. Ver
+       * `config/forma-assinatura.ts` e a etapa "nenhum dado de cartão viaja na
+       * criação" em `scripts/testar-assinatura-recorrente.mjs`.
+       */
+      billingType: dados.forma,
       value: dados.precoCentavos / 100,
       nextDueDate: dados.primeiroVencimento.toISOString().slice(0, 10),
       cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
       description: dados.descricao,
       externalReference: referencia,
-      split: fatias.map((f) => ({
-        walletId: f.carteira,
-        fixedValue: f.centavos / 100,
-      })),
+      split: fatias.map((f) => montarFatiaAsaas(f)),
     }),
   });
 }
@@ -233,10 +276,7 @@ export async function atualizarAssinatura(dados: {
       value: dados.precoCentavos / 100,
       description: dados.descricao,
       updatePendingPayments: true,
-      split: fatias.map((f) => ({
-        walletId: f.carteira,
-        fixedValue: f.centavos / 100,
-      })),
+      split: fatias.map((f) => montarFatiaAsaas(f)),
     }),
   });
 }

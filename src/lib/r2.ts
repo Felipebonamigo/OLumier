@@ -26,26 +26,64 @@ const conta = process.env.R2_ACCOUNT_ID;
 const accessKeyId = process.env.R2_ACCESS_KEY_ID;
 const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
 
-/**
- * Onde o armazém atende. Vazio = o endereço do R2, derivado da conta.
+/*
+ * ── APONTAR O ARMAZÉM PARA OUTRO LUGAR (16/09/2026) ───────────────────────
  *
- * Existe pelo mesmo motivo do `ASAAS_BASE_URL` no produto vizinho — poder
- * apontar para outro lugar sem tocar em código —, e aqui isso paga uma conta
- * concreta: o CI sobe um MinIO ao lado e roda a suíte inteira contra ele.
- * Sem esta variável, TODA suíte que passa por uma rota de arquivo (upload,
- * derivadas, multipart, cofre, seleção…) só rodaria na máquina de quem tem as
- * chaves de produção — ou seja, nunca rodaria sozinha.
+ * O comentário lá em cima promete que trocar de fornecedor "não muda nada aqui
+ * além das variáveis de ambiente". Não era verdade: o endereço era montado a
+ * partir da conta do R2 e não havia como apontar para outro lugar.
  *
- * O comentário acima já anunciava a mudança para outro fornecedor "sem nada
- * mudar além das variáveis de ambiente". Faltava esta variável para a frase ser
- * verdade.
+ * Quem cobrou a promessa foi o CI. A suíte publica galeria, assina upload e
+ * confere que o objeto saiu do bucket — um dublê provaria que o dublê funciona,
+ * então o portão precisa de um armazém DE VERDADE. Com credencial de produção
+ * no runner, qualquer workflow do repositório passaria a alcançar as fotos dos
+ * clientes; com esta variável, ele sobe um MinIO ao lado e fala com ele.
+ *
+ * Em produção `R2_ENDPOINT` não existe, e tudo continua exatamente como estava.
+ *
+ * `forcePathStyle` acompanha porque servidor local não tem DNS curinga: sem
+ * ele o cliente procura `galerias.127.0.0.1` e não acha ninguém. Fica atrás de
+ * uma chave própria em vez de ligar sozinho junto com o endereço, para um
+ * fornecedor futuro poder usar endereço próprio e continuar no estilo virtual.
+ *
+ * As duas variáveis são lidas em `OPCOES_DO_CLIENTE`, logo abaixo.
  */
-const endereco = process.env.R2_ENDPOINT;
 
 export const BUCKET = process.env.R2_BUCKET ?? "galerias";
 
-/** true quando as credenciais estão configuradas — telas mostram aviso amigável se não. */
-export const armazenamentoConfigurado = Boolean((conta || endereco) && accessKeyId && secretAccessKey);
+/**
+ * O endereço do armazém, e as opções do cliente S3 — exportados porque havia
+ * CINCO cópias desta mesma conta espalhadas pelos scripts.
+ *
+ * `testar-r2`, `testar-limpeza`, `testar-cors` e `configurar-cors` montavam
+ * cada um o seu `new S3Client({ endpoint: `https://${conta}.r2...` })`. Quando
+ * o CI apontou o armazém para outro lugar, o app obedeceu e os scripts não:
+ * eles abriram TLS contra um servidor HTTP e devolveram
+ * `ssl3_read_bytes:ssl/tls alert handshake failure`, que não diz nada sobre
+ * endereço nenhum.
+ *
+ * Uma cópia só, e quem falar com o armazém por fora do app usa esta.
+ */
+export const ENDERECO_DO_ARMAZEM =
+  process.env.R2_ENDPOINT ?? `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+
+export const OPCOES_DO_CLIENTE = {
+  region: process.env.R2_ENDPOINT ? (process.env.R2_REGIAO ?? "us-east-1") : "auto",
+  endpoint: ENDERECO_DO_ARMAZEM,
+  forcePathStyle: process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1",
+};
+
+/** true quando as credenciais estão configuradas — telas mostram aviso amigável se não.
+ *
+ *  `R2_ENDPOINT` conta como conta configurada, e não é detalhe: quando o armazém
+ *  é imposto por endereço — o MinIO do CI —, NÃO existe `R2_ACCOUNT_ID`, porque
+ *  não há conta da Cloudflare envolvida. Exigindo só `conta`, o `healthz`
+ *  reprovaria por falta de armazém e o corredor pularia as 32 suítes de HTTP,
+ *  inclusive as treze que passam por rota de arquivo. Metade do portão viraria
+ *  enfeite, em silêncio — que é o pior jeito de um CI falhar. */
+export const armazenamentoConfigurado = Boolean(
+  (conta || process.env.R2_ENDPOINT) && accessKeyId && secretAccessKey,
+);
 
 let cliente: S3Client | null = null;
 
@@ -56,12 +94,7 @@ function s3(): S3Client {
     );
   }
   cliente ??= new S3Client({
-    region: "auto",
-    endpoint: endereco || `https://${conta}.r2.cloudflarestorage.com`,
-    /* `forcePathStyle` só quando o endereço é imposto: o R2 e o B2 falam por
-     * subdomínio (`bucket.host`), e um MinIO local não tem DNS curinga para
-     * isso — ali o caminho é `host/bucket`. Ligar sempre quebraria produção. */
-    forcePathStyle: Boolean(endereco),
+    ...OPCOES_DO_CLIENTE,
     credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
   });
   return cliente;
@@ -187,7 +220,39 @@ export function urlDeUpload(chave: string, mime: string, expiraSeg = 3600) {
 export function dispositionSegura(nome: string): string {
   const limpo = nome.replace(/[\r\n"\\]/g, "").slice(0, 200) || "arquivo";
   const soAscii = limpo.replace(/[^\x20-\x7E]/g, "_");
-  return `attachment; filename="${soAscii}"; filename*=UTF-8''${encodeURIComponent(limpo)}`;
+  return `attachment; filename="${soAscii}"; filename*=UTF-8''${paraExtValue(limpo)}`;
+}
+
+/**
+ * O nome no formato que a RFC 5987 chama de `ext-value`.
+ *
+ * ── POR QUE `encodeURIComponent` NÃO BASTA (11/09/2026) ───────────────────
+ *
+ * A Carol tentou salvar uma foto no celular e o navegador saiu da galeria para
+ * o Backblaze, com isto na tela:
+ *
+ *     InvalidRequest invalid b2-content-disposition:
+ *     expected a token character at 139, but got '('
+ *
+ * O parêntese era do nome do arquivo — "… (1).jpg" é o nome mais comum que sai
+ * de uma pasta de fotos. `encodeURIComponent` deixa passar `!'()*` SEM
+ * codificar: é assim por desenho, porque esses caracteres são legais numa URL.
+ * Num `ext-value` eles não são. A gramática aceita só
+ *
+ *     ALPHA / DIGIT / "!" / "#" / "$" / "&" / "+" / "-" / "." / "^" / "_" /
+ *     "`" / "|" / "~"     e o resto como %XX
+ *
+ * de onde `( ) ' *` estão fora, e `!` é o único dos cinco que se salva.
+ *
+ * O R2 aceitava o cabeçalho torto; o B2 recusa. Como o ORIGINAL mora no B2 e a
+ * derivada no R2, o defeito aparecia SÓ no download da foto em tamanho cheio —
+ * a galeria abria normalmente, e era o "salvar" que morria.
+ */
+function paraExtValue(nome: string): string {
+  return encodeURIComponent(nome).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 }
 
 /**

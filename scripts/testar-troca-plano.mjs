@@ -18,7 +18,7 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
-import { planoPorId, GB } from "../src/config/planos.ts";
+import { planoPorId, GB, ESPACOS } from "../src/config/planos.ts";
 import { usoDoEstudio } from "../src/lib/medias.ts";
 
 exigirBancoDeTeste();
@@ -56,7 +56,11 @@ console.log("\nTroca de plano:\n");
 
 try {
   const grande = planoPorId("g:filme:5000"); // 5 TB
-  const pequeno = planoPorId("g:foto:100"); // 100 GB
+  /* A MENOR faixa da grade, e não um id cravado: "g:foto:100" existiu até
+   * 04/09/2026 e sumiu quando a entrada virou 250 GB. O que este arquivo prova
+   * é a REGRA da descida — não cabe o que está guardado, não desce —, e ela vale
+   * para qualquer faixa pequena. */
+  const pequeno = planoPorId(`g:foto:${Math.min(...ESPACOS.map((e) => e.gb))}`);
 
   const t = await db.query(
     `insert into tenants (slug,nome_estudio,email,senha_hash,plano_id,quota_bytes)
@@ -89,7 +93,7 @@ try {
   });
 
   await etapa("descer é RECUSADO quando o que está no ar não cabe", async () => {
-    await galeriaCom(300 * GB); // 300 GB > os 100 GB do plano pequeno
+    await galeriaCom(300 * GB); // maior que a menor faixa do plano pequeno
     const r = await cabeNoPlano(tenantId, pequeno);
     igual(r.cabe, false, "não devia caber");
     const excesso = Number(r.total - BigInt(pequeno.quotaGb) * BigInt(GB)) / GB;
@@ -100,7 +104,7 @@ try {
   /*
    * O ponto que a unificação mudou: galeria ARQUIVADA continua contando contra
    * o plano. Antes ela tinha balde próprio, e descer de plano ignorava o
-   * arquivo — o estúdio caía para 100 GB carregando 700 GB de entregas antigas,
+   * arquivo — o estúdio caía para a menor faixa carregando 700 GB de entregas antigas,
    * e a conta ficava acima do limite sem ninguém ter enviado nada.
    */
   await etapa("o que está GUARDADO também conta na descida", async () => {
@@ -109,12 +113,12 @@ try {
     const r = await cabeNoPlano(tenantId, pequeno);
     igual(r.cabe, false, "arquivado não pode ser espaço grátis");
     igual(r.uso.noAr, 0, "nada no ar");
-    return "700 GB guardados não cabem em 100 GB";
+    return `700 GB guardados não cabem em ${pequeno.quotaGb} GB`;
   });
 
   await etapa("descer é PERMITIDO depois de liberar espaço", async () => {
     await db.query("delete from galerias where tenant_id = $1", [tenantId]);
-    await galeriaCom(50 * GB); // cabe nos 100 GB
+    await galeriaCom(50 * GB); // cabe na menor faixa
     const r = await cabeNoPlano(tenantId, pequeno);
     igual(r.cabe, true, "agora cabe");
     return `50 GB cabem no ${pequeno.nome}`;

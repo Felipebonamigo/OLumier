@@ -65,15 +65,22 @@ export function marcaDaRodada() {
  * um teste que chama `estudioDaRodada()` em duas etapas criaria dois estúdios
  * e compararia um com o outro. */
 let estudio = null;
-let vizinho = null;
 const galerias = new Map();
 
-/* `returning *` de propósito: os testes pedem colunas variadas do estúdio
- * (logo_chave, site, senha_hash, status, trial_ate). Listar campo a campo
- * obrigaria a mexer aqui a cada teste novo, e o esquecimento apareceria como
- * `undefined` no teste — erro que custa a achar. */
-async function criarEstudio(db, sufixo, opcoes) {
-  const marca = `${MARCA}${sufixo}`;
+/**
+ * O estúdio desta execução. Cria na primeira chamada, devolve o mesmo depois.
+ *
+ * @param db        cliente pg já conectado
+ * @param opcoes.quotaBytes  espaço contratado (padrão: 1 TB, folgado)
+ * @param opcoes.nome        nome de exibição (padrão: "Estúdio da Rodada")
+ */
+export async function estudioDaRodada(db, opcoes = {}) {
+  if (estudio) return estudio;
+
+  /* `returning *` de propósito: os testes pedem colunas variadas do estúdio
+   * (logo_chave, site, senha_hash, status, trial_ate). Listar campo a campo
+   * obrigaria a mexer aqui a cada teste novo, e o esquecimento apareceria como
+   * `undefined` no teste — erro que custa a achar. */
   const { rows } = await db.query(
     /* status 'ativo' EXPLICITO: o default do banco e 'trial', e desde
      * 27/08/2026 o trial tem teto de quota (config/trial.ts). A bancada
@@ -84,51 +91,49 @@ async function criarEstudio(db, sufixo, opcoes) {
      values ($1, $2, $3, 'x', $4, 'ativo')
      returning *`,
     [
-      `estudio-${marca}`,
+      `estudio-${MARCA}`,
       opcoes.nome ?? "Estúdio da Rodada",
-      `${marca}@teste.local`,
+      `${MARCA}@teste.local`,
       String(opcoes.quotaBytes ?? 1024 ** 4),
     ],
   );
-  return rows[0];
-}
-
-/**
- * O estúdio desta execução. Cria na primeira chamada, devolve o mesmo depois.
- *
- * @param db        cliente pg já conectado
- * @param opcoes.quotaBytes  espaço contratado (padrão: 1 TB, folgado)
- * @param opcoes.nome        nome de exibição (padrão: "Estúdio da Rodada")
- */
-export async function estudioDaRodada(db, opcoes = {}) {
-  if (!estudio) estudio = await criarEstudio(db, "", opcoes);
+  estudio = rows[0];
   return estudio;
 }
+
+/* O vizinho, para os testes de isolamento. Ver `segundoEstudioDaRodada`. */
+let vizinho = null;
 
 /**
  * O SEGUNDO estúdio desta execução — o vizinho de quem nada deve vazar.
  *
- * ── POR QUE ISTO PRECISOU EXISTIR ─────────────────────────────────────────
- * Todo teste de isolamento entre contas precisa de dois estúdios de verdade:
- * um id inventado prova pouco, porque a consulta não acha nada de qualquer
- * jeito. Sem esta função, três testes pegavam os dois estúdios mais antigos do
- * banco:
+ * Três suítes (`testar-api-galerias`, `testar-chave-api`,
+ * `testar-dominio-proprio`) pediam dois estúdios EMPRESTADOS do banco:
  *
- *     select ... from tenants order by criado_em limit 2
+ *     select id from tenants order by criado_em limit 2
  *
- * É o mesmo defeito que este módulo existe para matar, uma linha adiante — e
- * ele escapou do varredor do `testar-isolamento.mjs`, que só procurava
- * `limit 1`. Custava duas coisas: o `testar-dominio-proprio` LIMPAVA o domínio
- * próprio dos dois estúdios que encontrasse (dado de gente, não do teste), e
- * num banco recém-criado — o do CI, o de quem acabou de clonar — os três
- * desistiam com "preciso de dois estúdios no banco de teste". Foi assim que a
- * primeira execução do CI deste repositório terminou 59 · 3.
+ * Os dois mais antigos que por acaso existissem. Numa máquina com histórico
+ * funciona; num banco recém-criado — o do CI, o de quem acabou de clonar — não
+ * existem dois, e as três desistiam antes da primeira etapa com "preciso de
+ * dois estúdios no banco de teste". Só passavam porque a máquina de quem
+ * rodava tinha sobra de rodadas anteriores.
  *
- * Vem depois do primeiro na ordem de criação, e nunca antes: quem pedir os
- * dois recebe dois, e nenhum deles é de ninguém.
+ * Pior no `testar-dominio-proprio`, que ESCREVE nos estúdios que encontra:
+ * num banco de desenvolvimento com conta de gente, era o teste apagando o
+ * domínio próprio de quem não pediu nada.
+ *
+ * Agora o vizinho é criado aqui, e `limparRodada` leva os dois embora.
  */
-export async function segundoEstudioDaRodada(db, opcoes = {}) {
-  if (!vizinho) vizinho = await criarEstudio(db, "b", { nome: "Estúdio Vizinho", ...opcoes });
+export async function segundoEstudioDaRodada(db) {
+  if (vizinho) return vizinho;
+
+  const { rows } = await db.query(
+    `insert into tenants (slug, nome_estudio, email, senha_hash, quota_bytes, status)
+     values ($1, $2, $3, 'x', $4, 'ativo')
+     returning *`,
+    [`vizinho-${MARCA}`, "Estúdio Vizinho", `vizinho-${MARCA}@teste.local`, String(1024 ** 4)],
+  );
+  vizinho = rows[0];
   return vizinho;
 }
 
@@ -146,10 +151,11 @@ export async function segundoEstudioDaRodada(db, opcoes = {}) {
  * @param opcoes.medias     quantas mídias criar (padrão: 3)
  * @param opcoes.publicada  padrão: true, que é o que a maioria dos testes quer
  * @param opcoes.bytes      tamanho de cada mídia (padrão: 1 MB)
- * @param opcoes.dono       de qual estúdio da bancada é a galeria (padrão: o
- *                          primeiro). Serve para dar conteúdo ao vizinho: teste
- *                          de vazamento entre contas só prova alguma coisa se
- *                          houver o que vazar do outro lado.
+ * @param opcoes.dono       de quem é a galeria (padrão: o estúdio da rodada).
+ *                          Passe `segundoEstudioDaRodada(db)` para dar conteúdo
+ *                          ao vizinho: sem galeria do lado de lá, toda prova de
+ *                          isolamento passa sem comparar nada — e "passou" aí
+ *                          quer dizer "não olhou", que é pior que vermelho.
  */
 export async function galeriaDaRodada(db, opcoes = {}) {
   const nome = opcoes.nome ?? "principal";
@@ -207,16 +213,12 @@ export async function galeriaDaRodada(db, opcoes = {}) {
  * o que nunca esteve lá transformaria todo teste num vermelho inútil.
  */
 export async function limparRodada(db) {
-  /* Os dois: quem pediu o vizinho tem de levá-lo embora junto, senão a bancada
-   * "limpa" deixa um estúdio para trás em toda execução. */
-  const estudios = [estudio, vizinho].filter(Boolean);
-  if (estudios.length === 0) return { estudios: 0, galerias: 0, objetos: 0 };
+  if (!estudio) return { estudios: 0, galerias: 0, objetos: 0 };
 
-  const ids = estudios.map((t) => t.id);
   const { rows: midias } = await db.query(
     `select m.chave, m.chave_thumb, m.chave_preview, m.armazem
-       from medias m where m.tenant_id = any($1::uuid[])`,
-    [ids],
+       from medias m where m.tenant_id = $1`,
+    [estudio.id],
   );
 
   let objetos = 0;
@@ -237,14 +239,19 @@ export async function limparRodada(db) {
   }
 
   const quantas = galerias.size;
-  /* Uma consulta só: a cascata de `tenants` leva galerias, mídias, seções,
+  /* Uma linha só: a cascata de `tenants` leva galerias, mídias, seções,
    * favoritas, acessos, chaves de API e recuperações. Conferido no schema. */
-  await db.query("delete from tenants where id = any($1::uuid[])", [ids]);
+  await db.query("delete from tenants where id = $1", [estudio.id]);
 
+  /* O vizinho vai junto: quem o cria não é quem o limpa, e deixá-lo para trás
+     encheria o banco de "Estúdio Vizinho" a cada execução. */
+  if (vizinho) await db.query("delete from tenants where id = $1", [vizinho.id]);
+
+  const quantosEstudios = vizinho ? 2 : 1;
   estudio = null;
   vizinho = null;
   galerias.clear();
-  return { estudios: estudios.length, galerias: quantas, objetos };
+  return { estudios: quantosEstudios, galerias: quantas, objetos };
 }
 
 /**

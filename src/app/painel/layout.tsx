@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
-import { quotaEfetivaBytes } from "@/config/trial";
+import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoDoEstudio } from "@/lib/medias";
 import { MarcaLockup } from "@/components/marca-tile";
 import { SeletorTema } from "@/components/seletor-tema";
 import { ehAdmin } from "@/config/admin";
+import { SECAO_SITE_NO_AR } from "@/config/site-do-estudio";
 import { sairAction } from "../(auth)/actions";
 
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
@@ -39,15 +40,18 @@ export default async function PainelLayout({ children }: { children: React.React
   const { noAr } = await usoDoEstudio(tenantId);
   const usado = Number(noAr);
   const quota = Number(quotaEfetivaBytes(tenant));
-  const proporcao = quota > 0 ? Math.min(usado / quota, 1) : 0;
+  const semLimite = espacoSemLimite(tenant);
+  const proporcao = !semLimite && quota > 0 ? Math.min(usado / quota, 1) : 0;
   const perto = proporcao >= 0.8;
 
   return (
     <div className="min-h-dvh">
       <header className="border-b border-linha">
         <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-4 px-6 py-4">
+          {/* Sem o descritor: aqui ele repetia o título da tela — ver
+              `MarcaLockup`. */}
           <Link href="/painel">
-            <MarcaLockup tamanho={40} />
+            <MarcaLockup tamanho={40} descritor={false} />
           </Link>
 
           <nav className="ml-auto flex items-center gap-1 text-sm">
@@ -57,12 +61,17 @@ export default async function PainelLayout({ children }: { children: React.React
             >
               Galerias
             </Link>
-            <Link
-              href="/painel/site"
-              className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"
-            >
-              Site
-            </Link>
+            {/* Fora do ar a pedido do Juan em 16/09/2026 — ver
+                `config/site-do-estudio.ts`. A rota devolve 404 junto: link
+                escondido com rota aberta é segurança de fachada. */}
+            {SECAO_SITE_NO_AR && (
+              <Link
+                href="/painel/site"
+                className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"
+              >
+                Site
+              </Link>
+            )}
             <Link
               href="/painel/conta"
               className="rounded-lg px-3 py-2 text-texto-soft transition hover:bg-carbon hover:text-texto"
@@ -99,12 +108,16 @@ export default async function PainelLayout({ children }: { children: React.React
         <div className="mx-auto max-w-5xl px-6 pb-4">
           <div className="flex items-baseline justify-between text-xs">
             <span className="text-texto-soft">
-              {tenant.nome_estudio} · {formatarBytes(usado)} de {formatarBytes(quota)}
+              {tenant.nome_estudio} · {formatarBytes(usado)}
+              {semLimite ? " · sem limite" : ` de ${formatarBytes(quota)}`}
             </span>
-            <span className={perto ? "text-alerta" : "text-texto-faint"}>
-              {(proporcao * 100).toFixed(proporcao < 0.1 ? 1 : 0)}% usado
-            </span>
+            {!semLimite && (
+              <span className={perto ? "text-alerta" : "text-texto-faint"}>
+                {(proporcao * 100).toFixed(proporcao < 0.1 ? 1 : 0)}% usado
+              </span>
+            )}
           </div>
+          {!semLimite && (
           <div
             className="mt-1.5 h-1 overflow-hidden rounded-full bg-carbon-2"
             role="progressbar"
@@ -118,6 +131,7 @@ export default async function PainelLayout({ children }: { children: React.React
               style={{ width: `${Math.max(proporcao * 100, 0.5)}%` }}
             />
           </div>
+          )}
         </div>
       </header>
 

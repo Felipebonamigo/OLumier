@@ -153,10 +153,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Falhou ao remontar: aborta para as partes não ficarem ocupando espaço pago.
     await abortarEnvioDoOriginal(dados.media.chave, dados.uploadId, dados.armazem).catch(() => {});
     await apagarMedia(id, tenantId);
-    return NextResponse.json(
-      { erro: e instanceof Error ? e.message : "não foi possível finalizar o envio" },
-      { status: 502 },
-    );
+    /*
+     * O TEXTO DO ERRO FICA NO SERVIDOR.
+     *
+     * Este `catch` cobre a remontagem no S3, e a mensagem do SDK traz nome de
+     * bucket, chave do objeto e endpoint — que iam inteiros no corpo da resposta
+     * para qualquer estúdio autenticado. Nenhuma outra rota fazia isso; esta
+     * era a única. Quem precisa do detalhe é quem opera, e o log é onde ele
+     * mora.
+     */
+    console.error("[partes] falha ao finalizar o envio da mídia", id, e);
+    return NextResponse.json({ erro: "não foi possível finalizar o envio" }, { status: 502 });
   }
 }
 

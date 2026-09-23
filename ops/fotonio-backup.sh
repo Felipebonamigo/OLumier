@@ -10,8 +10,11 @@
 # O QUE ENTRA: o banco `fotonio` inteiro (5 tabelas). E pequeno — dezenas de KB
 # comprimido — entao nao ha motivo para escolher partes.
 #
-# O QUE **NAO** ENTRA: as FOTOS. Elas moram no Cloudflare R2 e sao copia unica.
-# Isso e um risco conhecido e ainda aberto — ver docs/backup.md.
+# O QUE **NAO** ENTRA: as FOTOS. Os ORIGINAIS moram no Backblaze B2
+# (`olumier-arquivos`) e sao COPIA UNICA desde que o espelho saiu em 27/08/2026;
+# as derivadas (miniatura e preview) moram no Cloudflare R2 e sao regeneraveis.
+# Esta linha dizia "Cloudflare R2" para os dois e envelheceu junto com a obra da
+# rota B2. O risco da copia unica e conhecido e segue aberto — ver docs/backup.md.
 #
 # Roda pelo systemd (fotonio-backup.timer). Para rodar na mao:
 #   /opt/fotonio-backup.sh
@@ -34,18 +37,45 @@ DIARIOS=7
 SEMANAIS=4
 # Chave do Resend para avisar quando falha. Reaproveita a do Atomatiza (mesmo
 # dono, mesmo servidor) em vez de duplicar um segredo em dois lugares.
-SEGREDOS=/opt/atomatiza-secrets.env
+# Padrao de producao; trocavel so para o `scripts/testar-vigia.mjs` conseguir
+# exercitar o `avisar()` sem um segredo de verdade.
+SEGREDOS="${BACKUP_SEGREDOS:-/opt/atomatiza-secrets.env}"
 
+# ── ESTA FUNCAO ENGOLIA A PROPRIA FALHA (17/09/2026) ────────────────────────
+#
+# Ela terminava em `>/dev/null || true`. Ou seja: as tres saidas possiveis —
+# segredo ausente, Resend recusando, rede fora — eram indistinguiveis de
+# sucesso, e nenhuma delas deixava rastro em lugar nenhum. O `journalctl` ficava
+# com "BACKUP FALHOU" e ZERO linhas sobre o aviso ter saido ou nao.
+#
+# E este e o aviso mais importante que este sistema manda: enquanto ele nao
+# chega, o banco esta sem copia do dia e ninguem sabe. Perde-lo em silencio e a
+# diferenca entre "um dia sem backup" e "descobrir meses depois que nunca houve".
+#
+# Tudo agora vai para a saida de erro, que o systemd leva para o journal.
 avisar() {
   local assunto="$1"
-  [ -f "$SEGREDOS" ] || return 0
+  [ -f "$SEGREDOS" ] || { echo "!! SEM AVISO: $SEGREDOS nao existe" >&2; return 0; }
   local chave dest
   chave=$(sed -n 's/^RESEND_API_KEY=//p' "$SEGREDOS" | tail -1)
   dest=$(sed -n 's/^ALERTA_EMAIL_DESTINO=//p' "$SEGREDOS" | tail -1)
-  [ -n "$chave" ] && [ -n "$dest" ] || return 0
-  curl -s --max-time 30 -X POST https://api.resend.com/emails \
+  [ -n "$chave" ] || { echo "!! SEM AVISO: RESEND_API_KEY ausente em $SEGREDOS" >&2; return 0; }
+  [ -n "$dest" ] || { echo "!! SEM AVISO: ALERTA_EMAIL_DESTINO ausente em $SEGREDOS" >&2; return 0; }
+
+  local corpo http
+  corpo=$(mktemp)
+  http=$(curl -s -o "$corpo" -w '%{http_code}' --max-time 30 \
+    -X POST https://api.resend.com/emails \
     -H "Authorization: Bearer $chave" -H "Content-Type: application/json" \
-    -d "{\"from\":\"Vigia do Fotonio <contato@atomatiza.com.br>\",\"to\":[\"$dest\"],\"subject\":\"$assunto\",\"text\":\"$assunto\n\nO backup do banco do Fotonio nao completou. Enquanto isso, o banco esta sem copia do dia.\n\nConferir com: systemctl status fotonio-backup; journalctl -u fotonio-backup -n 50\"}" >/dev/null || true
+    -d "{\"from\":\"Vigia do Fotonio <contato@atomatiza.com.br>\",\"to\":[\"$dest\"],\"subject\":\"$assunto\",\"text\":\"$assunto\n\nO backup do banco do Fotonio nao completou. Enquanto isso, o banco esta sem copia do dia.\n\nConferir com: systemctl status fotonio-backup; journalctl -u fotonio-backup -n 50\"}" \
+    2>/dev/null || echo "000")
+
+  case "$http" in
+    2*) echo "aviso enviado para $dest" >&2 ;;
+    *)  echo "!! O AVISO NAO SAIU — Resend respondeu $http: $(tr -d '\n' < "$corpo" | cut -c1-300)" >&2
+        echo "!! o backup falhou E ninguem foi avisado. Conferir RESEND_API_KEY e o remetente." >&2 ;;
+  esac
+  rm -f "$corpo"
 }
 
 falhou() {

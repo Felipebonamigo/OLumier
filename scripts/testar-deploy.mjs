@@ -49,6 +49,10 @@ const MARCOS = {
   dump: 'ssh -n "$VPS" "/opt/fotonio-backup.sh"',
   migracao: 'scripts/migrar.mjs --aplicar"',
   empacotamento: "git archive --format=tar.gz",
+  /* A migração da BANCADA, que é outra: sem aspas no fim, porque não viaja
+     dentro de um comando ssh. É o que a distingue de `migracao` aqui. */
+  bancada: "scripts/migrar.mjs --aplicar; then",
+  guardaBancada: "guarda-producao.mjs",
 };
 
 let falhou = false;
@@ -119,6 +123,41 @@ etapa("os tipos vêm antes da suíte", () => {
    * é de eficiência e não de segurança. */
   if (onde("tipos") > onde("suite")) throw new Error("a suíte roda antes do typecheck");
   return "o barato primeiro";
+});
+
+/*
+ * ── A BANCADA EM DIA (16/09/2026) ─────────────────────────────────────────
+ *
+ * O portão de migração pergunta ao banco de PRODUÇÃO. Ninguém perguntava ao
+ * LOCAL, e é contra ele que a suíte roda. Na publicação dos 29 ajustes o portão
+ * devolveu quarenta suítes vermelhas — `column "slug" does not exist` — com o
+ * código correto e a bancada três migrações atrás.
+ */
+etapa("a bancada local é migrada antes da suíte", () => {
+  if (onde("bancada") > onde("suite")) {
+    throw new Error("a suíte roda contra uma bancada que ninguém pôs em dia");
+  }
+  if (onde("tipos") > onde("bancada")) {
+    throw new Error("mexe no banco antes de saber se o código compila");
+  }
+  return "depois dos tipos, antes da suíte";
+});
+
+etapa("o guarda de produção protege a migração da bancada", () => {
+  /* Este passo aplica migração no que a DATABASE_URL apontar. Um `.env.local`
+     copiado do servidor faria o deploy migrar PRODUÇÃO aqui — antes do portão,
+     que é o estado exato que a ordem acima existe para impedir. */
+  if (onde("guardaBancada") > onde("bancada")) {
+    throw new Error("migra a bancada sem conferir se ela é mesmo uma bancada");
+  }
+  return "guarda-producao.mjs primeiro";
+});
+
+etapa("a bancada é migrada bem antes de tocar em produção", () => {
+  if (onde("bancada") > onde("dump") || onde("bancada") > onde("migracao")) {
+    throw new Error("a bancada só entra em dia depois de produção já ter mudado");
+  }
+  return "local primeiro, produção no fim";
 });
 
 /*

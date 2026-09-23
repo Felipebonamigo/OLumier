@@ -235,7 +235,21 @@ export function SeloBeta() {
   );
 }
 
-export function MarcaLockup({ tamanho = 40 }: { tamanho?: number }) {
+/**
+ * @param descritor "galerias de entrega", sob o nome. Existe para quem ainda
+ *   NÃO sabe o que o produto é — a página de entrada, o 404, o rodapé
+ *   institucional. Dentro do painel ele é ruído: o estúdio já está usando a
+ *   ferramenta, e ali a linha ainda tropeçava no título da própria tela
+ *   ("Galerias de entrega" em cima de "Galerias"). Felipe, 16/09/2026: "repete
+ *   duas vezes o galeria".
+ */
+export function MarcaLockup({
+  tamanho = 40,
+  descritor = true,
+}: {
+  tamanho?: number;
+  descritor?: boolean;
+}) {
   return (
     <span className="flex items-center gap-3">
       <MarcaSimbolo tamanho={tamanho} />
@@ -271,9 +285,11 @@ export function MarcaLockup({ tamanho = 40 }: { tamanho?: number }) {
           </span>
           <SeloBeta />
         </span>
-        <span className="block font-mono text-[9px] uppercase tracking-[0.3em] text-texto-faint">
-          galerias de entrega
-        </span>
+        {descritor && (
+          <span className="block font-mono text-[9px] uppercase tracking-[0.3em] text-texto-faint">
+            galerias de entrega
+          </span>
+        )}
       </span>
     </span>
   );

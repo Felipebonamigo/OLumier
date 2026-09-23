@@ -57,7 +57,10 @@ export default function TermosPage() {
       <ul>
         <li>Você é responsável por manter sua senha em segredo e pelo que acontece na sua conta.</li>
         <li>Uma conta é de um estúdio. Compartilhar acesso é por sua conta e risco.</li>
-        <li>Você pode encerrar quando quiser, escrevendo para <a href={`mailto:${marca.email}`}>{marca.email}</a>.</li>
+        <li>
+          Você pode encerrar quando quiser, chamando no{" "}
+          <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a>.
+        </li>
       </ul>
 
       <h2>O conteúdo é seu — e a responsabilidade também</h2>

@@ -20,9 +20,14 @@
  * incluso. Este arquivo prende as duas metades disso: que a peça sumiu, e que
  * ninguém que já assinou perdeu espaço nem pagou mais caro.
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import {
   SEGMENTOS,
   ESPACOS,
+  TB_ADICIONAL_CENTAVOS,
+  ESPACO_MAXIMO_GB,
+  precoDoEspacoCentavos,
   montar,
   idDaMontagem,
   planoPorId,
@@ -33,13 +38,25 @@ import {
   precoDoCicloCentavos,
   MESES_PAGOS_NO_ANO,
 } from "../src/config/planos.ts";
-import { lucroCentavos, montarFatias, SOCIOS, FOLGA_ESPACO, TAXA_COBRANCA } from "../src/config/socios.ts";
+import {
+  lucroCentavos,
+  montarFatias,
+  SOCIOS,
+  FOLGA_ESPACO,
+  taxaCobrancaCentavos,
+  BASE_DO_SPLIT,
+  RATEIO_DO_CUSTO,
+} from "../src/config/socios.ts";
 
 /*
  * A reserva da montagem. Mesma regra do socios.ts, refeita aqui de propósito:
  * se a de lá mudar sem ninguém pensar na grade, este teste conta a diferença.
  */
-const reserva = (m) => Math.round(custoArmazenamentoCentavos(m) * FOLGA_ESPACO) + TAXA_COBRANCA;
+const reserva = (m) =>
+  Math.round(custoArmazenamentoCentavos(m) * FOLGA_ESPACO) +
+  taxaCobrancaCentavos(montar(m).precoCentavos);
+
+const RAIZ = path.resolve(import.meta.dirname, "..");
 
 let falhou = false;
 async function etapa(nome, fn) {
@@ -73,6 +90,67 @@ await etapa("tamanhos de espaço em ordem crescente", () => {
   }
   return `${ESPACOS.length} faixas, ${ESPACOS[0].gb} GB a ${ESPACOS.at(-1).gb} GB`;
 });
+
+/*
+ * ── A ESCADA DE TB É CONTÍNUA E LINEAR (05/09/2026) ───────────────────────
+ *
+ * O Felipe: "eu havia solicitado para mudar os planos, deixando apenas 3 e
+ * depois plano adicional por 1TB". O seletor da home mostrava as sete faixas;
+ * passa a mostrar três mais um passo de "+1 TB".
+ *
+ * O passo só é honesto se a tabela tiver TODOS os teras. Antes ela pulava
+ * 3 → 5 → 10: apertar "+1 TB" a partir de 3 daria 5, e a conta na tela não
+ * bateria com o que a pessoa clicou. Estas duas etapas prendem as duas metades
+ * da promessa "cada TB a mais custa R$ 80": nenhum buraco, e o mesmo degrau em
+ * todos os passos.
+ *
+ * Nenhum preço existente mudou para isso — 2, 3, 5 e 10 TB já eram
+ * exatamente 1 TB + N × R$ 80. O que faltava eram os degraus do meio.
+ */
+etapa("acima de 1 TB não há buraco na escada", () => {
+  const teras = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  for (let i = 1; i < teras.length; i++) {
+    if (teras[i].gb - teras[i - 1].gb !== 1000) {
+      throw new Error(
+        `de ${teras[i - 1].gb / 1000} TB pula para ${teras[i].gb / 1000} TB — "+1 TB" não teria onde pousar`,
+      );
+    }
+  }
+  return `${teras[0].gb / 1000} a ${teras.at(-1).gb / 1000} TB, de 1 em 1`;
+});
+
+etapa("cada TB a mais custa o MESMO, em toda a escada", () => {
+  const teras = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  for (let i = 1; i < teras.length; i++) {
+    const passo = teras[i].precoCentavos - teras[i - 1].precoCentavos;
+    if (passo !== TB_ADICIONAL_CENTAVOS) {
+      throw new Error(
+        `de ${teras[i - 1].gb / 1000} para ${teras[i].gb / 1000} TB o passo é ${passo} e não ${TB_ADICIONAL_CENTAVOS}`,
+      );
+    }
+  }
+  return `R$ ${(TB_ADICIONAL_CENTAVOS / 100).toFixed(2)} por TB, em ${teras.length - 1} passos`;
+});
+
+etapa("a vitrine continua com três, e o seletor com três mais o passo", () => {
+  if (planos.length !== 3) throw new Error(`a vitrine tem ${planos.length} planos`);
+  const base = ESPACOS.filter((e) => e.gb <= 1000);
+  if (base.length !== 3) {
+    throw new Error(`${base.length} faixas até 1 TB — o seletor mostra uma por botão`);
+  }
+  const montador = readFileSync(
+    path.join(RAIZ, "src/components/montador-plano.tsx"),
+    "utf8",
+  );
+  if (montador.includes("ESPACOS.map(")) {
+    throw new Error("o seletor ainda desenha um botão por faixa da tabela inteira");
+  }
+  if (!/TB adicional|tera a mais/i.test(montador)) {
+    throw new Error("o seletor não oferece o passo de TB adicional");
+  }
+  return "3 botões + passo";
+});
+
 
 /*
  * A escada tem de ficar mais barata por GB a cada degrau — é o que empurra o
@@ -326,7 +404,9 @@ await etapa("o desconto do ano sai do lucro, nunca da reserva", () => {
 
     /* Tolerância de 11 taxas de cobrança: o anual cobra UMA vez no ano, o mensal
      * cobra doze — essa economia é real e fica no lucro do anual. */
-    const folga = TAXA_COBRANCA * 11;
+    /* A taxa deixou de ser fixa (R$ 0,49 + 2,99% no cartão), então a folga é a
+       taxa do MENSAL onze vezes — que é o que o anual deixa de pagar. */
+    const folga = taxaCobrancaCentavos(p.precoCentavos) * 11;
     if (perdido > doisMeses + 1 || perdido < doisMeses - folga - 1) {
       throw new Error(
         `${p.id}: o anual custa R$ ${(perdido / 100).toFixed(2)} de lucro, e o desconto ` +
@@ -345,21 +425,55 @@ await etapa("o desconto do ano sai do lucro, nunca da reserva", () => {
  * O split fica gordo, a reserva fica curta, e nada acusa: as duas funções estão
  * "certas" separadas. Esta etapa junta as duas.
  */
-await etapa("o split do anual não passa do lucro do anual", () => {
+await etapa("o split do anual respeita a base declarada", () => {
   /* Carteiras de mentira só para as fatias existirem: sem carteira o sócio é
    * pulado, e o teste mediria uma lista vazia achando que passou. */
   const salvas = SOCIOS.map((s) => [s.variavelCarteira, process.env[s.variavelCarteira]]);
   for (const s of SOCIOS) process.env[s.variavelCarteira] = `carteira-de-teste-${s.id}`;
 
   try {
+    let piorDescoberto = 0;
+    const zerados = [];
+
     for (const m of todasAsMontagens()) {
       const p = montar(m);
       const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
       const fatias = montarFatias(p.id, anual, "anual");
+      /*
+       * Com o custo em TERÇOS, sócio de 25% pode ficar de fora: quando o custo
+       * passa de 75% da receita, o terço dele é maior que a fatia, e ele
+       * deveria PAGAR — coisa que um split não sabe fazer, então a fatia dele
+       * trava em zero. Não é defeito, é o acordo encostando no limite; o teste
+       * anota QUAIS planos fazem isso, porque é informação de negócio.
+       */
       if (fatias.length !== SOCIOS.length) {
-        throw new Error(`${p.id}: esperava ${SOCIOS.length} fatias, vieram ${fatias.length}`);
+        if (RATEIO_DO_CUSTO !== "igual") {
+          throw new Error(`${p.id}: esperava ${SOCIOS.length} fatias, vieram ${fatias.length}`);
+        }
+        zerados.push(p.id);
       }
       const enviado = fatias.reduce((s, f) => s + f.centavos, 0);
+      const custoDoAno = custoArmazenamentoTetoCentavos(m) * 12;
+
+      /*
+       * DIVIDINDO A RECEITA, A RESERVA DEIXA DE EXISTIR — de propósito.
+       *
+       * Até 31/08/2026 esta etapa exigia que o split nunca passasse do lucro,
+       * porque o que ficava na conta era o dinheiro do fornecedor. O Felipe
+       * mudou a base para `receita`, com o custo acertado entre os sócios por
+       * fora, e essa exigência virou a descrição de um mundo que não existe
+       * mais.
+       *
+       * Ela não foi apagada, foi VIRADA: em `receita` a conta fica zerada e a
+       * fatura sai do bolso de quem opera. O teste passa a medir e a IMPRIMIR
+       * o tamanho desse descoberto, para a consequência da decisão continuar
+       * visível em vez de sumir junto com a regra antiga.
+       */
+      if (BASE_DO_SPLIT === "receita") {
+        piorDescoberto = Math.max(piorDescoberto, custoDoAno - (anual - enviado));
+        continue;
+      }
+
       const lucro = lucroCentavos(p.id, anual, "anual");
       if (enviado > lucro) {
         throw new Error(
@@ -367,7 +481,6 @@ await etapa("o split do anual não passa do lucro do anual", () => {
             `é R$ ${(lucro / 100).toFixed(2)} — a diferença sai da reserva do fornecedor`,
         );
       }
-      const custoDoAno = custoArmazenamentoTetoCentavos(m) * 12;
       if (anual - enviado < custoDoAno) {
         throw new Error(
           `${p.id}: depois do split ficam R$ ${((anual - enviado) / 100).toFixed(2)} na conta ` +
@@ -375,7 +488,18 @@ await etapa("o split do anual não passa do lucro do anual", () => {
         );
       }
     }
-    return `${todasAsMontagens().length} montagens, split dentro do lucro`;
+
+    if (BASE_DO_SPLIT === "receita") {
+      return (
+        `base receita — a conta fica zerada; maior descoberto de um ano: ` +
+        `R$ ${(piorDescoberto / 100).toFixed(2)}, que sai do caixa de quem opera`
+      );
+    }
+    const total = todasAsMontagens().length;
+    return zerados.length
+      ? `${total} montagens, split dentro do lucro · em ${zerados.length} delas quem tem 25% ` +
+          `fica com zero no anual (o terço do custo passa da fatia): ${zerados.join(", ")}`
+      : `${total} montagens, split dentro do lucro`;
   } finally {
     for (const [chave, valor] of salvas) {
       if (valor === undefined) delete process.env[chave];
@@ -472,6 +596,179 @@ await etapa("existe um combo em destaque para a home", () => {
   const destaque = planos.filter((p) => p.destaque);
   igual(destaque.length, 1, "quantidade de destaques");
   return `${destaque[0].nome} — R$ ${destaque[0].precoCentavos / 100}`;
+});
+
+/*
+ * ── A GRADE DE 04/09/2026, E O QUE ELA PRENDE ─────────────────────────────
+ *
+ * O sócio propôs três planos na vitrine — 250 GB, 500 GB, 1 TB — e "TERA
+ * ADICIONAL" vendido à parte. A vitrine mudou; a grade NÃO encolheu, e é isso
+ * que as etapas abaixo garantem.
+ *
+ * As faixas de 2 a 10 TB continuam existindo porque acima de 300 GB nenhum
+ * concorrente existe, por nenhum preço (medido em 26/08/2026: Lumi trava em
+ * 100 GB, GoFotógrafo em 300 GB). Tirá-las da tabela seria abandonar o único
+ * mercado sem briga para caber numa página de vendas mais curta.
+ *
+ * O "TB adicional" não é produto novo nem coluna nova: é a DIFERENÇA entre
+ * degraus vizinhos acima de 1 TB. Mantê-la constante é o que permite dizer
+ * "cada TB a mais custa R$ X" sem mentir, e sem inventar uma segunda estrutura
+ * de cobrança (quota = plano + N) que exigiria mexer em schema e no Asaas.
+ */
+await etapa("acima de 1 TB, cada TB a mais custa o MESMO — é o que sustenta o adicional", () => {
+  const acima = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  const passos = [];
+  for (let i = 1; i < acima.length; i++) {
+    const tb = (acima[i].gb - acima[i - 1].gb) / 1000;
+    passos.push((acima[i].precoCentavos - acima[i - 1].precoCentavos) / tb);
+  }
+  const distintos = [...new Set(passos)];
+  if (distintos.length !== 1) {
+    throw new Error(
+      `o TB adicional varia: ${passos.map((c) => `R$ ${(c / 100).toFixed(2)}`).join(", ")}`,
+    );
+  }
+  return `R$ ${(distintos[0] / 100).toFixed(2)} por TB`;
+});
+
+await etapa("o TB adicional cobre o próprio custo com folga", () => {
+  /* O custo de mil GB com o espaço CHEIO, com a mesma folga cambial da reserva.
+     Abaixo disto o adicional venderia prejuízo — e prejuízo que cresce com o
+     uso, que é o pior tipo. */
+  const custoTb = custoArmazenamentoTetoCentavos({ segmento: "foto", espacoGb: 1000 }) * 1.3;
+  const acima = ESPACOS.filter((e) => e.gb >= 1000).sort((a, b) => a.gb - b.gb);
+  const porTb =
+    (acima[1].precoCentavos - acima[0].precoCentavos) / ((acima[1].gb - acima[0].gb) / 1000);
+  if (porTb <= custoTb) {
+    throw new Error(
+      `TB adicional a R$ ${(porTb / 100).toFixed(2)} não cobre o custo de R$ ${(custoTb / 100).toFixed(2)}`,
+    );
+  }
+  return `R$ ${(porTb / 100).toFixed(2)} contra R$ ${(custoTb / 100).toFixed(2)} de custo`;
+});
+
+await etapa("a vitrine mostra três planos, e a tabela continua indo até 10 TB", () => {
+  igual(planos.length, 3, "planos na vitrine");
+  const gbs = planos.map((p) => p.quotaGb);
+  igual(JSON.stringify(gbs), JSON.stringify([250, 500, 1000]), "quais");
+  /* A tabela escrita à mão é o que o montador oferece antes do passo livre — e é
+     onde mora o dinheiro que não tem concorrente. */
+  if (!ESPACOS.some((e) => e.gb === 10000)) throw new Error("a tabela perdeu o topo de 10 TB");
+  return `vitrine ${gbs.join("/")} GB · tabela até ${Math.max(...ESPACOS.map((e) => e.gb)) / 1000} TB`;
+});
+
+/*
+ * ── A ESCADA NÃO TEM MAIS TOPO (06/09/2026) ───────────────────────────────
+ *
+ * O Felipe: "remova essa coisa do 10TB". Até aqui o "+1 TB" desabilitava no
+ * último degrau da tabela, e a home anunciava esse degrau como teto do produto.
+ * Acima de 1 TB a tabela sempre foi uma reta — preço(topo) + N × R$ 80 —, e a
+ * reta não tem por que parar onde a tabela para de estar escrita.
+ *
+ * A TABELA CONTINUA ESCRITA À MÃO até 10 TB, e é de propósito: é dinheiro, e o
+ * diff tem de mostrar preço por preço. A fórmula só assume ACIMA do topo, onde
+ * não há o que escrever à mão. A primeira etapa abaixo é o que amarra as duas:
+ * a fórmula tem de reproduzir EXATAMENTE cada degrau que já está escrito. No
+ * dia em que alguém reajustar uma faixa e esquecer da outra, é aqui que aparece.
+ */
+await etapa("a fórmula acima do topo reproduz todos os degraus escritos à mão", () => {
+  for (const e of ESPACOS) {
+    const pela = precoDoEspacoCentavos(e.gb);
+    if (pela !== e.precoCentavos) {
+      throw new Error(
+        `${e.gb} GB: a tabela diz ${e.precoCentavos} e a fórmula diz ${pela}`,
+      );
+    }
+  }
+  return `${ESPACOS.length} degraus conferidos`;
+});
+
+await etapa("acima do topo cada TB continua custando o mesmo", () => {
+  const topo = ESPACOS.at(-1);
+  for (const teras of [1, 2, 5, 10, 90]) {
+    const gb = topo.gb + teras * 1000;
+    const esperado = topo.precoCentavos + teras * TB_ADICIONAL_CENTAVOS;
+    igual(precoDoEspacoCentavos(gb), esperado, `preço de ${gb / 1000} TB`);
+  }
+  return `de ${topo.gb / 1000} TB para cima, R$ ${(TB_ADICIONAL_CENTAVOS / 100).toFixed(2)} por TB`;
+});
+
+await etapa("um espaço acima do topo vira plano de verdade", () => {
+  const p = planoPorId("g:foto:20000");
+  if (!p) throw new Error("planoPorId recusou 20 TB");
+  igual(p.quotaGb, 20000, "quota");
+  igual(p.precoCentavos, 163999, "preço mensal");
+  igual(montar({ segmento: "foto", espacoGb: 20000 }).id, "g:foto:20000", "id da montagem");
+  return `20 TB · R$ ${(p.precoCentavos / 100).toFixed(2)}/mês`;
+});
+
+/*
+ * ⚠️ A ETAPA QUE PROTEGE O DINHEIRO DE VERDADE.
+ *
+ * `reservaDoPlano` (socios.ts) resolve o id por `planoPorId`. Um id que ela não
+ * reconhece cai no chute de 35% do preço — e 35% é MUITO pouco para um plano
+ * grande, cujo custo de disco é o maior de todos. O efeito medido, com a grade
+ * aberta mas `planoPorId` ainda recusando: a razão do split SALTA de 26% para
+ * 65% acima de 10 TB, e o split despacha para as carteiras dos sócios dinheiro
+ * que é da fatura da Backblaze.
+ *
+ * Não daria erro, não apareceria em tela, e só seria notado na fatura. Por isso
+ * o teto de 30% aqui, e não uma comparação frouxa de "razão positiva".
+ */
+await etapa("acima do topo a reserva é a real, e não o chute de id desconhecido", () => {
+  for (const gb of [11000, 20000, 100000]) {
+    const preco = precoDoEspacoCentavos(gb);
+    const lucro = lucroCentavos(`g:foto:${gb}`, preco, "mensal");
+    const razao = lucro / preco;
+    if (razao > 0.3) {
+      throw new Error(
+        `${gb / 1000} TB devolve ${(razao * 100).toFixed(1)}% de lucro — é o fallback de 35%, não a reserva do plano`,
+      );
+    }
+    if (lucro <= 0) throw new Error(`${gb / 1000} TB não sobra nada depois da reserva`);
+  }
+  return "reserva calculada pelo espaço, não chutada";
+});
+
+await etapa("o anual acima do topo continua cobrindo doze meses de disco", () => {
+  for (const gb of [11000, 20000, 100000]) {
+    const preco = precoDoCicloCentavos(precoDoEspacoCentavos(gb), "anual");
+    const lucro = lucroCentavos(`g:foto:${gb}`, preco, "anual");
+    if (lucro <= 0) {
+      throw new Error(`${gb / 1000} TB anual não cobre a reserva de doze meses`);
+    }
+  }
+  return "anual positivo em todas as faixas provadas";
+});
+
+/*
+ * O QUE A ESCADA LIVRE NÃO PODE ACEITAR.
+ *
+ * O passo é de 1 TB, então 10.500 GB não é um espaço — é um id inventado, e
+ * aceitá-lo criaria preço que nenhum botão da tela produz. E `plano_id` chega
+ * de server action: sem um limite de sanidade, `g:foto:999999999` viraria plano
+ * válido de milhões de reais. O limite não é teto de venda e não aparece em
+ * tela nenhuma; é a guarda da fronteira de entrada.
+ */
+await etapa("meio tera e número absurdo continuam sendo recusados", () => {
+  if (planoPorId("g:foto:10500")) throw new Error("aceitou 10.500 GB — o passo é de 1 TB");
+  if (planoPorId(`g:foto:${ESPACO_MAXIMO_GB + 1000}`)) {
+    throw new Error("aceitou espaço acima do limite de sanidade");
+  }
+  if (planoPorId("g:foto:999999999")) throw new Error("aceitou 999.999.999 GB");
+  if (!planoPorId(`g:foto:${ESPACO_MAXIMO_GB}`)) {
+    throw new Error("recusou o próprio limite de sanidade");
+  }
+  return `limite em ${ESPACO_MAXIMO_GB / 1000} TB`;
+});
+
+await etapa("a entrada de 250 GB é o preço que o sócio pediu", () => {
+  const entrada = ESPACOS.sort((a, b) => a.gb - b.gb)[0];
+  igual(entrada.gb, 250, "menor faixa");
+  igual(entrada.precoCentavos, 4999, "preço da entrada");
+  /* A faixa de 100 GB saiu: o GoFotógrafo dá 300 GB mais um CRM inteiro por
+     R$ 49,90, e 100 GB pelo mesmo dinheiro perdia em qualquer comparação. */
+  if (ESPACOS.some((e) => e.gb === 100)) throw new Error("a faixa de 100 GB voltou");
 });
 
 console.log(falhou ? "\n✗ suíte vermelha\n" : "\n✓ planos ok\n");

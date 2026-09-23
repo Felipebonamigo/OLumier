@@ -53,7 +53,8 @@ let capA, capB;
 
 await etapa("cria capítulos em ordem", async () => {
   const r = await db.query(
-    `insert into secoes (galeria_id, nome, ordem) values ($1,'Cerimônia',0), ($1,'Festa',1) returning id, nome`,
+    `insert into secoes (galeria_id, nome, ordem, slug)
+     values ($1,'Cerimônia',0,'cerimonia'), ($1,'Festa',1,'festa') returning id, nome, slug`,
     [galeriaId],
   );
   [capA, capB] = r.rows;
@@ -94,17 +95,40 @@ await etapa("fotos movidas aparecem sob o capítulo", async () => {
   return "Cerimônia e Festa na página";
 });
 
+/*
+ * OS CAPÍTULOS MUDARAM DE CASA EM 10/09/2026. Eram uma barra própria, grudada
+ * no topo; hoje são a segunda linha da BARRA DE MENUS que o Juan pediu — duas
+ * faixas grudadas no mesmo lugar brigariam pelo topo da tela.
+ *
+ * ── E DEIXARAM DE SER ÂNCORA EM 21/09/2026 ────────────────────────────────
+ *
+ * Juan: "quando chega no fim do capítulo ele está trocando sozinho". Felipe:
+ * "poderia encerrar o capítulo 'making of' e ter um botão 'próximo capítulo'".
+ *
+ * A pastilha era `#cap-<id>`: rolava até a seção e o visitante entrava no
+ * capítulo seguinte sem escolher. Agora ela é o ENDEREÇO do capítulo, que abre
+ * só ele — em qualquer tamanho de galeria, e não só acima do teto de 600.
+ */
+const barraDeMenus = (html) =>
+  html.match(/<nav[^>]*aria-label="Menu da galeria"[^]*?<\/nav>/)?.[0] ?? "";
+
 await etapa("menu de navegação aparece com 2+ capítulos", async () => {
   const html = await (await fetch(url, { cache: "no-store" })).text();
-  if (!html.includes(`#cap-${capA.id}`)) throw new Error("sem âncora para o capítulo");
-  if (!html.includes("Capítulos da galeria")) throw new Error("sem o menu de navegação");
-  return "âncoras e menu presentes";
+  if (html.includes(`#cap-${capA.id}"`)) throw new Error("a pastilha voltou a ser âncora");
+  const link = `/g/${tslug}/${gslug}/${capA.slug}`;
+  if (!html.includes(link)) throw new Error(`sem o endereço do capítulo (${link})`);
+  const barra = barraDeMenus(html);
+  if (!barra) throw new Error("sem a barra de menus");
+  if (!barra.includes(link)) throw new Error("o endereço do capítulo ficou fora da barra");
+  return `${link} na barra`;
 });
 
 await etapa("ordem do fotógrafo é respeitada na página", async () => {
   const t = await texto(await fetch(url, { cache: "no-store" }));
-  const posCerimonia = t.indexOf("Cerimônia", t.indexOf("Capítulos da galeria") + 40);
-  const posFesta = t.indexOf("Festa", t.indexOf("Capítulos da galeria") + 40);
+  /* Basta a primeira ocorrência de cada nome: as duas primeiras são as pastilhas
+     da barra, na ordem em que a barra as desenha. */
+  const posCerimonia = t.indexOf("Cerimônia");
+  const posFesta = t.indexOf("Festa");
   if (posCerimonia === -1 || posFesta === -1) throw new Error("capítulos não localizados");
   if (posCerimonia > posFesta) throw new Error("ordem invertida");
 
@@ -112,8 +136,7 @@ await etapa("ordem do fotógrafo é respeitada na página", async () => {
   await db.query("update secoes set ordem = 1 where id = $1", [capA.id]);
   await db.query("update secoes set ordem = 0 where id = $1", [capB.id]);
   const t2 = await texto(await fetch(url, { cache: "no-store" }));
-  const base = t2.indexOf("Capítulos da galeria") + 40;
-  if (t2.indexOf("Festa", base) > t2.indexOf("Cerimônia", base)) {
+  if (t2.indexOf("Festa") > t2.indexOf("Cerimônia")) {
     throw new Error("não acompanhou a reordenação");
   }
   await db.query("update secoes set ordem = 0 where id = $1", [capA.id]);
@@ -128,6 +151,112 @@ await etapa("ordem do fotógrafo é respeitada na página", async () => {
  * quanto para "já existe", e o envio precisa do id da que já existe, não de um
  * erro. Sem isto, a segunda leva de fotos da mesma pasta perderia o capítulo.
  */
+/*
+ * ── FOTO SOLTA NÃO PODE VIRAR PASTILHA SEM NOME (04/09/2026) ──────────────
+ *
+ * O sócio: "as fotos subidas sem capítulo devem ir obrigatoriamente para um
+ * capítulo. Ou organizar isso."
+ *
+ * O defeito concreto era o menu: as fotos sem capítulo entravam na lista de
+ * capítulos com `nome: ""`, e o menu do cliente — que só aparece com dois ou
+ * mais — desenhava uma pastilha VAZIA no meio das outras. Um botão sem texto
+ * que leva a algum lugar.
+ *
+ * A saída não é obrigar o fotógrafo a escolher no envio (atrito no pior
+ * momento), nem mover as fotos sozinho (mexer no trabalho dele sem pedir). É
+ * dar nome ao grupo quando ele convive com capítulos, e dar um botão de um
+ * clique no painel para quem quiser arrumar.
+ */
+await etapa("com capítulos, as fotos soltas ganham nome em vez de pastilha vazia", async () => {
+  /* Uma foto fora de qualquer capítulo, e pelo menos um capítulo existindo. */
+  await db.query("update medias set secao_id = null where id = $1", [fotos[0].id]);
+  const html = await (await fetch(url, { cache: "no-store" })).text();
+  const nav = barraDeMenus(html);
+  if (!nav) throw new Error("o menu de capítulos sumiu");
+  /* `>​<` entre a abertura e o fechamento do link é a pastilha sem texto. */
+  if (/>\s*<\/a>/.test(nav)) throw new Error("ainda há uma pastilha sem nome no menu");
+  if (!nav.includes("Outras fotos")) throw new Error("o grupo das soltas não recebeu nome");
+  return "as soltas viram “Outras fotos”";
+});
+
+await etapa("SEM capítulo nenhum, a galeria segue sem título — nada de “Outras fotos”", async () => {
+  const { rows: guardadas } = await db.query(
+    "select id, secao_id from medias where galeria_id = $1 and secao_id is not null",
+    [galeriaId],
+  );
+  await db.query("update medias set secao_id = null where galeria_id = $1", [galeriaId]);
+  const { rows: secoesAntes } = await db.query(
+    "select id, nome, ordem from secoes where galeria_id = $1 order by ordem",
+    [galeriaId],
+  );
+  await db.query("delete from secoes where galeria_id = $1", [galeriaId]);
+
+  const html = await (await fetch(url, { cache: "no-store" })).text();
+  if (html.includes("Outras fotos")) {
+    throw new Error("galeria de fluxo único ganhou um título que não pediu");
+  }
+
+  /* Devolve a bancada ao estado anterior — as etapas seguintes contam com ela. */
+  for (const s of secoesAntes) {
+    await db.query("insert into secoes (id, galeria_id, nome, ordem) values ($1,$2,$3,$4)", [
+      s.id,
+      galeriaId,
+      s.nome,
+      s.ordem,
+    ]);
+  }
+  for (const m of guardadas) {
+    await db.query("update medias set secao_id = $1 where id = $2", [m.secao_id, m.id]);
+  }
+});
+
+await etapa("mover as soltas de uma vez leva TODAS, e só as desta galeria", async () => {
+  const { moverSoltasParaSecao } = await import("../src/lib/secoes.ts");
+  const { rows: [destino] } = await db.query(
+    "select id from secoes where galeria_id = $1 order by ordem limit 1",
+    [galeriaId],
+  );
+  /* Guarda a lotação atual: as etapas seguintes contam com ela — a de apagar
+     capítulo, por exemplo, precisa que uma foto específica esteja no capítulo
+     que ela vai apagar. Bancada devolvida no fim desta etapa. */
+  const { rows: antes } = await db.query(
+    "select id, secao_id from medias where galeria_id = $1",
+    [galeriaId],
+  );
+  await db.query("update medias set secao_id = null where galeria_id = $1", [galeriaId]);
+
+  /* Uma galeria vizinha, com foto solta também: o UPDATE não pode alcançá-la. */
+  const vizinha = await galeriaDaRodada(db, { nome: "soltas-vizinha", medias: 2 });
+  await db.query("update medias set secao_id = null where galeria_id = $1", [vizinha.id]);
+
+  const movidas = await moverSoltasParaSecao(galeriaId, destino.id, tenantId);
+  const { rows: [restam] } = await db.query(
+    "select count(*)::int as n from medias where galeria_id = $1 and secao_id is null",
+    [galeriaId],
+  );
+  const { rows: [naVizinha] } = await db.query(
+    "select count(*)::int as n from medias where galeria_id = $1 and secao_id is null",
+    [vizinha.id],
+  );
+  if (restam.n !== 0) throw new Error(`sobraram ${restam.n} soltas`);
+  if (naVizinha.n !== 2) throw new Error(`mexeu na galeria vizinha: ${naVizinha.n} soltas`);
+
+  for (const m of antes) {
+    await db.query("update medias set secao_id = $1 where id = $2", [m.secao_id, m.id]);
+  }
+  return `${movidas} movidas, vizinha intacta`;
+});
+
+await etapa("mover as soltas de OUTRO estúdio não move nada", async () => {
+  const { moverSoltasParaSecao } = await import("../src/lib/secoes.ts");
+  const { rows: [destino] } = await db.query(
+    "select id from secoes where galeria_id = $1 order by ordem limit 1",
+    [galeriaId],
+  );
+  const movidas = await moverSoltasParaSecao(galeriaId, destino.id, crypto.randomUUID());
+  if (movidas !== 0) throw new Error(`moveu ${movidas} com o tenant errado`);
+});
+
 await etapa("garantir capítulos: cria o que falta e devolve o id do que já existe", async () => {
   const r = await garantirSecoes(galeriaId, tenantId, ["Cerimônia", "Making Of"]);
   if (r.length !== 2) throw new Error(`esperava 2, veio ${r.length}`);

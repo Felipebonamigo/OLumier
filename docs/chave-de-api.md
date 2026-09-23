@@ -181,7 +181,7 @@ Três coisas entraram para isso, todas dentro do desenho que já existia:
 | `GET /api/galerias/:id` | como está a entrega: estado, contagem, endereço canônico e o `noAr` **calculado** (a régua da página pública, nunca a coluna `publicada` crua) | `leitura` |
 | `POST /api/galerias` + `referenciaExterna` | criar a galeria de um contrato, com **idempotência**: a mesma referência devolve a mesma galeria (200), nunca uma `ana-pedro-2` | `envio` |
 
-A procedência fica em `galerias.origem`/`origem_ref` (migração 026), com índice único
+A procedência fica em `galerias.origem`/`origem_ref` (migração 039), com índice único
 parcial por `(tenant, origem, origem_ref)` que deixa a lixeira de fora — apagar a
 galeria errada não pode trancar o contrato até a purga. A referência é **opaca**:
 guardamos e devolvemos, nunca interpretamos. Nenhum dado do contrato (valor, cliente,

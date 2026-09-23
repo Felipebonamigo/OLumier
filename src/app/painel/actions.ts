@@ -11,10 +11,19 @@ import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
  * por isso que ele pode ser chamado assim, solto, no fim de cada ação: nenhuma
  * delas passa a depender de o Atomatiza estar de pé. */
 import { avisarEntrega, removerCanal } from "@/lib/avisos";
-import { lerAparencia } from "@/config/aparencia";
+import {
+  gravarRascunho,
+  promoverRascunhoSePendente,
+  salvarPadraoDoEstudio,
+  esquecerPadraoDoEstudio,
+  padraoDoEstudio,
+  publicarAparencia,
+} from "@/lib/aparencia-galeria";
+import { presetPorId } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
-import { planoPorId, GB, cicloDe, precoDoCicloCentavos, type Ciclo } from "@/config/planos";
+import { planoPorId, GB, cicloDe, precoDoCicloCentavos } from "@/config/planos";
+import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
 import {
   asaasConfigurado,
@@ -39,10 +48,18 @@ import {
   criarSecao,
   garantirSecoes,
   moverMediasParaSecao,
+  moverSoltasParaSecao,
   moverSecao,
+  reordenarSecoes,
   renomearSecao,
+  renomearGrupoSolto,
+  ordenarFotosDaSecao,
+  ORDENS_DAS_FOTOS,
+  type OrdemDasFotos,
 } from "@/lib/secoes";
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
+import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
+import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -70,6 +87,51 @@ export async function criarGaleriaAction(
   const dataEvento = String(form.get("data_evento") ?? "").trim();
 
   const galeria = await criarGaleria({ tenantId, titulo, subtitulo, dataEvento });
+
+  /*
+   * ── O QUE O ASSISTENTE TRAZ JUNTO (04/09/2026) ──────────────────────────
+   *
+   * Estilo e capítulos passaram a ser perguntados na criação, em duas etapas
+   * opcionais. As duas decisões já existiam — só ficavam escondidas em outra
+   * tela, e muita gente nunca descobria que dava para tomá-las.
+   *
+   * As duas falham em SILÊNCIO de propósito: a galeria já existe e é o que a
+   * pessoa pediu. Perder o estilo escolhido é chato e tem conserto num clique
+   * em Design; recusar a criação inteira por causa de um preset inválido não
+   * tem conserto nenhum — ela perderia o nome, a data e a vontade.
+   */
+  /*
+   * ── O ESTILO ESCOLHIDO VENCE O PADRÃO DO ESTÚDIO ──────────────────────
+   *
+   * A ordem importa e é a única leitura possível: se a pessoa parou na etapa de
+   * estilo e apontou um cartão, foi uma decisão TOMADA AGORA, sobre esta
+   * galeria. O padrão do estúdio é a decisão de sempre, e serve para quem
+   * passou direto — que é o caminho de quem já salvou o próprio padrão
+   * justamente para não escolher de novo.
+   *
+   * Sem nenhum dos dois, a coluna fica no `'{}'` de sempre e `lerAparencia`
+   * completa com o padrão do código.
+   */
+  const preset = presetPorId(String(form.get("preset") ?? ""));
+  const aparenciaInicial = preset?.aparencia ?? (await padraoDoEstudio(tenantId));
+  if (aparenciaInicial) {
+    await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
+      JSON.stringify(aparenciaInicial),
+      galeria!.id,
+      tenantId,
+    ]).catch(() => {});
+  }
+
+  /* Uma linha por capítulo, na ordem em que a pessoa marcou. `garantirSecoes`
+     já ignora nome repetido e vazio — ver lib/secoes.ts. */
+  const capitulos = String(form.get("capitulos") ?? "")
+    .split("\n")
+    .map((c) => c.trim())
+    .filter(Boolean);
+  if (capitulos.length > 0) {
+    await garantirSecoes(galeria!.id, tenantId, capitulos).catch(() => []);
+  }
+
   revalidatePath("/painel");
   redirect(`/painel/galerias/${galeria!.id}`);
 }
@@ -90,6 +152,20 @@ export async function salvarPublicacaoAction(form: FormData) {
   if (publicada !== null) {
     valores.push(publicada === "1");
     campos.push(`publicada = $${valores.length}`);
+  }
+
+  /*
+   * PUBLICAR A GALERIA PUBLICA A APARÊNCIA PENDENTE JUNTO.
+   *
+   * Duas usuárias seguidas escolheram o tema claro, viram a prévia clara e
+   * entregaram a galeria escura — o rascunho nunca foi publicado. Ver
+   * `promoverRascunhoSePendente`, que explica por que isso não desfaz a
+   * separação rascunho/publicado.
+   *
+   * Só ao LIGAR: tirar do ar não é hora de mexer no desenho de nada.
+   */
+  if (publicada === "1") {
+    await promoverRascunhoSePendente(galeriaId, tenantId);
   }
 
   const permiteDownload = form.get("permite_download");
@@ -145,24 +221,103 @@ export async function salvarAparenciaAction(form: FormData): Promise<{ erro?: st
     return { erro: "Não consegui ler a aparência escolhida." };
   }
 
-  // lerAparencia descarta qualquer chave desconhecida ou valor inválido:
-  // o que é gravado é sempre um objeto que o renderizador sabe desenhar.
-  const limpa = lerAparencia(bruto);
-
-  /* O `returning` existe para saber se ESCREVEU. `consultar` devolve só as
-   * linhas, e um update sem returning devolve lista vazia tanto quando gravou
-   * quanto quando não achou nada — a tela diria "salvo" para uma gravação que
-   * não aconteceu (galeria de outro estúdio, ou apagada em outra aba). */
-  const gravadas = await consultar(
-    `update galerias set aparencia = $1, atualizado_em = now()
-      where id = $2 and tenant_id = $3
-      returning id`,
-    [JSON.stringify(limpa), galeriaId, tenantId],
-  );
-  if (gravadas.length === 0) return { erro: "Esta galeria não é sua, ou não existe mais." };
+  const { ok } = await publicarAparencia(galeriaId, tenantId, bruto);
+  if (!ok) return { erro: "Esta galeria não é sua, ou não existe mais." };
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
   return {};
+}
+
+/**
+ * Guarda a escolha que o fotógrafo ainda está experimentando.
+ *
+ * Grava sozinho, a cada mudança, e NÃO muda a galeria que o cliente está vendo.
+ * É o que devolve ao editor a virtude que o salvamento automático tinha — nada
+ * se perde ao sair da tela — sem devolver o defeito dele, que era publicar cada
+ * passo do caminho. Ver `lib/aparencia-galeria.ts`.
+ *
+ * Não revalida caminho nenhum: rascunho não muda página que alguém esteja
+ * vendo, e revalidar a cada tecla seria trabalho jogado fora.
+ */
+/**
+ * PUBLICAR AS ALTERAÇÕES DE UMA GALERIA QUE JÁ ESTÁ NO AR.
+ *
+ * Felipe, 16/09/2026: "aqui, para poder ver a galeria, estamos precisando tirar
+ * do ar e publicar novamente. Talvez um botão republicar com as atualizações ou
+ * algo assim corrigiria."
+ *
+ * Ele descreveu o remédio junto com a queixa, e a queixa era de um buraco de
+ * verdade. O cabeçalho tinha "Publicar galeria" enquanto ela fosse RASCUNHO, e
+ * publicar promovia a aparência pendente junto (ver
+ * `promoverRascunhoSePendente`). Depois de publicada, aquele botão virava
+ * "tirar do ar" — e a única forma de promover um rascunho de aparência pelo
+ * cabeçalho passou a ser DESPUBLICAR e publicar de novo, que é literalmente o
+ * que eles estavam fazendo. Enquanto isso o link do casal ficava fora do ar.
+ *
+ * O caminho pelo Design existia e continua existindo; o que faltava era ele
+ * existir de onde a pessoa está quando vê o aviso.
+ */
+/**
+ * Guarda a aparência de agora como o padrão do estúdio.
+ *
+ * Felipe, 16/09/2026: "adicionar algum método de 'salvar padrão criado', para
+ * sempre se repetir na hora do design da capa".
+ *
+ * Não mexe em galeria nenhuma — nem nesta. É uma decisão sobre o que vem
+ * DEPOIS: a próxima galeria nasce assim. Mexer nas existentes seria reescrever
+ * entregas já feitas a partir de um botão que diz "salvar".
+ */
+export async function salvarPadraoDoEstudioAction(form: FormData): Promise<{ ok?: string; erro?: string }> {
+  const tenantId = await exigirTenant();
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(String(form.get("aparencia") ?? "{}"));
+  } catch {
+    return { erro: "Não consegui ler a aparência escolhida." };
+  }
+  await salvarPadraoDoEstudio(tenantId, bruto);
+  return { ok: "Toda galeria nova vai nascer com este design." };
+}
+
+/** Esquece o padrão: a galeria nova volta a nascer com o desenho da casa. */
+export async function esquecerPadraoDoEstudioAction(): Promise<{ ok?: string }> {
+  const tenantId = await exigirTenant();
+  await esquecerPadraoDoEstudio(tenantId);
+  return { ok: "As galerias novas voltam a nascer com o design padrão." };
+}
+
+export async function publicarAlteracoesAction(form: FormData): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  const promoveu = await promoverRascunhoSePendente(galeriaId, tenantId);
+  /* Sem rascunho não há erro nenhum: alguém publicou pelo Design enquanto esta
+     aba estava aberta, e o resultado é o que a pessoa queria. O `refresh` do
+     cliente some com o aviso. */
+  if (promoveu) {
+    revalidatePath(`/painel/galerias/${galeriaId}`);
+    revalidatePath(`/painel/galerias/${galeriaId}/design`);
+  }
+  return {};
+}
+
+export async function salvarRascunhoAparenciaAction(
+  form: FormData,
+): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(String(form.get("aparencia") ?? "{}"));
+  } catch {
+    return { erro: "Não consegui ler a aparência escolhida." };
+  }
+
+  const { ok } = await gravarRascunho(galeriaId, tenantId, bruto);
+  return ok ? {} : { erro: "Esta galeria não é sua, ou não existe mais." };
 }
 
 /** Define qual foto abre a galeria. */
@@ -281,10 +436,63 @@ export async function renomearSecaoAction(form: FormData) {
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
 }
 
+/**
+ * Renomeia o grupo das fotos sem capítulo — o que a galeria mostra como
+ * "Outras fotos" enquanto ninguém escrever outra coisa.
+ *
+ * Pedido do Juan em 18/09/2026. Campo vazio volta ao padrão; ver
+ * `renomearGrupoSolto`.
+ */
+export async function renomearGrupoSoltoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  await renomearGrupoSolto(galeriaId, tenantId, String(form.get("nome") ?? ""));
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
 export async function apagarSecaoAction(form: FormData) {
   const tenantId = await exigirTenant();
   await apagarSecao(String(form.get("secao_id") ?? ""), tenantId);
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+/**
+ * Reordena as fotos de UM capítulo por um critério.
+ *
+ * Felipe, 16/09/2026: "poder organizar por ordem de upload/adição // por ordem
+ * cronológica // por nome A-Z // por nome Z-A".
+ *
+ * `secao_id` vazio é o grupo das fotos SEM capítulo — ele aparece na mesma
+ * lista da tela e tem o mesmo direito de ser ordenado.
+ */
+export async function ordenarFotosDaSecaoAction(form: FormData): Promise<{ aviso?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const secaoId = String(form.get("secao_id") ?? "") || null;
+  const criterio = String(form.get("criterio") ?? "") as OrdemDasFotos;
+  if (!ORDENS_DAS_FOTOS.some((o) => o.id === criterio)) return {};
+
+  const r = await ordenarFotosDaSecao(galeriaId, tenantId, secaoId, criterio);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  if (!r.ok) return {};
+
+  /*
+   * O aviso é honesto sobre o que a ordem cronológica conseguiu.
+   *
+   * Foto sem data da câmera cai na data de ENVIO — vídeo, PNG, foto exportada
+   * sem metadados e tudo que subiu antes da migração 035. Ordenar 600 fotos e
+   * não dizer que 200 delas foram pelo envio é entregar uma sequência que
+   * parece cronológica e não é.
+   */
+  if (r.semData > 0) {
+    return {
+      aviso:
+        `${r.semData} de ${r.quantas} ${r.semData === 1 ? "foto não tem" : "fotos não têm"} a data ` +
+        `da câmera e ${r.semData === 1 ? "entrou" : "entraram"} pela ordem de envio. ` +
+        `Fotos enviadas antes de 16/09/2026 não guardaram essa data.`,
+    };
+  }
+  return {};
 }
 
 export async function moverSecaoAction(form: FormData) {
@@ -292,6 +500,27 @@ export async function moverSecaoAction(form: FormData) {
   const direcao = form.get("direcao") === "cima" ? "cima" : "baixo";
   await moverSecao(String(form.get("secao_id") ?? ""), tenantId, direcao);
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+/**
+ * A ordem inteira dos capítulos, como ficou depois de arrastar.
+ *
+ * Carol pediu em 11/09/2026: com sete capítulos, subir a "Festa" ao topo eram
+ * seis cliques na seta e seis recarregamentos. A lista chega separada por
+ * vírgula porque é o que cabe num FormData sem inventar formato.
+ *
+ * Nada do que vem aqui é usado sem passar pelo banco — `reordenarSecoes`
+ * amarra cada id à galeria e ao tenant antes de gravar.
+ */
+export async function reordenarSecoesAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const ids = String(form.get("ordem") ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  await reordenarSecoes(galeriaId, tenantId, ids);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
 }
 
 export async function moverMediasAction(form: FormData) {
@@ -314,8 +543,22 @@ export async function moverMediasAction(form: FormData) {
  */
 export async function criarAssinaturaAction(
   documento: string,
-  ciclo: Ciclo = "mensal",
+  /*
+   * `unknown` e não `Ciclo`: isto vem da tela, atravessando uma server action, e
+   * ali o tipo é promessa do cliente. `cicloDe` fecha a lista, e o lado seguro é
+   * o MENSAL — o anual reserva doze meses de custo contra dez de preço, e
+   * reservar de menos seria pagar sócio com o dinheiro da fatura da Backblaze.
+   */
+  cicloBruto: unknown = "mensal",
+  /*
+   * A escolha crua da tela, não o `billingType`. Traduzir aqui, e não no
+   * componente, é o que garante a tradução: o cliente pode mandar o que quiser,
+   * e `formaDaAssinatura` fecha a lista — lixo cai em UNDEFINED, que é o lado
+   * de NÃO guardar o cartão de quem não pediu. Ver `config/forma-assinatura.ts`.
+   */
+  escolhaDaForma?: unknown,
 ): Promise<{ erro?: string } | void> {
+  const ciclo = cicloDe(cicloBruto);
   const tenantId = await exigirTenant();
 
   if (!asaasConfigurado()) return { erro: "A cobranca ainda nao foi ligada." };
@@ -366,6 +609,7 @@ export async function criarAssinaturaAction(
       ciclo,
       descricao: `${marca.nome} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}`,
       primeiroVencimento: vencimento,
+      forma: formaDaAssinatura(escolhaDaForma),
     });
 
     /* O ciclo é gravado JUNTO com o id da assinatura, na mesma escrita. Se
@@ -1037,4 +1281,149 @@ export async function desligarAvisosAction() {
   const tenantId = await exigirTenant();
   await removerCanal(tenantId);
   revalidatePath("/painel/conta");
+}
+
+// ── busca por rosto ──────────────────────────────────────────────────────────
+
+/**
+ * Liga a busca por rosto. É o ATO DE CONSENTIMENTO do fotógrafo (LGPD art.
+ * 11): só chega aqui quem leu o texto e marcou que aceita — e o `aceito` é
+ * conferido de novo, porque o formulário é do navegador.
+ *
+ * O evento registra QUANDO. É a resposta para "o estúdio consentiu?", que um
+ * dia alguém pode perguntar.
+ */
+export async function ligarBuscaPorRostoAction(form: FormData): Promise<{ erro?: string } | void> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não informada." };
+  if (form.get("aceito") !== "1") {
+    return { erro: "Para ligar, é preciso aceitar as condições." };
+  }
+
+  const ok = await ligarRostos(galeriaId, tenantId);
+  if (!ok) return { erro: "Galeria não encontrada." };
+
+  await registrarEvento({
+    tenantId,
+    ator: "estudio",
+    acao: ACOES.ROSTOS_LIGADOS,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    ip: await ipDaRequisicao(),
+  });
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * Desliga E apaga os vetores. As duas coisas são uma só — ver `desligarRostos`.
+ * O evento diz quantos foram apagados: é a prova de que o dado sumiu.
+ */
+export async function desligarBuscaPorRostoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return;
+
+  const apagados = await desligarRostos(galeriaId, tenantId);
+  await registrarEvento({
+    tenantId,
+    ator: "estudio",
+    acao: ACOES.ROSTOS_DESLIGADOS,
+    alvoTipo: "galeria",
+    alvoId: galeriaId,
+    detalhe: { rostosApagados: apagados },
+    ip: await ipDaRequisicao(),
+  });
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * As fotos que ainda não passaram pela medição, com o link da PRÉVIA de cada
+ * uma — é o que o navegador do fotógrafo baixa para medir as fotos que já
+ * estavam na galeria antes de a busca ser ligada.
+ *
+ * Prévia, não original: a prévia sai do R2, onde a saída não custa nada; o
+ * original mora no B2 e cada byte lido é cobrado. O preço é que rosto pequeno
+ * demais na prévia fica de fora — a tela avisa isso.
+ */
+export async function fotosSemRostoAction(
+  galeriaId: string,
+): Promise<{ id: string; url: string }[]> {
+  const tenantId = await exigirTenant();
+  const fotos = await fotosSemRosto(galeriaId, tenantId);
+  return Promise.all(
+    fotos.map(async (f) => ({
+      id: f.id,
+      url: await urlDaDerivada(f.chave_preview, f.chave, armazemDe(f.armazem), 3600),
+    })),
+  );
+}
+
+/**
+ * Manda todas as fotos sem capítulo para um capítulo, de uma vez.
+ *
+ * Pedido do sócio em 04/09/2026: "as fotos subidas sem capítulo devem ir
+ * obrigatoriamente para um capítulo. Ou organizar isso." Obrigar na hora do
+ * envio seria atrito no pior momento — quem está subindo 600 fotos não quer
+ * responder pergunta. Um botão que arruma depois resolve o mesmo, sem cobrar
+ * nada de quem não se importa.
+ */
+export async function moverSoltasAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const secaoId = String(form.get("secao_id") ?? "");
+  if (!galeriaId || !secaoId) return;
+
+  await moverSoltasParaSecao(galeriaId, secaoId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
+ * Troca o endereço da galeria. O anterior deixa de abrir.
+ *
+ * A regra inteira mora em `lib/endereco-galeria.ts`, inclusive o que acontece
+ * com o endereço que sai — nada, ele morre ali. Aqui só há a sessão, a
+ * revalidação e o texto que a tela mostra.
+ */
+export async function trocarEnderecoGaleriaAction(
+  _estado: { ok?: string; erro?: string },
+  form: FormData,
+): Promise<{ ok?: string; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const pedido = String(form.get("slug") ?? "");
+  if (!galeriaId) return { erro: "Galeria não encontrada." };
+
+  const { trocarEnderecoDaGaleria } = await import("@/lib/endereco-galeria");
+  const r = await trocarEnderecoDaGaleria(galeriaId, tenantId, pedido);
+  if (!r.ok) return { erro: r.erro };
+
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  revalidatePath("/painel");
+  return { ok: `Endereço agora é /${r.slug}.` };
+}
+
+/**
+ * Apaga um endereço antigo da galeria: ele deixa de abrir.
+ *
+ * Felipe, 16/09/2026: "quando alterar o endereço da galeria, apagar o antigo" e
+ * "pode apagar sempre o endereço antigo". A troca em si já não guarda apelido
+ * nenhum; esta ação é para os que ficaram das trocas anteriores, e serve agora
+ * em vez de esperar a próxima troca — o que importa quando o link vazou.
+ */
+export async function esquecerApelidoGaleriaAction(
+  _estado: { ok?: string; erro?: string },
+  form: FormData,
+): Promise<{ ok?: string; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const slug = String(form.get("slug") ?? "");
+  if (!galeriaId || !slug) return { erro: "Endereço não identificado." };
+
+  const { esquecerApelidoDaGaleria } = await import("@/lib/endereco-galeria");
+  const r = await esquecerApelidoDaGaleria(galeriaId, tenantId, slug);
+  if (!r.ok) return { erro: "Este endereço já não estava guardado." };
+
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return { ok: `/${slug} deixou de abrir esta galeria.` };
 }

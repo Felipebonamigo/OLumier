@@ -37,6 +37,16 @@ import {
  * quota antes do envio começar, para dois uploads simultâneos não furarem o
  * limite juntos.
  */
+/** ISO do navegador → Date, ou null. Nunca estoura. */
+function dataValida(bruto: unknown): Date | null {
+  if (typeof bruto !== "string") return null;
+  const d = new Date(bruto);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Formato do `lote` que o navegador manda — ver `criarMediaPendente`. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   /*
    * Navegador (cookie) OU programa (chave de API com escopo `envio`).
@@ -74,11 +84,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     mime?: string;
     bytes?: number;
     comDerivadas?: boolean;
+    comPreview?: boolean;
+    tiradaEm?: string;
     formatoDerivadas?: string;
     secaoId?: string;
     largura?: number;
     altura?: number;
     indice?: number;
+    lote?: string;
   };
   try {
     corpo = await request.json();
@@ -169,9 +182,27 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const chaves = montarChaves(tenantId, galeriaId, nome, formato);
 
-  // O navegador avisa se conseguiu gerar as derivadas. Quando não conseguir
-  // (vídeo, HEIC que ele não decodifica), gravamos null e a grade usa o original.
-  const comDerivadas = tipo === "foto" && corpo.comDerivadas === true;
+  /*
+   * O navegador avisa se conseguiu gerar as derivadas. Quando não conseguir
+   * (HEIC que ele não decodifica, arquivo corrompido), gravamos null e a grade
+   * usa o original.
+   *
+   * ── VÍDEO TEM PÔSTER, E SÓ PÔSTER (16/09/2026) ─────────────────────────
+   *
+   * Era `tipo === "foto"`, e a consequência estava na galeria: vídeo sem
+   * nenhuma derivada virava um retângulo cinza na grade e um lightbox preto —
+   * "aperto play e ele já abre uma tela estranha". Desde que o navegador passou
+   * a extrair um quadro do filme (`derivadas-client.ts`), há miniatura para
+   * gravar, e a proporção real vem junto.
+   *
+   * O PREVIEW continua nulo em vídeo, e isso não é economia: `urlDaDerivada`
+   * devolve a derivada de preview quando ela existe, então um pôster gravado
+   * ali seria entregue ao `<video>` no lugar do filme. Sem ela, a rota cai no
+   * original — que é o arquivo que o player quer. Quem decide é o navegador,
+   * que diz em `comPreview` o que de fato gerou.
+   */
+  const comDerivadas = corpo.comDerivadas === true;
+  const comPreview = comDerivadas && corpo.comPreview !== false && tipo === "foto";
 
   /*
    * O ORIGINAL nasce onde a credencial disser (B2 quando as ARQUIVOS_*
@@ -190,21 +221,32 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     tenantId,
     chave: chaves.original,
     chaveThumb: comDerivadas ? chaves.thumb : null,
-    chavePreview: comDerivadas ? chaves.preview : null,
+    chavePreview: comPreview ? chaves.preview : null,
     nomeOriginal: nome,
     tipo,
     mime,
     bytes,
+    /* A data do EXIF, quando o navegador achou. Texto inválido vira nulo em
+       vez de derrubar o envio: a ordenação cronológica cai na de envio, e
+       perder a foto por causa de um cabeçalho torto seria trocar a entrega
+       por um campo de ordenação. */
+    tiradaEm: dataValida(corpo.tiradaEm),
     largura: Number(corpo.largura) || null,
     altura: Number(corpo.altura) || null,
     secaoId,
     // Posição na lista que o fotógrafo ordenou — ver criarMediaPendente.
     indice: Number.isInteger(corpo.indice) ? corpo.indice : undefined,
+    /* O envio a que este arquivo pertence (migração 038). Só serve para a base
+       da posição não escorregar no meio do lote, e é o navegador que o gera —
+       por isso vale conferir o formato: texto qualquer aqui viraria erro de
+       tipo no `::uuid` da consulta, e derrubaria o envio por causa de um campo
+       que não muda uma foto de lugar. */
+    lote: UUID.test(String(corpo.lote ?? "")) ? String(corpo.lote) : null,
   });
 
   const [urlThumb, urlPreview] = await Promise.all([
     comDerivadas ? urlDeUpload(chaves.thumb, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
-    comDerivadas ? urlDeUpload(chaves.preview, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
+    comPreview ? urlDeUpload(chaves.preview, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
   ]);
 
   // Acima de 5 GB o PUT único não serve: abre o envio em partes e o navegador

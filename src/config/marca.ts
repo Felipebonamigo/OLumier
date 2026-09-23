@@ -15,8 +15,8 @@
  *
  * `dominio` e `email` PARECEM texto e moram neste arquivo, mas não são: o
  * primeiro monta o link do "esqueci minha senha" e autoriza a emissão de
- * certificado TLS; o segundo é o endereço que a página de privacidade, os
- * termos e o rodapé mandam a pessoa escrever.
+ * certificado TLS; o segundo é o endereço que a marca velha reaparecendo
+ * estragaria.
  *
  * ── FASE 2 FEITA EM 26/08/2026 ────────────────────────────────────────────
  * Os dois passaram para `galeriaatomo.com.br`, fechando a linha
@@ -28,9 +28,10 @@
  * NENHUM dos dois domínios recebe mensagem. `olumier.com.br` tem MX nulo
  * (`0 .` — RFC 7505, "este domínio não aceita e-mail") e SPF `-all`;
  * `galeriaatomo.com.br` não tem MX nenhum. Ou seja, `contato@olumier.com.br`
- * NUNCA recebeu nada, e a página de privacidade promete resposta em 15 dias
- * para uma caixa que devolve. Mover para o domínio novo não piorou coisa
- * alguma; o que falta é CRIAR a caixa, e isso é trabalho de DNS, não de código.
+ * NUNCA recebeu nada, e a página de privacidade prometia resposta em 15 dias
+ * para uma caixa que devolve. O que falta é CRIAR a caixa, e isso é trabalho de
+ * DNS, não de código — então em 17/09/2026 quem passou a atender foi o
+ * `whatsapp` mais abaixo, e o `email` saiu das telas até existir caixa.
  *
  * `scripts/testar-marca-plataforma.mjs` é o freio disso, e foi exercitado
  * contra o find-replace cego antes de existir.
@@ -42,16 +43,62 @@
  * Átomo), a segunda cópia é a que fica para trás. */
 const NOME = "Galeria Átomo";
 
+/*
+ * O NÚMERO, SEPARADO PELO MESMO MOTIVO QUE O NOME — e porque ele é lido de dois
+ * jeitos que não se convertem um no outro sem inventar regra: o `wa.me` quer só
+ * dígitos com o país na frente, e a pessoa quer ver o número como ela o disca.
+ */
+const WHATSAPP = "5551994854884";
+
 export const marca = {
   nome: NOME,
   nomeSimples: "galeria-atomo",
   simbolo: "GA",
-  tagline: "O dia passa. As fotos ficam.",
+  tagline: "Onde o instante permanece.",
   /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
   dominio: "galeriaatomo.com.br",
-  descricao:
-    "Galerias de entrega para fotógrafos e filmakers. Downloads e streaming ilimitados, com a sua marca.",
+  /*
+   * A descrição vai no `<meta name="description">` e no cartão do link. Felipe,
+   * 16/09/2026, escolheu a frase: "colocar: galerias inteligentes de alto
+   * padrão visual".
+   *
+   * "Para fotógrafos" saiu porque o público deixou de ser só ele — o mesmo
+   * pedido do mesmo dia pede a página falando também com filmmakers e
+   * storymakers, e um título que nomeia um deles exclui os outros. O que ficou
+   * é o que os três querem ouvir.
+   */
+  descricao: "Galerias inteligentes de alto padrão visual.",
   email: "contato@galeriaatomo.com.br",
+
+  /*
+   * ── O CANAL QUE RESPONDE (17/09/2026) ───────────────────────────────────
+   *
+   * Felipe, perguntado qual seria o contato de suporte: "o whats é o meu
+   * 51994854884".
+   *
+   * A pergunta existia por causa do `email` logo acima. O bloco no topo deste
+   * arquivo sabe desde 26/08/2026 que NENHUM dos nossos domínios recebe
+   * mensagem — `olumier.com.br` tem MX nulo, `galeriaatomo.com.br` não tem MX
+   * nenhum —, e saber disso num comentário não consertou nada: a página de
+   * privacidade prometia resposta em 15 dias, o rodapé convidava a escrever, e
+   * o pior de todos, quem PERDIA A SENHA era mandado para lá justamente no
+   * momento em que não consegue entrar de outro jeito
+   * (`app/(auth)/actions.ts`). Três promessas para uma caixa que devolve.
+   *
+   * Então o número passa a ser O contato mostrado, e o `email` sai das telas.
+   * Ele continua aqui porque continua sendo o endereço A CRIAR, e porque o que
+   * `testar-marca-plataforma.mjs` prende nele — a marca velha reaparecer numa
+   * página que pede para escreverem — não mudou. No dia em que existir caixa,
+   * ele volta às telas; até lá, mostrar os dois só divide quem precisa de
+   * ajuda entre um canal que atende e um que engole.
+   *
+   * ⚠️ É o celular pessoal do Felipe, numa página pública. Trocar por um número
+   * de trabalho depois é editar esta linha; tirar da web o que já foi raspado,
+   * não é.
+   */
+  whatsapp: WHATSAPP,
+  whatsappVisivel: "(51) 99485-4884",
+  whatsappLink: `https://wa.me/${WHATSAPP}`,
 
   /*
    * BETA — a chave que liga o aviso, e a frase que o explica.

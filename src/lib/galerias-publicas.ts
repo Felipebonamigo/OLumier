@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { consultar, consultarUm } from "./db";
+import { hashDeIp } from "./ip";
 
 /**
  * Acesso do CLIENTE FINAL (o casal) à galeria. Não é login: não existe conta,
@@ -20,11 +21,40 @@ export interface GaleriaPublica {
   permite_download: boolean;
   expira_em: Date | null;
   aparencia: unknown;
+  /*
+   * O que o fotógrafo está experimentando e ainda não publicou.
+   *
+   * Vem junto porque a PRÉVIA do dono (`?previa=1`) precisa dele: sem esta
+   * coluna o botão "Visualizar galeria" abria a aparência publicada, e quem
+   * acabara de trocar a grade via a antiga. O cliente nunca lê este campo —
+   * `buscarGaleriaPublica` só o traz, e quem decide usá-lo é a página, depois
+   * de provar que a sessão é do dono.
+   */
+  aparencia_rascunho: unknown;
   capa_media_id: string | null;
+  /** Capa enviada como arquivo (migração 029). Vence `capa_media_id`. */
+  capa_chave: string | null;
+  capa_foco_x: number;
+  capa_foco_y: number;
+  /** Busca por rosto ligada pelo fotógrafo (migração 028). */
+  rostos_ativos: boolean;
+  /**
+   * Como o grupo das fotos sem capítulo se chama nesta galeria (migração 037).
+   * Nulo = "Outras fotos". Ver `nomeDoGrupoSolto`.
+   */
+  grupo_solto: string | null;
   // do estúdio dono — a marca que aparece é a dele, não a nossa
   estudio_nome: string;
+  /* O contato do estúdio, como ele preencheu no site. A tela de consentimento
+     da busca por rosto diz ao convidado com quem falar sobre as fotos dele —
+     e é o estúdio, não nós. */
+  estudio_site: unknown;
   estudio_slug: string;
   estudio_logo: string | null;
+  /* A fonte própria do estúdio. Vem junto porque a galeria pública precisa dela
+     para montar o @font-face — sem isso seria uma segunda consulta por página. */
+  estudio_fonte: string | null;
+  estudio_fonte_nome: string | null;
   estudio_cor: string;
   /** Para `galeriasNoAr` — a carência do trial abandonado. */
   estudio_status: string;
@@ -47,9 +77,10 @@ export async function buscarGaleriaPublica(
 ) {
   return consultarUm<GaleriaPublica>(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
-            g.permite_download, g.expira_em, g.aparencia, g.capa_media_id,
-            t.nome_estudio as estudio_nome, t.slug as estudio_slug,
+            g.permite_download, g.expira_em, g.aparencia, g.aparencia_rascunho, g.capa_media_id, g.capa_chave, g.capa_foco_x, g.capa_foco_y, g.rostos_ativos, g.grupo_solto,
+            t.nome_estudio as estudio_nome, t.slug as estudio_slug, t.site as estudio_site,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
+            t.fonte_chave as estudio_fonte, t.fonte_nome as estudio_fonte_nome,
             -- Para galeriasNoAr: o trial abandonado deixa de servir a galeria
             -- 15 dias depois de vencer. Sem estas duas colunas a regra recebe
             -- undefined e libera todo mundo — falha que nenhuma tela denuncia.
@@ -225,12 +256,10 @@ export async function registrarAcesso(dados: {
   ip?: string | null;
   userAgent?: string | null;
 }) {
-  const ipHash = dados.ip
-    ? createHash("sha256")
-        .update(segredo() + dados.ip)
-        .digest("hex")
-        .slice(0, 32)
-    : null;
+  /* A MESMA função de `eventos`: é o que permite cruzar as duas tabelas e dizer
+     que o acesso e a ação vieram do mesmo lugar. Já foram duas cópias, e as duas
+     divergiram em silêncio — ver o cabeçalho de `lib/ip.ts`. */
+  const ipHash = dados.ip ? hashDeIp(dados.ip) : null;
 
   try {
     await consultar(

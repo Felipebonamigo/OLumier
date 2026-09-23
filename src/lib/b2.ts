@@ -5,6 +5,7 @@ import {
   PutObjectCommand,
   HeadObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   CreateMultipartUploadCommand,
   UploadPartCommand,
   CompleteMultipartUploadCommand,
@@ -53,6 +54,21 @@ const regiao = process.env.ARQUIVOS_REGIAO ?? "us-east-005";
 export const ARQUIVOS_BUCKET = process.env.ARQUIVOS_BUCKET ?? "";
 
 /**
+ * Irmãs das de `r2.ts`, e pelo mesmo motivo: `testar-cors-arquivos` e
+ * `configurar-cors` montavam cada um o seu cliente, e uma cópia esquecida é
+ * uma cópia que fala com o armazém errado.
+ *
+ * `forcePathStyle`: servidor local não tem DNS curinga, e sem ele o cliente
+ * procura `olumier-arquivos.127.0.0.1`. Em produção a variável não existe e o
+ * B2 segue no estilo virtual.
+ */
+export const OPCOES_DO_CLIENTE_ARQUIVOS = {
+  region: regiao,
+  endpoint,
+  forcePathStyle: process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1",
+};
+
+/**
  * true quando dá para servir do B2.
  *
  * Enquanto for false o sistema roda igual: nada foi movido para cá ainda, e
@@ -74,8 +90,7 @@ function s3(): S3Client {
     );
   }
   cliente ??= new S3Client({
-    region: regiao,
-    endpoint,
+    ...OPCOES_DO_CLIENTE_ARQUIVOS,
     credentials: { accessKeyId: accessKeyId!, secretAccessKey: secretAccessKey! },
   });
   return cliente;
@@ -130,6 +145,37 @@ export async function conferirArquivo(chave: string) {
 
 export async function apagarArquivo(chave: string) {
   await s3().send(new DeleteObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave }));
+}
+
+/**
+ * Apaga muitos originais de uma vez — o gêmeo de `apagarObjetos` do R2.
+ *
+ * Mesma razão de lá: `DeleteObjects` leva até 1000 chaves por chamada. Uma
+ * galeria de 286 fotos são 286 requisições separadas contra uma — e a diferença
+ * apareceu como "Não foi possível apagar agora" na tela da Ana Carolina, em
+ * 18/09/2026.
+ *
+ * Não lança por objeto que já não existe: apagar o que já não está lá é o
+ * resultado desejado.
+ */
+export async function apagarArquivos(chaves: string[]) {
+  const unicas = [...new Set(chaves)].filter(Boolean);
+  for (let i = 0; i < unicas.length; i += 1000) {
+    const lote = unicas.slice(i, i + 1000);
+    const r = await s3().send(
+      new DeleteObjectsCommand({
+        Bucket: ARQUIVOS_BUCKET,
+        Delete: { Objects: lote.map((Key) => ({ Key })), Quiet: true },
+      }),
+    );
+    /* Com `Quiet: true` só voltam os que FALHARAM. Silêncio aqui esconderia
+       arquivo pago ficando para trás. */
+    if (r.Errors?.length) {
+      throw new Error(
+        `${r.Errors.length} arquivo(s) não foram apagados (ex.: ${r.Errors[0].Key} — ${r.Errors[0].Message})`,
+      );
+    }
+  }
 }
 
 /** true se o objeto já está aqui — usado pelo movedor para não copiar duas vezes. */
