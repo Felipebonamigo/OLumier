@@ -72,6 +72,9 @@ const originais = [
 ];
 const pedidosAoBalde = new Map();
 let derrubarPrimeira = true;
+/* E OUTRA volta com 200 e corpo vazio: foi assim que a produção quebrou em
+   23/09/2026 ("chegou com 0 bytes"). Tem de valer nova tentativa, não ZIP morto. */
+let esvaziarPrimeira = true;
 
 const balde = createServer((req, res) => {
   const i = Number(req.url.slice(1));
@@ -80,6 +83,11 @@ const balde = createServer((req, res) => {
     derrubarPrimeira = false;
     res.writeHead(500);
     return res.end("caiu de propósito");
+  }
+  if (i === 2 && esvaziarPrimeira) {
+    esvaziarPrimeira = false;
+    res.writeHead(200, { "Content-Type": "image/jpeg" });
+    return res.end();
   }
   const o = originais[i];
   res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": o.bytes.length });
@@ -221,6 +229,10 @@ await etapa("dois cliques ao mesmo tempo: uma montagem, dois ZIPs iguais e compl
 
 await etapa("a foto que caiu na primeira busca foi tentada de novo", async () => {
   igual(pedidosAoBalde.get(1), 2, "original 1: a que caiu, e a que veio");
+});
+
+await etapa("a foto que veio vazia (200 sem corpo) também foi tentada de novo", async () => {
+  igual(pedidosAoBalde.get(2), 2, "original 2: a vazia, e a inteira");
 });
 
 await etapa("o ZIP abre num descompactador de verdade, byte a byte", async () => {

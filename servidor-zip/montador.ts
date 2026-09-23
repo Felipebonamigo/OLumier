@@ -22,26 +22,46 @@ import { CONFIG } from "./config.ts";
 
 const TENTATIVAS = 3;
 const ESPERAS_MS = [1_000, 4_000];
+/** Até este tamanho a foto é lida inteira antes de ir para o ZIP — ver `abrir`. */
+const TETO_EM_MEMORIA = 64 * 1024 * 1024;
 
-/** Um original aberto — o corpo ainda não foi lido. */
+/**
+ * Um original aberto — o corpo ainda não foi lido.
+ *
+ * Guarda a RESPOSTA inteira, não só o corpo: o `fetch` do Node cancela a
+ * conexão de uma resposta que o coletor de lixo recolhe, e uma foto aberta à
+ * frente fica minutos esperando a vez. Segurar só o `body` deixava a resposta
+ * solta, e a foto "chegava com 0 bytes" (visto em produção em 23/09/2026).
+ */
 interface Aberto {
-  corpo: AsyncIterable<Uint8Array>;
+  resposta: Response;
   status: number;
 }
 
 async function abrir(url: string, tamanho: number): Promise<Aberto> {
-  /* Tempo para os CABEÇALHOS chegarem; o corpo é regulado pelo consumo. */
-  const r = await fetch(url, { signal: AbortSignal.timeout(60_000) });
+  /*
+   * Tempo para os CABEÇALHOS chegarem, e só para eles. `AbortSignal.timeout`
+   * no fetch valeria também para o corpo, e uma foto aberta à frente pode
+   * ficar mais de 60 s na fila antes de ser lida — era cortada no meio.
+   */
+  const controle = new AbortController();
+  const relogio = setTimeout(() => controle.abort(), 60_000);
+  let r: Response;
+  try {
+    r = await fetch(url, { signal: controle.signal });
+  } finally {
+    clearTimeout(relogio);
+  }
   if (!r.ok || !r.body) {
     await r.body?.cancel().catch(() => {});
-    return { corpo: (async function* () {})(), status: r.status };
+    return { resposta: r, status: r.status };
   }
   const declarado = Number(r.headers.get("content-length"));
   if (Number.isFinite(declarado) && declarado > 0 && declarado !== tamanho) {
     await r.body.cancel().catch(() => {});
     throw new Error(`o armazém diz ${declarado} bytes, o banco diz ${tamanho}`);
   }
-  return { corpo: r.body as unknown as AsyncIterable<Uint8Array>, status: r.status };
+  return { resposta: r, status: r.status };
 }
 
 export interface FonteDeUrls {
@@ -91,8 +111,32 @@ export function arquivosDoManifesto(manifesto: Manifesto, fonte: FonteDeUrls): A
             tentativa--;
             continue;
           }
-          if (aberto.status !== 200) throw new Error(`HTTP ${aberto.status}`);
-          for await (const pedaco of aberto.corpo) yield pedaco;
+          if (aberto.status !== 200 || !aberto.resposta.body) throw new Error(`HTTP ${aberto.status}`);
+          /*
+           * O que CHEGOU tem de ser o que o banco diz, e a conferência é
+           * AQUI, dentro da tentativa: `zipEmFluxo` também confere, mas lá
+           * já é tarde — o cabeçalho da foto já saiu e o ZIP inteiro morre.
+           * Aqui, um corpo vazio ou cortado é só mais uma falha de rede, e
+           * ganha nova tentativa como qualquer outra.
+           *
+           * Só que os bytes já entregues não voltam: se a falha for no meio,
+           * o ZIP está perdido de qualquer jeito. Por isso o corpo é lido
+           * INTEIRO antes de sair daqui quando é pequeno o bastante para
+           * caber na memória; acima disso, vai em fluxo e conta com a
+           * conferência do escritor.
+           */
+          const pedacos: Uint8Array[] = [];
+          let lidos = 0;
+          const emMemoria = a.tamanho <= TETO_EM_MEMORIA;
+          for await (const pedaco of aberto.resposta.body as unknown as AsyncIterable<Uint8Array>) {
+            lidos += pedaco.length;
+            if (emMemoria) pedacos.push(pedaco);
+            else yield pedaco;
+          }
+          if (lidos !== a.tamanho) {
+            throw new Error(`chegou com ${lidos} bytes, e o banco diz ${a.tamanho}`);
+          }
+          for (const pedaco of pedacos) yield pedaco;
           return;
         } catch (e) {
           janela.delete(i);
