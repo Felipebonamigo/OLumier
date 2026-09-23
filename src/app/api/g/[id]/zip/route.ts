@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { armazemDe, urlDoOriginal } from "@/lib/armazem";
 import { dispositionSegura } from "@/lib/r2";
 import { registrarAcesso } from "@/lib/galerias-publicas";
+import { pessoaAtual } from "@/lib/favoritas";
 import { GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 import { prepararEntrega } from "@/lib/entrega-da-galeria";
 import { tamanhoDoZip, zipEmFluxo, type ArquivoDoZip } from "@/lib/zip-em-fluxo";
@@ -121,9 +122,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const userAgent = request.headers.get("user-agent");
   const acao = entrega.tipo === "tudo" ? "baixou_tudo" : "baixou";
 
+  /* Lido ANTES do fluxo começar: o gerador roda enquanto o zip é transmitido, e
+     ali dentro `cookies()` já não é mais o pedido desta rota. */
+  const pessoaId = await pessoaAtual(id);
+
   async function* comRegistro() {
     yield* zipEmFluxo(arquivos);
-    await registrarAcesso({ galeriaId: id, acao, ip, userAgent });
+    await registrarAcesso({ galeriaId: id, acao, ip, userAgent, pessoaId });
   }
 
   const sufixo = semProibidos(entrega.sufixo.replace(/^ - /, ""));

@@ -51,7 +51,7 @@ export function PainelSelecao({
    * ninguém se identificava. O bloco some nesse caso, em vez de desenhar um
    * "0 pessoas" que faria o fotógrafo procurar um defeito que não existe.
    */
-  pessoas?: { id: string; email: string; nome: string | null; quantas: number }[];
+  pessoas?: { id: string; email: string | null; nome: string | null; quantas: number }[];
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -190,10 +190,12 @@ export function PainelSelecao({
             <li
               key={p.id}
               className="rounded-lg border border-linha px-3 py-1.5 text-xs text-texto-soft"
-              title={p.email}
+              /* Desde a migração 040 a pessoa pode ter só nome: quem baixa se
+                 identifica com um dos dois, e a lista de escolhas é a mesma. */
+              title={p.email ?? undefined}
             >
               <span className="font-medium text-texto">{p.nome || p.email}</span>
-              {p.nome && <span className="ml-1.5 text-texto-faint">{p.email}</span>}
+              {p.nome && p.email && <span className="ml-1.5 text-texto-faint">{p.email}</span>}
               {/* Com limite, a conta de cada uma é contra o limite DELA — que é
                   como o produto aplica, e o que o fotógrafo precisa saber para
                   cobrar o combinado. */}

@@ -184,7 +184,7 @@ export function GaleriaCliente({
    */
   recorte?: boolean;
   /** Quem se identificou por e-mail nesta galeria. Null = ninguém ainda. */
-  eu?: { email: string; nome: string | null } | null;
+  eu?: { email: string | null; nome: string | null } | null;
   /**
    * Ids das fotos já escolhidas NESTA galeria. Desde a migração 019 a lista é
    * uma só, compartilhada: a noiva no celular e o noivo no notebook veem a mesma
@@ -302,6 +302,79 @@ export function GaleriaCliente({
   const [nomeDigitado, setNomeDigitado] = useState("");
   const [identificando, setIdentificando] = useState(false);
 
+  /*
+   * ── QUEM ESTÁ BAIXANDO (23/09/2026) ─────────────────────────────────────
+   *
+   * Juan: "gostaria de saber quem está baixando. Quais fotos estão sendo
+   * baixadas". Felipe, decidindo o preço disso para o convidado: "quando for
+   * baixar pedir nome e email opcional, pelo menos um dos dois para baixar a
+   * primeira vez".
+   *
+   * "A primeira vez" é a parte que faz isto valer a pena: a resposta vira o
+   * mesmo cookie das favoritas, então quem já se identificou para escolher uma
+   * foto não vê nada, e quem se identificou para baixar não vê de novo.
+   *
+   * A porta devolve uma PROMESSA em vez de mandar um callback: as três entradas
+   * de download (`salvarUm`, `iniciarEntrega`, `baixarZip`) já são funções
+   * inteiras e legíveis, e um `if (!(await exigirIdentidade())) return;` na
+   * primeira linha de cada uma diz o que faz sem partir nenhuma em duas.
+   */
+  const [pedindoParaBaixar, setPedindoParaBaixar] = useState(false);
+  const respostaDaPorta = useRef<((seguiu: boolean) => void) | null>(null);
+
+  function exigirIdentidade(): Promise<boolean> {
+    if (eu) return Promise.resolve(true);
+    setPedindoParaBaixar(true);
+    return new Promise<boolean>((resolver) => {
+      respostaDaPorta.current = resolver;
+    });
+  }
+
+  /* Fechar sem dizer quem é CANCELA o download — "pelo menos um dos dois para
+     baixar". A promessa precisa ser resolvida de todo jeito, senão a função que
+     esperava por ela fica pendurada para sempre. */
+  function fecharPorta(seguiu: boolean) {
+    setPedindoParaBaixar(false);
+    respostaDaPorta.current?.(seguiu);
+    respostaDaPorta.current = null;
+  }
+
+  /** Diz quem está baixando. Aceita nome OU e-mail — ver a rota `eu`. */
+  async function identificarParaBaixar() {
+    if (identificando) return;
+    const email = emailDigitado.trim();
+    const nome = nomeDigitado.trim();
+    if (!email && !nome) {
+      setAviso("escreva o seu nome ou o seu e-mail");
+      setTimeout(() => setAviso(null), 3000);
+      return;
+    }
+    setIdentificando(true);
+    try {
+      const r = await fetch(`/api/g/${galeriaId}/eu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, nome, motivo: "baixar" }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setAviso(d?.erro ?? "não consegui guardar. Tente de novo.");
+        setTimeout(() => setAviso(null), 4000);
+        return;
+      }
+      setEu(d.pessoa);
+      setFavoritas(new Set<string>(d.favoritas ?? []));
+      setEmailDigitado("");
+      setNomeDigitado("");
+      fecharPorta(true);
+    } catch {
+      setAviso("não consegui guardar. Confira sua conexão.");
+      setTimeout(() => setAviso(null), 4000);
+    } finally {
+      setIdentificando(false);
+    }
+  }
+
   const [selecao, setSelecao] = useState(selecaoInicial);
   const [fechando, setFechando] = useState(false);
 
@@ -372,7 +445,8 @@ export function GaleriaCliente({
    * O registro na Atividade acontece no SERVIDOR, quando o zip termina de ser
    * entregue — cancelar no meio não conta como entrega.
    */
-  function baixarZip(consulta: string) {
+  async function baixarZip(consulta: string) {
+    if (!(await exigirIdentidade())) return;
     baixarNoComputador(`/api/g/${galeriaId}/zip${consulta}`, "galeria.zip");
   }
 
@@ -708,6 +782,7 @@ export function GaleriaCliente({
   );
 
   async function salvarUm(it: ItemGaleria) {
+    if (!(await exigirIdentidade())) return;
     /*
      * O link do original nasce AGORA, pedido à rota — que recusa quando o
      * download está bloqueado. Antes o servidor decidia isso ao montar a
@@ -785,6 +860,7 @@ export function GaleriaCliente({
    */
   async function iniciarEntrega(pedido: { escopo: string; consulta: string; rotulo: string }) {
     if (entrega || modo === "computador") return;
+    if (!(await exigirIdentidade())) return;
     /* Um AbortController por entrega. O motivo diz o que a pessoa pediu: parar
        (e continuar depois) ou recomeçar do zero. */
     const parada = new AbortController();
@@ -1453,6 +1529,86 @@ export function GaleriaCliente({
                 style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
               >
                 {identificando ? "guardando…" : "escolher esta foto"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/*
+        ── A PORTA DO DOWNLOAD ─────────────────────────────────────────────
+
+        Mesma caixa do "quem está escolhendo", outro texto e outra regra: aqui
+        nome OU e-mail basta. A frase diz POR QUE se pede, porque um formulário
+        sem motivo na frente da foto do casamento de alguém parece cobrança.
+      */}
+      {pedindoParaBaixar && (
+        <div
+          onClick={() => fecharPorta(false)}
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,.55)" }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-xl border p-5"
+            style={{ borderColor: "var(--g-linha)", background: "var(--g-superficie)" }}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--g-texto)" }}>
+              Quem está baixando?
+            </p>
+            <p className="mt-1 text-xs leading-snug" style={{ color: "var(--g-suave)" }}>
+              Só desta vez — o fotógrafo acompanha quem recebeu as fotos. Basta o nome
+              ou o e-mail.
+            </p>
+
+            <input
+              type="text"
+              autoComplete="name"
+              autoFocus
+              value={nomeDigitado}
+              onChange={(e) => setNomeDigitado(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && identificarParaBaixar()}
+              placeholder="seu nome"
+              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "var(--g-linha)",
+                background: "var(--g-fundo)",
+                color: "var(--g-texto)",
+              }}
+            />
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={emailDigitado}
+              onChange={(e) => setEmailDigitado(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && identificarParaBaixar()}
+              placeholder="seu@email.com (opcional)"
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "var(--g-linha)",
+                background: "var(--g-fundo)",
+                color: "var(--g-texto)",
+              }}
+            />
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => fecharPorta(false)}
+                className="rounded-lg border px-3 py-2 text-xs transition hover:opacity-70"
+                style={{ borderColor: "var(--g-linha)", color: "var(--g-suave)" }}
+              >
+                agora não
+              </button>
+              <button
+                type="button"
+                onClick={identificarParaBaixar}
+                disabled={identificando}
+                className="rounded-lg px-4 py-2 text-xs font-semibold transition hover:opacity-85 disabled:opacity-60"
+                style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+              >
+                {identificando ? "guardando…" : "baixar"}
               </button>
             </div>
           </div>

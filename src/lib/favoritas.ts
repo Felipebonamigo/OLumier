@@ -155,9 +155,14 @@ export interface EstadoSelecao {
  */
 export interface PessoaDaGaleria {
   id: string;
-  email: string;
+  /** `null` em quem se identificou só pelo nome. Ver migração 040. */
+  email: string | null;
   nome: string | null;
 }
+
+/** Como chamar esta pessoa numa tela. Nunca vazio — o banco garante (040). */
+export const comoChamar = (p: { email: string | null; nome: string | null }): string =>
+  p.nome?.trim() || p.email?.trim() || "não identificado";
 
 /** A pessoa deste e-mail nesta galeria, criando na primeira vez. */
 export async function pessoaPorEmail(
@@ -190,6 +195,43 @@ export async function pessoaPorEmail(
   return linha ?? null;
 }
 
+/**
+ * A pessoa por NOME OU E-MAIL — pelo menos um dos dois.
+ *
+ * Felipe, 23/09/2026, sobre o download: "pedir nome e email opcional, pelo
+ * menos um dos dois para baixar a primeira vez".
+ *
+ * `pessoaPorEmail` acima continua existindo e continua exigindo e-mail, porque
+ * ela serve às FAVORITAS: ali a identidade precisa ser a mesma no celular e no
+ * notebook, e só o e-mail atravessa dois aparelhos. Para saber quem baixou,
+ * "Tia Marta" vale — e exigir e-mail de cada convidado que quer salvar uma foto
+ * é atrito em cima de quem não tem nada a ver com a contabilidade do estúdio.
+ *
+ * Quem dá e-mail cai no mesmo caminho das favoritas, e é de propósito: baixar e
+ * favoritar com o mesmo e-mail é a MESMA pessoa, e o fotógrafo vê uma linha só.
+ */
+export async function pessoaPorNomeOuEmail(
+  galeriaId: string,
+  dados: { email?: string | null; nome?: string | null },
+): Promise<PessoaDaGaleria | null> {
+  const email = String(dados.email ?? "").trim().slice(0, 160);
+  const nome = String(dados.nome ?? "").trim().slice(0, 80);
+
+  if (email) return pessoaPorEmail(galeriaId, email, nome || null);
+  if (!nome) return null;
+
+  /* Só nome: a chave é o índice parcial da migração 040, que existe justamente
+     para "Tia Marta" não abrir uma linha nova a cada download. */
+  return consultarUm<PessoaDaGaleria>(
+    `insert into pessoas_da_galeria (galeria_id, email, nome)
+          values ($1, null, $2)
+     on conflict (galeria_id, lower(btrim(nome))) where email is null
+     do update set nome = excluded.nome
+       returning id, email, nome`,
+    [galeriaId, nome],
+  );
+}
+
 /** Nome e e-mail de quem está identificado, para a tela dizer "você é fulano". */
 export async function dadosDaPessoa(
   galeriaId: string,
@@ -217,8 +259,8 @@ export async function favoritasDaPessoa(
 /** Quem escolheu o quê, para o painel do fotógrafo. */
 export async function resumoPorPessoa(
   galeriaId: string,
-): Promise<{ id: string; email: string; nome: string | null; quantas: number }[]> {
-  return consultar<{ id: string; email: string; nome: string | null; quantas: number }>(
+): Promise<{ id: string; email: string | null; nome: string | null; quantas: number }[]> {
+  return consultar<{ id: string; email: string | null; nome: string | null; quantas: number }>(
     `select p.id, p.email, p.nome, count(f.id)::int as quantas
        from pessoas_da_galeria p
        left join favoritas f on f.pessoa_id = p.id

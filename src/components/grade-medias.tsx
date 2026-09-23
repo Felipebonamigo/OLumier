@@ -13,6 +13,8 @@ export interface MediaExibida {
   secaoId: string | null;
   /** Quantas pessoas marcaram esta foto como favorita. 0 = ninguém. */
   favoritas?: number;
+  /** Quantas vezes o cliente baixou ESTA foto. Ver `downloadsPorFoto`. */
+  baixadas?: number;
 }
 
 export interface SecaoOpcao {
@@ -394,12 +396,55 @@ export function GradeMedias({
                 Com duas ou mais, o número é a informação: foto escolhida pelos
                 dois é decisão tomada.
               */}
-              {(m.favoritas ?? 0) > 0 && (
-                <span
-                  title={`${m.favoritas} ${m.favoritas === 1 ? "pessoa marcou" : "pessoas marcaram"} como favorita`}
-                  className="absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-acento"
-                >
-                  ♥{(m.favoritas ?? 0) > 1 ? ` ${m.favoritas}` : ""}
+              {((m.favoritas ?? 0) > 0 || (m.baixadas ?? 0) > 0) && (
+                /*
+                  ── ANCORADO NA FOTO, E NÃO NO ITEM INTEIRO ────────────────
+                  A caixa da imagem não é `relative`, então um `absolute` aqui
+                  se mede contra o `<li>` — que inclui a linha do nome e do
+                  tamanho embaixo. Medido: a pastilha nascia 17 px ABAIXO da
+                  foto, em cima de "1.0 MiB".
+                  O coração de favorita tinha o mesmo defeito desde que nasceu;
+                  ele só não aparecia porque quase nenhuma galeria de teste
+                  tinha favorita marcada. Este invólucro repete o truque que o
+                  alvo de clique já usa — `inset-x-0 top-0 aspect-[4/5]` tem
+                  exatamente a altura da foto — e aí `items-end` encosta as duas
+                  pastilhas no rodapé da IMAGEM.
+                  `pointer-events-none` porque isto é leitura, não alvo: sem
+                  ele, o invólucro cobriria a foto inteira e mataria o clique
+                  que seleciona.
+                */
+                <span className="pointer-events-none absolute inset-x-0 top-0 flex aspect-[4/5] items-end justify-end p-1.5">
+                <span className="flex items-center gap-1">
+                  {(m.favoritas ?? 0) > 0 && (
+                    <span
+                      title={`${m.favoritas} ${m.favoritas === 1 ? "pessoa marcou" : "pessoas marcaram"} como favorita`}
+                      className="rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-acento"
+                    >
+                      ♥{(m.favoritas ?? 0) > 1 ? ` ${m.favoritas}` : ""}
+                    </span>
+                  )}
+                  {/*
+                    O CONTADOR DE DOWNLOADS, ao lado do coração.
+
+                    Felipe, 23/09/2026: "e o numero de downloads de cada foto".
+                    Coração e seta respondem perguntas diferentes — "gostaram" e
+                    "levaram" —, e uma foto pode ter muito de um e nada do
+                    outro. Por isso são duas pastilhas e não uma.
+
+                    Aqui o número aparece SEMPRE, inclusive no 1, ao contrário
+                    do coração: baixar é um evento contável que se repete, e
+                    "alguém baixou" e "baixaram doze vezes" são notícias
+                    diferentes. O coração, não — ou a pessoa marcou, ou não.
+                  */}
+                  {(m.baixadas ?? 0) > 0 && (
+                    <span
+                      title={`${m.baixadas} download${m.baixadas === 1 ? "" : "s"} desta foto`}
+                      className="rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-texto-soft"
+                    >
+                      ↓ {m.baixadas}
+                    </span>
+                  )}
+                </span>
                 </span>
               )}
 

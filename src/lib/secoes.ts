@@ -264,15 +264,30 @@ export async function ordenarFotosDaSecao(
 ): Promise<{ ok: boolean; quantas: number; semData: number }> {
   if (!(await galeriaDoTenant(galeriaId, tenantId))) return { ok: false, quantas: 0, semData: 0 };
 
+  /*
+   * `baixadas` vem junto porque "mais baixadas" precisa dela, e uma segunda
+   * consulta por foto seriam centenas de idas ao banco. O `left join lateral`
+   * conta só as fotos deste capítulo, e não a galeria inteira.
+   *
+   * `acao = 'baixou'` e não `in ('baixou','baixou_tudo')`: o zip da galeria
+   * inteira não é sobre uma foto, e contá-lo daria +1 em todas de uma vez —
+   * "mais baixadas" viraria a ordem de sempre com um número maior em cima.
+   */
   const fotos = await consultar<{
     id: string;
     nome_original: string;
     criado_em: Date;
     tirada_em: Date | null;
+    baixadas: number;
   }>(
-    `select id, nome_original, criado_em, tirada_em
-       from medias
-      where galeria_id = $1 and ${secaoId === null ? "secao_id is null" : "secao_id = $2"}`,
+    `select m.id, m.nome_original, m.criado_em, m.tirada_em,
+            coalesce(d.n, 0)::int as baixadas
+       from medias m
+       left join lateral (
+         select count(*) as n from acessos a
+          where a.media_id = m.id and a.acao = 'baixou'
+       ) d on true
+      where m.galeria_id = $1 and ${secaoId === null ? "m.secao_id is null" : "m.secao_id = $2"}`,
     secaoId === null ? [galeriaId] : [galeriaId, secaoId],
   );
   if (fotos.length === 0) return { ok: true, quantas: 0, semData: 0 };
@@ -283,6 +298,13 @@ export async function ordenarFotosDaSecao(
   const ordenadas = [...fotos].sort((a, b) => {
     if (criterio === "nome") return colador.compare(a.nome_original, b.nome_original);
     if (criterio === "nome-invertido") return colador.compare(b.nome_original, a.nome_original);
+    /* Empate em "mais baixadas" é a regra e não a exceção: numa galeria nova
+       TODAS têm zero. Sem desempate a ordem viria do banco, que não promete
+       nenhuma — a pessoa clicaria "mais baixadas" e veria a galeria embaralhar
+       sem motivo. O nome é o desempate porque é o que ela reconhece. */
+    if (criterio === "mais-baixadas") {
+      return b.baixadas - a.baixadas || colador.compare(a.nome_original, b.nome_original);
+    }
     /* Empate de horário — rajada de câmera grava várias no mesmo segundo — cai
        no nome, que dentro de uma câmera é a sequência do disparo. */
     const dif = quando(a) - quando(b);
