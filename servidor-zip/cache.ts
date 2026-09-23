@@ -1,4 +1,5 @@
 import { mkdir, open, readdir, rename, stat, unlink, utimes } from "node:fs/promises";
+import { closeSync, openSync } from "node:fs";
 import path from "node:path";
 import { CONFIG } from "./config.ts";
 
@@ -98,10 +99,20 @@ export function iniciarMontagem(
     esperar: () => proximaEscrita,
   };
 
+  /*
+   * O `.part` nasce AQUI, de forma síncrona, antes de este registro existir
+   * para qualquer leitor. A versão anterior abria o arquivo dentro da rotina
+   * assíncrona abaixo, e o primeiro leitor — a própria requisição que pediu a
+   * montagem — chegava ao `open` antes de o arquivo existir: ENOENT, 502.
+   * Passou na bancada porque o disco local ganhava a corrida; no volume de
+   * rede da Hetzner, perdeu (23/09/2026).
+   */
+  const parcial = caminhoParcial(chave);
+  closeSync(openSync(parcial, "w"));
+
   m.pronta = (async () => {
     const inicio = Date.now();
-    const parcial = caminhoParcial(chave);
-    const fd = await open(parcial, "w");
+    const fd = await open(parcial, "r+");
     try {
       for await (const pedaco of fluxo) {
         await fd.write(pedaco);
@@ -146,12 +157,32 @@ export async function* lerDoDisco(
   fim: number,
   pedaco = 256 * 1024,
 ): AsyncGenerator<Uint8Array> {
-  /* O `.part` pode ter virado `.zip` entre o caller olhar a montagem e chegar
-     aqui; nesse caso o pronto é o certo, e a montagem já não tem o que esperar. */
-  const fd = await open(
-    montagem && !montagem.erro && emAndamento.has(chave) ? caminhoParcial(chave) : caminhoPronto(chave),
-    "r",
-  ).catch(() => open(caminhoPronto(chave), "r"));
+  /*
+   * Qual arquivo abrir: o `.part` enquanto a montagem anda, o `.zip` depois.
+   * O `.part` pode virar `.zip` entre o caller olhar a montagem e chegar aqui
+   * (o rename é atômico e o fd aberto sobrevive a ele); e se nenhum dos dois
+   * existir ainda, espera a montagem avançar em vez de estourar — é o que
+   * separa "ainda não" de "não existe".
+   */
+  async function abrirOQueHouver() {
+    for (;;) {
+      const andando = montagem && !montagem.erro && emAndamento.has(chave);
+      try {
+        return await open(andando ? caminhoParcial(chave) : caminhoPronto(chave), "r");
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      }
+      try {
+        return await open(andando ? caminhoPronto(chave) : caminhoParcial(chave), "r");
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      }
+      if (!montagem || montagem.erro) throw montagem?.erro ?? new Error(`ZIP ${chave} não está no disco`);
+      if (!emAndamento.has(chave)) throw new Error(`ZIP ${chave} terminou sem deixar arquivo`);
+      await montagem.esperar();
+    }
+  }
+  const fd = await abrirOQueHouver();
   try {
     let posicao = inicio;
     while (posicao <= fim) {
