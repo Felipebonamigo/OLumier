@@ -6,8 +6,11 @@ import {
   panoramaDosEstudios,
   crescimentoMensal,
   entregaRecente,
+  entregaDeZipDoMes,
   eventosRecentes,
 } from "@/lib/admin";
+import { resumoDeTrafego } from "@/lib/metricas-entrega";
+import { zipRemotoConfigurado } from "@/lib/zip-remoto";
 import {
   resumoDaPlataforma,
   trialsVencendo,
@@ -55,10 +58,11 @@ export const dynamic = "force-dynamic";
 export default async function AdminPage() {
   await exigirAdmin();
 
-  const [estudios, meses, entrega, eventos] = await Promise.all([
+  const [estudios, meses, entrega, somasDeZip, eventos] = await Promise.all([
     panoramaDosEstudios(),
     crescimentoMensal(12),
     entregaRecente(30),
+    entregaDeZipDoMes(),
     /*
      * OITO, e não quarenta. Uma limpeza de galeria despeja trinta
      * `media.apagada` no mesmo minuto: com quarenta linhas, o painel terminava
@@ -71,6 +75,12 @@ export default async function AdminPage() {
 
   const agora = new Date();
   const r = resumoDaPlataforma(estudios, agora);
+  const trafego = resumoDeTrafego(somasDeZip, {
+    bytesGuardados: r.bytesGuardados,
+    custoDoGuardadoCentavos: r.custoMensalCentavos,
+    servidorConfigurado: zipRemotoConfigurado(),
+  });
+  const tomDoAviso = { ok: "text-ok", alerta: "text-alerta", erro: "text-erro" } as const;
 
   /*
    * Quanto cada pagante contribui, em média, depois do custo do que ele guarda.
@@ -239,6 +249,84 @@ export default async function AdminPage() {
           <Cartao rotulo="Downloads" valor={entrega.baixou.toLocaleString("pt-BR")} />
           <Cartao rotulo="Baixou tudo" valor={entrega.baixou_tudo.toLocaleString("pt-BR")} />
           <Cartao rotulo="Favoritadas" valor={totalFavoritas.toLocaleString("pt-BR")} />
+        </div>
+      </Bloco>
+
+      {/* ── 4b. TRÁFEGO E CUSTO DA ENTREGA ────────────────────────────── */}
+      <Bloco
+        titulo="Tráfego e custo da entrega"
+        explicacao="O mês corrente. É a tela que responde se o desenho da entrega está custando o previsto — e o que fazer quando não estiver. Download avulso é estimativa pelo tamanho médio de uma mídia."
+      >
+        <ul className="mb-3 space-y-1">
+          {trafego.avisos.map((a) => (
+            <li key={a.texto} className={`text-sm ${tomDoAviso[a.nivel]}`}>
+              {a.nivel === "ok" ? "✓" : a.nivel === "erro" ? "✗" : "!"} {a.texto}
+            </li>
+          ))}
+        </ul>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Cartao
+            rotulo="ZIPs montados"
+            valor={somasDeZip.montadosN}
+            nota={`${formatarBytes(BigInt(Math.round(somasDeZip.montadosBytes)))} lidos do armazém`}
+          />
+          <Cartao
+            rotulo="ZIPs entregues"
+            valor={somasDeZip.servidosServidorN + somasDeZip.servidosVpsN}
+            nota={`${porcento(trafego.fracaoDoCache)} do arquivo guardado · ${somasDeZip.abortadosN} caíram no meio`}
+            tom="ok"
+          />
+          <Cartao
+            rotulo="Download avulso"
+            valor={somasDeZip.avulsosN.toLocaleString("pt-BR")}
+            nota={`~${formatarBytes(BigInt(Math.round(somasDeZip.avulsosN * somasDeZip.bytesPorMedia)))} direto do B2 (estimativa)`}
+          />
+          <Cartao
+            rotulo="Custo do tráfego"
+            valor={formatarReais(trafego.custoTrafegoCentavos)}
+            nota={trafego.custoTrafegoCentavos === 0 ? "tudo dentro das franquias" : "excedente do B2 e do servidor"}
+            tom={trafego.custoTrafegoCentavos === 0 ? "ok" : "erro"}
+          />
+          <Cartao
+            rotulo="Servidor de ZIP"
+            valor={formatarReais(trafego.custoServidorZipCentavos)}
+            nota="fixo por mês — some quando dilui nos TB"
+          />
+          <Cartao
+            rotulo="Por TB guardado"
+            valor={trafego.custoPorTbGuardadoCentavos === null ? "—" : formatarReais(trafego.custoPorTbGuardadoCentavos)}
+            nota="armazenamento + servidor + tráfego, por TB"
+            tom={
+              trafego.custoPorTbGuardadoCentavos !== null && trafego.custoPorTbGuardadoCentavos > 8400
+                ? "alerta"
+                : "neutro"
+            }
+          />
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div>
+            <div className="mb-1 flex justify-between text-[11px] text-texto-faint">
+              <span>Download do B2 vs franquia (3× o guardado)</span>
+              <span className="tabular-nums">
+                {formatarBytes(BigInt(Math.round(trafego.egressB2Bytes)))} / {formatarBytes(BigInt(Math.round(trafego.franquiaB2Bytes)))}
+              </span>
+            </div>
+            <Barra fracao={trafego.fracaoB2} tom={trafego.fracaoB2 >= 0.8 ? "alerta" : "ok"} />
+          </div>
+          <div>
+            <div className="mb-1 flex justify-between text-[11px] text-texto-faint">
+              <span>Servidor de ZIP vs 20 TB/mês</span>
+              <span className="tabular-nums">{formatarBytes(BigInt(Math.round(trafego.trafegoServidorBytes)))}</span>
+            </div>
+            <Barra fracao={trafego.fracaoServidor} tom={trafego.fracaoServidor >= 0.6 ? "alerta" : "ok"} />
+          </div>
+          <div>
+            <div className="mb-1 flex justify-between text-[11px] text-texto-faint">
+              <span>ZIP pelo VPS vs 8 TB/mês (deveria ser zero)</span>
+              <span className="tabular-nums">{formatarBytes(BigInt(Math.round(trafego.trafegoVpsBytes)))}</span>
+            </div>
+            <Barra fracao={trafego.fracaoVps} tom={trafego.trafegoVpsBytes > 0 ? "alerta" : "ok"} />
+          </div>
         </div>
       </Bloco>
 

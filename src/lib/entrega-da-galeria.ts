@@ -32,6 +32,8 @@ export type MediaDaEntrega = Awaited<ReturnType<typeof listarMediasPublicas>>[nu
 
 export interface Entrega {
   titulo: string;
+  /** O estúdio dono da galeria — vai no registro de entrega (migração 039). */
+  tenantId: string;
   fotos: MediaDaEntrega[];
   /** Nome de cada capítulo da galeria, como o fotógrafo escreveu. */
   capitulos: Map<string, string>;
@@ -63,11 +65,12 @@ export async function prepararEntrega(
     permite_download: boolean;
     expira_em: string | null;
     grupo_solto: string | null;
+    tenant_id: string;
     estudio_status: string;
     estudio_trial_ate: string | null;
   }>(
     `select g.titulo, g.senha_hash, g.estado, g.permite_download, g.expira_em, g.grupo_solto,
-            t.status as estudio_status, t.trial_ate as estudio_trial_ate
+            g.tenant_id, t.status as estudio_status, t.trial_ate as estudio_trial_ate
        from galerias g join tenants t on t.id = g.tenant_id
       where g.id = $1 and g.publicada`,
     [id],
@@ -117,6 +120,7 @@ export async function prepararEntrega(
     const minhas = new Set(await favoritasDaPessoa(id, pessoa));
     return {
       titulo: galeria.titulo,
+      tenantId: galeria.tenant_id,
       fotos: medias.filter((m) => minhas.has(m.id)),
       capitulos,
       sufixo: " - favoritas",
@@ -133,6 +137,7 @@ export async function prepararEntrega(
     const pedidas = new Set(recorte);
     return {
       titulo: galeria.titulo,
+      tenantId: galeria.tenant_id,
       fotos: medias.filter((m) => pedidas.has(m.id)),
       capitulos,
       sufixo: " - fotos escolhidas",
@@ -145,6 +150,7 @@ export async function prepararEntrega(
   if (cap) {
     return {
       titulo: galeria.titulo,
+      tenantId: galeria.tenant_id,
       /* `m.secao_id === cap` sobre as mídias DESTA galeria: um capítulo de
          outra galeria simplesmente não casa com foto nenhuma. */
       fotos:
@@ -161,6 +167,7 @@ export async function prepararEntrega(
 
   return {
     titulo: galeria.titulo,
+    tenantId: galeria.tenant_id,
     fotos: medias,
     capitulos,
     sufixo: "",
