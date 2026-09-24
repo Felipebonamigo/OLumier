@@ -10,6 +10,7 @@ import { PrazoCofre } from "@/components/prazo-cofre";
 import { BuscaPorRosto } from "@/components/busca-por-rosto";
 import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
 import { apagarGaleriaAction } from "../../../actions";
+import { decifrarSenha } from "@/lib/senha-da-galeria";
 
 export const metadata: Metadata = { title: "Entrega da galeria" };
 export const dynamic = "force-dynamic";
@@ -51,6 +52,10 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
         galeriaSlug={galeria.slug}
         publicada={galeria.publicada}
         temSenha={Boolean(galeria.senha_hash)}
+        /* O que o fotógrafo digitou, para ele poder contar ao casal. `null`
+           quando a senha é anterior a 24/09/2026: aquele hash não volta atrás,
+           e a tela diz isso em vez de fingir. Ver `lib/senha-da-galeria.ts`. */
+        senhaVisivel={decifrarSenha(galeria.senha_cifrada)}
         permiteDownload={galeria.permite_download}
         semFotos={totalMedias === 0}
       />
