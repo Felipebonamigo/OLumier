@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   PARALELOS,
   type ArquivoComCaminho,
@@ -64,9 +64,34 @@ export function EnviarArquivos({
    * Sem repetido a pergunta não aparece: quem arrasta uma pasta nova não
    * merece um diálogo no caminho.
    */
+  /*
+   * ── E A FILA DESTA SESSÃO CONTA (23/09/2026) ───────────────────────────
+   *
+   * `nomesNaGaleria` é o retrato que o SERVIDOR desenhou quando a página
+   * carregou, e quem o atualiza é o `router.refresh()` que só roda depois de a
+   * fila ESVAZIAR. Num envio de 180 fotos, que leva minutos, soltar a mesma
+   * pasta de novo no meio passava direto pela pergunta — e a foto entrava duas
+   * vezes na galeria.
+   *
+   * É a mesma janela que embaralhava a ordem ("a segunda pasta solta assim que
+   * a primeira parece ter acabado"), e o estrago aqui é pior: o casal recebe a
+   * foto repetida na galeria e no zip, com o "(2)" que `nomeUnico` põe para
+   * nenhuma das duas ser sobrescrita.
+   *
+   * Os que deram ERRO ficam de fora: nenhuma linha nasceu para eles, então
+   * reenviar é legítimo e não merece diálogo no caminho.
+   */
+  const jaConhecidos = useMemo(
+    () => [
+      ...nomesNaGaleria,
+      ...envio.fila.filter((i) => i.situacao !== "erro").map((i) => i.nome),
+    ],
+    [nomesNaGaleria, envio.fila],
+  );
+
   function conferirEEnviar(brutos: ArquivoComCaminho[]) {
     if (brutos.length === 0) return;
-    const { novos, repetidos } = separarRepetidos(brutos, nomesNaGaleria);
+    const { novos, repetidos } = separarRepetidos(brutos, jaConhecidos);
     if (repetidos.length === 0) mandar(brutos);
     else setPergunta({ novos, repetidos });
   }

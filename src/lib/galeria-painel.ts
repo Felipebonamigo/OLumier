@@ -1,5 +1,5 @@
 import "server-only";
-import { consultarUm } from "./db";
+import { consultar, consultarUm } from "./db";
 import type { Galeria } from "./tenants";
 
 /**
@@ -47,4 +47,46 @@ export async function contarMediasProntas(galeriaId: string): Promise<number> {
     [galeriaId],
   );
   return r?.n ?? 0;
+}
+
+
+/**
+ * FOTOS REPETIDAS — o mesmo nome de arquivo mais de uma vez nesta galeria.
+ *
+ * Felipe, 23/09/2026, olhando o zip do casamento da Júlia: dentro de "Cerimônia"
+ * havia `sirius-jugusw-1070.jpg` E `sirius-jugusw-1070 (2).jpg`, com o MESMO
+ * tamanho em bytes. O "(2)" é nosso (`nomeUnico`, para o descompactador não
+ * sobrescrever uma com a outra), mas dois arquivos idênticos em bytes não são
+ * duas fotos: é a mesma foto duas vezes na galeria.
+ *
+ * Ele pediu a consulta e disse "eu nem sei aonde esta o banco dessa aplicação".
+ * Ninguém deveria precisar saber. A pergunta é do produto, então a resposta
+ * mora na tela.
+ *
+ * ── PELO NOME, E NÃO PELO CONTEÚDO ───────────────────────────────────────
+ *
+ * Comparar bytes exigiria ler os dois arquivos de volta do bucket — banda e
+ * dinheiro para responder uma pergunta que o nome já responde. É o mesmo
+ * raciocínio de `separarRepetidos` no envio, e aqui vale ainda mais: é
+ * justamente por nome que a pergunta do envio decide.
+ *
+ * `bytes` vem junto porque é ele que separa os dois casos: tamanhos DIFERENTES
+ * são duas fotos que por acaso se chamam igual (duas câmeras, `DSC_0001.jpg`),
+ * e isso é normal. Tamanhos IGUAIS são a mesma foto entrando duas vezes.
+ */
+export async function fotosRepetidas(
+  galeriaId: string,
+): Promise<{ nome: string; vezes: number; mesmoTamanho: boolean }[]> {
+  return consultar<{ nome: string; vezes: number; mesmoTamanho: boolean }>(
+    `select nome_original as nome,
+            count(*)::int as vezes,
+            count(distinct bytes) = 1 as "mesmoTamanho"
+       from medias
+      where galeria_id = $1 and pronto
+      group by nome_original
+     having count(*) > 1
+      order by count(*) desc, nome_original
+      limit 200`,
+    [galeriaId],
+  );
 }
