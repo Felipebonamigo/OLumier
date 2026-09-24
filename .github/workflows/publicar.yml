@@ -165,18 +165,39 @@ jobs:
         env:
           NODE_ENV: development
 
-      # DO QUAY, NÃO DO DOCKER HUB. O `verificar.yml` puxava `minio/minio` do
-      # Hub e isso funcionou em agosto; em 16/09/2026 a mesma linha devolve
-      # "pull access denied ... may require 'docker login'" — o Hub deixou de
-      # servir essa imagem para quem não está autenticado. O quay.io é o outro
-      # registro oficial do MinIO e não pede login, então a bancada não fica
-      # dependendo de uma credencial de terceiro para subir.
+      # COMPILADO DO CÓDIGO-FONTE, SEM REGISTRO DE IMAGEM (24/09/2026).
+      #
+      # Primeiro o Docker Hub deixou de servir `minio/minio` sem login
+      # (16/09/2026); depois o quay.io fez o mesmo ("unauthorized", 24/09, e as
+      # publicações dos PRs #36 e #37 pararam aqui). Correr atrás de um terceiro
+      # registro seria esperar a próxima vez. O MinIO é software livre em Go, e
+      # o runner já tem Go: compila em uns dois minutos, e o cache do Go deixa as
+      # rodadas seguintes quase instantâneas. O commit é FIXO para a bancada não
+      # mudar sozinha entre uma publicação e outra.
+      - name: Go (para compilar o MinIO)
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+
+      - name: Cache do MinIO compilado
+        id: cache-minio
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/minio
+          key: minio-7aac2a2c5b7c
+
+      - name: Compilar o MinIO
+        if: steps.cache-minio.outputs.cache-hit != 'true'
+        run: GOTOOLCHAIN=auto go install github.com/minio/minio@v0.0.0-20260212201848-7aac2a2c5b7c
+
       - name: Subir o armazém (MinIO, que fala S3 como o R2)
         run: |
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            quay.io/minio/minio server /data
-          # `docker run -d` volta na hora e o servidor leva alguns segundos.
+          mkdir -p /tmp/minio-dados
+          MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
+            nohup ~/go/bin/minio server /tmp/minio-dados --address 127.0.0.1:9000 \
+            > /tmp/minio.log 2>&1 &
+          # O servidor sobe em segundo plano e leva alguns segundos.
           # Falha DIZENDO o porquê: sem isto o armazém morto só aparece no
           # comando seguinte, como um erro de bucket que não explica nada.
           for i in $(seq 1 30); do
@@ -185,7 +206,7 @@ jobs:
           done
           if ! curl -sf http://127.0.0.1:9000/minio/health/live > /dev/null; then
             echo "✗ o MinIO não respondeu — a suíte não teria armazém."
-            docker logs minio 2>&1 | tail -30
+            tail -30 /tmp/minio.log
             exit 1
           fi
           for balde in galerias olumier-arquivos; do
