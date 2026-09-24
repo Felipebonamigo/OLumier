@@ -97,7 +97,10 @@ export function AssistenteNovaGaleria({
         ))}
       </ol>
 
-      <div className={etapa === 0 ? "mt-6 flex flex-col gap-4" : "hidden"}>
+      {/* O formulário continua estreito de propósito: campo de texto largo
+          demais faz o olho perder o começo da linha. Ver o comentário da
+          largura em `page.tsx`. */}
+      <div className={etapa === 0 ? "mt-6 flex max-w-2xl flex-col gap-4" : "hidden"}>
         <Campo
           label="Nome da galeria"
           name="titulo"
@@ -116,7 +119,12 @@ export function AssistenteNovaGaleria({
           Como a galeria vai aparecer para o cliente. Dá para trocar tudo depois, em Design.
         </p>
         <input type="hidden" name="preset" value={preset} />
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/* Mais colunas conforme a tela, porque aqui a largura VIRA amostra:
+            com três colunas dentro de 672 px cada "Ana & Pedro" saía com ~155
+            px, e escolher a cara da entrega por uma miniatura desse tamanho é
+            escolher no escuro. O teto é cinco — passando disso a amostra volta
+            a encolher, e o nome do estilo começa a quebrar. */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {PRESETS.map((p) => {
             const tema = TEMAS[p.aparencia.tema];
             const escolhido = preset === p.id;
@@ -148,10 +156,11 @@ export function AssistenteNovaGaleria({
             );
           })}
         </div>
-        {slotLogo && <div className="mt-6">{slotLogo}</div>}
+        {/* A logo é formulário, não amostra: não acompanha a grade. */}
+        {slotLogo && <div className="mt-6 max-w-2xl">{slotLogo}</div>}
       </div>
 
-      <div className={etapa === 2 ? "mt-6" : "hidden"}>
+      <div className={etapa === 2 ? "mt-6 max-w-2xl" : "hidden"}>
         <p className="text-sm text-texto-soft">
           Os momentos do evento. O cliente ganha um menu para pular direto ao que quer ver — e
           você manda as fotos já para o capítulo certo.
