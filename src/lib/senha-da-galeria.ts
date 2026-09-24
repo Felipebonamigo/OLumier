@@ -5,13 +5,18 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
  * O LEMBRETE DA SENHA DA GALERIA — cifrado, para o fotógrafo poder relê-lo.
  *
  * Juan, 24/09/2026: "ao colocar a senha, ela some e eu não sei mais qual a
- * senha".
+ * senha. Não fica aparecendo qual a senha — tem que anotar logo depois que
+ * adiciona ali, porque É SEGREDO ATÉ PRA NÓS FOTÓGRAFOS. Tinha que ter algum
+ * campo que a gente consiga ver qual é a senha, caso o cliente esqueça."
  *
- * Ele descreveu o produto funcionando como projetado, e o projeto é que estava
- * errado. Hash existe para o segredo de UMA pessoa. A senha da galeria é o
- * contrário: o trabalho do fotógrafo é CONTÁ-LA ao casal junto com o link, e
- * relê-la um mês depois quando a mãe da noiva pedir. Esquecer obrigava a
- * TROCAR, e trocar derruba todo mundo que já recebeu a antiga.
+ * A frase dele é o diagnóstico inteiro. Ele descreveu o produto funcionando
+ * como projetado, e o projeto é que estava errado: hash existe para o segredo
+ * de UMA pessoa, e esta senha é o contrário — o fotógrafo a inventa para
+ * ENTREGAR, e o caso de uso é justamente o cliente esquecer e perguntar a ele.
+ *
+ * "Anotar logo depois que adiciona" era a gambiarra que o produto obrigava, e
+ * gambiarra que o usuário inventa é dívida que nós deixamos. Esquecer obrigava
+ * a TROCAR, e trocar derruba todo mundo que já recebeu a antiga.
  *
  * ── CIFRADA, E NÃO EM TEXTO PURO ─────────────────────────────────────────
  *

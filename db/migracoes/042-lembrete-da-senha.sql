@@ -3,7 +3,9 @@
 -- ============================================================================
 --
 --  Juan, 24/09/2026: "ao colocar a senha, ela some e eu não sei mais qual a
---  senha".
+--  senha. [...] Tem que anotar logo depois que adiciona ali, porque É SEGREDO
+--  ATÉ PRA NÓS FOTÓGRAFOS. Tinha que ter algum campo que a gente consiga ver
+--  qual é a senha, caso o cliente esqueça."
 --
 --  Ele está descrevendo o produto funcionando como projetado, e o projeto é que
 --  estava errado. A senha era guardada só como hash SHA-256 — irreversível de
