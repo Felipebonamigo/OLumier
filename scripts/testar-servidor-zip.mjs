@@ -123,6 +123,7 @@ const app = createServer((req, res) => {
       tipo: id === PEDIDO_TUDO ? "tudo" : "favoritas",
       nomeDoZip: id === PEDIDO_TUDO ? "Ana & Kaio.zip" : "Ana & Kaio - favoritas.zip",
       chaveDeCache: id === PEDIDO_TUDO ? chaveTudo : null,
+      dataDoConteudo: "2026-09-20T18:30:00.000Z",
       arquivos: arquivosDoManifesto(quais).map((a, k) => ({
         ...a,
         url: comUrls ? `${urlDoBalde}/${quais[k]}` : undefined,
@@ -275,6 +276,27 @@ await etapa("retomar de onde parou: Range devolve 206 com o pedaço certo", asyn
   igual(status, 206, "status");
   igual(cabecalhos.get("content-range"), `bytes ${de}-${zipTudo.length - 1}/${zipTudo.length}`, "content-range");
   igual(corpo.equals(zipTudo.subarray(de)), true, "os bytes do fim");
+});
+
+await etapa("apagado do cache e montado de novo, o ZIP sai idêntico byte a byte", async () => {
+  /* O rodízio do cache cheio (50 galerias num fim de semana, 24/09/2026):
+     o ZIP sai do disco e é montado outra vez. Os bytes têm de ser os mesmos,
+     senão um "Retomar" emenda dois arquivos diferentes. */
+  rmSync(path.join(cacheDir, `${chaveTudo}.zip`));
+  const { status, corpo } = await baixar(tokenTudo);
+  igual(status, 200, "status");
+  igual(corpo.equals(zipTudo), true, "mesmos bytes da primeira montagem");
+});
+
+await etapa("retomar com a identidade de outro arquivo recebe o ZIP inteiro, não um pedaço", async () => {
+  const { status, corpo, cabecalhos } = await baixar(tokenTudo, {
+    Range: "bytes=200000-",
+    "If-Range": '"outra-versao"',
+  });
+  igual(status, 200, "status inteiro");
+  igual(corpo.length, zipTudo.length, "arquivo inteiro");
+  const certo = await baixar(tokenTudo, { Range: "bytes=200000-", "If-Range": cabecalhos.get("etag") });
+  igual(certo.status, 206, "com a identidade certa, retoma");
 });
 
 await etapa("HEAD dá o tamanho sem corpo", async () => {

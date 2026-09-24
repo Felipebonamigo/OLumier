@@ -130,6 +130,12 @@ export interface Manifesto {
    * encontrado — não há invalidação a esquecer.
    */
   chaveDeCache: string | null;
+  /**
+   * A data que vai dentro do ZIP (ISO), a mesma para o mesmo conteúdo: a mais
+   * recente entre as fotos. Com ela, remontar dá os mesmos bytes — ver
+   * `OpcoesDoZip.data` em lib/zip-em-fluxo.ts.
+   */
+  dataDoConteudo?: string;
   arquivos: ArquivoDoManifesto[];
 }
 

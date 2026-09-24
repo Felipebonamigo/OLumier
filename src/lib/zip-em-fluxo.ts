@@ -48,6 +48,14 @@ export interface OpcoesDoZip {
    * formato; o teste rebaixa para forçar o caminho sem gerar 4 GB.
    */
   limiteZip64?: number;
+  /**
+   * A data gravada em cada entrada. Sem ela, é a hora da montagem — e dois
+   * ZIPs do mesmo conteúdo saem com bytes diferentes. O servidor de ZIP passa
+   * uma data FIXA por conteúdo, para que um ZIP apagado do cache e montado de
+   * novo seja idêntico byte a byte ao anterior: é o que deixa o "Retomar" do
+   * navegador continuar de onde parou sem emendar dois arquivos diferentes.
+   */
+  data?: Date;
 }
 
 const TETO_32 = 0xffffffff;
@@ -122,7 +130,7 @@ export async function* zipEmFluxo(
 ): AsyncGenerator<Uint8Array> {
   const zip64 = usaZip64(arquivos, opcoes.limiteZip64 ?? TETO_32);
 
-  const { hora, data } = dataDos(new Date());
+  const { hora, data } = dataDos(opcoes.data ?? new Date());
   const central: Buffer[] = [];
   let posicao = 0;
 
