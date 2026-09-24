@@ -407,13 +407,27 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         <div className="mt-6">
           <Legenda />
         </div>
-        <a
-          href="#fotos"
-          className={`mt-10 inline-block rounded-full px-8 py-3 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-80`}
-          style={{ ...estiloDetalhe, border: "1px solid var(--g-destaque)", color: "var(--g-destaque)" }}
-        >
-          Ver galeria
-        </a>
+        {/*
+          ── A JORNAL NÃO TEM MAIS BOTÃO (24/09/2026) ────────────────────────
+
+          Juan, sobre as capas: "muitas letras, cores diferentes. As letrinhas
+          de um jeito, o 'ver galeria' de outro". E, sobre a mínima: "esse tá
+          lindo, a distribuição das informações tão bonitas — tá sem o 'ver
+          galeria'".
+
+          Ele estava certo, e a conta fecha: das cinco capas, três já viviam sem
+          botão — incluindo a IMERSA, que é a mais imersiva de todas. O botão
+          era o elemento mais pesado da capa e o menos importante.
+
+          E ele não tinha trabalho a fazer aqui: a jornal cresce pelo CONTEÚDO,
+          não pela tela, então a próxima foto sempre aparece logo abaixo. O
+          botão anunciava o que já estava visível, e a barra de ações
+          (Slideshow · Favoritas · Baixar) vem logo em seguida de qualquer
+          jeito.
+
+          Decisão do Felipe em 24/09/2026: "tira o botão da jornal e deixa
+          discreto no convite".
+        */}
 
         {/*
           A FOTO DA JORNAL — a manchete em cima, a imagem embaixo (08/09/2026).
@@ -530,10 +544,32 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             <div className="mt-6">
               <Legenda />
             </div>
+            {/*
+              ── NO CONVITE ELE FICA, MAS SEM O BLOCO ──────────────────────
+
+              Aqui o botão tem trabalho de verdade, e é a única capa em que
+              tem: a convite multiplica a altura por 1,205 no computador, então
+              na opção "Cheia" ela chega a 94vh e sobra só 6% de tela mostrando
+              que existe mais abaixo. Nas outras sobram 22%.
+
+              O que incomodava não era existir, era o PESO: um retângulo sólido
+              logo abaixo de um nome em serifada fina é a coisa mais escura da
+              capa, e a menos importante. Virou o que ele sempre foi de fato —
+              uma chamada — em texto com um filete embaixo, na mesma família
+              das outras letrinhas (e por isso acompanha o eixo "Letrinhas da
+              capa", como elas).
+
+              `border-bottom` e não `underline`: o filete fica a 6px da linha de
+              base em vez de cortar as descidas do "g" de "galeria".
+            */}
             <a
               href="#fotos"
-              className={`mt-6 inline-block px-8 py-3 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85`}
-              style={{ ...estiloDetalhe, background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+              className={`mt-6 inline-block pb-1.5 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-70`}
+              style={{
+                ...estiloDetalhe,
+                color: "var(--g-destaque)",
+                borderBottom: "1px solid var(--g-destaque)",
+              }}
             >
               Ver galeria
             </a>
