@@ -92,14 +92,23 @@ async function servirDoDisco(
   montagem: Montagem | null,
   doCache: boolean,
 ) {
-  const intervalo = intervaloDoRange(req.headers.range, tamanho);
+  /*
+   * A identidade do arquivo é a chave MAIS a data do conteúdo: é ela que
+   * define os bytes. Um "Retomar" traz If-Range com a identidade de quando
+   * começou; se não bater, o pedaço pedido é de outro arquivo e emendar daria
+   * um ZIP corrompido — então vai o arquivo inteiro (200), como o HTTP manda.
+   */
+  const etag = `"${chave}-${manifesto.dataDoConteudo ?? "sem-data"}"`;
+  const ifRange = req.headers["if-range"];
+  const rangeValido = !ifRange || ifRange === etag;
+  const intervalo = rangeValido ? intervaloDoRange(req.headers.range, tamanho) : null;
   const [inicio, fim] = intervalo ?? [0, tamanho - 1];
   const cabecalhos: Record<string, string> = {
     "Content-Type": "application/zip",
     "Content-Disposition": dispositionSegura(manifesto.nomeDoZip),
     "Content-Length": String(fim - inicio + 1),
     "Accept-Ranges": "bytes",
-    ETag: `"${chave}"`,
+    ETag: etag,
     "Cache-Control": "private, no-store",
   };
   if (intervalo) cabecalhos["Content-Range"] = `bytes ${inicio}-${fim}/${tamanho}`;

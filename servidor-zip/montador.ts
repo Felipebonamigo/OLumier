@@ -157,5 +157,8 @@ export function tamanhoDoManifesto(manifesto: Manifesto): number {
 async function* vazio(): AsyncIterable<Uint8Array> {}
 
 export function fluxoDoManifesto(manifesto: Manifesto, fonte: FonteDeUrls): AsyncGenerator<Uint8Array> {
-  return zipEmFluxo(arquivosDoManifesto(manifesto, fonte));
+  /* Data fixa por conteúdo: remontar dá os mesmos bytes (ver OpcoesDoZip.data).
+     Um app mais velho que não manda a data cai na hora da montagem. */
+  const data = manifesto.dataDoConteudo ? new Date(manifesto.dataDoConteudo) : undefined;
+  return zipEmFluxo(arquivosDoManifesto(manifesto, fonte), { data });
 }

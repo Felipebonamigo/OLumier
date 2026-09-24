@@ -103,8 +103,15 @@ export async function manifestoDoPedido(
   comUrls: boolean,
 ): Promise<Manifesto> {
   const ids = pedido.entradas.map((e) => e.id);
-  const medias = await consultar<{ id: string; chave: string; armazem: string; bytes: string; versao: number }>(
-    `select id, chave, armazem, bytes, versao
+  const medias = await consultar<{
+    id: string;
+    chave: string;
+    armazem: string;
+    bytes: string;
+    versao: number;
+    criado_em: Date;
+  }>(
+    `select id, chave, armazem, bytes, versao, criado_em
        from medias
       where galeria_id = $1 and pronto and id = any($2::uuid[])`,
     [pedido.galeria_id, ids],
@@ -144,6 +151,9 @@ export async function manifestoDoPedido(
       atuais.map((e) => ({ nome: `${e.nome}#${e.versao}`, tamanho: e.tamanho })),
     ),
     arquivos,
+    dataDoConteudo: new Date(
+      Math.max(0, ...atuais.map((e) => new Date(porId.get(e.id)!.criado_em).getTime())),
+    ).toISOString(),
   };
 }
 

@@ -78,6 +78,27 @@ Um ZIP pronto sem pedido há `ZIP_CACHE_DIAS` (14) é apagado; passando de
 `ZIP_CACHE_MAX_GB` (150), o mais antigo sai primeiro. Bate com o padrão de uso:
 muito na semana do lançamento, nada depois.
 
+### Quanto disco
+
+O volume guarda os ZIPs dos lançamentos RECENTES, não de todas as galerias.
+Ele tem de caber o pico de uma a duas semanas: com 20 GB por casamento,
+100 GB seguram uns 4 lançamentos simultâneos, 1 TB uns 40. Abaixo disso o
+cache vira rodízio (24/09/2026, "50 galerias no mesmo fim de semana"): cada
+ZIP é empurrado para fora antes de ser baixado de novo, e cada pedido volta a
+ler o B2 — nada quebra, mas é o desperdício que o servidor existe para evitar.
+O sinal é o painel: a fração "do arquivo guardado" abaixo de 50%. A ação é
+aumentar o volume na Hetzner (Volumes → Resize, `resize2fs`, e rodar o
+instalador de novo, que recalcula o teto em 85% do disco).
+
+Antes de cada montagem o servidor confere o espaço e apaga os ZIPs prontos
+menos usados na hora; se nem assim couber, entrega em fluxo sem guardar.
+
+Um ZIP montado de novo sai **idêntico byte a byte** ao anterior (a data
+dentro dele é a do conteúdo, não a da montagem), então o "Retomar" do
+navegador continua funcionando depois de um rodízio. Se por algum motivo a
+identidade não bater (`If-Range`), vai o arquivo inteiro em vez de um pedaço
+errado.
+
 ### Montagem única
 
 Trinta cliques no mesmo segundo (o link chegou no grupo da família) viram UMA
