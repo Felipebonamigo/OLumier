@@ -104,11 +104,25 @@ for (const [nome, ap] of Object.entries(PRESETS)) {
        pela presenca do botao: duas capas ja tem botao de entrada, e deducao por
        pista indireta confunde uma com a outra em silencio. */
     [`capa ${ap.capa} marcada no html`, normalizado.includes(`data-capa="${ap.capa}"`)],
+    /*
+     * SÓ A CONVITE TEM BOTÃO (24/09/2026).
+     *
+     * Eram duas. Juan, sobre as capas: "muitas letras, cores diferentes — as
+     * letrinhas de um jeito, o 'ver galeria' de outro", e sobre a mínima:
+     * "esse tá lindo, tá sem o 'ver galeria'". Felipe decidiu: "tira o botão
+     * da jornal e deixa discreto no convite".
+     *
+     * A conta é de altura. A convite multiplica a altura por 1,205 no
+     * computador: na opção "Cheia" ela chega a 94vh e sobra 6% de tela
+     * mostrando que existe mais abaixo. A jornal cresce pelo CONTEÚDO, então a
+     * próxima foto sempre aparece — o botão anunciava o que já estava visível.
+     *
+     * Esta lista é a guarda contra ele voltar por distração a uma capa que não
+     * precisa: quatro das cinco têm de sair SEM "Ver galeria".
+     */
     [
       `botao de entrada em ${ap.capa}`,
-      ["jornal", "convite"].includes(ap.capa)
-        ? html.includes("Ver galeria")
-        : !html.includes("Ver galeria"),
+      ap.capa === "convite" ? html.includes("Ver galeria") : !html.includes("Ver galeria"),
     ],
     // O título tem que apontar para a variável do next/font. Já falhou uma vez:
     // usando o token do Tailwind (--font-serif), a variável não existe em tempo
