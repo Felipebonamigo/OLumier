@@ -6,6 +6,7 @@ import { intervaloDoRange } from "./range.ts";
 import { buscarManifesto, PedidoRecusado, relatar } from "./app.ts";
 import { fluxoDoManifesto, tamanhoDoManifesto } from "./montador.ts";
 import {
+  abrirEspaco,
   iniciarMontagem,
   lerDoDisco,
   montagemEmAndamento,
@@ -215,6 +216,14 @@ async function atenderZip(req: IncomingMessage, res: ServerResponse, token: stri
   if (comUrls.chaveDeCache !== chave) return atenderZip(req, res, token);
 
   const fluxo = fluxoDoManifesto(comUrls, { renovar: () => buscarManifesto(pedidoId, true) });
+
+  /* 2''. não cabe no disco nem apagando os antigos → entrega em fluxo, sem
+     guardar. É o caso de um ZIP maior que o disco: raro, e o download sai. */
+  if (!montagemEmAndamento(chave) && !(await abrirEspaco(tamanho))) {
+    console.error(`sem espaço para guardar ${chave} (${tamanho} bytes): entregando em fluxo`);
+    return servirEmFluxo(req, res, comUrls);
+  }
+
   const montagem =
     montagemEmAndamento(chave) ??
     iniciarMontagem(chave, tamanho, fluxo, ({ ok, bytes, duracaoMs }) => {

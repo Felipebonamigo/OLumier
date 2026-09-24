@@ -1,4 +1,4 @@
-import { mkdir, open, readdir, rename, stat, unlink, utimes } from "node:fs/promises";
+import { mkdir, open, readdir, rename, stat, statfs, unlink, utimes } from "node:fs/promises";
 import { closeSync, openSync } from "node:fs";
 import path from "node:path";
 import { CONFIG } from "./config.ts";
@@ -259,6 +259,59 @@ export async function varrer(): Promise<{ apagados: number; bytesNoDisco: number
     apagados++;
   }
   return { apagados, bytesNoDisco: total };
+}
+
+/**
+ * ABRE ESPAÇO para uma montagem de `bytes`, apagando ZIPs prontos do mais
+ * antigo para o mais novo — e diz se coube.
+ *
+ * ── POR QUE ANTES DE CADA MONTAGEM, E NÃO SÓ DE HORA EM HORA (24/09/2026) ──
+ *
+ * Felipe: "e quando o servidor de ZIP lotar?". A varredura por hora apaga por
+ * idade e por teto, mas cinco casamentos lançados na mesma noite enchem um
+ * volume de 100 GB entre uma varredura e outra, e a montagem morreria com
+ * disco cheio. Então a pergunta é feita na hora: cabe? Se não, os mais
+ * antigos saem AGORA. Se nem assim couber (um ZIP maior que o disco inteiro),
+ * quem chama entrega em fluxo, sem guardar — o download nunca falha por
+ * falta de disco, só deixa de ser guardado.
+ *
+ * `.part` em andamento nunca é apagado: é de alguém baixando agora.
+ */
+export async function abrirEspaco(bytes: number): Promise<boolean> {
+  /* Folga de 2 GB acima do pedido: o disco não pode encostar em zero, o
+     sistema também escreve nele. */
+  const FOLGA = 2 * 1024 ** 3;
+  const livre = async () => {
+    const f = await statfs(CONFIG.cacheDir);
+    return Number(f.bavail) * Number(f.bsize);
+  };
+  const guardado = async () => {
+    let total = 0;
+    for (const nome of await readdir(CONFIG.cacheDir)) {
+      if (!nome.endsWith(".zip")) continue;
+      total += (await stat(path.join(CONFIG.cacheDir, nome)).catch(() => null))?.size ?? 0;
+    }
+    return total;
+  };
+  const cabe = async () =>
+    (await livre()) >= bytes + FOLGA && (await guardado()) + bytes <= CONFIG.cacheMaxBytes;
+
+  if (await cabe()) return true;
+
+  const prontos: { caminho: string; mtime: number }[] = [];
+  for (const nome of await readdir(CONFIG.cacheDir)) {
+    if (!nome.endsWith(".zip")) continue;
+    const caminho = path.join(CONFIG.cacheDir, nome);
+    const s = await stat(caminho).catch(() => null);
+    if (s) prontos.push({ caminho, mtime: s.mtimeMs });
+  }
+  prontos.sort((a, b) => a.mtime - b.mtime);
+  for (const p of prontos) {
+    await unlink(p.caminho).catch(() => {});
+    console.log(`disco cheio: apagado ${path.basename(p.caminho)} para abrir espaço`);
+    if (await cabe()) return true;
+  }
+  return await cabe();
 }
 
 export function montagensAtivas(): number {

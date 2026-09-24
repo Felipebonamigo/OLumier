@@ -112,6 +112,16 @@ cp "$DESTINO/ops/fotonio-zip.service" /etc/systemd/system/fotonio-zip.service
 # num arquivo à parte, que a cópia da unidade acima não apaga. Sem isto o
 # servidor sobe, mas toda montagem morre com EROFS (23/09/2026).
 CACHE_DIR=$(grep -E '^ZIP_CACHE_DIR=' "$ENV" | cut -d= -f2-)
+mkdir -p "${CACHE_DIR:-$CACHE}"
+# O teto do cache segue o DISCO onde ele está: 85% do tamanho, para o volume
+# nunca encostar em cheio. Um teto escrito à mão maior que o disco (os 150 GB
+# padrão num volume de 100 GB) nunca seria atingido antes de o disco lotar.
+DISCO_GB=$(df --output=size -BG "${CACHE_DIR:-$CACHE}" | tail -1 | tr -dc '0-9')
+if [[ -n "$DISCO_GB" && "$DISCO_GB" -gt 0 ]]; then
+  TETO_GB=$(( DISCO_GB * 85 / 100 ))
+  sed -i "s|^ZIP_CACHE_MAX_GB=.*|ZIP_CACHE_MAX_GB=$TETO_GB|" "$ENV"
+  echo "   cache em ${CACHE_DIR:-$CACHE} (${DISCO_GB} GB no disco, teto ${TETO_GB} GB)"
+fi
 mkdir -p /etc/systemd/system/fotonio-zip.service.d
 printf '[Service]\nReadWritePaths=%s\n' "${CACHE_DIR:-$CACHE}" > /etc/systemd/system/fotonio-zip.service.d/cache.conf
 mkdir -p "${CACHE_DIR:-$CACHE}" && chown fotonio-zip:fotonio-zip "${CACHE_DIR:-$CACHE}"
