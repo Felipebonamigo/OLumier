@@ -7,6 +7,7 @@ import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
 import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
+import { cifrarSenha } from "@/lib/senha-da-galeria";
 import {
   gravarRascunho,
   promoverRascunhoSePendente,
@@ -175,6 +176,23 @@ export async function salvarPublicacaoAction(form: FormData) {
     // Campo vazio tira a senha; com texto, grava o hash.
     valores.push(senha ? gerarHashSenhaGaleria(senha, galeriaId) : null);
     campos.push(`senha_hash = $${valores.length}`);
+
+    /*
+     * ── O LEMBRETE VAI JUNTO, NA MESMA INSTRUÇÃO (24/09/2026) ─────────────
+     *
+     * Juan: "ao colocar a senha, ela some e eu não sei mais qual a senha". O
+     * hash é irreversível de propósito e continua sendo a AUTORIDADE — quem
+     * confere quem entra na galeria é ele. Esta segunda coluna existe só para
+     * a tela do fotógrafo poder mostrar o que ele digitou, e vai cifrada com o
+     * segredo do servidor (ver `lib/senha-da-galeria.ts`).
+     *
+     * Escrever os dois no MESMO `update` não é economia, é correção: se um
+     * gravasse sem o outro, a tela mostraria uma senha que não abre a galeria
+     * — pior que não mostrar nada. Tirar a senha zera os dois pelo mesmo
+     * motivo.
+     */
+    valores.push(senha ? cifrarSenha(senha) : null);
+    campos.push(`senha_cifrada = $${valores.length}`);
   }
 
   if (campos.length === 0) return;

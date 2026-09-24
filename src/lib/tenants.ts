@@ -57,6 +57,8 @@ export interface Galeria {
   publicada: boolean;
   estado: string;
   senha_hash: string | null;
+  /** A senha em texto, cifrada com o segredo do servidor (migração 042). */
+  senha_cifrada: string | null;
   permite_download: boolean;
   bytes_total: string;
   expira_em: Date | null;

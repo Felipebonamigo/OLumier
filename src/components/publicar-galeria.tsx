@@ -19,6 +19,7 @@ export function PublicarGaleria({
   galeriaSlug,
   publicada,
   temSenha,
+  senhaVisivel,
   permiteDownload,
   semFotos,
 }: {
@@ -29,6 +30,8 @@ export function PublicarGaleria({
   galeriaSlug: string;
   publicada: boolean;
   temSenha: boolean;
+  /** O que o fotógrafo digitou. `null` em senha anterior a 24/09/2026. */
+  senhaVisivel: string | null;
   permiteDownload: boolean;
   /* Publicar galeria vazia é permitido — só não deve ser acidental. */
   semFotos: boolean;
@@ -36,6 +39,7 @@ export function PublicarGaleria({
   const [copiado, setCopiado] = useState(false);
   const [senha, setSenha] = useState("");
   const [mexeuNaSenha, setMexeuNaSenha] = useState(false);
+  const [copiouSenha, setCopiouSenha] = useState(false);
   const [salvando, iniciar] = useTransition();
   const router = useRouter();
 
@@ -148,6 +152,53 @@ export function PublicarGaleria({
             ? "Para trocar, digite outra. Para tirar, salve com o campo vazio."
             : "Opcional. O link já é secreto; a senha é uma tranca a mais."}
         </p>
+
+        {/*
+          ── A SENHA ATUAL, ESCRITA ──────────────────────────────────────────
+
+          Juan, 24/09/2026: "ao colocar a senha, ela some e eu não sei mais qual
+          a senha". Era o produto funcionando como projetado — só o hash era
+          guardado —, e o projeto é que estava errado: o trabalho dele é CONTAR
+          a senha ao casal, e relê-la um mês depois.
+
+          Fica ao lado do botão de copiar porque é assim que ela é usada: o
+          fotógrafo manda o link e a senha na mesma mensagem.
+        */}
+        {temSenha && senhaVisivel && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-linha bg-void px-3 py-2">
+            <span className="text-xs text-texto-faint">senha atual</span>
+            <code className="flex-1 font-mono text-sm text-texto">{senhaVisivel}</code>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(senhaVisivel);
+                  setCopiouSenha(true);
+                  setTimeout(() => setCopiouSenha(false), 2000);
+                } catch {
+                  /* Sem área de transferência (http sem TLS, navegador embutido):
+                     a senha já está na tela, então basta ler e digitar. */
+                  prompt("Copie a senha:", senhaVisivel);
+                }
+              }}
+              className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:border-acento hover:text-texto"
+            >
+              {copiouSenha ? "copiada ✓" : "copiar"}
+            </button>
+          </div>
+        )}
+
+        {/* A senha definida antes de 24/09/2026 existe só como hash, e hash não
+            volta atrás. Dizer isso é melhor que deixar o fotógrafo procurando
+            um botão de "mostrar" que não existiria. */}
+        {temSenha && !senhaVisivel && (
+          <p className="mt-2 rounded-lg border border-linha bg-void px-3 py-2 text-xs leading-relaxed text-texto-soft">
+            Esta senha foi definida antes de o sistema passar a guardá-la de forma legível, e não
+            dá para mostrá-la. Ela continua funcionando — se você não lembra qual é, defina uma
+            nova aqui embaixo. Quem já recebeu a antiga vai precisar da nova.
+          </p>
+        )}
+
         <div className="mt-2 flex flex-wrap gap-2">
           <input
             type="text"
