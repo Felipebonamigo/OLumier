@@ -12,6 +12,7 @@
  * pode dar tem uma etapa que o provoca de propósito.
  */
 import { resumoDeTrafego, custoServidorZipCentavos } from "../src/lib/metricas-entrega.ts";
+import { relatorioDaEntrega } from "../src/lib/relatorio-semanal.ts";
 import {
   FRANQUIA_SERVIDOR_ZIP_BYTES,
   FRANQUIA_VPS_BYTES,
@@ -57,6 +58,13 @@ const somas = (over = {}) => ({
   abortadosVpsBytes: 0,
   avulsosN: 0,
   bytesPorMedia: 5 * 1024 * 1024,
+  guardaveisServidosN: 0,
+  guardaveisDoCacheN: 0,
+  despejosN: 0,
+  despejosBytes: 0,
+  remontagensN: 0,
+  remontagensBytes: 0,
+  conjuntoQuenteBytes: 0,
   ...over,
 });
 const contexto = (over = {}) => ({
@@ -77,6 +85,8 @@ await etapa("um ZIP montado e nove do cache: B2 conta uma montagem só", () => {
       servidosServidorBytes: 200 * GB,
       doCacheN: 9,
       doCacheBytes: 180 * GB,
+      guardaveisServidosN: 10,
+      guardaveisDoCacheN: 9,
       avulsosN: 200,
     }),
     contexto(),
@@ -167,16 +177,78 @@ await etapa("estúdio novo: guardado zero e download > 0 não divide por zero", 
   igual(r.excedenteB2Bytes, 10 * 5 * 1024 * 1024, "tudo é excedente");
 });
 
-await etapa("cache que não segura (menos da metade do disco) é avisado, só com amostra", () => {
-  const pouca = resumoDeTrafego(somas({ servidosServidorN: 4, doCacheN: 0 }), contexto());
-  semAviso(pouca, "arquivo guardado");
-  const muita = resumoDeTrafego(somas({ servidosServidorN: 20, doCacheN: 6 }), contexto());
-  temAviso(muita, "alerta", "arquivo guardado");
+console.log("\ndisco do servidor de ZIP (24/09/2026)");
+
+await etapa("favoritas não entram na fração do cache — só os ZIPs guardáveis", () => {
+  /* 20 entregas de favoritas (nunca guardadas) e 2 completos, ambos do disco:
+     a fração é 100%, não 10%. */
+  const r = resumoDeTrafego(
+    somas({ servidosServidorN: 22, doCacheN: 2, guardaveisServidosN: 2, guardaveisDoCacheN: 2 }),
+    contexto(),
+  );
+  igual(r.fracaoDoCache, 1, "fração só dos guardáveis");
+  semAviso(r, "disco do servidor de ZIP");
+});
+
+await etapa("disco que encheu uma vez é alerta, com o tamanho sugerido", () => {
+  const r = resumoDeTrafego(
+    somas({ despejosN: 1, despejosBytes: 20 * GB, conjuntoQuenteBytes: 120 * GB }),
+    contexto(),
+  );
+  temAviso(r, "alerta", "encheu este mês");
+  temAviso(r, "alerta", "pelo menos 200 GB");
+  igual(r.discoSugeridoGb, 200, "120 GB / 0,85 = 141 → degrau de 200");
+});
+
+await etapa("três remontagens viram erro, dizendo quanto do B2 foi à toa e o que fazer", () => {
+  const r = resumoDeTrafego(
+    somas({
+      despejosN: 8,
+      despejosBytes: 160 * GB,
+      remontagensN: 5,
+      remontagensBytes: 100 * GB,
+      conjuntoQuenteBytes: 1000 * GB,
+    }),
+    contexto(),
+  );
+  temAviso(r, "erro", "está pequeno para o volume atual");
+  temAviso(r, "erro", "100 GB do B2 à toa");
+  temAviso(r, "erro", "pelo menos 1.200 GB");
+  temAviso(r, "erro", "Resize");
+  semAviso(r, "encheu este mês");
+  return r.avisos.find((a) => a.nivel === "erro").texto.slice(0, 90) + "…";
+});
+
+await etapa("sem montagem para medir, não há tamanho sugerido nem aviso de disco", () => {
+  const r = resumoDeTrafego(somas(), contexto());
+  igual(r.discoSugeridoGb, null, "sugestão");
+  semAviso(r, "disco do servidor de ZIP");
 });
 
 await etapa("muitos downloads caindo no meio é avisado", () => {
   const r = resumoDeTrafego(somas({ servidosServidorN: 6, abortadosN: 5, abortadosBytes: GB }), contexto());
   temAviso(r, "alerta", "caíram no meio");
+});
+
+console.log("\ne-mail semanal");
+
+await etapa("sem aviso de erro, não há e-mail — alerta fica só no painel", () => {
+  igual(relatorioDaEntrega([{ nivel: "ok", texto: "tudo certo" }], "https://x/painel/admin"), null, "só ok");
+  igual(relatorioDaEntrega([{ nivel: "alerta", texto: "acompanhar" }], "https://x/painel/admin"), null, "só alerta");
+});
+
+await etapa("com erro: o e-mail traz o aviso, os alertas à parte e o link do painel", () => {
+  const r = resumoDeTrafego(
+    somas({ despejosN: 6, remontagensN: 4, remontagensBytes: 80 * GB, conjuntoQuenteBytes: 400 * GB }),
+    contexto({ servidorConfigurado: false }),
+  );
+  const e = relatorioDaEntrega(r.avisos, "https://galeriaatomo.com.br/painel/admin");
+  if (!e) throw new Error("não montou o e-mail");
+  igual(e.assunto, "Galeria Átomo: 1 ponto da entrega precisa de ação", "assunto");
+  if (!e.texto.includes("pelo menos 500 GB")) throw new Error(`sem o tamanho sugerido: ${e.texto}`);
+  if (!e.texto.includes("Para acompanhar")) throw new Error("o alerta de servidor não configurado sumiu");
+  if (!e.texto.includes("https://galeriaatomo.com.br/painel/admin")) throw new Error("sem o link");
+  return e.assunto;
 });
 
 process.exit(falhou ? 1 : 0);

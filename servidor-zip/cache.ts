@@ -277,7 +277,10 @@ export async function varrer(): Promise<{ apagados: number; bytesNoDisco: number
  *
  * `.part` em andamento nunca é apagado: é de alguém baixando agora.
  */
-export async function abrirEspaco(bytes: number): Promise<boolean> {
+export async function abrirEspaco(
+  bytes: number,
+  aoApagar: (bytesApagados: number) => void = () => {},
+): Promise<boolean> {
   /* Folga de 2 GB acima do pedido: o disco não pode encostar em zero, o
      sistema também escreve nele. */
   const FOLGA = 2 * 1024 ** 3;
@@ -298,16 +301,18 @@ export async function abrirEspaco(bytes: number): Promise<boolean> {
 
   if (await cabe()) return true;
 
-  const prontos: { caminho: string; mtime: number }[] = [];
+  const prontos: { caminho: string; mtime: number; bytes: number }[] = [];
   for (const nome of await readdir(CONFIG.cacheDir)) {
     if (!nome.endsWith(".zip")) continue;
     const caminho = path.join(CONFIG.cacheDir, nome);
     const s = await stat(caminho).catch(() => null);
-    if (s) prontos.push({ caminho, mtime: s.mtimeMs });
+    if (s) prontos.push({ caminho, mtime: s.mtimeMs, bytes: s.size });
   }
   prontos.sort((a, b) => a.mtime - b.mtime);
   for (const p of prontos) {
     await unlink(p.caminho).catch(() => {});
+    /* Relatado ao app: é o sinal de disco pequeno que o painel lê. */
+    aoApagar(p.bytes);
     console.log(`disco cheio: apagado ${path.basename(p.caminho)} para abrir espaço`);
     if (await cabe()) return true;
   }

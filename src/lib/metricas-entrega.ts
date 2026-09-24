@@ -47,6 +47,29 @@ export interface SomasDeEntrega {
   avulsosN: number;
   /** Tamanho médio de uma mídia, para estimar os bytes dos avulsos. */
   bytesPorMedia: number;
+  /**
+   * Só os ZIPs GUARDÁVEIS (galeria inteira e capítulo) entregues pelo
+   * servidor, e quantos deles saíram do arquivo guardado. Favoritas e recorte
+   * nunca são guardados, de propósito: contá-los na fração faria o painel
+   * acusar disco pequeno numa galeria de muitas favoritas (24/09/2026).
+   */
+  guardaveisServidosN: number;
+  guardaveisDoCacheN: number;
+  /** ZIPs prontos que o servidor apagou para caber outro (migração 042). */
+  despejosN: number;
+  despejosBytes: number;
+  /**
+   * Remontagens: a mesma galeria montada de novo, com o mesmo tamanho, menos
+   * de 14 dias depois da anterior. É o rodízio — o disco pequeno fazendo ler
+   * o B2 à toa. Mudança de conteúdo muda o tamanho e não entra aqui.
+   */
+  remontagensN: number;
+  remontagensBytes: number;
+  /**
+   * O que o disco precisaria guardar para não despejar: a soma dos ZIPs
+   * guardáveis distintos montados nos últimos 14 dias (o prazo do cache).
+   */
+  conjuntoQuenteBytes: number;
 }
 
 export interface Aviso {
@@ -69,8 +92,13 @@ export interface ResumoDeTrafego {
   /** O que saiu do VPS em ZIP — deveria ser zero. */
   trafegoVpsBytes: number;
   fracaoVps: number;
-  /** Dos ZIPs entregues pelo servidor, a fração que não tocou o armazém. */
+  /** Dos ZIPs GUARDÁVEIS entregues pelo servidor, a fração que não tocou o armazém. */
   fracaoDoCache: number;
+  /**
+   * O tamanho de volume que caberia o uso atual com folga, em GB, arredondado
+   * para cima em degraus de 100 GB. `null` quando não há uso para medir.
+   */
+  discoSugeridoGb: number | null;
   /** O que o mês custou de tráfego, com IOF e spread. */
   custoTrafegoCentavos: number;
   /** O servidor de ZIP, como custo fixo do mês. */
@@ -113,7 +141,15 @@ export function resumoDeTrafego(
   const trafegoVpsBytes = somas.servidosVpsBytes + somas.abortadosVpsBytes;
 
   const fracaoDoCache =
-    somas.servidosServidorN === 0 ? 0 : somas.doCacheN / somas.servidosServidorN;
+    somas.guardaveisServidosN === 0 ? 0 : somas.guardaveisDoCacheN / somas.guardaveisServidosN;
+
+  /* O teto do cache é 85% do disco (o instalador calcula assim), e os ZIPs
+     de uma semana cheia chegam juntos: o conjunto quente dividido por 0,85,
+     arredondado para o degrau de 100 GB de cima. */
+  const discoSugeridoGb =
+    somas.conjuntoQuenteBytes > 0
+      ? Math.max(100, Math.ceil(somas.conjuntoQuenteBytes / 0.85 / 1000 ** 3 / 100) * 100)
+      : null;
 
   const custoServidor = contexto.servidorConfigurado ? custoServidorZipCentavos() : 0;
   const custoTrafegoCentavos = custoExcedenteB2Centavos + custoExcedenteServidorCentavos;
@@ -171,10 +207,27 @@ export function resumoDeTrafego(
     });
   }
 
-  if (somas.servidosServidorN >= 10 && fracaoDoCache < 0.5) {
+  /*
+   * O DISCO DO SERVIDOR DE ZIP (24/09/2026).
+   *
+   * O sinal é o despejo que o servidor relata, não a fração do cache: um
+   * despejo é o disco cheio de fato, e uma remontagem é esse disco cheio
+   * custando leitura do B2. O texto diz a ação e o tamanho, porque é lido
+   * por quem vai clicar em "Resize" na Hetzner, não por quem escreveu isto.
+   */
+  const gb = (b: number) => `${Math.round(b / 1000 ** 3).toLocaleString("pt-BR")} GB`;
+  const alvo = discoSugeridoGb ? `para pelo menos ${discoSugeridoGb.toLocaleString("pt-BR")} GB` : "";
+  const comoAumentar =
+    "Hetzner → Volumes → Resize, depois `resize2fs` e rodar o instalador de novo (docs/servidor-zip.md).";
+  if (somas.remontagensN >= 3) {
+    avisos.push({
+      nivel: "erro",
+      texto: `O disco do servidor de ZIP está pequeno para o volume atual: ${somas.remontagensN} ZIPs foram montados de novo depois de apagados por falta de espaço, lendo ${gb(somas.remontagensBytes)} do B2 à toa. Aumente o volume ${alvo}. ${comoAumentar}`,
+    });
+  } else if (somas.despejosN > 0) {
     avisos.push({
       nivel: "alerta",
-      texto: `Só ${Math.round(fracaoDoCache * 100)}% dos ZIPs saíram do arquivo guardado. Ou os pedidos são todos de favoritas/recorte, ou o cache está sendo apagado cedo (ZIP_CACHE_DIAS / ZIP_CACHE_MAX_GB).`,
+      texto: `O disco do servidor de ZIP encheu este mês e apagou ${somas.despejosN} ZIP${somas.despejosN === 1 ? "" : "s"} pronto${somas.despejosN === 1 ? "" : "s"} (${gb(somas.despejosBytes)}) para caber outros. Ainda sem custo; se virar rotina, aumente o volume ${alvo}.`,
     });
   }
 
@@ -203,6 +256,7 @@ export function resumoDeTrafego(
     trafegoVpsBytes,
     fracaoVps: trafegoVpsBytes / FRANQUIA_VPS_BYTES,
     fracaoDoCache,
+    discoSugeridoGb,
     custoTrafegoCentavos,
     custoServidorZipCentavos: custoServidor,
     custoPorTbGuardadoCentavos,

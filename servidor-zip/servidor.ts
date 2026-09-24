@@ -228,7 +228,9 @@ async function atenderZip(req: IncomingMessage, res: ServerResponse, token: stri
 
   /* 2''. não cabe no disco nem apagando os antigos → entrega em fluxo, sem
      guardar. É o caso de um ZIP maior que o disco: raro, e o download sai. */
-  if (!montagemEmAndamento(chave) && !(await abrirEspaco(tamanho))) {
+  const aoApagar = (bytes: number) =>
+    void relatar({ pedidoId, evento: "despejo", bytes, doCache: false, duracaoMs: 0 });
+  if (!montagemEmAndamento(chave) && !(await abrirEspaco(tamanho, aoApagar))) {
     console.error(`sem espaço para guardar ${chave} (${tamanho} bytes): entregando em fluxo`);
     return servirEmFluxo(req, res, comUrls);
   }
