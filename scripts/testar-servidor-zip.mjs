@@ -157,6 +157,9 @@ const filho = spawn(
       ZIP_PORTA: String(PORTA),
       ZIP_CACHE_DIR: cacheDir,
       ZIP_BUSCAS_PARALELAS: "2",
+      /* Teto minúsculo: o ZIP de 25 MB cabe, e é o que prova que o teto não
+         atrapalha o caso normal; ver a etapa do disco cheio. */
+      ZIP_CACHE_MAX_GB: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   },
