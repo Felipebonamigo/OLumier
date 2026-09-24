@@ -148,8 +148,27 @@ exit 0
 }
 
 /** Roda o vigia inteiro na bancada e devolve o log que ele escreveu. */
-function rodarVigia({ healthz, corpoHealthz, resend, segredos }) {
+function rodarVigia({ healthz, corpoHealthz, resend, segredos, relatorio = null, proximo = null }) {
   const { dir, bin, registro } = bancada({ healthz, corpoHealthz, resend });
+  /*
+   * O resumo semanal da entrega (24/09/2026). Sem `relatorio`, a bancada não
+   * tem app instalado e o bloco some — que é o que as etapas antigas esperam.
+   * Com ele, um `node` de mentira faz o papel de avisos-da-entrega.mjs.
+   */
+  const appDir = path.join(dir, "app");
+  const proximoArq = path.join(dir, "proximo-relatorio");
+  const nodeFalso = path.join(bin, "node-de-mentira");
+  if (relatorio) {
+    mkdirSync(path.join(appDir, "scripts"), { recursive: true });
+    writeFileSync(path.join(appDir, "scripts", "avisos-da-entrega.mjs"), "// de mentira\n");
+    const corpo =
+      relatorio.codigo === 0
+        ? `printf '%s\\n' ${JSON.stringify(JSON.stringify(relatorio.assunto))} ${JSON.stringify(JSON.stringify(relatorio.texto))}`
+        : "";
+    writeFileSync(nodeFalso, `#!/usr/bin/env bash\n${corpo}\nexit ${relatorio.codigo}\n`, { mode: 0o755 });
+    chmodSync(nodeFalso, 0o755);
+  }
+  if (proximo !== null) writeFileSync(proximoArq, String(proximo));
   const log = path.join(dir, "vigia.log");
   const carimbo = path.join(dir, "carimbo");
   const arquivoSegredos = path.join(dir, "segredos.env");
@@ -165,6 +184,9 @@ function rodarVigia({ healthz, corpoHealthz, resend, segredos }) {
       VIGIA_SEGREDOS: arquivoSegredos,
       VIGIA_SERVICO: "servico-de-mentira",
       CURL_REGISTRO: registro,
+      VIGIA_APP_DIR: relatorio ? appDir : path.join(dir, "sem-app"),
+      VIGIA_NODE: nodeFalso,
+      VIGIA_PROXIMO_RELATORIO: proximoArq,
     },
   });
 
@@ -174,6 +196,7 @@ function rodarVigia({ healthz, corpoHealthz, resend, segredos }) {
     carimbou: existsSync(carimbo),
     saida: `${r.stdout ?? ""}${r.stderr ?? ""}`,
     codigo: r.status,
+    proximo: existsSync(proximoArq) ? Number(readFileSync(proximoArq, "utf8")) : null,
   };
 }
 
@@ -235,6 +258,51 @@ etapa("Resend recusa: o log GRITA, e não queima a hora de silêncio", () => {
     throw new Error("gravou o carimbo depois de FALHAR — perderia mais uma hora em silêncio");
   }
   return "tenta de novo na próxima rodada";
+});
+
+/*
+ * O RESUMO SEMANAL DA ENTREGA (24/09/2026). Felipe: "vou ser avisado quando
+ * precisar aumentar o espaço?". O vigia pergunta ao app uma vez por semana e
+ * manda pelo mesmo Resend. As quatro etapas abaixo são os quatro desfechos.
+ */
+const SEMANA = 7 * 24 * 3600;
+const agora = () => Math.floor(Date.now() / 1000);
+const RELATORIO = {
+  codigo: 0,
+  assunto: "Galeria Átomo: 1 ponto da entrega precisa de ação",
+  texto: 'O disco do servidor de ZIP está pequeno. Aumente o volume para pelo menos 500 GB.\n\nPainel: "Tráfego"',
+};
+
+etapa("resumo semanal com aviso: envia, e só pergunta de novo em 7 dias", () => {
+  const r = rodarVigia({ healthz: 200, corpoHealthz: '{"ok":true}', resend: 200, segredos: SEGREDOS_BONS, relatorio: RELATORIO });
+  if (!/pelo menos 500 GB/.test(r.enviado)) throw new Error(`o texto do app não chegou ao e-mail: ${r.enviado.trim() || "(nada enviado)"}`);
+  if (!/resumo semanal enviado para felipe@exemplo\.com/.test(r.log)) throw new Error(`não registrou o envio: ${r.log.trim()}`);
+  if (!r.proximo || r.proximo < agora() + SEMANA - 60) throw new Error(`próxima pergunta em ${r.proximo} — devia ser daqui a 7 dias`);
+  return "e o carimbo é de uma semana";
+});
+
+etapa("resumo semanal sem nada a contar: nenhum e-mail, e pergunta de novo em 7 dias", () => {
+  const r = rodarVigia({ healthz: 200, corpoHealthz: '{"ok":true}', resend: 200, segredos: SEGREDOS_BONS, relatorio: { codigo: 3 } });
+  if (r.enviado.trim()) throw new Error(`mandou e-mail sem aviso: ${r.enviado.trim()}`);
+  if (r.log.trim()) throw new Error(`escreveu no log numa semana sem nada: ${r.log.trim()}`);
+  if (!r.proximo || r.proximo < agora() + SEMANA - 60) throw new Error("não adiou a próxima pergunta");
+  return "silêncio";
+});
+
+etapa("resumo semanal que o Resend recusa: grita, e tenta de novo em 1 hora, não em 7 dias", () => {
+  const r = rodarVigia({ healthz: 200, corpoHealthz: '{"ok":true}', resend: 422, segredos: SEGREDOS_BONS, relatorio: RELATORIO });
+  if (!/resumo semanal: !! NAO SAIU/.test(r.log)) throw new Error(`não acusou a recusa: ${r.log.trim()}`);
+  if (!r.proximo || r.proximo > agora() + 3600 + 60) throw new Error(`adiou demais depois de falhar: ${r.proximo}`);
+  return "próxima em 1h";
+});
+
+etapa("resumo semanal ainda não vencido: nem pergunta ao app", () => {
+  const r = rodarVigia({
+    healthz: 200, corpoHealthz: '{"ok":true}', resend: 200, segredos: SEGREDOS_BONS,
+    relatorio: RELATORIO, proximo: agora() + 3 * 24 * 3600,
+  });
+  if (r.enviado.trim()) throw new Error("perguntou e enviou antes da hora");
+  return "espera a semana fechar";
 });
 
 etapa("sem o segredo: diz QUAL falta, em vez de sumir", () => {

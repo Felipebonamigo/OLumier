@@ -109,6 +109,73 @@ avisar() {
   rm -f "$corpo"
 }
 
+# ── O RESUMO SEMANAL DA ENTREGA (24/09/2026) ────────────────────────────────
+#
+# Felipe: "vou ser avisado quando precisar aumentar o espaço?". Uma vez por
+# semana o vigia pergunta ao app se o bloco "Tráfego e custo da entrega" tem
+# aviso de erro (disco do servidor de ZIP pequeno, franquia do B2 passando,
+# servidor de ZIP perto dos 20 TB) e, se tiver, manda pelo MESMO caminho do
+# Resend deste arquivo. Quem calcula é `scripts/avisos-da-entrega.mjs`, com as
+# contas do painel; aqui só se decide QUANDO perguntar e se envia.
+#
+# O carimbo guarda QUANDO perguntar de novo: sete dias depois de uma resposta
+# (com ou sem e-mail), uma hora depois de uma falha — banco fora ou Resend
+# recusando não podem custar uma semana de silêncio.
+#
+# Roda antes do healthz, porque o ramo 200 sai do script. Só roda onde o app
+# está instalado: em qualquer outra máquina (a bancada de `testar-vigia.mjs`,
+# o CI) o diretório não existe e o bloco some.
+APP_DIR="${VIGIA_APP_DIR:-/opt/fotonio}"
+PROXIMO_RELATORIO="${VIGIA_PROXIMO_RELATORIO:-/var/lib/fotonio-vigia-proximo-relatorio}"
+NODE_BIN="${VIGIA_NODE:-/usr/local/bin/node}"
+if [ -d "$APP_DIR/scripts" ] && [ -f "$APP_DIR/scripts/avisos-da-entrega.mjs" ]; then
+  agora=$(date +%s)
+  quando=$(cat "$PROXIMO_RELATORIO" 2>/dev/null || echo 0)
+  if [ "$agora" -ge "$quando" ]; then
+    saida=$(cd "$APP_DIR" && "$NODE_BIN" --env-file=.env.production \
+      --experimental-strip-types --no-warnings --import ./scripts/registrar-ts.mjs \
+      scripts/avisos-da-entrega.mjs 2>>"$LOG")
+    rc=$?
+    case "$rc" in
+      3)
+        echo $((agora + 7 * 24 * 3600)) > "$PROXIMO_RELATORIO"
+        ;;
+      0)
+        assunto_json=$(printf '%s\n' "$saida" | sed -n 1p)
+        texto_json=$(printf '%s\n' "$saida" | sed -n 2p)
+        chave=$(sed -n 's/^RESEND_API_KEY=//p' "$SEGREDOS" 2>/dev/null | tail -1)
+        dest=$(sed -n 's/^ALERTA_EMAIL_DESTINO=//p' "$SEGREDOS" 2>/dev/null | tail -1)
+        if [ -z "$chave" ] || [ -z "$dest" ]; then
+          registrar "resumo semanal: !! SEM ENVIO — RESEND_API_KEY ou ALERTA_EMAIL_DESTINO ausente em $SEGREDOS"
+          echo $((agora + 3600)) > "$PROXIMO_RELATORIO"
+        else
+          corpo_resp=$(mktemp)
+          http=$(curl -s -o "$corpo_resp" -w '%{http_code}' --max-time 30 \
+            -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer $chave" -H "Content-Type: application/json" \
+            -d "{\"from\":\"Vigia do Fotonio <contato@atomatiza.com.br>\",\"to\":[\"$dest\"],\"subject\":$assunto_json,\"text\":$texto_json}" \
+            2>/dev/null || echo "000")
+          case "$http" in
+            2*)
+              registrar "resumo semanal enviado para $dest"
+              echo $((agora + 7 * 24 * 3600)) > "$PROXIMO_RELATORIO"
+              ;;
+            *)
+              registrar "resumo semanal: !! NAO SAIU — Resend respondeu $http: $(tr -d '\n' < "$corpo_resp" | cut -c1-300)"
+              echo $((agora + 3600)) > "$PROXIMO_RELATORIO"
+              ;;
+          esac
+          rm -f "$corpo_resp"
+        fi
+        ;;
+      *)
+        registrar "resumo semanal: falhou ao calcular (saida $rc) — nova tentativa em 1h"
+        echo $((agora + 3600)) > "$PROXIMO_RELATORIO"
+        ;;
+    esac
+  fi
+fi
+
 CORPO=$(curl -s --max-time 20 "$URL" 2>/dev/null || true)
 CODIGO=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$URL" 2>/dev/null || echo "000")
 

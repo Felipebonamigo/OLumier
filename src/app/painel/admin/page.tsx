@@ -264,7 +264,7 @@ export default async function AdminPage() {
             </li>
           ))}
         </ul>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           <Cartao
             rotulo="ZIPs montados"
             valor={somasDeZip.montadosN}
@@ -273,7 +273,7 @@ export default async function AdminPage() {
           <Cartao
             rotulo="ZIPs entregues"
             valor={somasDeZip.servidosServidorN + somasDeZip.servidosVpsN}
-            nota={`${porcento(trafego.fracaoDoCache)} do arquivo guardado · ${somasDeZip.abortadosN} caíram no meio`}
+            nota={`${porcento(trafego.fracaoDoCache)} dos completos saíram do disco · ${somasDeZip.abortadosN} caíram no meio`}
             tom="ok"
           />
           <Cartao
@@ -286,6 +286,22 @@ export default async function AdminPage() {
             valor={formatarReais(trafego.custoTrafegoCentavos)}
             nota={trafego.custoTrafegoCentavos === 0 ? "tudo dentro das franquias" : "excedente do B2 e do servidor"}
             tom={trafego.custoTrafegoCentavos === 0 ? "ok" : "erro"}
+          />
+          <Cartao
+            rotulo="Disco do ZIP"
+            valor={
+              somasDeZip.remontagensN > 0
+                ? `${somasDeZip.remontagensN} remontado${somasDeZip.remontagensN === 1 ? "" : "s"}`
+                : somasDeZip.despejosN > 0
+                  ? `${somasDeZip.despejosN} apagado${somasDeZip.despejosN === 1 ? "" : "s"}`
+                  : "folgado"
+            }
+            nota={
+              trafego.discoSugeridoGb
+                ? `uso de 14 dias pede ~${trafego.discoSugeridoGb.toLocaleString("pt-BR")} GB`
+                : "sem montagens para medir"
+            }
+            tom={somasDeZip.remontagensN >= 3 ? "erro" : somasDeZip.despejosN > 0 ? "alerta" : "ok"}
           />
           <Cartao
             rotulo="Servidor de ZIP"

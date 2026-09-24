@@ -178,6 +178,20 @@ corrente:
 - avisos com a ação: reserva em uso, 60%/90% da franquia, excedente cobrado,
   cache que não segura, downloads caindo.
 
+**Disco do servidor de ZIP.** O servidor relata cada ZIP pronto que apagou
+para caber outro (`despejo`, migração 042). Uma remontagem — a mesma galeria
+montada de novo, mesmo tamanho, em menos de 14 dias — é o disco pequeno
+custando leitura do B2. Três remontagens no mês viram aviso de **erro** com o
+tamanho sugerido ("aumente o volume para pelo menos X GB"), calculado pelos
+ZIPs completos distintos dos últimos 14 dias ÷ 0,85. A fração "do arquivo
+guardado" conta só galeria inteira e capítulo: favoritas nunca são guardadas.
+
+**E-mail semanal.** O vigia do VPS (`ops/fotonio-vigia.sh`) pergunta uma vez
+por semana a `scripts/avisos-da-entrega.mjs` se o bloco tem aviso de erro e,
+se tiver, manda pelo mesmo Resend do "site fora do ar" (`ALERTA_EMAIL_DESTINO`
+em `/opt/atomatiza-secrets.env`). Semana sem erro, semana sem e-mail. Falha
+de cálculo ou de envio tenta de novo em 1 hora.
+
 As contas estão em `src/lib/metricas-entrega.ts` (puras, testadas em
 `scripts/testar-metricas-entrega.mjs`); os preços e franquias em
 `src/config/trafego.ts`, com a data em que foram conferidos.
