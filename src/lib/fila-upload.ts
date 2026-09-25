@@ -1,5 +1,7 @@
 "use client";
 
+import { compararNomeNatural } from "@/lib/ordem-natural";
+
 /**
  * Fila de envio em massa.
  *
@@ -256,12 +258,12 @@ export async function arquivosDeArrasto(dt: DataTransfer): Promise<ArquivoComCam
   return achados;
 }
 
-/** Compara como o fotógrafo espera: foto_2 antes de foto_10. */
-const colador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
-
-/** Ordena como o fotógrafo espera: foto_2 antes de foto_10. */
+/**
+ * Ordena como o fotógrafo espera: "foto_2" antes de "foto_10", e a colorida
+ * antes da sua variante em preto-e-branco. Ver `lib/ordem-natural.ts`.
+ */
 export function ordenarNatural(arquivos: File[]): File[] {
-  return [...arquivos].sort((a, b) => colador.compare(a.name, b.name));
+  return [...arquivos].sort((a, b) => compararNomeNatural(a.name, b.name));
 }
 
 /**
@@ -273,7 +275,7 @@ export function ordenarNatural(arquivos: File[]): File[] {
  * cerimônia.
  */
 export function ordenarNaturalPorCaminho(itens: ArquivoComCaminho[]): ArquivoComCaminho[] {
-  return [...itens].sort((a, b) => colador.compare(a.caminho, b.caminho));
+  return [...itens].sort((a, b) => compararNomeNatural(a.caminho, b.caminho));
 }
 
 /** Mantém a tela acesa enquanto a fila roda; devolve como soltar. */
