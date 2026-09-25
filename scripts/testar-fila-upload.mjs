@@ -307,6 +307,24 @@ await etapa("ordena como o fotógrafo espera (2 antes de 10)", async () => {
   return ordenado.join(" · ");
 });
 
+/*
+ * ── A COLORIDA ANTES DA SUA VARIANTE EM PB, JÁ NO ENVIO (25/09/2026) ───────
+ *
+ * Juan: "nas horizontais, a preto e branco tá na frente (…) atualizei por
+ * nome A-Z e nothing happened" — a galeria JÁ SAÍA nessa ordem, porque nasce
+ * aqui, na hora de escolher a ordem de ENVIO, não só no botão de reordenar.
+ * Ver `lib/ordem-natural.ts`.
+ */
+await etapa("a colorida entra antes da PB — o defeito nasce no ENVIO, não só no reordenar", async () => {
+  const nomes = ["sirius-jugusw-1070-pb.jpg", "sirius-jugusw-1070.jpg"];
+  const ordenado = mod.ordenarNatural(nomes.map((n) => arq(n))).map((f) => f.name);
+  const esperado = ["sirius-jugusw-1070.jpg", "sirius-jugusw-1070-pb.jpg"];
+  if (JSON.stringify(ordenado) !== JSON.stringify(esperado)) {
+    throw new Error(`veio ${ordenado.join(", ")} — a PB entrou antes da colorida`);
+  }
+  return ordenado.join(" · ");
+});
+
 // --- envio para capítulo, contra a rota de verdade --------------------------
 
 const { DATABASE_URL, SESSION_SECRET } = process.env;

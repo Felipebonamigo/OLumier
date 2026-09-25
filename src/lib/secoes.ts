@@ -2,6 +2,7 @@ import "server-only";
 import { consultar, consultarUm } from "./db";
 import { gerarSlug } from "./tenants";
 import { ORDENS_DAS_FOTOS, type OrdemDasFotos } from "@/config/ordens-das-fotos";
+import { compararNomeNatural } from "@/lib/ordem-natural";
 
 export { ORDENS_DAS_FOTOS, type OrdemDasFotos };
 
@@ -230,21 +231,20 @@ export async function renomearGrupoSolto(galeriaId: string, tenantId: string, no
   ]);
 }
 
-/** Compara como o fotógrafo espera: foto_2 antes de foto_10. */
-const colador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
-
 /**
  * Reordena as fotos de um capítulo (ou as sem capítulo) por um critério.
  *
  * ── POR QUE A ORDENAÇÃO ACONTECE EM JAVASCRIPT ───────────────────────────
  *
  * Por causa do A→Z. O fotógrafo espera `foto_2` antes de `foto_10`, e é isso
- * que o `Intl.Collator` com `numeric` faz — a MESMA função que ordena os
- * arquivos no envio (`ordenarNaturalPorCaminho`). O Postgres não tem ordenação
- * natural: um `order by nome_original` põe `foto_10` antes de `foto_2`, e
- * chegar perto disso em SQL exigiria uma função de chave que envelheceria
- * separada da do envio. São algumas centenas de linhas por capítulo, já
- * trazidas por `galeria_id`.
+ * que `compararNomeNatural` faz (`lib/ordem-natural.ts`) — a MESMA função que
+ * ordena os arquivos no envio (`ordenarNaturalPorCaminho`), literalmente a
+ * mesma agora, e não só na intenção — ver o comentário daquele módulo sobre
+ * as duas cópias que discordavam sem ninguém perceber. O Postgres não tem
+ * ordenação natural: um `order by nome_original` põe `foto_10` antes de
+ * `foto_2`, e chegar perto disso em SQL exigiria uma função de chave que
+ * envelheceria separada da do envio. São algumas centenas de linhas por
+ * capítulo, já trazidas por `galeria_id`.
  *
  * ── A ESCRITA É UMA SÓ ───────────────────────────────────────────────────
  *
@@ -322,19 +322,19 @@ export async function ordenarFotosDaSecao(
     (criterio === "cronologica" ? (f.tirada_em ?? f.criado_em) : f.criado_em).getTime();
 
   const ordenadas = [...fotos].sort((a, b) => {
-    if (criterio === "nome") return colador.compare(a.nome_original, b.nome_original);
-    if (criterio === "nome-invertido") return colador.compare(b.nome_original, a.nome_original);
+    if (criterio === "nome") return compararNomeNatural(a.nome_original, b.nome_original);
+    if (criterio === "nome-invertido") return compararNomeNatural(b.nome_original, a.nome_original);
     /* Empate em "mais baixadas" é a regra e não a exceção: numa galeria nova
        TODAS têm zero. Sem desempate a ordem viria do banco, que não promete
        nenhuma — a pessoa clicaria "mais baixadas" e veria a galeria embaralhar
        sem motivo. O nome é o desempate porque é o que ela reconhece. */
     if (criterio === "mais-baixadas") {
-      return b.baixadas - a.baixadas || colador.compare(a.nome_original, b.nome_original);
+      return b.baixadas - a.baixadas || compararNomeNatural(a.nome_original, b.nome_original);
     }
     /* Empate de horário — rajada de câmera grava várias no mesmo segundo — cai
        no nome, que dentro de uma câmera é a sequência do disparo. */
     const dif = quando(a) - quando(b);
-    return dif !== 0 ? dif : colador.compare(a.nome_original, b.nome_original);
+    return dif !== 0 ? dif : compararNomeNatural(a.nome_original, b.nome_original);
   });
 
   await consultar(
