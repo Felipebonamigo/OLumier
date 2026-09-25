@@ -110,6 +110,72 @@ await etapa("nome Z → A", async () => {
   return lida.join(" · ");
 });
 
+/**
+ * ── O EMPATE (25/09/2026) ─────────────────────────────────────────────────
+ *
+ * Juan: "as fotos não estão ficando em ordem de A-Z. A foto seguinte tem que
+ * estar logo depois da foto anterior."
+ *
+ * Duas fotos com o MESMO nome empatam no `Intl.Collator` — e elas existem: a
+ * entrega da Júlia tinha `sirius-jugusw-1070.jpg` duas vezes, que é a razão de
+ * o zip precisar do `nomeUnico` e a tela precisar do `AvisoDeRepetidas`. O
+ * `sort` do JavaScript é estável, então o par sai na ordem em que ENTROU, e a
+ * consulta não pedia ordem nenhuma: sem `order by`, quem decide é o PLANO.
+ *
+ * ── COMO A ARMADILHA É ARMADA, E POR QUE ASSIM ────────────────────────────
+ *
+ * A primeira versão desta etapa inseria o par ao contrário no disco e passou
+ * COM o defeito: existe `idx_medias_galeria on medias(galeria_id, ordem)`, o
+ * plano varreu o índice e devolveu na ordem certa por sorte. Sorte não é
+ * contrato — numa galeria de 4.577 fotos o mesmo `where` vira varredura da
+ * tabela, e aí a ordem é a do disco.
+ *
+ * Então o par empata também em `ordem`, e o índice deixa de desempatar. Isso
+ * não é caso de laboratório: é o estrago do defeito de 18/09 (migração 038),
+ * quando vários arquivos liam o mesmo `max(ordem)` e nasciam na mesma posição.
+ * As galerias que o Juan subiu antes daquele dia ainda têm essas linhas.
+ */
+await etapa("duas fotos de MESMO nome saem na ordem do envio, não na do disco", async () => {
+  const empate = await criarSecao(g.id, g.estudio.id, "Empate");
+  const poe = async (marca, envio) =>
+    (
+      await db.query(
+        `insert into medias (galeria_id, tenant_id, secao_id, chave, nome_original, tipo, mime,
+                             bytes, ordem, pronto, criado_em)
+         values ($1,$2,$3,$4,'sirius-jugusw-1070.jpg','foto','image/jpeg',1000,7,true,$5)
+         returning id`,
+        [g.id, g.estudio.id, empate.id, `x/${g.id}/empate-${marca}.jpg`, envio],
+      )
+    ).rows[0].id;
+
+  /* A SEGUNDA do envio entra primeiro no disco — é o que a etapa precisa ter
+     para morder, e é o que o banco devolve quando ninguém pede ordem. */
+  const segunda = await poe("b", D("2026-09-15T12:01:00Z"));
+  const primeira = await poe("a", D("2026-09-15T12:00:00Z"));
+
+  const cru = (
+    await db.query("select id from medias where galeria_id = $1 and secao_id = $2", [g.id, empate.id])
+  ).rows.map((r) => r.id);
+  if (cru[0] !== segunda) {
+    throw new Error(
+      "a armadilha não armou: sem pedir ordem, o banco já devolveu a certa — " +
+        "a etapa passaria com defeito e tudo, que é o erro que ela existe para não repetir",
+    );
+  }
+
+  await ordenarFotosDaSecao(g.id, g.estudio.id, empate.id, "nome");
+  const lida = (
+    await db.query("select id from medias where secao_id = $1 order by ordem, criado_em", [
+      empate.id,
+    ])
+  ).rows.map((r) => r.id);
+
+  if (lida[0] !== primeira) {
+    throw new Error("o empate saiu na ordem do disco: a cópia que subiu depois foi para a frente");
+  }
+  return "o par de mesmo nome manteve a sequência do envio";
+});
+
 await etapa("cronológica usa a data da CÂMERA, não a do envio", async () => {
   const r = await ordenarFotosDaSecao(g.id, g.estudio.id, cerimonia.id, "cronologica");
   const lida = await ordemAgora(cerimonia.id);
@@ -289,6 +355,59 @@ await etapa("o ordenar aparece em TODO capítulo, apagado quando não há o que 
   }
   void vazioDeVerdade;
   return `"${cheia.nome}" (${cheia.total} fotos) ativo, "Recepção" (0) apagado`;
+});
+
+/**
+ * ── SEM CAPÍTULO, O A-Z TEM DE ESTAR ESCRITO NA TELA (25/09/2026) ─────────
+ *
+ * Esta é a TERCEIRA vez que o mesmo controle some da vista do Juan:
+ *
+ *   18/09  "não tem botão pra reorganizar a ordem das fotos. Essa opção só
+ *           aparece quando tem capítulos" — a lista inteira vivia no `else`
+ *           do "Nenhum capítulo ainda".
+ *   23/09  "quando tá sem capítulo não tem onde reorganizar as fotos por nome
+ *           A-Z" — a lista já aparecia, dentro de um cartão chamado
+ *           "Capítulos", abaixo de uma caixa que anuncia que não há nenhum.
+ *   25/09  "cade a opção de reorganizar as fotos por nome A-Z. Quando não tem
+ *           capítulo" — o cartão já se chamava "Ordem das fotos", e o controle
+ *           era um `select` cinza escrito "ordenar…", encostado na borda.
+ *
+ * Duas correções mexeram em ONDE ele mora, e nenhuma das duas teve teste — por
+ * isso as duas puderam "passar" com o fotógrafo ainda sem achar nada. O que
+ * este teste prende não é a existência da ação (as etapas acima já fazem
+ * isso): é a PALAVRA na tela. "Nome A → Z" tem que estar legível sem abrir
+ * menu nenhum, porque é literalmente o que ele procura.
+ */
+await etapa("sem capítulo, 'Nome A → Z' está escrito na tela, e não dentro de um menu", async () => {
+  const solta = await galeriaDaRodada(db, { nome: "sem-capitulo", medias: 4, publicada: true });
+  const cookie = cookieDeSessao(solta.tenant_id);
+  const html = await (
+    await fetch(`${BASE}/painel/galerias/${solta.id}/fotos`, {
+      headers: { cookie },
+      cache: "no-store",
+    })
+  ).text();
+
+  if (!/<h2[^>]*>Ordem das fotos<\/h2>/.test(html)) {
+    throw new Error("o cartão não se chama 'Ordem das fotos' — voltou a ser sobre capítulos");
+  }
+
+  /* Fora de `<option>`: dentro do menu fechado a palavra existe e não se lê,
+     que era exatamente o defeito de 25/09. */
+  const semOpcoes = html.replace(/<option\b[\s\S]*?<\/option>/g, "");
+  for (const rotulo of ["Nome A → Z", "Nome Z → A", "Ordem de envio", "Data da foto"]) {
+    if (!semOpcoes.includes(rotulo)) {
+      throw new Error(`"${rotulo}" não aparece na tela fora de um <option> — só dentro do menu`);
+    }
+  }
+
+  /* E clicável: de nada adianta estar escrito e vir apagado. */
+  const botao = semOpcoes.match(/<button[^>]*>\s*Nome A → Z\s*<\/button>/);
+  if (!botao) throw new Error("'Nome A → Z' está escrito, mas não é um botão");
+  if (/\sdisabled(=|\s|>|$)/.test(botao[0])) {
+    throw new Error("o botão 'Nome A → Z' veio apagado numa galeria com 4 fotos");
+  }
+  return "os quatro critérios legíveis, sem abrir menu";
 });
 
 await limparRodada(db);

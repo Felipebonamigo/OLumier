@@ -272,6 +272,31 @@ export async function ordenarFotosDaSecao(
    * `acao = 'baixou'` e não `in ('baixou','baixou_tudo')`: o zip da galeria
    * inteira não é sobre uma foto, e contá-lo daria +1 em todas de uma vez —
    * "mais baixadas" viraria a ordem de sempre com um número maior em cima.
+   *
+   * ── O `order by` NÃO É ENFEITE: ELE É O DESEMPATE (25/09/2026) ─────────
+   *
+   * Juan: "as fotos não estão ficando em ordem de A-Z. A foto seguinte tem que
+   * estar logo depois da foto anterior."
+   *
+   * Duas fotos com o MESMO nome empatam — e elas existem de verdade nas
+   * galerias dele: a entrega da Júlia tinha `sirius-jugusw-1070.jpg` duas
+   * vezes, que é o que faz o zip precisar do `nomeUnico` e a tela precisar do
+   * `AvisoDeRepetidas`. O `Intl.Collator` devolve 0 para o par, e com
+   * `sensitivity: "base"` ele devolve 0 também para `Foto.JPG` e `foto.jpg`.
+   *
+   * Empate resolvido pelo `sort`, que é estável desde o ES2019: o par sai na
+   * ordem em que ENTROU. Só que a consulta não pedia ordem nenhuma, e sem
+   * `order by` o Postgres não promete nada — ele devolve o que for mais barato
+   * de ler, que muda com um `update`, com um `vacuum` ou com o plano. Ou seja:
+   * clicar "Nome A → Z" duas vezes podia dar dois resultados diferentes, e a
+   * cópia preto-e-branco caía antes da colorida sem nada tê-la mandado para lá.
+   *
+   * Pedindo `ordem` aqui, o empate cai na sequência que a galeria já tinha —
+   * que é a do envio, a que o fotógrafo montou. `criado_em` e `id` fecham a
+   * conta para as linhas que nasceram com a mesma `ordem`.
+   *
+   * Vale para os cinco critérios de uma vez, e não só para o A→Z: em "mais
+   * baixadas" a galeria recém-entregue é um empate de ponta a ponta.
    */
   const fotos = await consultar<{
     id: string;
@@ -287,7 +312,8 @@ export async function ordenarFotosDaSecao(
          select count(*) as n from acessos a
           where a.media_id = m.id and a.acao = 'baixou'
        ) d on true
-      where m.galeria_id = $1 and ${secaoId === null ? "m.secao_id is null" : "m.secao_id = $2"}`,
+      where m.galeria_id = $1 and ${secaoId === null ? "m.secao_id is null" : "m.secao_id = $2"}
+      order by m.ordem, m.criado_em, m.id`,
     secaoId === null ? [galeriaId] : [galeriaId, secaoId],
   );
   if (fotos.length === 0) return { ok: true, quantas: 0, semData: 0 };

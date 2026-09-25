@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { definirCapaAction, moverMediasAction } from "@/app/painel/actions";
+import { depoisDoClique } from "@/lib/trecho-selecionado";
 
 export interface MediaExibida {
   id: string;
@@ -56,13 +57,29 @@ export function GradeMedias({
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
 
-  const alternarSelecao = (id: string) =>
-    setSelecao((s) => {
-      const nova = new Set(s);
-      if (nova.has(id)) nova.delete(id);
-      else nova.add(id);
-      return nova;
-    });
+  /*
+    ── SHIFT PARA MARCAR UM TRECHO INTEIRO (25/09/2026) ────────────────────
+
+    Juan: "adicionar a função de selecionar várias através do comando 'segurar
+    shift ou alt', como é padrão na movimentação de arquivos. Clica em uma,
+    segura shift, clica em outra. E todas entre elas serem selecionadas."
+
+    A REGRA mora em `lib/trecho-selecionado.ts`, e não aqui, porque nenhum
+    teste desta casa abre navegador: dentro do `onClick` ela seria intestável.
+    Lá também está por que a âncora não anda e por que `alt` ficou de fora.
+
+    Aqui fica só o que é de tela: a âncora atravessa cliques num `ref` (mudá-la
+    não redesenha nada), e a ordem dos ids é a da GRADE, que é o que define o
+    "entre elas" — reordenar a galeria muda o trecho, e tem de mudar.
+  */
+  const ancora = useRef<string | null>(null);
+  const ordemNaTela = useMemo(() => medias.map((m) => m.id), [medias]);
+
+  const alternarSelecao = (id: string, comShift = false) => {
+    const r = depoisDoClique(ordemNaTela, selecao, id, ancora.current, comShift);
+    ancora.current = r.ancora;
+    setSelecao(r.selecao);
+  };
 
   function moverPara(secaoId: string) {
     const ids = [...selecao];
@@ -255,7 +272,9 @@ export function GradeMedias({
       {aberta && (
         <p className="mt-1.5 text-xs text-texto-faint">
           Selecionar serve para agir em várias de uma vez: mover para um capítulo, ou remover.
-          Clique na foto (ou na bolinha) para marcar.
+          Clique na foto (ou na bolinha) para marcar. Para pegar um trecho inteiro, clique na
+          primeira e, segurando <kbd className="rounded border border-linha px-1">Shift</kbd>,
+          clique na última.
         </p>
       )}
 
@@ -294,13 +313,53 @@ export function GradeMedias({
         </div>
       )}
 
+      {/*
+        ── CONTATO, E NÃO GALERIA (25/09/2026) ───────────────────────────────
+
+        Juan, com 4.577 arquivos na tela: "deixar essas miniaturas beeeem
+        menores. Tá quase uma visualização de galeria. Pode ser algo bem menor,
+        pra ter mais praticidade (…) só pra ver por cima mesmo sobre qual foto
+        se trata."
+
+        Ele está certo sobre o que a grade virou. Medido numa tela de 1440 com
+        uma galeria de 4.577 arquivos, igual à dele: o ladrilho tinha 236×295 px
+        — tamanho de VER a foto, e esta tela não é para ver, é para achar,
+        marcar e mover. A página saía com 370.051 px de altura.
+
+        Quatro colunas viram oito na mesma largura: 116 px por ladrilho, um
+        quarto da área de antes, e a página cai para 102.173 px. É a folha de
+        contato do laboratório — cabe reconhecer a foto, que é o que ele pediu,
+        e cabem seis vezes mais fotos na tela sem rolar.
+
+        ── E O "LAGZINHO" É A MESMA CONTA ────────────────────────────────────
+
+        "Quando eu rodo muito rápido nessa parte aqui dá um lagzinho." Dá, e é
+        medível: nove elementos por ladrilho dão 41.409 numa página só. O
+        `loading="lazy"` segura o DOWNLOAD da imagem e não o trabalho de layout
+        e pintura, que o navegador refaz a cada rolada.
+
+        `content-visibility: auto` é exatamente o remédio: o navegador pula
+        layout e pintura do que está fora da tela, e `contain-intrinsic-size`
+        diz a altura a reservar para a barra de rolagem não dançar. Duas linhas
+        de CSS no lugar de uma virtualização inteira, sem estado e sem
+        biblioteca.
+
+        Varrendo a galeria inteira em 150 quadros, antes e depois: a mediana
+        por quadro caiu de 57,1 ms para 27,3 ms, o pior quadro de 418,8 para
+        148,1, e os quadros abaixo de 30 fps de 148 (de 149) para 43. Com 1.008
+        fotos não dá para ver diferença nenhuma — ali já eram 60 fps dos dois
+        lados. O defeito é de escala, e só aparece na escala dele
+      */}
       {aberta && (
-      <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+      <ul className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10">
         {medias.map((m) => {
           const selecionada = selecao.has(m.id);
           const capitulo = nomeSecao(m.secaoId);
           return (
-            <li key={m.id} className="group relative">
+            <li
+              key={m.id}
+              className="group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto]"
+            >
               {/*
                 A MOLDURA ACENDE SOB O PONTEIRO (pedido do Juan em 05/09/2026).
 
@@ -361,7 +420,13 @@ export function GradeMedias({
               {m.tipo === "foto" && (
                 <button
                   type="button"
-                  onClick={() => alternarSelecao(m.id)}
+                  /* O navegador pinta uma seleção de TEXTO entre dois cliques
+                     com shift. Sem isto, marcar um trecho de 300 fotos deixa
+                     meia grade azulada por baixo. */
+                  onMouseDown={(e) => {
+                    if (e.shiftKey) e.preventDefault();
+                  }}
+                  onClick={(e) => alternarSelecao(m.id, e.shiftKey)}
                   aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
                   aria-pressed={selecionada}
                   className="absolute inset-x-0 top-0 aspect-[4/5] w-full cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-acento"
@@ -371,7 +436,10 @@ export function GradeMedias({
               {/* Bolinha de seleção — sempre visível, para ficar óbvio que dá para selecionar. */}
               <button
                 type="button"
-                onClick={() => alternarSelecao(m.id)}
+                onMouseDown={(e) => {
+                  if (e.shiftKey) e.preventDefault();
+                }}
+                onClick={(e) => alternarSelecao(m.id, e.shiftKey)}
                 aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
                 aria-pressed={selecionada}
                 className={`absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-full border text-[11px] transition ${
@@ -418,7 +486,7 @@ export function GradeMedias({
                   {(m.favoritas ?? 0) > 0 && (
                     <span
                       title={`${m.favoritas} ${m.favoritas === 1 ? "pessoa marcou" : "pessoas marcaram"} como favorita`}
-                      className="rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-acento"
+                      className="rounded-full bg-void/80 px-1.5 text-[10px] font-medium text-acento"
                     >
                       ♥{(m.favoritas ?? 0) > 1 ? ` ${m.favoritas}` : ""}
                     </span>
@@ -439,7 +507,7 @@ export function GradeMedias({
                   {(m.baixadas ?? 0) > 0 && (
                     <span
                       title={`${m.baixadas} download${m.baixadas === 1 ? "" : "s"} desta foto`}
-                      className="rounded-full bg-void/80 px-2 py-0.5 text-[11px] font-medium text-texto-soft"
+                      className="rounded-full bg-void/80 px-1.5 text-[10px] font-medium text-texto-soft"
                     >
                       ↓ {m.baixadas}
                     </span>
@@ -448,14 +516,19 @@ export function GradeMedias({
                 </span>
               )}
 
-              <span className="absolute right-1.5 top-1.5 z-10 flex gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+              {/* EM PÉ, e não lado a lado: deitados eles somam 86 px e o
+                  ladrilho tem 116, então cobriam a bolinha de marcar (medido:
+                  7 px por cima dela). Empilhados ocupam 48 e sobram 32 px de
+                  folga até a bolinha, que continua legível com o ponteiro em
+                  cima — e é ela que diz se a foto está marcada. */}
+              <span className="absolute right-1.5 top-1.5 z-10 flex flex-col items-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
                 {m.tipo === "foto" && capaId !== m.id && (
                   <button
                     type="button"
                     onClick={() => definirCapa(m)}
                     disabled={definindoCapa === m.id}
                     aria-label={`Usar ${m.nome} como capa`}
-                    className="rounded-md bg-void/80 px-2 py-1 text-[11px] text-texto disabled:opacity-50"
+                    className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
                   >
                     {definindoCapa === m.id ? "…" : "capa"}
                   </button>
@@ -465,19 +538,21 @@ export function GradeMedias({
                   onClick={() => remover(m)}
                   disabled={removendo === m.id}
                   aria-label={`Remover ${m.nome}`}
-                  className="rounded-md bg-void/80 px-2 py-1 text-[11px] text-texto disabled:opacity-50"
+                  className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
                 >
                   {removendo === m.id ? "…" : "remover"}
                 </button>
               </span>
 
-              <div className="mt-1.5 flex items-baseline justify-between gap-2">
-                <span className="min-w-0 truncate text-[11px] text-texto-faint">
-                  {capitulo ?? m.nome}
-                </span>
-                <span className="shrink-0 text-[11px] tabular-nums text-texto-faint">
-                  {formatar(m.bytes)}
-                </span>
+              {/* Nome e tamanho lado a lado sobravam da grade grande: em 116 px
+                  o nome virava três letras e reticências. O tamanho passa para
+                  o `title`, junto do nome inteiro — que o `truncate` corta de
+                  todo jeito, e é o que faltava para saber QUAL arquivo é. */}
+              <div
+                title={`${m.nome} · ${formatar(m.bytes)}`}
+                className="mt-1 truncate text-[10px] text-texto-faint"
+              >
+                {capitulo ?? m.nome}
               </div>
             </li>
           );

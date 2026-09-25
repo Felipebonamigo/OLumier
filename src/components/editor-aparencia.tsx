@@ -22,6 +22,7 @@ import {
   esquecerPadraoDoEstudioAction,
 } from "@/app/painel/actions";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
+import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -666,11 +667,25 @@ export function EditorAparencia({
                         : "border-linha hover:border-acento hover:bg-acento/5"
                     }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <MiniaturaPreset aparencia={p.aparencia} />
-                      <span className="text-sm font-medium">{p.nome}</span>
-                    </span>
-                    <span className="mt-1.5 block text-[11px] leading-snug text-texto-faint">
+                    {/*
+                      ── O RABISCO MOSTRAVA UM EIXO DE CINCO (25/09/2026) ────
+
+                      Juan, escolhendo estilo: "tem várias super iguais, não dá
+                      pra perceber qual a diferença entre elas".
+
+                      Aqui era um rabisco de 32×24 px com a GRADE e nada de
+                      tipografia; no assistente era uma tarja com a TIPOGRAFIA
+                      e nada de grade. Duas amostras diferentes para a mesma
+                      decisão, e nenhuma das duas desenhava a capa — que é
+                      justamente o que separa um preset do outro.
+
+                      Agora é a mesma amostra dos dois lados, e ela desenha a
+                      página: capa, título na fonte do preset, grade com a
+                      densidade e o canto dele.
+                    */}
+                    <AmostraDoPreset aparencia={p.aparencia} className="mb-2 h-20 w-full" />
+                    <span className="block text-sm font-medium">{p.nome}</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">
                       {p.desc}
                     </span>
                   </button>
@@ -1078,60 +1093,3 @@ export function EditorAparencia({
   );
 }
 
-/**
- * Rabisco do preset — ajuda a escolher sem precisar abrir.
- *
- * Deduzido da APARÊNCIA, não escrito por id. Antes havia um desenho codificado
- * para cada um dos quatro presets e um genérico para o resto; ao acrescentar
- * quatro em 27/08/2026, os quatro novos cairiam todos no mesmo rabisco — o
- * oposto do trabalho dele, que é diferenciar.
- *
- * O tema dá o papel, a grade dá o arranjo. Preset novo ganha o seu de graça, e
- * ninguém precisa lembrar de vir aqui.
- */
-function MiniaturaPreset({ aparencia }: { aparencia: Aparencia }) {
-  const comum = "h-6 w-8 shrink-0 rounded-[3px] border border-linha p-[3px]";
-
-  /* O papel de cada tema, e a tinta que aparece por cima dele. Valores crus e
-   * não tokens: isto é um rabisco de OUTRO tema dentro do painel, e usar as
-   * cores do painel faria os três rabiscos ficarem iguais. */
-  const papel =
-    aparencia.tema === "noite"
-      ? { fundo: "#07080b", cheio: "#d9a441", vazio: "rgba(190,205,230,0.32)" }
-      : aparencia.tema === "creme"
-        ? { fundo: "#f2ebdd", cheio: "#927659", vazio: "#c0ab8e" }
-        : { fundo: "#ffffff", cheio: "#9ca3af", vazio: "#d1d5db" };
-
-  const bloco = (cor: string, extra = "") => (
-    <span className={extra} style={{ background: cor }} />
-  );
-
-  return (
-    <span className={comum} style={{ background: papel.fundo }}>
-      {aparencia.grade === "editorial" ? (
-        <span className="grid h-full grid-cols-3 grid-rows-2 gap-[1px]">
-          {bloco(papel.cheio, "col-span-2 row-span-2")}
-          {bloco(papel.vazio)}
-          {bloco(papel.vazio)}
-        </span>
-      ) : aparencia.grade === "linhas" ? (
-        <span className="flex h-full flex-col gap-[1px]">
-          {bloco(papel.cheio, "flex-1")}
-          {bloco(papel.vazio, "flex-1")}
-        </span>
-      ) : aparencia.grade === "colunas" ? (
-        <span className="flex h-full items-end gap-[1px]">
-          {bloco(papel.cheio, "h-full flex-1")}
-          {bloco(papel.vazio, "h-2/3 flex-1")}
-          {bloco(papel.cheio, "h-5/6 flex-1")}
-        </span>
-      ) : (
-        <span className="grid h-full grid-cols-3 grid-rows-2 gap-[1px]">
-          {Array.from({ length: 6 }, (_, i) => (
-            <span key={i} style={{ background: i % 2 ? papel.vazio : papel.cheio }} />
-          ))}
-        </span>
-      )}
-    </span>
-  );
-}

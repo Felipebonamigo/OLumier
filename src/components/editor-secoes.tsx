@@ -482,13 +482,63 @@ export function EditorSecoes({
                   */}
                   {(() => {
                     const poucasFotos = semCapitulo < 2;
+                    /* `secao_id` vazio é o grupo das soltas — a ação entende,
+                       e é o que a torna útil aqui. */
+                    const ordenar = (criterio: string) =>
+                      executar(ordenarFotosDaSecaoAction, { secao_id: "", criterio });
+
+                    /*
+                      ── SEM CAPÍTULO, OS CRITÉRIOS FICAM À MOSTRA (25/09/2026)
+
+                      Juan, dois dias depois de o cartão passar a se chamar
+                      "Ordem das fotos": "cade a opção de reorganizar as fotos
+                      por nome A-Z. Quando não tem capítulo."
+
+                      O controle ESTAVA na tela — e continuava impossível de
+                      achar, porque era um `select` cinza de 11 px encostado na
+                      borda direita, escrito "ordenar…". A palavra que ele
+                      procurava ("A-Z") não aparecia em lugar nenhum: estava
+                      dentro do menu, e menu fechado não se lê. Ao lado, a
+                      caixa azul "Nenhum capítulo ainda" ocupa metade do cartão
+                      — o olho vai nela, conclui que o assunto é capítulo, e sai.
+
+                      Duas vezes consertamos ONDE o controle mora. O que
+                      faltava é ele DIZER o que faz. Sem capítulo o cartão
+                      inteiro é sobre ordem, então os cinco critérios são a
+                      cara dele, escritos por extenso, um clique cada.
+
+                      Nos CAPÍTULOS continua o `select`, e pelo motivo de
+                      16/09: cinco botões repetidos em cada linha de uma lista
+                      de seis capítulos são trinta botões: uma parede. Lá o
+                      nome do capítulo já é o assunto da linha, e o menu cabe.
+                    */
+                    if (!temCapitulos) {
+                      return (
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-[11px] text-texto-faint">ordenar por</span>
+                          {ORDENS_DAS_FOTOS.map((o) => (
+                            <button
+                              key={o.id}
+                              type="button"
+                              disabled={ocupado || poucasFotos}
+                              title={
+                                poucasFotos
+                                  ? "Com menos de duas fotos não há o que ordenar"
+                                  : undefined
+                              }
+                              onClick={() => ordenar(o.id)}
+                              className="rounded-md border border-linha bg-void px-2 py-1 text-xs text-texto-soft transition hover:border-linha-forte hover:bg-carbon-2 disabled:opacity-40"
+                            >
+                              {o.nome}
+                            </button>
+                          ))}
+                        </span>
+                      );
+                    }
+
                     return (
                       <select
-                        aria-label={
-                          temCapitulos
-                            ? "Ordenar as fotos sem capítulo"
-                            : "Ordenar as fotos da galeria"
-                        }
+                        aria-label="Ordenar as fotos sem capítulo"
                         title={
                           poucasFotos
                             ? "Com menos de duas fotos não há o que ordenar"
@@ -498,12 +548,7 @@ export function EditorSecoes({
                         value=""
                         onChange={(e) => {
                           if (!e.target.value) return;
-                          /* `secao_id` vazio é o grupo das soltas — a ação
-                             entende, e é o que a torna útil aqui. */
-                          executar(ordenarFotosDaSecaoAction, {
-                            secao_id: "",
-                            criterio: e.target.value,
-                          });
+                          ordenar(e.target.value);
                           e.target.value = "";
                         }}
                         className="rounded-md border border-linha bg-void px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"

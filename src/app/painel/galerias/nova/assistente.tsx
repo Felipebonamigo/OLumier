@@ -10,7 +10,8 @@ import {
   BOTAO_PRIMARIO,
   BOTAO_SECUNDARIO,
 } from "@/components/form-ui";
-import { FONTES_TITULO, PRESETS, TEMAS } from "@/config/aparencia";
+import { PRESETS } from "@/config/aparencia";
+import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
 /**
  * Criar galeria em três etapas.
@@ -126,7 +127,6 @@ export function AssistenteNovaGaleria({
             a encolher, e o nome do estilo começa a quebrar. */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {PRESETS.map((p) => {
-            const tema = TEMAS[p.aparencia.tema];
             const escolhido = preset === p.id;
             return (
               <button
@@ -138,18 +138,26 @@ export function AssistenteNovaGaleria({
                   escolhido ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
                 }`}
               >
-                {/* Amostra honesta: o fundo e a letra que o preset realmente usa. */}
-                <span
-                  className="mb-2 flex h-14 items-center justify-center rounded-lg text-lg"
-                  style={{
-                    background: tema["--g-fundo"],
-                    color: tema["--g-texto"],
-                    border: `1px solid ${tema["--g-linha"]}`,
-                    fontFamily: FONTES_TITULO[p.aparencia.tipografia],
-                  }}
-                >
-                  Ana &amp; Pedro
-                </span>
+                {/*
+                  ── A AMOSTRA MOSTRAVA DOIS EIXOS DE CINCO (25/09/2026) ─────
+
+                  Juan: "essas prévias dos estilos não fazem sentido, tem
+                  várias super iguais, não dá pra perceber qual a diferença
+                  entre elas. Pra mim a 'ateliê', 'marfim' e 'caligrafia' são
+                  iguais. Convite e revista também."
+
+                  Aqui era uma tarja de 56 px com o fundo do tema e o nome na
+                  fonte do título — tema e tipografia, e mais nada. O que
+                  separa "Ateliê" de "Marfim" é a CAPA: um abre com foto ao
+                  lado do nome, o outro abre sem foto nenhuma. Nada disso
+                  chegava à tela, então os dois eram o mesmo retângulo creme
+                  com a mesma manuscrita, e ele estava descrevendo o que via.
+
+                  `AmostraDoPreset` desenha a página em miniatura, e é a mesma
+                  do editor de Design — eram duas amostras diferentes para a
+                  mesma decisão, cada uma mostrando metade.
+                */}
+                <AmostraDoPreset aparencia={p.aparencia} className="mb-2 h-28 w-full" />
                 <span className="block text-sm font-medium">{p.nome}</span>
                 <span className="mt-0.5 block text-xs text-texto-faint">{p.desc}</span>
               </button>
