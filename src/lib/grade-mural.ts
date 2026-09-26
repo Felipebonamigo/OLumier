@@ -42,6 +42,15 @@ export function colunasQueCabem(
 }
 
 /**
+ * Até quanto duas colunas contam como niveladas: um quarto da altura de uma
+ * foto QUADRADA, na escala em que a coluna mede 1 de largura (um retrato 2:3
+ * mede 1,5; uma deitada 3:2, 0,67). Numa coluna de 300 px são 75 px — bem
+ * mais que a diferença de recorte entre duas fotos "iguais", e menos que meia
+ * altura de qualquer foto até 2:1. Ver `distribuirEmColunas`.
+ */
+export const EMPATE_VISUAL = 0.25;
+
+/**
  * Reparte os índices entre as colunas, na ordem de LEITURA e pela ALTURA.
  *
  * Cada foto vai para a coluna mais CURTA no momento. Empate vai para a mais à
@@ -65,6 +74,40 @@ export function colunasQueCabem(
  * colunas passa a terminar quase junto, e a diferença que resta é, no máximo, a
  * altura de uma foto.
  *
+ * ── O EMPATE É O QUE O OLHO VÊ, NÃO O QUE O NÚMERO DIZ (26/09/2026) ────────
+ *
+ * Juan, com o print da galeria da Lu e do Marino numerado à mão: "era pra ser
+ * nessa ordem dos números, mas está 2 - 1 - 4 - 5 - 3". E antes: "nas
+ * horizontais, a preto e branco tá na frente".
+ *
+ * As fotos 1 e 2 do print começam na MESMA altura da tela, e 3, 4 e 5 também:
+ * as colunas estavam niveladas. Niveladas a olho — no número, uma estava um ou
+ * dois pixels mais curta, porque duas fotos "2:3" raramente têm exatamente a
+ * mesma proporção depois de recortadas e exportadas. O `<` acima tratava isso
+ * como uma coluna mais curta e mandava a foto 1 para lá, à direita; a 2, sua
+ * versão em PB, caía à esquerda, na mesma fileira. A regra do empate existia —
+ * "fica a mais à esquerda" — e só valia para empate exato, que com foto de
+ * verdade quase nunca acontece.
+ *
+ * Então o empate passa a ser o que o olho enxerga como empate: colunas que não
+ * diferem mais que `EMPATE_VISUAL` da mais curta contam como niveladas, e entre
+ * elas vence a mais à esquerda.
+ *
+ * O que isto NÃO muda, e por quê: uma foto posterior nunca começa mais que
+ * `EMPATE_VISUAL` acima de uma anterior — a mais curta só cresce, e a escolhida
+ * está no máximo essa folga acima dela. Um quarto de foto quadrada é menos que
+ * meia altura de qualquer foto até 2:1, então as duas continuam lidas na mesma
+ * fileira, e aí a da esquerda é a primeira: nenhuma foto passa a aparecer
+ * CLARAMENTE acima de uma anterior, que era a garantia da regra antiga. Uma
+ * folga maior fecharia mais casos e quebraria essa garantia (medido; ver
+ * `scripts/testar-grade-mural.mjs`).
+ *
+ * E o que ela não resolve: depois de uma deitada, uma coluna fica MESMO mais
+ * curta — 0,8 foto —, e a foto seguinte vai para lá, esteja onde estiver. Num
+ * mural de colunas com alturas diferentes nenhuma regra mantém toda leitura em
+ * ordem sem deixar buraco. Quem precisa da sequência exata tem "Panorama" e
+ * "Linhas", que montam fileiras.
+ *
  * @param alturaDe Altura da foto `i` para uma coluna de largura 1 — ou seja,
  *   `1 / proporção`. Sem ela a repartição volta a ser por contagem, que é o
  *   certo quando as alturas não são conhecidas (a grade quadrada, por exemplo,
@@ -87,12 +130,14 @@ export function distribuirEmColunas(
 
   const altura = new Array<number>(usadas).fill(0);
   for (let i = 0; i < quantidade; i++) {
+    let menor = altura[0];
+    for (let c = 1; c < usadas; c++) if (altura[c] < menor) menor = altura[c];
+    /* A mais à ESQUERDA entre as niveladas com a mais curta. Com todas as
+       colunas ainda zeradas isso põe as primeiras fotos em 0, 1, 2, como
+       sempre; depois, é o que impede um pixel de diferença de mandar a foto
+       para o outro lado da fileira. */
     let escolhida = 0;
-    for (let c = 1; c < usadas; c++) {
-      /* `<` e não `<=`: no empate fica a mais à esquerda, e é isso que põe as
-         primeiras fotos em 0, 1, 2 com todas as colunas ainda zeradas. */
-      if (altura[c] < altura[escolhida]) escolhida = c;
-    }
+    while (altura[escolhida] > menor + EMPATE_VISUAL) escolhida++;
     saida[escolhida].push(i);
     /* Proporção inválida (foto sem largura/altura no banco) não pode virar
        NaN: uma coluna com altura NaN nunca mais seria escolhida, e todas as
