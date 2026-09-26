@@ -6,6 +6,7 @@ import {
   OPCOES,
   PRESETS,
   presetEquivalente,
+  mesmaAparencia,
   FONTES_TITULO,
   VIEWPORTS_PREVIA,
   PALETAS,
@@ -374,7 +375,9 @@ const CAPAS_SEM_FOTO: string[] = ["minima"];
 const nomeDaCapa = (id: string) => OPCOES.capa.find((o) => o.id === id)?.nome ?? id;
 
 const GRUPOS = [
-  { id: "estilos", nome: "Estilos prontos" },
+  /* "Estilos", e não mais "Estilos prontos": desde 26/09/2026 o primeiro
+     cartão é o padrão do estúdio, que não é pronto nosso — é dele. */
+  { id: "estilos", nome: "Estilos" },
   { id: "capa", nome: "Capa" },
   { id: "tipografia", nome: "Tipografia" },
   { id: "cor", nome: "Cor" },
@@ -389,7 +392,7 @@ export function EditorAparencia({
   inicial,
   publicado,
   temFontePropria,
-  temPadraoDoEstudio = false,
+  padraoDoEstudio = null,
   slotCapa,
 }: {
   galeriaId: string;
@@ -406,8 +409,9 @@ export function EditorAparencia({
   publicado: Aparencia;
   /** O estúdio enviou uma fonte? Decide se a opção aparece no seletor. */
   temFontePropria: boolean;
-  /** Já existe um padrão de design salvo neste estúdio. Ver `padraoDoEstudio`. */
-  temPadraoDoEstudio?: boolean;
+  /** O design que o estúdio salvou como padrão, ou null se nunca salvou. Ver
+      `padraoDoEstudio` em lib/aparencia-galeria.ts. */
+  padraoDoEstudio?: Aparencia | null;
 }) {
   /* Qual grupo do ajuste fino está aberto. Só desenho: não entra no rascunho
      nem na publicação — trocar de grupo não é mexer na galeria. */
@@ -493,11 +497,27 @@ export function EditorAparencia({
    * Felipe: "adicionar algum método de 'salvar padrão criado', para sempre se
    * repetir na hora do design da capa".
    *
-   * O estado local existe só para o recado da tela. O que vale é o que está no
-   * tenant, e ele não mexe em galeria nenhuma — nem nesta: é uma decisão sobre
-   * o que vem DEPOIS. Ver `salvarPadraoDoEstudioAction`.
+   * O que vale é o que está no tenant, e salvar não mexe em galeria nenhuma —
+   * nem nesta: é uma decisão sobre o que vem DEPOIS. Ver
+   * `salvarPadraoDoEstudioAction`.
+   *
+   * ── O ESTADO GUARDA O DESENHO, E NÃO SÓ "EXISTE UM" (26/09/2026) ───────
+   *
+   * Até aqui era um booleano, para escolher o recado. E o padrão salvo não
+   * aparecia em lugar nenhum: não virava cartão em Estilos, não aparecia na
+   * criação da galeria, e a tela nunca dizia "esta galeria está no seu
+   * padrão". Os sócios salvaram e não conseguiram mais achar — "os estilos
+   * salvos não estão fácil de achar, não conseguimos descobrir onde estão".
+   *
+   * Guardar a aparência inteira é o que deixa o padrão ser MOSTRADO (o
+   * primeiro cartão de Estilos, com a mesma amostra dos outros) e APLICADO a
+   * uma galeria que já existe, que antes não tinha caminho nenhum.
    */
-  const [padrao, setPadrao] = useState({ salvo: temPadraoDoEstudio, recado: "" });
+  const [padrao, setPadrao] = useState<{ aparencia: Aparencia | null; recado: string }>({
+    aparencia: padraoDoEstudio,
+    recado: "",
+  });
+  const noPadrao = padrao.aparencia !== null && mesmaAparencia(ap, padrao.aparencia);
 
   const presetAtivo = presetEquivalente(ap);
   const sujo = JSON.stringify(ap) !== JSON.stringify(salvo);
@@ -600,7 +620,9 @@ export function EditorAparencia({
           {erro ??
             (sujo
               ? "alterações não publicadas"
-              : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
+              : noPadrao
+                ? "no ar: meu padrão"
+                : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
         </span>
       </div>
 
@@ -654,6 +676,44 @@ export function EditorAparencia({
         <div className="mt-4 grid min-w-0 flex-1 gap-4 sm:mt-0">
           {grupo === "estilos" && (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {/*
+                O PADRÃO DO ESTÚDIO É O PRIMEIRO CARTÃO (26/09/2026).
+
+                Ele é a escolha de sempre do fotógrafo, então vem antes das
+                nossas. Mesma amostra e mesmo gesto dos outros cartões: um
+                clique aplica nesta galeria, e publicar continua sendo o único
+                jeito de o cliente ver.
+
+                Sem padrão salvo, o lugar fica reservado por um aviso tracejado
+                que diz onde ele nasce — quem procura o recurso acha a porta
+                aqui, que é onde se escolhe estilo, e não só lá embaixo.
+              */}
+              {padrao.aparencia ? (
+                <button
+                  type="button"
+                  onClick={() => padrao.aparencia && mudar(padrao.aparencia)}
+                  className={`rounded-lg border p-3 text-left transition ${
+                    noPadrao
+                      ? "border-acento bg-acento/5"
+                      : "border-linha hover:border-acento hover:bg-acento/5"
+                  }`}
+                >
+                  <AmostraDoPreset aparencia={padrao.aparencia} className="mb-2 h-20 w-full" />
+                  <span className="block text-sm font-medium">Meu padrão</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">
+                    O design que você salvou. Toda galeria nova já nasce assim.
+                  </span>
+                </button>
+              ) : (
+                <div className="rounded-lg border border-dashed border-linha-forte p-3">
+                  <span className="block text-sm font-medium text-texto-soft">Meu padrão</span>
+                  <span className="mt-1 block text-[11px] leading-snug text-texto-faint">
+                    Monte o seu design e aperte{" "}
+                    <strong className="font-medium text-texto-soft">Salvar como meu padrão</strong>,
+                    logo abaixo. Ele passa a aparecer aqui e na criação de toda galeria nova.
+                  </span>
+                </div>
+              )}
               {PRESETS.map((p) => {
                 const ativo = presetAtivo === p.id;
                 return (
@@ -874,20 +934,20 @@ export function EditorAparencia({
           <span className="block text-xs font-medium text-texto-soft">Padrão do estúdio</span>
           <p className="mt-0.5 max-w-[60ch] text-[11px] leading-snug text-texto-faint">
             {padrao.recado ||
-              (padrao.salvo
-                ? "Toda galeria nova nasce com o seu design salvo. Salvar de novo substitui o anterior; nenhuma galeria existente muda."
-                : "Guarde esta combinação e toda galeria nova já nasce assim. Nenhuma galeria existente muda — nem esta.")}
+              (padrao.aparencia
+                ? "Toda galeria nova nasce com o seu design salvo, e ele fica em Estilos como “Meu padrão”. Salvar de novo substitui o anterior; nenhuma galeria existente muda."
+                : "Guarde esta combinação e toda galeria nova já nasce assim — ela fica em Estilos como “Meu padrão”. Nenhuma galeria existente muda, nem esta.")}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {padrao.salvo && (
+          {padrao.aparencia && (
             <button
               type="button"
               disabled={salvando}
               onClick={() =>
                 iniciar(async () => {
                   const r = await esquecerPadraoDoEstudioAction();
-                  setPadrao({ salvo: false, recado: r.ok ?? "" });
+                  setPadrao({ aparencia: null, recado: r.ok ?? "" });
                 })
               }
               className="rounded-lg px-3 py-2 text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
@@ -903,12 +963,15 @@ export function EditorAparencia({
                 const f = new FormData();
                 f.set("aparencia", JSON.stringify(ap));
                 const r = await salvarPadraoDoEstudioAction(f);
-                setPadrao({ salvo: !r.erro, recado: r.erro ?? r.ok ?? "" });
+                setPadrao((atual) => ({
+                  aparencia: r.erro ? atual.aparencia : ap,
+                  recado: r.erro ?? r.ok ?? "",
+                }));
               })
             }
             className="rounded-lg border border-linha-forte px-4 py-2 text-xs transition hover:bg-carbon-2 disabled:opacity-40"
           >
-            {padrao.salvo ? "Salvar de novo como padrão" : "Salvar como meu padrão"}
+            {padrao.aparencia ? "Salvar de novo como padrão" : "Salvar como meu padrão"}
           </button>
         </div>
       </div>

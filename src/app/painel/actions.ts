@@ -284,7 +284,9 @@ export async function salvarPadraoDoEstudioAction(form: FormData): Promise<{ ok?
     return { erro: "Não consegui ler a aparência escolhida." };
   }
   await salvarPadraoDoEstudio(tenantId, bruto);
-  return { ok: "Toda galeria nova vai nascer com este design." };
+  /* O recado diz ONDE ele ficou. Salvar e não saber onde procurar depois foi
+     a queixa de 26/09/2026. */
+  return { ok: "Salvo. Está em Estilos como “Meu padrão”, e toda galeria nova vai nascer assim." };
 }
 
 /** Esquece o padrão: a galeria nova volta a nascer com o desenho da casa. */
