@@ -29,6 +29,7 @@ import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 exigirBancoDeTeste();
 
 import { FOTOS_POR_TELA, fatiarGaleria } from "../src/config/fatia-galeria.ts";
+import { PRIMEIRA_LEVA } from "../src/lib/grade-por-partes.ts";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 
@@ -145,45 +146,57 @@ try {
       html,
       mb: html.length / 1024 / 1024,
       imgs: [...html.matchAll(/<img\b/g)].length,
-      assinadas: [...html.matchAll(/X-Amz-Signature/g)].length,
+      /*
+       * ── AS FOTOS QUE O SERVIDOR MANDOU, E NÃO AS DESENHADAS (26/09/2026) ──
+       *
+       * Até aqui `imgs` respondia as duas perguntas, porque cada foto enviada
+       * virava um `<img>`. Desde que a grade desenha por partes
+       * (`lib/grade-por-partes.ts`) o documento leva a fatia inteira nos dados
+       * e só a primeira leva em `<img>` — contar `<img>` passaria a provar o
+       * corte do CLIENTE, e o desta suíte é o do SERVIDOR.
+       *
+       * Cada foto da bancada tem a sua miniatura assinada (`grande-<n>_thumb`)
+       * em algum lugar do documento — no `<img>`, nos dados de hidratação ou
+       * nos dois. As diferentes são as fotos que saíram pela rede.
+       */
+      enviadas: new Set(html.match(/grande-\d+_thumb/g) ?? []).size,
     };
   };
 
   const total = EXTRAS + 1;
   const cheia = await pegar(url);
-  if (cheia.imgs <= FOTOS_POR_TELA + 5) {
-    ok(`galeria de ${total} fotos manda ${cheia.imgs} imagens`, `${cheia.mb.toFixed(2)} MB`);
+  /* A prova de que o corte é no SERVIDOR, e não um `display:none`: as URLs
+     assinadas são 37% do documento — se continuassem todas ali, o iPhone
+     continuaria estourando com a tela "certa". */
+  if (cheia.enviadas > 0 && cheia.enviadas <= FOTOS_POR_TELA) {
+    ok(`galeria de ${total} fotos manda ${cheia.enviadas} delas`, `${cheia.mb.toFixed(2)} MB`);
   } else {
-    erro(`a galeria mandou ${cheia.imgs} imagens de ${total} — o corte não aconteceu no servidor`);
+    erro(`a galeria mandou ${cheia.enviadas} fotos de ${total} — o corte não aconteceu no servidor`);
   }
 
-  /* A prova de que o corte é no SERVIDOR, e não um `display:none`: o número de
-     URLs assinadas cai junto. Elas são 37% do documento — se continuassem
-     todas ali, o iPhone continuaria estourando com a tela "certa". */
-  /* Duas assinaturas por foto — uma no `<img>`, outra nos dados de
-     hidratação — mais um punhado para capa e logo. O que esta etapa persegue é
-     a diferença entre "assina o que manda" e "assina a galeria inteira": com o
-     corte, o número acompanha as imagens desenhadas. */
-  if (cheia.assinadas <= cheia.imgs * 2 + 20) {
-    ok("e assina só o que manda", `${cheia.assinadas} assinaturas`);
+  /* E das enviadas, o documento DESENHA só a primeira leva — o resto entra
+     conforme a rolagem, sem ir ao servidor. É o que tira do celular os seis
+     mil nós que ele montava antes de responder ao primeiro toque. */
+  if (cheia.imgs <= PRIMEIRA_LEVA + 5) {
+    ok(`e desenha só as ${PRIMEIRA_LEVA} primeiras`, `${cheia.imgs} imagens no HTML`);
   } else {
-    erro(`assinou ${cheia.assinadas} URLs — está mandando a galeria inteira escondida`);
+    erro(`o documento desenhou ${cheia.imgs} imagens — a grade voltou a nascer inteira`);
   }
 
   if (cheia.mb < 2) ok("o documento fica abaixo de 2 MB", `${cheia.mb.toFixed(2)} MB`);
   else erro(`o documento tem ${cheia.mb.toFixed(2)} MB — acima do que um iPhone aguenta`);
 
   const soFesta = await pegar(`${url}?cap=${festa}`);
-  if (soFesta.imgs > 0 && soFesta.imgs <= EXTRAS / 2 + 5) {
-    ok("escolher um capítulo carrega só ele", `${soFesta.imgs} imagens`);
+  if (soFesta.enviadas > 0 && soFesta.enviadas <= EXTRAS / 2 + 5) {
+    ok("escolher um capítulo carrega só ele", `${soFesta.enviadas} fotos`);
   } else {
-    erro(`o capítulo trouxe ${soFesta.imgs} imagens`);
+    erro(`o capítulo trouxe ${soFesta.enviadas} fotos`);
   }
 
   /* Capítulo inventado não pode virar erro nem galeria inteira. */
   const torto = await pegar(`${url}?cap=nao-existe-mesmo`);
-  if (torto.imgs <= FOTOS_POR_TELA + 5) ok("capítulo inventado não derruba nem escancara a galeria");
-  else erro(`capítulo inventado trouxe ${torto.imgs} imagens`);
+  if (torto.enviadas <= FOTOS_POR_TELA) ok("capítulo inventado não derruba nem escancara a galeria");
+  else erro(`capítulo inventado trouxe ${torto.enviadas} fotos`);
 
   /*
    * ── A BUSCA POR ROSTO NÃO PODE VIRAR MENTIRA ────────────────────────────
