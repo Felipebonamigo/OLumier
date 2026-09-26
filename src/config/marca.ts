@@ -55,12 +55,19 @@ export const marca = {
   nomeSimples: "galeria-atomo",
   simbolo: "GA",
   /*
-   * ⚠️ REJEITADA PELA ESTRATÉGIA DE MARCA (26/09/2026) — romântica e clichê
-   * para o posicionamento desejado. Continua aqui só porque ainda não há
-   * slogan aprovado para pôr no lugar, e a home espera a nova direção. Não
-   * reforce esta frase em tela nova; ver `docs/estrategia-de-marca.md`.
+   * DESCRITIVA, E NÃO SLOGAN (26/09/2026).
+   *
+   * Era "Onde o instante permanece.", rejeitada pela estratégia de marca por
+   * ser romântica e clichê — e ela saía no título de toda página e no cartão
+   * do link compartilhado no WhatsApp. Enquanto a camada estratégica não
+   * aprova uma assinatura, o lugar fica com o que o produto É: a mesma frase
+   * da sobrancelha da home nova. A frase do hero ("Sua fotografia tem
+   * identidade. Sua entrega também.") NÃO veio para cá de propósito: a
+   * estratégia (§15) pede validação antes de ela virar assinatura.
+   *
+   * Ver `docs/estrategia-de-marca.md` e `docs/home-leitura-critica.md`.
    */
-  tagline: "Onde o instante permanece.",
+  tagline: "Galeria brasileira para fotógrafos",
   /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
   dominio: "galeriaatomo.com.br",
   /*
