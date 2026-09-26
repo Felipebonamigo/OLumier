@@ -29,8 +29,15 @@
 import * as mod from "../src/lib/grade-mural.ts";
 import { DENSIDADES, LARGURA_DA_FOTO as LARGURA } from "../src/config/aparencia.ts";
 
-const { PROPORCAO_DEITADA, agruparEmFileiras, colunasDoItem, colunasQueCabem, distribuirEmColunas, ehDeitada } =
-  mod;
+const {
+  EMPATE_VISUAL,
+  PROPORCAO_DEITADA,
+  agruparEmFileiras,
+  colunasDoItem,
+  colunasQueCabem,
+  distribuirEmColunas,
+  ehDeitada,
+} = mod;
 
 let falhou = false;
 function etapa(nome, fn) {
@@ -203,11 +210,21 @@ etapa("a repartição pela altura fecha as colunas quase no mesmo rodapé", () =
       `por altura o vão é ${vao(porAltura).toFixed(2)} e por contagem ${vao(porContagem).toFixed(2)}`,
     );
   }
-  /* O vão que sobra não pode passar da altura de UMA foto: é o mínimo teórico
-     de qualquer repartição que não corte nem reordene nada. */
+  /* O vão que sobra não pode passar de UMA foto mais o empate visual.
+     
+     Até 26/09 o teto era uma foto exata, o mínimo teórico de quem manda cada
+     foto para a coluna mais curta. O empate visual (ver `distribuirEmColunas`)
+     pode escolher uma coluna até `EMPATE_VISUAL` mais comprida, e a conta
+     acompanha: a última foto da coluna mais alta entrou quando ela estava no
+     máximo essa folga acima da mais curta. Neste caso o vão foi de 0,8 para
+     1,5; em 600 galerias sortidas, o médio foi de 0,92 para 0,98. É o preço
+     de a foto 1 não ir para o lado errado da fileira por um pixel — e ele é
+     limitado por construção, não por sorte. */
   const maisAlta = Math.max(...proporcoes.map((p) => 1 / p));
-  if (vao(porAltura) > maisAlta) {
-    throw new Error(`sobrou um vão de ${vao(porAltura).toFixed(2)}, maior que uma foto (${maisAlta.toFixed(2)})`);
+  if (vao(porAltura) > maisAlta + EMPATE_VISUAL + 1e-9) {
+    throw new Error(
+      `sobrou um vão de ${vao(porAltura).toFixed(2)}, maior que uma foto (${maisAlta.toFixed(2)}) mais o empate visual`,
+    );
   }
   return `vão: ${vao(porContagem).toFixed(1)} → ${vao(porAltura).toFixed(1)}`;
 });
@@ -232,6 +249,136 @@ etapa("proporção inválida não contamina a repartição", () => {
     if (c.length === 0) throw new Error(`coluna vazia: ${JSON.stringify(cols)}`);
   }
   return cols.map((c) => c.length).join(" · ");
+});
+
+/* ── O EMPATE QUE O OLHO VÊ (26/09/2026) ──────────────────────────────────
+ *
+ * Juan, com o print numerado à mão: "era pra ser nessa ordem dos números, mas
+ * está 2 - 1 - 4 - 5 - 3". As fotos 1 e 2 começavam na mesma altura da tela,
+ * e 3, 4 e 5 também — colunas niveladas a olho, diferentes por um ou dois
+ * pixels no número. A regra desempatava pelo pixel.
+ *
+ * A etapa "repartir pela altura não mexe na ordem de leitura", acima, nunca
+ * pegou isso: ela confere o topo de cada COLUNA, e dentro da coluna a ordem
+ * sempre esteve certa. O erro é da FILEIRA.
+ *
+ * `lidasAoContrario` mede a fileira como se lê um mural: duas fotos cujos
+ * topos diferem menos que meia foto estão na mesma fileira e se leem da
+ * esquerda para a direita; fora disso, quem começa mais acima vem antes.
+ */
+function lidasAoContrario(cols, alturaDe) {
+  const pos = [];
+  cols.forEach((c, k) => {
+    let y = 0;
+    for (const i of c) {
+      pos[i] = { k, t: y, h: alturaDe(i) };
+      y += alturaDe(i);
+    }
+  });
+  let lado = 0, acima = 0;
+  for (let i = 0; i + 1 < pos.length; i++) {
+    const a = pos[i], b = pos[i + 1];
+    const mesmaFileira = Math.abs(a.t - b.t) <= 0.5 * Math.min(a.h, b.h);
+    if (mesmaFileira && b.k < a.k) lado++;
+    else if (!mesmaFileira && b.t < a.t) acima++;
+  }
+  return { lado, acima };
+}
+
+/* Galerias sortidas, semente fixa: 2 a 6 colunas, 10 a 50% de deitadas, e
+   metade das fotos seguidas da sua PB — a mesma exportação, mesma proporção.
+   Cada foto tem alguns pixels de diferença da proporção nominal, como na vida
+   real: é isso que transforma empate em "desempate por um pixel". */
+function galeriasSortidas() {
+  let s = 11;
+  const rnd = () => ((s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+  const saida = [];
+  for (const deitadas of [0.1, 0.25, 0.5]) {
+    for (const colunas of [2, 3, 4, 5, 6]) {
+      for (let g = 0; g < 12; g++) {
+        const tam = 60 + Math.floor(rnd() * 240);
+        const p = [];
+        while (p.length < tam) {
+          const nominal = rnd() < deitadas ? (rnd() < 0.5 ? 3 / 2 : 16 / 9) : rnd() < 0.8 ? 2 / 3 : 4 / 5;
+          const x = nominal * (1 + (rnd() - 0.5) * 0.006);
+          p.push(x);
+          if (rnd() < 0.5) p.push(x);
+        }
+        saida.push({ p, colunas });
+      }
+    }
+  }
+  return saida;
+}
+
+console.log("\nO empate que o olho vê\n");
+
+etapa("o print do Juan: colunas niveladas a olho saem 1, 2, 3, 4, 5", () => {
+  /* A fileira de cima do print, reconstruída pela altura em que cada coluna
+     terminava (na escala em que a coluna mede 1 de largura): a primeira e a
+     última niveladas, com a última um fio mais curta; as três do meio também
+     niveladas entre si, mais embaixo. Depois, cinco retratos — as fotos 1 a 5
+     dele — e mais uma fileira, para nenhuma delas ser a última da galeria. */
+  const topoDaFileira = [1.17, 1.98, 2.0, 1.99, 1.15];
+  const alt = (i) => (i < 5 ? topoDaFileira[i] : 1.5);
+  const cols = distribuirEmColunas(15, 5, alt);
+  const colunaDe = (i) => cols.findIndex((c) => c.includes(i));
+  const numeradas = [5, 6, 7, 8, 9]; // as fotos 1..5 do print
+  const lidas = [...numeradas].sort((a, b) => {
+    const [ca, cb] = [colunaDe(a), colunaDe(b)];
+    const topo = (i) => cols[colunaDe(i)].slice(0, cols[colunaDe(i)].indexOf(i)).reduce((t, j) => t + alt(j), 0);
+    const mesma = Math.abs(topo(a) - topo(b)) <= 0.75;
+    return mesma ? ca - cb : topo(a) - topo(b);
+  });
+  const comoSeLe = lidas.map((i) => i - 4).join(" - ");
+  if (comoSeLe !== "1 - 2 - 3 - 4 - 5") {
+    throw new Error(`lido como ${comoSeLe} — era pra ser 1 - 2 - 3 - 4 - 5`);
+  }
+  return comoSeLe;
+});
+
+etapa("em galerias sortidas, metade dos pares lidos ao contrário some", () => {
+  let lado = 0, fotos = 0;
+  for (const { p, colunas } of galeriasSortidas()) {
+    const alt = (i) => 1 / p[i];
+    lado += lidasAoContrario(distribuirEmColunas(p.length, colunas, alt), alt).lado;
+    fotos += p.length;
+  }
+  const por100 = (100 * lado) / fotos;
+  /* A regra do pixel dava ~35 por 100 fotos nestas galerias. O que sobra é o
+     que nenhuma regra de coluna resolve (depois de uma deitada, a coluna fica
+     curta DE VERDADE), e é por isso que o teto não é zero. */
+  if (por100 > 22) {
+    throw new Error(`${por100.toFixed(1)} pares consecutivos lidos ao contrário por 100 fotos`);
+  }
+  return `${por100.toFixed(1)} por 100 fotos (a regra do pixel: ~35)`;
+});
+
+etapa("nenhuma foto posterior aparece claramente ACIMA de uma anterior", () => {
+  /* A garantia da regra antiga, e o motivo de o empate ser só um quarto de
+     foto: uma folga maior fecha mais casos de fileira e passa a jogar fotos
+     posteriores para cima das anteriores — medido, com 0,5 são ~5 por 100. */
+  let acima = 0;
+  for (const { p, colunas } of galeriasSortidas()) {
+    const alt = (i) => 1 / p[i];
+    acima += lidasAoContrario(distribuirEmColunas(p.length, colunas, alt), alt).acima;
+  }
+  if (acima > 0) throw new Error(`${acima} fotos posteriores começam claramente acima de uma anterior`);
+  return "nenhuma";
+});
+
+etapa("o rodapé fecha dentro de uma foto mais o empate, em toda galeria", () => {
+  let pior = 0;
+  for (const { p, colunas } of galeriasSortidas()) {
+    const hs = alturasDasColunas(distribuirEmColunas(p.length, colunas, (i) => 1 / p[i]), p);
+    const vao = Math.max(...hs) - Math.min(...hs);
+    const maisAlta = Math.max(...p.map((x) => 1 / x));
+    if (vao > maisAlta + EMPATE_VISUAL + 1e-9) {
+      throw new Error(`vão de ${vao.toFixed(2)} com a foto mais alta medindo ${maisAlta.toFixed(2)}`);
+    }
+    pior = Math.max(pior, vao);
+  }
+  return `pior vão ${pior.toFixed(2)}`;
 });
 
 /* ── AS FILEIRAS DO PANORAMA ─────────────────────────────────────────────── */
