@@ -102,6 +102,30 @@ await etapa("nome A → Z, e é NATURAL: foto_2 antes de foto_10", async () => {
   return lida.join(" · ");
 });
 
+/**
+ * ── A COLORIDA ANTES DA SUA VARIANTE EM PB (25/09/2026) ────────────────────
+ *
+ * Juan, numa galeria de verdade: "nas horizontais, a preto e branco tá na
+ * frente" — e ele já tinha clicado "reordenar por nome A-Z" antes de
+ * reclamar, sem efeito nenhum, porque a galeria JÁ estava nessa ordem desde
+ * o envio. A causa mora em `lib/ordem-natural.ts` — o nome inteiro, com
+ * extensão, faz o sufixo "-PB" vencer o "." da colorida na comparação. Este
+ * teste é o mesmo defeito, mas pela AÇÃO do painel, e não só a função pura.
+ */
+await etapa("a colorida vem antes da sua variante em preto-e-branco", async () => {
+  const pb = await criarSecao(g.id, g.estudio.id, "PB");
+  await por(pb.id, "sirius-jugusw-1070-pb.jpg", D("2026-09-15T13:01:00Z"), null);
+  await por(pb.id, "sirius-jugusw-1070.jpg", D("2026-09-15T13:00:00Z"), null);
+
+  await ordenarFotosDaSecao(g.id, g.estudio.id, pb.id, "nome");
+  const lida = await ordemAgora(pb.id);
+  const esperada = ["sirius-jugusw-1070.jpg", "sirius-jugusw-1070-pb.jpg"];
+  if (lida.join() !== esperada.join()) {
+    throw new Error(`veio ${lida.join(", ")} — a PB saiu antes da colorida`);
+  }
+  return lida.join(" · ");
+});
+
 await etapa("nome Z → A", async () => {
   await ordenarFotosDaSecao(g.id, g.estudio.id, cerimonia.id, "nome-invertido");
   const lida = await ordemAgora(cerimonia.id);
