@@ -73,10 +73,12 @@ abaixo foi conferida no código desta data.*
    celular, o circunflexo desalinhado da Cormorant, os números contraditórios
    de estilos e fontes (agora saem de `PRESETS` e `OPCOES`) e o texto corrido
    sem a fonte da marca — tudo isso deixa de existir na home nova.
-   **Não consertado, e fica para decisão:** a Montserrat não carrega em
-   nenhuma tela do app (a variável é resolvida no `:root`, antes de existir).
-   Consertar muda a fonte do texto de toda galeria já entregue, e isso não é
-   decisão para tomar de passagem.
+   **Não consertado, e fica para decisão:** a Montserrat não carrega no painel,
+   no login e nas páginas institucionais (a variável `--font-sans` é resolvida
+   no `:root`, antes de a da Montserrat existir, e cai na fonte do sistema). A
+   **galeria do cliente não é afetada** — ela usa a variável da Montserrat
+   direto (`FONTES_TEXTO`). Consertar é uma linha no `layout.tsx`, mas muda a
+   cara do painel inteiro, então fica para o Felipe decidir.
 
 ## 4. Estrutura implementada
 
@@ -101,12 +103,34 @@ abaixo foi conferida no código desta data.*
 | 16 | CTA final | as identidades de novo, deslizando devagar | componentes reais |
 | 17 | Rodapé | Produto · Suporte (WhatsApp) · Legal | — |
 
-## 5. O que depende de alguém
+## 5. Como foi verificado
+
+- Bateria completa (`npm test`) contra Postgres e MinIO locais, no mesmo
+  arranjo do CI. Três suítes prendiam a home antiga e foram atualizadas **sem
+  afrouxar o que protegem**: `testar-marca-plataforma` (agora impede a frase
+  rejeitada de voltar, em vez de exigir que ela seja o H1),
+  `testar-comparativo` (o número de fontes sai de `OPCOES` em vez de "nove"
+  escrito; o filme segue `VIDEO_LIBERADO` — desligado, a home é proibida de
+  falar de vídeo) e `testar-tema` (a home trava a própria luz; o contraste das
+  três tintas da home é medido sobre os três fundos, piso AA).
+- Prints no computador (1440) e no celular (390), sem erro no console e sem
+  rolagem lateral. Cabeçalho medido de 320 a 1024 px: o botão de criar conta cabe inteiro em todas.
+- Os prints do painel são reais: `scripts/capturar-telas-home.mjs` sobe as
+  fotos pelo painel, marca favoritas pelo caminho do cliente e fotografa.
+
+**Achado de passagem, não consertado (fora do escopo da home):** a prévia do
+fotógrafo com a galeria vazia (`/g/...` com `ehDono` e nenhum item) passa
+`capitulos={[]}` para o `GaleriaCliente`, e ele só desenha grade por
+capítulo — as fotos de exemplo nunca aparecem. A página de demonstração da home
+precisou passar o grupo das soltas (`sem-capitulo`) para as fotos aparecerem.
+
+## 6. O que depende de alguém
 
 **Felipe (validação técnica):**
 - Domínio próprio está no ar em produção? Se sim, ligar `DOMINIO_PROPRIO_LIBERADO`.
 - Vídeo está validado com entrega real? Se sim, ligar `VIDEO_LIBERADO`.
-- Consertar a Montserrat no app inteiro (muda o texto das galerias entregues)?
+- Consertar a Montserrat no painel, login e páginas institucionais? (A galeria
+  do cliente não muda; o painel passa a ter a fonte que sempre deveria ter.)
 
 **Juan / camada estratégica:**
 - Fotos autorais por slot (`config/home-demonstracao.ts`), incluindo o grupo E
