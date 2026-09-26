@@ -29,7 +29,15 @@
 import * as mod from "../src/lib/grade-mural.ts";
 import { DENSIDADES, LARGURA_DA_FOTO as LARGURA } from "../src/config/aparencia.ts";
 
-const { PROPORCAO_DEITADA, agruparEmFileiras, colunasDoItem, colunasQueCabem, ehDeitada } = mod;
+const {
+  PROPORCAO_DEITADA,
+  agruparEmFileiras,
+  colunasDoItem,
+  colunasQueCabem,
+  ehDeitada,
+  fileiraChegaNaBorda,
+  fileirasDeColunas,
+} = mod;
 
 let falhou = false;
 function etapa(nome, fn) {
@@ -49,8 +57,8 @@ const igual = (a, b, o) => {
 console.log("\nColunas: fileiras na ordem\n");
 
 /* A grade "Colunas" desde 26/09/2026: fileiras de N fotos, N = colunas da
-   densidade, toda foto valendo uma. Ver `lib/grade-mural.ts`. */
-const colunasDe = (proporcoes, n) => agruparEmFileiras(proporcoes, n, false);
+   densidade, toda foto valendo uma. Ver `fileirasDeColunas`. */
+const colunasDe = (proporcoes, n, completa = true) => fileirasDeColunas(proporcoes.length, n, completa);
 const retratos = (q) => Array.from({ length: q }, () => 2 / 3);
 
 etapa("a primeira fileira é 1, 2, 3 — e não 1, 11, 21", () => {
@@ -76,19 +84,78 @@ etapa("toda foto entra exatamente uma vez, na ordem", () => {
   }
 });
 
-etapa("toda fileira tem exatamente N fotos — a deitada não empurra ninguém", () => {
+etapa("a deitada não empurra ninguém para a fileira seguinte", () => {
   /* A diferença para a Panorama: lá a deitada vale por duas e a fileira fica
-     com menos fotos. Aqui a fileira é sempre do tamanho que a densidade
-     prometeu, e a deitada sai mais larga porque a fileira é justificada. */
-  const p = Array.from({ length: 23 }, (_, i) => (i % 4 === 1 ? 16 / 9 : 2 / 3));
+     com menos fotos. Aqui ela conta como uma, e sai mais larga porque a
+     fileira é justificada. */
+  const p = Array.from({ length: 25 }, (_, i) => (i % 4 === 1 ? 16 / 9 : 2 / 3));
   const f = colunasDe(p, 5);
-  f.slice(0, -1).forEach((fileira, k) => igual(fileira.length, 5, `fileira ${k}`));
-  igual(f.at(-1).length, 3, "a última, com o que sobrou");
-  return `${f.length} fileiras de 5, a última com 3`;
+  igual(f.map((r) => r.length), [5, 5, 5, 5, 5], "25 fotos, 7 deitadas, 5 colunas");
+  return "cinco fileiras de cinco";
 });
 
-etapa("menos fotos que colunas: uma fileira só, com o que tem", () => {
-  igual(colunasDe(retratos(2), 4), [[0, 1]], "duas fotos, quatro colunas");
+/*
+ * ── SEM ESPAÇO VAZIO NO FIM (26/09/2026) ──────────────────────────────────
+ *
+ * Felipe: "tente deixar sem espaçamento, é importante seguir a ordem". O
+ * único vazio das fileiras era a última, curta, com a borda direita em branco.
+ * A falta passou a ser repartida pelas últimas fileiras — 5 + 5 + 3 vira
+ * 5 + 4 + 4 — e toda fileira chega à borda.
+ */
+etapa("nenhuma fileira curta no fim: toda fileira tem N ou N − 1 fotos", () => {
+  for (const n of [2, 3, 4, 5, 6]) {
+    /* Da primeira galeria em que dá para repartir sem ninguém ficar com menos
+       de N − 1 até uma de 300 fotos. */
+    for (let q = n * (n - 1); q <= 300; q++) {
+      const f = colunasDe(retratos(q), n);
+      const fora = f.find((r) => r.length !== n && r.length !== n - 1);
+      if (fora) throw new Error(`${q} fotos em ${n} colunas: uma fileira com ${fora.length}`);
+      igual(f.flat(), Array.from({ length: q }, (_, i) => i), `${q} fotos em ${n} colunas, na ordem`);
+    }
+  }
+  const exemplo = colunasDe(retratos(48), 5).map((r) => r.length).join(" + ");
+  return `48 fotos em 5: ${exemplo}`;
+});
+
+etapa("galeria pequena reparte o que dá, o mais igual possível", () => {
+  igual(colunasDe(retratos(7), 5).map((r) => r.length), [4, 3], "7 fotos, 5 colunas");
+  igual(colunasDe(retratos(6), 5).map((r) => r.length), [3, 3], "6 fotos, 5 colunas");
+  igual(colunasDe(retratos(3), 5).map((r) => r.length), [3], "3 fotos, 5 colunas");
+});
+
+etapa("capítulo de uma ou duas fotos não vira pôster", () => {
+  /* Esticar até a borda deixa a foto `colunas ÷ fotos` vezes maior que numa
+     fileira cheia. Até o dobro é o que o fim repartido e o capítulo pequeno
+     pedem; uma foto sozinha em cinco colunas sairia cinco vezes maior — da
+     largura da tela e mais alta que ela. */
+  const casos = [
+    [4, 5, true, "4 em 5: 25% maiores"],
+    [3, 5, true, "3 em 5"],
+    [2, 5, false, "2 em 5 seriam 2,5×"],
+    [1, 5, false, "1 em 5 seria 5×"],
+    [1, 2, true, "1 em 2, no celular: a foto inteira na largura, como no resto do celular"],
+    [4, 8, true, "4 em 8"],
+    [3, 8, false, "3 em 8"],
+  ];
+  for (const [fotos, n, esperado, rotulo] of casos) {
+    if (fileiraChegaNaBorda(fotos, n) !== esperado) {
+      throw new Error(`${rotulo}: esperava ${esperado ? "chegar" : "não chegar"} à borda`);
+    }
+  }
+  /* Enquanto a galeria chega rolando, só fileira cheia estica. */
+  if (fileiraChegaNaBorda(4, 5, false)) throw new Error("fim de lote esticado até a borda");
+  if (!fileiraChegaNaBorda(5, 5, false)) throw new Error("fileira cheia deixou de chegar à borda");
+});
+
+etapa("galeria que ainda chega rolando: o lote novo não mexe no que já está na tela", () => {
+  /* Enquanto vem mais, a última fileira fica curta de propósito. Se o fim
+     fosse repartido, as fotos de baixo mudariam de fileira na frente da
+     pessoa quando o próximo lote chegasse. */
+  const antes = colunasDe(retratos(58), 5, false);
+  const depois = colunasDe(retratos(90), 5, false);
+  antes.slice(0, -1).forEach((r, k) => igual(depois[k], r, `fileira ${k} depois do lote`));
+  igual(antes.at(-1).length, 3, "o fim do lote fica curto");
+  return `${antes.length - 1} fileiras intactas quando o lote chega`;
 });
 
 etapa("quantas colunas cabem", () => {

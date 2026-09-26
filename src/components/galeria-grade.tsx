@@ -2,7 +2,12 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { DENSIDADES, LARGURA_DA_FOTO, type Aparencia } from "@/config/aparencia";
-import { agruparEmFileiras, colunasDaGrade } from "@/lib/grade-mural";
+import {
+  agruparEmFileiras,
+  colunasDaGrade,
+  fileiraChegaNaBorda,
+  fileirasDeColunas,
+} from "@/lib/grade-mural";
 
 /**
  * As cinco grades.
@@ -51,9 +56,9 @@ function useColunas(largura: number, gap: number, minColunas: number, maxColunas
   const ref = useRef<HTMLDivElement>(null);
   const [colunas, setColunas] = useState(1);
   /*
-   * A LARGURA MEDIDA sai junto desde 16/09/2026, para o panorama.
+   * A LARGURA MEDIDA sai junto desde 16/09/2026, para o panorama — e, desde
+   * 26/09/2026, também para a "Colunas", que virou fileira justificada.
    *
-   * O mural só precisa do NÚMERO de colunas — o flex reparte a largura sozinho.
    * A fileira justificada precisa da largura em pixels: a altura de cada
    * fileira é `largura útil ÷ soma das proporções`, e sem o número não há
    * conta. Zero é o valor antes da medição, e quem lê trata como "ainda não
@@ -86,6 +91,12 @@ interface PropsGrade {
   render: (i: number, estilo: CSSProperties, classe: string) => ReactNode;
   /** largura/altura do item i — os layouts de linhas e panorama precisam */
   proporcao: (i: number) => number;
+  /**
+   * Não vem mais foto depois destas? Na galeria fatiada o resto chega rolando,
+   * e enquanto chega a "Colunas" não reparte o fim — ver `fileirasDeColunas`.
+   * Sem fatia, a lista já é a inteira.
+   */
+  listaCompleta?: boolean;
 }
 
 /**
@@ -133,6 +144,7 @@ function Fileiras({
   minColunas,
   maxColunas,
   deitadaValeDuas,
+  listaCompleta = true,
 }: Omit<PropsGrade, "aparencia"> & LimitesDaGrade & { deitadaValeDuas: boolean }) {
   const [ref, colunas, larguraMedida] = useColunas(largura, gap, minColunas, maxColunas);
   const proporcoes = Array.from({ length: quantidade }, (_, i) => {
@@ -142,7 +154,9 @@ function Fileiras({
        o tamanho da foto. */
     return Number.isFinite(p) && p > 0 ? p : 4 / 5;
   });
-  const fileiras = agruparEmFileiras(proporcoes, colunas, deitadaValeDuas);
+  const fileiras = deitadaValeDuas
+    ? agruparEmFileiras(proporcoes, colunas)
+    : fileirasDeColunas(quantidade, colunas, listaCompleta);
 
   /* Antes de medir, a largura é 0 e não há conta a fazer: o primeiro quadro
      desenha uma coluna, que é o que o servidor manda e o que o celular recebe.
@@ -160,22 +174,25 @@ function Fileiras({
            pôster. Ela mantém a altura das outras e sobra espaço à direita. */
         const ultimaIncompleta = f === fileiras.length - 1 && fileiras.length > 1;
         /*
-         * Na "Colunas" a última fileira tem a altura que TERIA se estivesse
-         * cheia — as fotos que faltam contadas pela média das que vieram. Com
-         * N fotos por fileira essa conta existe (na Panorama não: não se sabe
-         * quantas caberiam), e é ela que faz o fim da galeria ter o tamanho do
-         * resto em vez do palpite fixo de `alturaBase`. Fileira que fechou
-         * cheia é justificada como qualquer outra.
+         * Na "Colunas" toda fileira chega à borda: `fileirasDeColunas` já
+         * repartiu o fim para nenhuma sair curta (26/09/2026 — "tente deixar
+         * sem espaçamento"). As exceções estão em `fileiraChegaNaBorda` — o
+         * fim de um lote que ainda chega rolando, e o capítulo de uma ou duas
+         * fotos. Essas saem com a altura que TERIAM cheias — as fotos que
+         * faltam contadas pela média das que vieram — em vez de esticar
+         * poucas fotos até a borda.
          */
         const alturaCheia =
           (larguraMedida - gap * (colunas - 1)) / ((soma * colunas) / indices.length);
         const alturaDaFileira =
           larguraMedida <= 0
             ? alturaBase
-            : !ultimaIncompleta
-              ? util / soma
-              : deitadaValeDuas
+            : deitadaValeDuas
+              ? ultimaIncompleta
                 ? alturaBase
+                : util / soma
+              : fileiraChegaNaBorda(indices.length, colunas, listaCompleta)
+                ? util / soma
                 : Math.min(alturaCheia, util / soma);
 
         return (
@@ -201,7 +218,13 @@ function Fileiras({
   );
 }
 
-export function GaleriaGrade({ aparencia, quantidade, render, proporcao }: PropsGrade) {
+export function GaleriaGrade({
+  aparencia,
+  quantidade,
+  render,
+  proporcao,
+  listaCompleta = true,
+}: PropsGrade) {
   const { gapPx: gap, minColunas, maxColunas } = DENSIDADES[aparencia.densidade];
   const largura = LARGURA_DA_FOTO[aparencia.densidade];
   const itens = Array.from({ length: quantidade }, (_, i) => i);
@@ -219,6 +242,7 @@ export function GaleriaGrade({ aparencia, quantidade, render, proporcao }: Props
         minColunas={minColunas}
         maxColunas={maxColunas}
         deitadaValeDuas={aparencia.grade === "panorama"}
+        listaCompleta={listaCompleta}
       />
     );
   }
