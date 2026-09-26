@@ -230,8 +230,12 @@ diferentes — a página demonstrando a versatilidade.
 Mensagem implícita: *não importa se a tua fotografia se parece com a nossa. A
 Galeria Átomo pode continuar parecendo com a tua.*
 
-**Ainda será aprofundada criativamente.** Não reconstruir a home com base só
-neste documento.
+**Atualização (26/09/2026):** a direção foi aprofundada no
+[briefing-mestre da nova home](briefing-home.md) — hierarquia, textos,
+direção visual e princípios. **Antes de mexer na home, ler o briefing e a
+[leitura crítica](home-leitura-critica.md)**, que registra o que foi
+implementado, o que mudou em relação ao briefing e o que ainda depende de
+validação.
 
 ## 18. Sobre a home atual
 
