@@ -30,13 +30,13 @@ import * as mod from "../src/lib/grade-mural.ts";
 import { DENSIDADES, LARGURA_DA_FOTO as LARGURA } from "../src/config/aparencia.ts";
 
 const {
-  EMPATE_VISUAL,
   PROPORCAO_DEITADA,
   agruparEmFileiras,
   colunasDoItem,
   colunasQueCabem,
-  distribuirEmColunas,
   ehDeitada,
+  fileiraChegaNaBorda,
+  fileirasDeColunas,
 } = mod;
 
 let falhou = false;
@@ -54,49 +54,108 @@ const igual = (a, b, o) => {
   if (x !== y) throw new Error(`${o}: esperava ${y}, veio ${x}`);
 };
 
-console.log("\nMural: ordem e foto deitada\n");
+console.log("\nColunas: fileiras na ordem\n");
+
+/* A grade "Colunas" desde 26/09/2026: fileiras de N fotos, N = colunas da
+   densidade, toda foto valendo uma. Ver `fileirasDeColunas`. */
+const colunasDe = (proporcoes, n, completa = true) => fileirasDeColunas(proporcoes.length, n, completa);
+const retratos = (q) => Array.from({ length: q }, () => 2 / 3);
 
 etapa("a primeira fileira é 1, 2, 3 — e não 1, 11, 21", () => {
-  const cols = distribuirEmColunas(30, 3);
-  igual(cols.length, 3, "quantas colunas");
-  /* O topo de cada coluna é o que a pessoa vê primeiro, da esquerda para a
-   * direita. Com o CSS antigo isto dava [0, 10, 20]. */
-  igual(
-    cols.map((c) => c[0]),
-    [0, 1, 2],
-    "topo das colunas",
-  );
-  return `topos: ${cols.map((c) => c[0]).join(", ")}`;
+  /* O defeito de 04/09: o `column-width` do CSS punha a foto 21 no topo da
+     terceira coluna. */
+  const f = colunasDe(retratos(30), 3);
+  igual(f[0], [0, 1, 2], "primeira fileira");
+  return `primeira fileira: ${f[0].join(", ")}`;
 });
 
 etapa("a foto do FIM nunca aparece no topo", () => {
   for (const n of [2, 3, 4, 5]) {
-    const cols = distribuirEmColunas(30, n);
-    for (const topo of cols.map((c) => c[0])) {
-      if (topo >= n) throw new Error(`com ${n} colunas, a foto ${topo + 1} está no topo`);
-    }
+    const f = colunasDe(Array.from({ length: 30 }, (_, i) => (i % 3 ? 2 / 3 : 3 / 2)), n);
+    igual(f[0], Array.from({ length: n }, (_, i) => i), `primeira fileira com ${n} colunas`);
   }
   return "conferido de 2 a 5 colunas";
 });
 
 etapa("toda foto entra exatamente uma vez, na ordem", () => {
   for (const [q, n] of [[30, 3], [7, 4], [1, 3], [12, 1], [0, 3]]) {
-    const cols = distribuirEmColunas(q, n);
-    const todas = cols.flat().sort((a, b) => a - b);
-    igual(todas, Array.from({ length: q }, (_, i) => i), `${q} fotos em ${n} colunas`);
-    for (const c of cols) {
-      /* Dentro da coluna a ordem tem de ser crescente: é o que faz a leitura
-       * continuar de cima para baixo dentro de cada fileira. */
-      for (let k = 1; k < c.length; k++) {
-        if (c[k] <= c[k - 1]) throw new Error(`coluna fora de ordem: ${c}`);
-      }
-    }
+    const plano = colunasDe(retratos(q), n).flat();
+    igual(plano, Array.from({ length: q }, (_, i) => i), `${q} fotos em ${n} colunas`);
   }
 });
 
-etapa("menos fotos que colunas não cria coluna vazia no meio", () => {
-  const cols = distribuirEmColunas(2, 4);
-  igual(cols.map((c) => c.length), [1, 1], "colunas usadas");
+etapa("a deitada não empurra ninguém para a fileira seguinte", () => {
+  /* A diferença para a Panorama: lá a deitada vale por duas e a fileira fica
+     com menos fotos. Aqui ela conta como uma, e sai mais larga porque a
+     fileira é justificada. */
+  const p = Array.from({ length: 25 }, (_, i) => (i % 4 === 1 ? 16 / 9 : 2 / 3));
+  const f = colunasDe(p, 5);
+  igual(f.map((r) => r.length), [5, 5, 5, 5, 5], "25 fotos, 7 deitadas, 5 colunas");
+  return "cinco fileiras de cinco";
+});
+
+/*
+ * ── SEM ESPAÇO VAZIO NO FIM (26/09/2026) ──────────────────────────────────
+ *
+ * Felipe: "tente deixar sem espaçamento, é importante seguir a ordem". O
+ * único vazio das fileiras era a última, curta, com a borda direita em branco.
+ * A falta passou a ser repartida pelas últimas fileiras — 5 + 5 + 3 vira
+ * 5 + 4 + 4 — e toda fileira chega à borda.
+ */
+etapa("nenhuma fileira curta no fim: toda fileira tem N ou N − 1 fotos", () => {
+  for (const n of [2, 3, 4, 5, 6]) {
+    /* Da primeira galeria em que dá para repartir sem ninguém ficar com menos
+       de N − 1 até uma de 300 fotos. */
+    for (let q = n * (n - 1); q <= 300; q++) {
+      const f = colunasDe(retratos(q), n);
+      const fora = f.find((r) => r.length !== n && r.length !== n - 1);
+      if (fora) throw new Error(`${q} fotos em ${n} colunas: uma fileira com ${fora.length}`);
+      igual(f.flat(), Array.from({ length: q }, (_, i) => i), `${q} fotos em ${n} colunas, na ordem`);
+    }
+  }
+  const exemplo = colunasDe(retratos(48), 5).map((r) => r.length).join(" + ");
+  return `48 fotos em 5: ${exemplo}`;
+});
+
+etapa("galeria pequena reparte o que dá, o mais igual possível", () => {
+  igual(colunasDe(retratos(7), 5).map((r) => r.length), [4, 3], "7 fotos, 5 colunas");
+  igual(colunasDe(retratos(6), 5).map((r) => r.length), [3, 3], "6 fotos, 5 colunas");
+  igual(colunasDe(retratos(3), 5).map((r) => r.length), [3], "3 fotos, 5 colunas");
+});
+
+etapa("capítulo de uma ou duas fotos não vira pôster", () => {
+  /* Esticar até a borda deixa a foto `colunas ÷ fotos` vezes maior que numa
+     fileira cheia. Até o dobro é o que o fim repartido e o capítulo pequeno
+     pedem; uma foto sozinha em cinco colunas sairia cinco vezes maior — da
+     largura da tela e mais alta que ela. */
+  const casos = [
+    [4, 5, true, "4 em 5: 25% maiores"],
+    [3, 5, true, "3 em 5"],
+    [2, 5, false, "2 em 5 seriam 2,5×"],
+    [1, 5, false, "1 em 5 seria 5×"],
+    [1, 2, true, "1 em 2, no celular: a foto inteira na largura, como no resto do celular"],
+    [4, 8, true, "4 em 8"],
+    [3, 8, false, "3 em 8"],
+  ];
+  for (const [fotos, n, esperado, rotulo] of casos) {
+    if (fileiraChegaNaBorda(fotos, n) !== esperado) {
+      throw new Error(`${rotulo}: esperava ${esperado ? "chegar" : "não chegar"} à borda`);
+    }
+  }
+  /* Enquanto a galeria chega rolando, só fileira cheia estica. */
+  if (fileiraChegaNaBorda(4, 5, false)) throw new Error("fim de lote esticado até a borda");
+  if (!fileiraChegaNaBorda(5, 5, false)) throw new Error("fileira cheia deixou de chegar à borda");
+});
+
+etapa("galeria que ainda chega rolando: o lote novo não mexe no que já está na tela", () => {
+  /* Enquanto vem mais, a última fileira fica curta de propósito. Se o fim
+     fosse repartido, as fotos de baixo mudariam de fileira na frente da
+     pessoa quando o próximo lote chegasse. */
+  const antes = colunasDe(retratos(58), 5, false);
+  const depois = colunasDe(retratos(90), 5, false);
+  antes.slice(0, -1).forEach((r, k) => igual(depois[k], r, `fileira ${k} depois do lote`));
+  igual(antes.at(-1).length, 3, "o fim do lote fica curto");
+  return `${antes.length - 1} fileiras intactas quando o lote chega`;
 });
 
 etapa("quantas colunas cabem", () => {
@@ -177,118 +236,22 @@ etapa("a densidade continua significando algo: mais arejada, menos colunas", () 
   }
 });
 
-/* ── O RODAPÉ DAS COLUNAS (16/09/2026) ────────────────────────────────────
+/* ── A ORDEM QUE O OLHO LÊ (26/09/2026) ───────────────────────────────────
  *
- * Felipe, com a foto do fim da galeria: "ficou estranho, umas partes vazias e
- * outra comprida". Repartir por CONTAGEM dá a cada coluna o mesmo número de
- * fotos e ignora que retrato é quase o dobro da altura de uma deitada — basta
- * a ordem das fotos conspirar para uma coluna esticar.
+ * Juan, com o print numerado à mão: "era pra ser 1 2 3 4 5, mas está 2 - 1 -
+ * 4 - 5 - 3". Felipe: "não pode trocar, ele tem que seguir a ordem".
  *
- * O teste usa a pior ordem para a repartição por contagem, e ela não é rara:
- * uma deitada a cada quatro fotos, com quatro colunas na tela. `i % colunas`
- * manda TODAS as deitadas para a coluna 0 e deixa as outras três só com
- * retratos — uma coluna curta ao lado de três compridas, que é a foto que o
- * Felipe mandou. Pela altura isso não tem como acontecer.
+ * O mural de colunas desempatava pela coluna mais curta, e nenhuma regra
+ * daquele desenho zerava as trocas — em galerias sortidas lia 35 de cada 100
+ * pares seguidos ao contrário, e a melhor variante ainda 17. Em fileira
+ * justificada todas as fotos de uma fileira começam na mesma altura, então a
+ * leitura é a ordem da fileira, e a fileira é um trecho contínuo da galeria.
+ *
+ * A etapa mede como o olho lê: posição = (fileira, lugar na fileira), e confere
+ * que isso dá a sequência exata, em galerias com a mistura de verdade.
  */
-console.log("\nO rodapé das colunas\n");
+console.log("\nA ordem que o olho lê\n");
 
-/** Altura de cada coluna, somando `1/proporção` de cada foto que caiu nela. */
-const alturasDasColunas = (cols, proporcoes) =>
-  cols.map((c) => c.reduce((t, i) => t + 1 / proporcoes[i], 0));
-
-etapa("a repartição pela altura fecha as colunas quase no mesmo rodapé", () => {
-  /* 24 fotos, uma deitada (3:2) a cada quatro; o resto retrato (2:3). */
-  const proporcoes = Array.from({ length: 24 }, (_, i) => (i % 4 === 0 ? 3 / 2 : 2 / 3));
-  const alturaDe = (i) => 1 / proporcoes[i];
-
-  const porContagem = alturasDasColunas(distribuirEmColunas(24, 4), proporcoes);
-  const porAltura = alturasDasColunas(distribuirEmColunas(24, 4, alturaDe), proporcoes);
-
-  const vao = (a) => Math.max(...a) - Math.min(...a);
-  if (!(vao(porAltura) < vao(porContagem))) {
-    throw new Error(
-      `por altura o vão é ${vao(porAltura).toFixed(2)} e por contagem ${vao(porContagem).toFixed(2)}`,
-    );
-  }
-  /* O vão que sobra não pode passar de UMA foto mais o empate visual.
-     
-     Até 26/09 o teto era uma foto exata, o mínimo teórico de quem manda cada
-     foto para a coluna mais curta. O empate visual (ver `distribuirEmColunas`)
-     pode escolher uma coluna até `EMPATE_VISUAL` mais comprida, e a conta
-     acompanha: a última foto da coluna mais alta entrou quando ela estava no
-     máximo essa folga acima da mais curta. Neste caso o vão foi de 0,8 para
-     1,5; em 600 galerias sortidas, o médio foi de 0,92 para 0,98. É o preço
-     de a foto 1 não ir para o lado errado da fileira por um pixel — e ele é
-     limitado por construção, não por sorte. */
-  const maisAlta = Math.max(...proporcoes.map((p) => 1 / p));
-  if (vao(porAltura) > maisAlta + EMPATE_VISUAL + 1e-9) {
-    throw new Error(
-      `sobrou um vão de ${vao(porAltura).toFixed(2)}, maior que uma foto (${maisAlta.toFixed(2)}) mais o empate visual`,
-    );
-  }
-  return `vão: ${vao(porContagem).toFixed(1)} → ${vao(porAltura).toFixed(1)}`;
-});
-
-etapa("repartir pela altura não mexe na ordem de leitura", () => {
-  const proporcoes = Array.from({ length: 30 }, (_, i) => (i % 3 === 0 ? 3 / 2 : 2 / 3));
-  const cols = distribuirEmColunas(30, 4, (i) => 1 / proporcoes[i]);
-  igual(cols.map((c) => c[0]), [0, 1, 2, 3], "topo das colunas");
-  for (const c of cols) {
-    for (let k = 1; k < c.length; k++) {
-      if (c[k] <= c[k - 1]) throw new Error(`coluna fora de ordem: ${c}`);
-    }
-  }
-  igual(cols.flat().sort((a, b) => a - b), Array.from({ length: 30 }, (_, i) => i), "todas uma vez");
-});
-
-etapa("proporção inválida não contamina a repartição", () => {
-  /* Foto sem largura/altura no banco. Um NaN na soma faria a coluna nunca mais
-     ser escolhida, e tudo cairia numa só. */
-  const cols = distribuirEmColunas(9, 3, (i) => (i === 0 ? NaN : 1));
-  for (const c of cols) {
-    if (c.length === 0) throw new Error(`coluna vazia: ${JSON.stringify(cols)}`);
-  }
-  return cols.map((c) => c.length).join(" · ");
-});
-
-/* ── O EMPATE QUE O OLHO VÊ (26/09/2026) ──────────────────────────────────
- *
- * Juan, com o print numerado à mão: "era pra ser nessa ordem dos números, mas
- * está 2 - 1 - 4 - 5 - 3". As fotos 1 e 2 começavam na mesma altura da tela,
- * e 3, 4 e 5 também — colunas niveladas a olho, diferentes por um ou dois
- * pixels no número. A regra desempatava pelo pixel.
- *
- * A etapa "repartir pela altura não mexe na ordem de leitura", acima, nunca
- * pegou isso: ela confere o topo de cada COLUNA, e dentro da coluna a ordem
- * sempre esteve certa. O erro é da FILEIRA.
- *
- * `lidasAoContrario` mede a fileira como se lê um mural: duas fotos cujos
- * topos diferem menos que meia foto estão na mesma fileira e se leem da
- * esquerda para a direita; fora disso, quem começa mais acima vem antes.
- */
-function lidasAoContrario(cols, alturaDe) {
-  const pos = [];
-  cols.forEach((c, k) => {
-    let y = 0;
-    for (const i of c) {
-      pos[i] = { k, t: y, h: alturaDe(i) };
-      y += alturaDe(i);
-    }
-  });
-  let lado = 0, acima = 0;
-  for (let i = 0; i + 1 < pos.length; i++) {
-    const a = pos[i], b = pos[i + 1];
-    const mesmaFileira = Math.abs(a.t - b.t) <= 0.5 * Math.min(a.h, b.h);
-    if (mesmaFileira && b.k < a.k) lado++;
-    else if (!mesmaFileira && b.t < a.t) acima++;
-  }
-  return { lado, acima };
-}
-
-/* Galerias sortidas, semente fixa: 2 a 6 colunas, 10 a 50% de deitadas, e
-   metade das fotos seguidas da sua PB — a mesma exportação, mesma proporção.
-   Cada foto tem alguns pixels de diferença da proporção nominal, como na vida
-   real: é isso que transforma empate em "desempate por um pixel". */
 function galeriasSortidas() {
   let s = 11;
   const rnd = () => ((s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
@@ -302,7 +265,7 @@ function galeriasSortidas() {
           const nominal = rnd() < deitadas ? (rnd() < 0.5 ? 3 / 2 : 16 / 9) : rnd() < 0.8 ? 2 / 3 : 4 / 5;
           const x = nominal * (1 + (rnd() - 0.5) * 0.006);
           p.push(x);
-          if (rnd() < 0.5) p.push(x);
+          if (rnd() < 0.5) p.push(x); // a PB, mesma exportação
         }
         saida.push({ p, colunas });
       }
@@ -311,74 +274,32 @@ function galeriasSortidas() {
   return saida;
 }
 
-console.log("\nO empate que o olho vê\n");
-
-etapa("o print do Juan: colunas niveladas a olho saem 1, 2, 3, 4, 5", () => {
-  /* A fileira de cima do print, reconstruída pela altura em que cada coluna
-     terminava (na escala em que a coluna mede 1 de largura): a primeira e a
-     última niveladas, com a última um fio mais curta; as três do meio também
-     niveladas entre si, mais embaixo. Depois, cinco retratos — as fotos 1 a 5
-     dele — e mais uma fileira, para nenhuma delas ser a última da galeria. */
-  const topoDaFileira = [1.17, 1.98, 2.0, 1.99, 1.15];
-  const alt = (i) => (i < 5 ? topoDaFileira[i] : 1.5);
-  const cols = distribuirEmColunas(15, 5, alt);
-  const colunaDe = (i) => cols.findIndex((c) => c.includes(i));
-  const numeradas = [5, 6, 7, 8, 9]; // as fotos 1..5 do print
-  const lidas = [...numeradas].sort((a, b) => {
-    const [ca, cb] = [colunaDe(a), colunaDe(b)];
-    const topo = (i) => cols[colunaDe(i)].slice(0, cols[colunaDe(i)].indexOf(i)).reduce((t, j) => t + alt(j), 0);
-    const mesma = Math.abs(topo(a) - topo(b)) <= 0.75;
-    return mesma ? ca - cb : topo(a) - topo(b);
+etapa("o print do Juan sai 1, 2, 3, 4, 5", () => {
+  /* A fileira de cima do print tinha alturas desencontradas — era isso que o
+     mural usava para decidir a coluna. Em fileira, altura não decide nada. */
+  const p = [0.85, 0.5, 0.5, 0.5, 0.87, 2 / 3, 2 / 3, 2 / 3, 2 / 3, 2 / 3];
+  const f = colunasDe(p, 5);
+  const lugar = new Map();
+  f.forEach((fileira, r) => fileira.forEach((i, k) => lugar.set(i, [r, k])));
+  const lidas = [5, 6, 7, 8, 9].sort((a, b) => {
+    const [ra, ka] = lugar.get(a), [rb, kb] = lugar.get(b);
+    return ra - rb || ka - kb;
   });
   const comoSeLe = lidas.map((i) => i - 4).join(" - ");
-  if (comoSeLe !== "1 - 2 - 3 - 4 - 5") {
-    throw new Error(`lido como ${comoSeLe} — era pra ser 1 - 2 - 3 - 4 - 5`);
-  }
+  if (comoSeLe !== "1 - 2 - 3 - 4 - 5") throw new Error(`lido como ${comoSeLe}`);
   return comoSeLe;
 });
 
-etapa("em galerias sortidas, metade dos pares lidos ao contrário some", () => {
-  let lado = 0, fotos = 0;
+etapa("em nenhuma galeria sortida um par sai lido ao contrário", () => {
+  let fotos = 0;
   for (const { p, colunas } of galeriasSortidas()) {
-    const alt = (i) => 1 / p[i];
-    lado += lidasAoContrario(distribuirEmColunas(p.length, colunas, alt), alt).lado;
+    const lidas = colunasDe(p, colunas).flat();
+    for (let i = 0; i < lidas.length; i++) {
+      if (lidas[i] !== i) throw new Error(`com ${colunas} colunas, a ${i + 1}ª lida é a foto ${lidas[i] + 1}`);
+    }
     fotos += p.length;
   }
-  const por100 = (100 * lado) / fotos;
-  /* A regra do pixel dava ~35 por 100 fotos nestas galerias. O que sobra é o
-     que nenhuma regra de coluna resolve (depois de uma deitada, a coluna fica
-     curta DE VERDADE), e é por isso que o teto não é zero. */
-  if (por100 > 22) {
-    throw new Error(`${por100.toFixed(1)} pares consecutivos lidos ao contrário por 100 fotos`);
-  }
-  return `${por100.toFixed(1)} por 100 fotos (a regra do pixel: ~35)`;
-});
-
-etapa("nenhuma foto posterior aparece claramente ACIMA de uma anterior", () => {
-  /* A garantia da regra antiga, e o motivo de o empate ser só um quarto de
-     foto: uma folga maior fecha mais casos de fileira e passa a jogar fotos
-     posteriores para cima das anteriores — medido, com 0,5 são ~5 por 100. */
-  let acima = 0;
-  for (const { p, colunas } of galeriasSortidas()) {
-    const alt = (i) => 1 / p[i];
-    acima += lidasAoContrario(distribuirEmColunas(p.length, colunas, alt), alt).acima;
-  }
-  if (acima > 0) throw new Error(`${acima} fotos posteriores começam claramente acima de uma anterior`);
-  return "nenhuma";
-});
-
-etapa("o rodapé fecha dentro de uma foto mais o empate, em toda galeria", () => {
-  let pior = 0;
-  for (const { p, colunas } of galeriasSortidas()) {
-    const hs = alturasDasColunas(distribuirEmColunas(p.length, colunas, (i) => 1 / p[i]), p);
-    const vao = Math.max(...hs) - Math.min(...hs);
-    const maisAlta = Math.max(...p.map((x) => 1 / x));
-    if (vao > maisAlta + EMPATE_VISUAL + 1e-9) {
-      throw new Error(`vão de ${vao.toFixed(2)} com a foto mais alta medindo ${maisAlta.toFixed(2)}`);
-    }
-    pior = Math.max(pior, vao);
-  }
-  return `pior vão ${pior.toFixed(2)}`;
+  return `${fotos} fotos em ${galeriasSortidas().length} galerias, todas na ordem`;
 });
 
 /* ── AS FILEIRAS DO PANORAMA ─────────────────────────────────────────────── */

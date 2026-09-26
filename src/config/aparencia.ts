@@ -721,7 +721,10 @@ export const OPCOES = {
     { id: "propria", nome: "A minha fonte", desc: "O arquivo que você enviou em Conta", familia: "Sua fonte" },
   ],
   grade: [
-    { id: "colunas", nome: "Colunas", desc: "Alturas variadas, estilo mural" },
+    /* Até 26/09/2026 era "Alturas variadas, estilo mural". O mural trocava fotos
+       de lugar na fileira, e a grade passou a montar fileiras — ver
+       `lib/grade-mural.ts`. */
+    { id: "colunas", nome: "Colunas", desc: "Mesmo número de fotos por fileira, na ordem" },
     { id: "linhas", nome: "Linhas", desc: "Fileiras alinhadas, sem cortar foto" },
     { id: "quadrada", nome: "Quadrada", desc: "Tudo no mesmo tamanho" },
     { id: "editorial", nome: "Editorial", desc: "Destaques maiores intercalados" },
@@ -848,7 +851,7 @@ export const PRESETS: Preset[] = [
   {
     id: "revista",
     nome: "Revista",
-    desc: "Fundo claro, tipografia grande, mural de colunas.",
+    desc: "Fundo claro, tipografia grande, fotos em fileiras.",
     aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
@@ -880,7 +883,9 @@ export const PRESETS: Preset[] = [
      *   capa mínima   — o desenho não tem foto de capa: abre no nome do casal
      *   creme         — o papel da imagem, marfim e não branco de tela
      *   manuscrita    — a Great Vibes, que é a `font-script` daquele mock
-     *   colunas       — o mural de duas colunas com alturas diferentes
+     *   colunas       — o mural de duas colunas com alturas diferentes (desde
+     *                   26/09/2026 a "Colunas" monta fileiras; ver
+     *                   `lib/grade-mural.ts`)
      *   normal        — e não `compacta`: ela tem piso de TRÊS colunas, e no
      *                   celular o desenho vira três fileiras estreitas. A
      *                   imagem tem duas, que é o que `normal` dá num telefone
@@ -888,7 +893,7 @@ export const PRESETS: Preset[] = [
      */
     id: "marfim",
     nome: "Marfim",
-    desc: "Creme e manuscrita, mural rente. É o desenho da nossa página inicial.",
+    desc: "Creme e manuscrita, fotos rentes. É o desenho da nossa página inicial.",
     aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {

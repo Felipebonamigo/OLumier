@@ -1792,6 +1792,12 @@ export function GaleriaCliente({
             <GaleriaGrade
               aparencia={aparencia}
               quantidade={cap.indices.length}
+              /* Galeria fatiada: enquanto o resto chega rolando, o fim deste
+                 lote não é o fim da galeria. Ver `fileirasDeColunas`. Mas as
+                 fotos chegam agrupadas por capítulo (`listarMediasPublicas`):
+                 se a última que chegou já é de outro, este veio inteiro e
+                 pode fechar a última fileira sem esperar a galeria toda. */
+              listaCompleta={acabou || capOriginal.indices.at(-1) !== itens.length - 1}
               proporcao={(k) => {
                 const it = itens[cap.indices[k]];
                 return it.largura && it.altura ? it.largura / it.altura : 4 / 5;
