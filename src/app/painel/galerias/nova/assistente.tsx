@@ -10,7 +10,7 @@ import {
   BOTAO_PRIMARIO,
   BOTAO_SECUNDARIO,
 } from "@/components/form-ui";
-import { PRESETS } from "@/config/aparencia";
+import { PRESETS, type Aparencia } from "@/config/aparencia";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
 /**
@@ -52,10 +52,13 @@ function Botao({ ultima }: { ultima: boolean }) {
 
 export function AssistenteNovaGaleria({
   capitulosSugeridos,
+  padraoDoEstudio = null,
   slotLogo,
 }: {
   /** Vem do servidor: `lib/secoes.ts` é server-only e não pode ser importado aqui. */
   capitulosSugeridos: readonly string[];
+  /** O design que o estúdio salvou como padrão, ou null se nunca salvou. */
+  padraoDoEstudio?: Aparencia | null;
   /** A logo do estúdio, montada no servidor — aparece junto do estilo. */
   slotLogo?: ReactNode;
 }) {
@@ -116,9 +119,32 @@ export function AssistenteNovaGaleria({
       </div>
 
       <div className={etapa === 1 ? "mt-6" : "hidden"}>
+        {/*
+          ── O PADRÃO DO ESTÚDIO APARECE AQUI (26/09/2026) ─────────────────
+
+          "Os estilos salvos não estão fácil de achar, não conseguimos
+          descobrir onde estão." Ele já valia nesta tela — `criarGaleriaAction`
+          usa o padrão quando nenhum cartão é marcado —, mas de um jeito
+          invisível: a etapa mostrava só os nossos dez, nenhum marcado, e quem
+          tinha salvo o próprio design achava que ele tinha sumido. Pior:
+          apontar um cartão para "procurar" o seu trocava o padrão por outro.
+
+          Agora ele é o primeiro cartão e já vem marcado, porque é o que
+          acontece se ninguém mexer. Marcá-lo manda `preset` vazio — o mesmo
+          caminho de antes, e a mesma ordem que `testar-padrao-do-estudio`
+          prende no servidor. Sem padrão salvo, a frase diz onde ele nasce.
+        */}
         <p className="text-sm text-texto-soft">
-          Como a galeria vai aparecer para o cliente. Dá para trocar tudo depois, em Design.
+          {padraoDoEstudio
+            ? "Como a galeria vai aparecer para o cliente. Ela já nasce no seu padrão — escolha outro estilo só se esta entrega pedir. Dá para trocar tudo depois, em Design."
+            : "Como a galeria vai aparecer para o cliente. Dá para trocar tudo depois, em Design."}
         </p>
+        {!padraoDoEstudio && (
+          <p className="mt-1 text-xs text-texto-faint">
+            Tem um design seu? Monte-o na aba Design de qualquer galeria e aperte “Salvar como meu
+            padrão” — ele passa a aparecer aqui como a primeira opção.
+          </p>
+        )}
         <input type="hidden" name="preset" value={preset} />
         {/* Mais colunas conforme a tela, porque aqui a largura VIRA amostra:
             com três colunas dentro de 672 px cada "Ana & Pedro" saía com ~155
@@ -126,6 +152,22 @@ export function AssistenteNovaGaleria({
             escolher no escuro. O teto é cinco — passando disso a amostra volta
             a encolher, e o nome do estilo começa a quebrar. */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {padraoDoEstudio && (
+            <button
+              type="button"
+              onClick={() => setPreset("")}
+              aria-pressed={preset === ""}
+              className={`rounded-xl border p-3 text-left transition ${
+                preset === "" ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+              }`}
+            >
+              <AmostraDoPreset aparencia={padraoDoEstudio} className="mb-2 h-28 w-full" />
+              <span className="block text-sm font-medium">Meu padrão</span>
+              <span className="mt-0.5 block text-xs text-texto-faint">
+                O design que você salvou.
+              </span>
+            </button>
+          )}
           {PRESETS.map((p) => {
             const escolhido = preset === p.id;
             return (

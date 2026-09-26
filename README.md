@@ -50,6 +50,7 @@ produção, se o build falhar, ou se o app subir sem falar com banco e R2.
 - [`docs/subdominio-por-estudio.md`](docs/subdominio-por-estudio.md) — DNS, TLS e as armadilhas
 - [`docs/ligar-cobranca.md`](docs/ligar-cobranca.md) — passo a passo do Asaas
 - [`docs/experiencia-galeria.md`](docs/experiencia-galeria.md) — decisões da galeria pública
+- [`docs/estrategia-de-marca.md`](docs/estrategia-de-marca.md) — posicionamento, linguagem e direção visual (camada estratégica)
 
 ## Next 16
 

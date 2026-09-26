@@ -441,27 +441,63 @@ for (const [frente, piso, descricao] of [
  * marcador é a imagem em `-z-20`, que é como as três são escritas — precisa
  * carregá-la, e o cabeçalho junto, porque ele flutua sobre o hero.
  */
-etapa("toda seção com foto de fundo carrega .sobre-foto", () => {
+/*
+ * ── 26/09/2026: A HOME DEIXOU DE SEGUIR O TEMA ───────────────────────────
+ *
+ * As duas etapas que moravam aqui prendiam a home ANTIGA: toda seção com foto
+ * de fundo carregando `.sobre-foto`, e o cabeçalho flutuando sobre o hero com
+ * ela. A home nova (briefing em `docs/briefing-home.md`) é clara e neutra, sem
+ * seletor de tema, e o cabeçalho tem fundo próprio. O defeito que `.sobre-foto`
+ * existia para impedir — o texto lavado sobre a foto no tema claro — não tem
+ * mais como acontecer lá, e é isso que as duas etapas novas conferem: que a
+ * home trava a luz dela, e que o cabeçalho não depende de foto nenhuma.
+ *
+ * `.sobre-foto` continua no CSS e no teste de contraste abaixo porque ainda é
+ * a peça certa para qualquer página que apoie texto sobre foto seguindo o tema.
+ */
+etapa("a home trava a própria luz e não segue o tema", () => {
   const HOME = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8");
-  const secoes = HOME.split(/(?=<section)/).filter((t) => t.startsWith("<section"));
-  const comFoto = secoes.filter((t) => t.includes("-z-20"));
-  if (comFoto.length === 0) throw new Error("nenhuma seção com foto de fundo — o marcador mudou?");
-  const nuas = comFoto.filter((t) => !/<section[^>]*sobre-foto/.test(t));
-  if (nuas.length) {
-    throw new Error(
-      `${nuas.length} de ${comFoto.length} seção(ões) com foto sem a classe — ` +
-        `no tema claro o texto delas fica lavado`,
-    );
+  if (!/<main[^>]*className=\{`home[\s`]/.test(HOME)) {
+    throw new Error("o <main> da home não carrega a classe .home");
   }
-  return `${comFoto.length} seções`;
+  const bloco = /\.home\s*\{[^}]*\}/.exec(CSS)?.[0] ?? "";
+  if (!/color-scheme:\s*only light/.test(bloco)) {
+    throw new Error(".home não trava `color-scheme: only light` — as light-dark() do app voltariam a seguir o sistema");
+  }
 });
 
-etapa("o cabeçalho que flutua sobre o hero carrega .sobre-foto", () => {
+/*
+ * O PISO DE CONTRASTE VALE NA HOME TAMBÉM (PRODUCT.md: "WCAG AA é piso").
+ *
+ * A home tem paleta própria (`.home` em globals.css) e três fundos: o papel, o
+ * branco das seções alternadas e o bege de "Brasileira desde o começo". O
+ * cinza mais claro do texto chegou a 4,3:1 sobre o bege na primeira versão —
+ * abaixo do piso, num texto de 14 px. Cada tinta de texto é medida sobre os
+ * três.
+ */
+{
+  const bloco = /\.home\s*\{[^}]*\}/.exec(CSS)?.[0] ?? "";
+  const token = (nome) => new RegExp(`${nome}:\\s*(#[0-9a-f]{6})`, "i").exec(bloco)?.[1];
+  for (const fundo of ["--h-papel", "--h-branco", "--h-quente"]) {
+    for (const tinta of ["--h-tinta", "--h-tinta-2", "--h-tinta-3"]) {
+      etapa(`texto da home (${tinta} sobre ${fundo})`, () => {
+        const a = token(tinta);
+        const b = token(fundo);
+        if (!a || !b) throw new Error(`token ausente em .home: ${!a ? tinta : fundo}`);
+        const r = contraste(a, b);
+        if (r < 4.5) throw new Error(`${r.toFixed(2)}:1, piso é 4.5:1`);
+        return `${r.toFixed(1)}:1`;
+      });
+    }
+  }
+}
+
+etapa("o cabeçalho da home tem fundo próprio", () => {
   const HOME = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8");
   const cabecalho = /<header[^>]*>/.exec(HOME)?.[0] ?? "";
   if (!cabecalho) throw new Error("não achei o <header> da home");
-  if (!cabecalho.includes("sobre-foto")) {
-    throw new Error("o <header> segue o tema — sobre o hero escuro ele some no claro");
+  if (!/bg-\[/.test(cabecalho)) {
+    throw new Error("o <header> não tem fundo — fixo sobre fotos e galerias, o texto dele se perde");
   }
 });
 
@@ -499,10 +535,11 @@ for (const [frente, piso, descricao] of [
  * trocar — o tema virava uma decisão tomada antes de entrar e irrevogável
  * depois. Aqui prendemos os dois lugares.
  */
-for (const [arquivo, onde] of [
-  ["src/app/page.tsx", "a home"],
-  ["src/app/painel/layout.tsx", "o painel"],
-]) {
+/* A HOME SAIU DESTA LISTA em 26/09/2026: ela é clara e neutra por decisão da
+   estratégia de marca, e o terceiro tema do seletor era o Movimento Átomo —
+   outra marca dentro da vitrine da Galeria Átomo (conflito 6 de
+   `docs/estrategia-de-marca.md`). O painel, onde se passa a tarde, continua. */
+for (const [arquivo, onde] of [["src/app/painel/layout.tsx", "o painel"]]) {
   etapa(`${onde} oferece a troca de tema`, () => {
     const fonte = readFileSync(path.join(RAIZ, arquivo), "utf8");
     if (!/<SeletorTema[\s/>]/.test(fonte)) {
