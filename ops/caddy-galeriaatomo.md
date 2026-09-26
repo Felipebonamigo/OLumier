@@ -40,6 +40,11 @@ galeriaatomo.com.br, www.galeriaatomo.com.br {
 }
 ```
 
+> **O `www` não precisa de `redir` aqui.** Desde 26/09/2026 o próprio app
+> manda `www.galeriaatomo.com.br` para a raiz com 308 (`src/proxy.ts`), menos a
+> `/api`. Antes os dois nomes respondiam 200 com a mesma página, e para o
+> buscador eram dois sites com o conteúdo copiado.
+
 ## 2. O matcher do subdomínio de estúdio — **não existe mais**
 
 > **Nada a fazer aqui. Pule para a seção 3.**

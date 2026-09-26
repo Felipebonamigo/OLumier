@@ -2,9 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MarcaLockup } from "@/components/marca-tile";
 import { emailConfigurado } from "@/lib/email";
+import { marca } from "@/config/marca";
+import { metadadosDaCasa } from "@/lib/metadados";
 import { FormEntrar } from "./form";
 
-export const metadata: Metadata = { title: "Entrar" };
+/* Descrição própria, e não a da marca herdada do layout: é o que aparece
+   debaixo do link quando alguém busca "galeria átomo entrar". */
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: "Entrar",
+  descricao: `Entre no painel do ${marca.nome} para enviar, publicar e acompanhar as galerias do seu estúdio.`,
+  caminho: "/entrar",
+});
 
 export default async function EntrarPage({
   searchParams,

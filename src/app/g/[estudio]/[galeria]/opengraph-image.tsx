@@ -1,68 +1,16 @@
 import { ImageResponse } from "next/og";
 import { marca } from "@/config/marca";
 import { lerAparencia, variaveisDoTema } from "@/config/aparencia";
-import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { armazemDe } from "@/lib/armazem";
+import { comAlfa, fotoParaOCartao } from "@/lib/cartao-de-link";
 import { buscarGaleriaPublica, listarMediasPublicas } from "@/lib/galerias-publicas";
 
-/**
- * ── O SATORI NÃO DESENHA WEBP (06/09/2026) ────────────────────────────────
- *
- * Alimentado com uma WebP, o renderizador do `ImageResponse` estoura com
- * "u2 is not iterable" — a rota fecha a conexão e o robô do WhatsApp, que
- * diante de erro desiste, mostra o LINK PELADO. Não é hipótese: rodei o
- * `ImageResponse` à mão com a derivada de uma galeria real e ele estourou;
- * com uma JPEG, desenhou.
- *
- * E TODA derivada de foto do produto é `.webp` — 1009 de 1009 no banco. Ou
- * seja: este cartão só funcionava por acidente, nas poucas mídias antigas sem
- * derivada, que caíam no original. O defeito ficou escondido porque a página
- * da galeria nem chegava a pedir esta imagem: sem bloco `openGraph` próprio,
- * o Next servia o cartão da RAIZ. Consertar o texto do cartão ligou esta rota
- * pela primeira vez, e o primeiro efeito teria sido trocar "cartão da
- * plataforma" por "cartão nenhum".
+/*
+ * Por que a foto passa por `fotoParaOCartao` e não entra direto: o satori não
+ * desenha WebP, e toda derivada do produto é WebP. A história, e o teto de
+ * memória, moram em `lib/cartao-de-link.ts` — que a vitrine do estúdio usa
+ * também desde 26/09/2026.
  */
-const DESENHAVEIS = ["image/jpeg", "image/png"];
-
-/**
- * Teto do que entra na memória para desenhar um quadro de 1200×630.
- *
- * A derivada tem centenas de KB; o ORIGINAL é o arquivo que saiu da câmera e
- * pode passar de 30 MB — e o cartão roda no mesmo VPS que serve as galerias.
- * Acima do teto, o cartão sai sem foto: quadro neutro com a cor e o nome da
- * galeria é uma entrega digna; VPS sem memória não é.
- */
-const TETO_DA_FOTO = 12 * 1024 * 1024;
-
-/** A imagem como `data:`, ou `null` quando não serve para desenhar. */
-async function embutirSeDesenhavel(url: string): Promise<string | null> {
-  const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
-  if (!r.ok) return null;
-  const tipo = (r.headers.get("content-type") ?? "").split(";")[0].trim();
-  if (!DESENHAVEIS.includes(tipo)) return null;
-  const anunciado = Number(r.headers.get("content-length") ?? 0);
-  if (anunciado > TETO_DA_FOTO) return null;
-  const bytes = Buffer.from(await r.arrayBuffer());
-  /* Confere o tamanho REAL também: `content-length` é o que o bucket diz. */
-  if (bytes.length > TETO_DA_FOTO) return null;
-  return `data:${tipo};base64,${bytes.toString("base64")}`;
-}
-
-/**
- * `#rrggbb` com transparência, para o véu.
- *
- * As cores do tema são sempre hex de seis dígitos — as três dos temas prontos
- * estão escritas assim em `TEMAS`, e as escolhidas à mão passam pelo filtro de
- * `lerCores`, que não aceita outra forma. Então não há caso a tratar aqui: se
- * um dia entrar `rgb()` ou `#fff` naquele arquivo, este parse devolve preto e o
- * teste do cartão acusa antes de chegar em galeria de alguém.
- */
-function comAlfa(hex: string, alfa: number): string {
-  const n = Number.parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return `rgba(${r},${g},${b},${alfa})`;
-}
 
 /*
  * O CARTÃO QUE O WHATSAPP DESDOBRA — desta galeria, não da plataforma.
@@ -103,19 +51,6 @@ export default async function Image({ params }: Props) {
      robô que recebe 500 desiste e mostra link pelado, que é pior que o neutro. */
   const podeMostrarFoto = Boolean(galeria) && !galeria?.senha_hash;
 
-  /*
-   * A FOTO É BAIXADA AQUI, e não entregue ao renderizador como endereço.
-   *
-   * Passar a URL assinada e deixar o satori buscá-la parecia mais simples e
-   * tinha um modo de falhar que derruba tudo: derivada que não existe mais no
-   * balde devolve 404, o renderizador estoura, e a rota inteira responde com
-   * conexão fechada. O robô do WhatsApp, diante disso, desiste e mostra o link
-   * pelado — pior que o cartão neutro.
-   *
-   * Buscando aqui, o 404 vira `null` e o quadro neutro entra no lugar. O
-   * `AbortSignal` fecha o outro buraco: bucket lento não pode segurar a rota
-   * até o robô cansar de esperar.
-   */
   let capaEmbutida: string | null = null;
   if (podeMostrarFoto && galeria) {
     try {
@@ -125,31 +60,11 @@ export default async function Image({ params }: Props) {
         medias.find((m) => m.tipo === "foto");
 
       if (capa) {
-        /* Validade curta de propósito: o link só precisa viver o tempo desta
-           requisição, aqui dentro, e nunca sai deste processo. */
-        const armazem = armazemDe(capa.armazem);
-        const daDerivada = await urlDaDerivada(capa.chave_preview, capa.chave, armazem, 120);
-        capaEmbutida = await embutirSeDesenhavel(daDerivada);
-
-        /*
-         * A derivada é WebP, e o satori não a desenha (ver `DESENHAVEIS`).
-         * Então a segunda tentativa é o ORIGINAL, que é o arquivo que o
-         * fotógrafo enviou — JPEG, na prática. Custa uma segunda busca, e só
-         * na primeira vez que alguém desdobra o link: o que o WhatsApp guarda
-         * é o PNG pronto.
-         *
-         * `chave_preview` nulo já cai no original pela própria `urlDaDerivada`;
-         * o `if` evita repetir a mesma busca nesse caso.
-         */
-        if (!capaEmbutida && capa.chave_preview) {
-          capaEmbutida = await embutirSeDesenhavel(
-            await urlDoOriginal(capa.chave, armazem, 120),
-          );
-        }
+        capaEmbutida = await fotoParaOCartao(capa.chave_preview, capa.chave, armazemDe(capa.armazem));
       }
     } catch {
-      /* Listar, assinar ou baixar pode falhar; nada disso derruba o cartão. Sem
-         foto, o quadro neutro ainda diz de quem é a galeria. */
+      /* Listar pode falhar; nada disso derruba o cartão. Sem foto, o quadro
+         neutro ainda diz de quem é a galeria. */
       capaEmbutida = null;
     }
   }

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { marca } from "@/config/marca";
+import { metadadosDaCasa } from "@/lib/metadados";
 
-export const metadata: Metadata = {
-  title: "Política de Privacidade",
-  description: `Como o ${marca.nome} trata dados pessoais.`,
-};
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: "Política de Privacidade",
+  descricao: `Como o ${marca.nome} trata dados pessoais.`,
+  caminho: "/privacidade",
+});
 
 /** Data da última revisão do texto — precisa mudar junto com o conteúdo. */
 const ATUALIZADO_EM = "25 de agosto de 2026";

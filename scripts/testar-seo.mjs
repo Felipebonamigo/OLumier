@@ -13,7 +13,12 @@
  * título formatado. A página de venda perde exatamente onde ela circula.
  */
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
+import http from "node:http";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { marca } from "../src/config/marca.ts";
+
+const RAIZ = path.resolve(import.meta.dirname, "..");
 
 let falhou = false;
 const etapa = async (nome, fn) => {
@@ -30,6 +35,44 @@ const pegar = async (caminho) => {
   const r = await fetch(BASE + caminho, { headers: { connection: "close" } });
   return { status: r.status, corpo: await r.text() };
 };
+
+/*
+ * O mesmo pedido, mas CHEGANDO POR UM ENDEREÇO: `www`, subdomínio de estúdio,
+ * domínio antigo. `http.request` e não `fetch` porque o `fetch` do Node trata
+ * `Host` como cabeçalho proibido e o descarta em silêncio — o servidor
+ * receberia "localhost" e a etapa mediria o site errado (a mesma armadilha
+ * registrada em `testar-subdominio.mjs`). Não segue redirecionamento, de
+ * propósito: o 308 é parte do que se mede.
+ */
+const pegarComo = (caminho, host) =>
+  new Promise((resolve, reject) => {
+    const url = new URL(BASE + caminho);
+    const req = http.request(
+      { hostname: url.hostname, port: url.port, path: url.pathname + url.search, headers: { Host: host } },
+      (res) => {
+        const partes = [];
+        res.on("data", (c) => partes.push(c));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode,
+            tipo: res.headers["content-type"] ?? "",
+            destino: res.headers.location ?? null,
+            corpo: Buffer.concat(partes).toString("utf8"),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+
+/** O conteúdo de uma `<meta>` ou o `href` de um `<link>`, como o robô lê. */
+const meta = (html, nome) =>
+  html.match(new RegExp(`<meta (?:property|name)="${nome}" content="([^"]*)"`))?.[1] ?? null;
+const canonico = (html) => html.match(/<link rel="canonical" href="([^"]*)"/)?.[1] ?? null;
+const titulo = (html) => html.match(/<title>([^<]*)<\/title>/)?.[1] ?? null;
+/* O Next escreve a raiz sem a barra final; as duas formas são o mesmo endereço. */
+const semBarra = (u) => (u ?? "").replace(/\/$/, "");
 
 console.log("SEO: o que o robô encontra\n");
 
@@ -103,6 +146,87 @@ await etapa("a FAQ da home existe como dado estruturado, e diz a verdade", async
     }
   }
   return `FAQPage com ${perguntas.length} perguntas, todas visíveis na página`;
+});
+
+/*
+ * ── CADA PÁGINA COM O SEU ENDEREÇO E O SEU CARTÃO (26/09/2026) ───────────
+ *
+ * A auditoria de 26/09/2026 achou o Open Graph só no layout, com `url: "/"`:
+ * `/termos`, `/seguranca` e `/cadastrar` herdavam o título, a descrição e o
+ * ENDEREÇO da home, e nenhuma página tinha `<link rel="canonical">`. As etapas
+ * de cima passavam — elas só olham a home.
+ */
+console.log("\ncada página da casa");
+
+const PAGINAS_DA_CASA = ["/", "/seguranca", "/termos", "/privacidade", "/entrar", "/cadastrar"];
+const home = (await pegar("/")).corpo;
+
+for (const caminho of PAGINAS_DA_CASA) {
+  await etapa(`${caminho} tem canônico, og:url e cartão próprios`, async () => {
+    const html = caminho === "/" ? home : (await pegar(caminho)).corpo;
+    const esperado = semBarra(`https://${marca.dominio}${caminho}`);
+    if (semBarra(canonico(html)) !== esperado) {
+      throw new Error(`canônico é ${canonico(html)}, esperava ${esperado}`);
+    }
+    if (semBarra(meta(html, "og:url")) !== esperado) {
+      throw new Error(`og:url é ${meta(html, "og:url")} — o cartão aponta para outra página`);
+    }
+    /* Página que define `openGraph` próprio perde a imagem herdada: é a
+       regressão que o conserto deste bloco mais facilmente causaria. */
+    if (!meta(html, "og:image")?.startsWith("https://")) throw new Error("sem og:image absoluta");
+    if (caminho !== "/" && meta(html, "og:title") === meta(home, "og:title")) {
+      throw new Error("og:title igual ao da home — o cartão desta página é o da home");
+    }
+  });
+}
+
+await etapa("a home diz ao buscador o que o produto é, e não só o slogan", () => {
+  /*
+   * O título era "Galeria Átomo — Onde o instante permanece." e a descrição
+   * tinha 44 caracteres: bonito na página, mudo no resultado de busca. O
+   * intervalo é o que o Google mostra sem cortar e sem inventar um trecho
+   * próprio no lugar.
+   */
+  const descricao = meta(home, "description") ?? "";
+  if (descricao.length < 110 || descricao.length > 160) {
+    throw new Error(`descrição com ${descricao.length} caracteres — fora de 110 a 160`);
+  }
+  if (titulo(home) === `${marca.nome} — ${marca.tagline}`) {
+    throw new Error("o título voltou a ser só marca + slogan");
+  }
+  return `${descricao.length} caracteres`;
+});
+
+await etapa("o www manda para o domínio canônico, e a API fica onde está", async () => {
+  const r = await pegarComo("/termos?origem=teste", `www.${marca.dominio}`);
+  if (r.status !== 308) throw new Error(`www devolveu HTTP ${r.status}, esperava 308`);
+  if (r.destino !== `https://${marca.dominio}/termos?origem=teste`) {
+    throw new Error(`redirecionou para ${r.destino} — perdeu o caminho ou a consulta`);
+  }
+  /* Webhook e porteiro do certificado não seguem redirecionamento. */
+  const api = await pegarComo("/api/healthz", `www.${marca.dominio}`);
+  if (api.status >= 300 && api.status < 400) throw new Error("a /api do www também redirecionou");
+  return "308 com caminho e consulta";
+});
+
+await etapa("a home só pré-carrega a foto do topo", () => {
+  /*
+   * O React 19 pendura `<link rel="preload">` para toda <img> sem
+   * `loading="lazy"`, e duas fotos do fim da página (600 KB somadas) disputavam
+   * a banda com a do topo na primeira pintura. Conferido no FONTE, e não no
+   * HTML: o servidor de desenvolvimento não emite esses preloads, e a etapa
+   * passaria verde sem medir nada.
+   */
+  const fonte = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  const imagens = [...fonte.matchAll(/<img\b[\s\S]*?\/>/g)].map((m) => m[0]);
+  const topo = imagens.filter((i) => /fetchPriority="high"/.test(i));
+  if (topo.length !== 1) throw new Error(`${topo.length} imagens com prioridade alta, esperava 1`);
+  const soltas = imagens.filter((i) => !/fetchPriority="high"/.test(i) && !/loading="lazy"/.test(i));
+  if (soltas.length) {
+    const qual = soltas.map((i) => i.match(/src=\{?"?([^"\s}]+)/)?.[1]).join(", ");
+    throw new Error(`sem loading="lazy": ${qual} — vira preload e atrasa a foto do topo`);
+  }
+  return `${imagens.length} <img>, 1 prioritária`;
 });
 
 /*
@@ -218,37 +342,38 @@ await etapa("galeria com senha continua devolvendo cartão, sem quebrar", async 
  * exigiria uma dependência de imagem só para isto. O que ela prende é
  * exatamente o erro cometido: absoluto sem medida.
  */
-await etapa("o véu do cartão tem largura e altura declaradas", async () => {
-  const { readFileSync } = await import("node:fs");
-  const path = (await import("node:path")).default;
-  const RAIZ = path.resolve(import.meta.dirname, "..");
-  const fonte = readFileSync(
-    path.join(RAIZ, "src/app/g/[estudio]/[galeria]/opengraph-image.tsx"),
-    "utf8",
-  ).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "").replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+/* Os DOIS cartões com foto: o da galeria e, desde 26/09/2026, o da vitrine do
+   estúdio, que nasceu do mesmo molde e herdaria o mesmo esquecimento. */
+for (const [arquivo, qual] of [
+  ["src/app/g/[estudio]/[galeria]/opengraph-image.tsx", "galeria"],
+  ["src/app/e/[estudio]/opengraph-image.tsx", "vitrine"],
+]) {
+  await etapa(`o véu do cartão da ${qual} tem largura e altura declaradas`, async () => {
+    const fonte = readFileSync(path.join(RAIZ, arquivo), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/\/\/[^\n]*/g, "")
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
 
-  /* Todo bloco de estilo com `position: "absolute"` precisa trazer as duas
-     medidas. Vale para o véu e para a foto — os dois são absolutos, e o mesmo
-     esquecimento em qualquer um deles apaga a peça em silêncio. */
-  const absolutos = [...fonte.matchAll(/style=\{\{([^}]*position:\s*"absolute"[^}]*)\}\}/g)];
-  if (absolutos.length < 2) {
-    throw new Error(`achei ${absolutos.length} elementos absolutos, esperava ao menos 2 (foto e véu)`);
-  }
-  for (const [, corpo] of absolutos) {
-    if (!/width:/.test(corpo) || !/height:/.test(corpo)) {
-      throw new Error(
-        "elemento absoluto sem width/height — no satori isso vira tamanho zero e a peça " +
-          "some do cartão sem erro nenhum",
-      );
+    /* Todo bloco de estilo com `position: "absolute"` precisa trazer as duas
+       medidas. Vale para o véu e para a foto — os dois são absolutos, e o mesmo
+       esquecimento em qualquer um deles apaga a peça em silêncio. */
+    const absolutos = [...fonte.matchAll(/style=\{\{([^}]*position:\s*"absolute"[^}]*)\}\}/g)];
+    if (absolutos.length < 2) {
+      throw new Error(`achei ${absolutos.length} elementos absolutos, esperava ao menos 2 (foto e véu)`);
     }
-  }
-  return `${absolutos.length} elementos absolutos, todos com medida`;
-});
+    for (const [, corpo] of absolutos) {
+      if (!/width:/.test(corpo) || !/height:/.test(corpo)) {
+        throw new Error(
+          "elemento absoluto sem width/height — no satori isso vira tamanho zero e a peça " +
+            "some do cartão sem erro nenhum",
+        );
+      }
+    }
+    return `${absolutos.length} elementos absolutos, todos com medida`;
+  });
+}
 
 await etapa("a regra da senha está escrita no gerador do cartão", async () => {
-  const { readFileSync } = await import("node:fs");
-  const path = (await import("node:path")).default;
-  const RAIZ = path.resolve(import.meta.dirname, "..");
   const fonte = readFileSync(
     path.join(RAIZ, "src/app/g/[estudio]/[galeria]/opengraph-image.tsx"),
     "utf8",
@@ -261,6 +386,111 @@ await etapa("a regra da senha está escrita no gerador do cartão", async () => 
     );
   }
   return "consulta senha_hash antes de mostrar a capa";
+});
+
+/*
+ * ── O ENDEREÇO DO ESTÚDIO (26/09/2026) ────────────────────────────────────
+ *
+ * A vitrine é a única página do estúdio que DEVE aparecer no Google, e a
+ * auditoria de 26/09/2026 achou quatro furos nela, todos invisíveis de dentro
+ * do painel:
+ *
+ *   · o cartão de link era o da plataforma (título, imagem e og:url nossos);
+ *   · a aba e o resultado de busca terminavam em "· Galeria Átomo";
+ *   · nenhum canônico, com a mesma vitrine abrindo por até quatro endereços;
+ *   · `/robots.txt`, `/sitemap.xml` e `/icon.svg` do subdomínio caíam na rota
+ *     de galeria e devolviam 404 — depois de consultar o banco.
+ */
+console.log("\no endereço do estúdio");
+
+const nomeEstudio = g.estudio.nome_estudio;
+const hostEstudio = `${g.tslug}.${marca.dominio}`;
+const enderecoEstudio = `https://${hostEstudio}`;
+
+await etapa("o robots.txt do estúdio é dele, e aponta o mapa dele", async () => {
+  const r = await pegarComo("/robots.txt", hostEstudio);
+  if (r.status !== 200) throw new Error(`HTTP ${r.status} — caiu na rota de galeria?`);
+  if (!r.tipo.startsWith("text/plain")) throw new Error(`content-type ${r.tipo}`);
+  if (!r.corpo.includes(`Sitemap: ${enderecoEstudio}/sitemap.xml`)) {
+    throw new Error("a linha Sitemap: não aponta o mapa do estúdio");
+  }
+  /* Bloquear as galerias esconderia do robô o `noindex` que as tira do índice. */
+  if (/Disallow:\s*\/(g|painel)\b/.test(r.corpo)) throw new Error("bloqueia rota que não devia");
+  return hostEstudio;
+});
+
+await etapa("o sitemap.xml do estúdio lista a vitrine, e só ela", async () => {
+  const r = await pegarComo("/sitemap.xml", hostEstudio);
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+  if (!r.corpo.includes(`<loc>${enderecoEstudio}/</loc>`)) throw new Error("não lista a vitrine");
+  if (r.corpo.includes(g.gslug)) throw new Error("lista uma galeria — entrega pessoal, com noindex");
+});
+
+await etapa("o /icon.svg do endereço do estúdio não passa pela rota de galeria", async () => {
+  const r = await pegarComo("/icon.svg", hostEstudio);
+  if (r.status !== 200 || !r.tipo.startsWith("image/svg+xml")) {
+    throw new Error(`HTTP ${r.status} ${r.tipo} — virou a galeria "icon.svg" de novo`);
+  }
+});
+
+const vitrine = (await pegarComo("/", hostEstudio)).corpo;
+
+await etapa("a aba da vitrine é do estúdio: o nome dele, e nunca o nosso ícone", () => {
+  if (titulo(vitrine) !== nomeEstudio) {
+    throw new Error(`<title> é "${titulo(vitrine)}", esperava "${nomeEstudio}"`);
+  }
+  /* O estúdio da bancada não tem logo: a aba fica sem ícone, e não com o
+     átomo do layout raiz (ver `lib/icone-do-estudio.ts`). */
+  if (/<link rel="icon"[^>]*icon\.svg/.test(vitrine)) {
+    throw new Error("a vitrine pendura o icon.svg da plataforma na aba do estúdio");
+  }
+});
+
+await etapa("o cartão da vitrine é do estúdio", async () => {
+  if (meta(vitrine, "og:title") !== nomeEstudio) throw new Error(`og:title é ${meta(vitrine, "og:title")}`);
+  if (meta(vitrine, "og:site_name") !== nomeEstudio) throw new Error("og:site_name é o da plataforma");
+  if (semBarra(meta(vitrine, "og:url")) !== enderecoEstudio) {
+    throw new Error(`og:url é ${meta(vitrine, "og:url")} — o cartão leva para outro lugar`);
+  }
+  const imagem = meta(vitrine, "og:image") ?? "";
+  if (!imagem.includes(`/e/${g.tslug}/opengraph-image`)) {
+    throw new Error(`og:image é "${imagem}" — o quadro da plataforma no site do estúdio`);
+  }
+  const png = await fetch(`${BASE}/e/${g.tslug}/opengraph-image`, { cache: "no-store" });
+  const bytes = Buffer.from(await png.arrayBuffer());
+  if (png.status !== 200 || bytes.subarray(0, 4).toString("hex") !== "89504e47") {
+    throw new Error(`o cartão da vitrine não veio PNG (HTTP ${png.status})`);
+  }
+  return `${Math.round(bytes.length / 1024)} KB`;
+});
+
+await etapa("a vitrine aponta um endereço canônico, venha por onde vier", async () => {
+  /* O domínio antigo continua servindo (link entregue não quebra); o
+     canônico é o que diz ao buscador qual dos endereços vale. */
+  for (const host of [hostEstudio, `${g.tslug}.olumier.com.br`]) {
+    const html = (await pegarComo("/", host)).corpo;
+    if (semBarra(canonico(html)) !== enderecoEstudio) {
+      throw new Error(`por ${host}, o canônico é ${canonico(html)}`);
+    }
+  }
+  return enderecoEstudio;
+});
+
+await etapa("a aba da galeria não termina no nome da plataforma", async () => {
+  const html = (await pegarComo(`/${g.gslug}`, hostEstudio)).corpo;
+  const t = titulo(html) ?? "";
+  if (!t.includes(nomeEstudio)) throw new Error(`<title> "${t}" não traz o estúdio`);
+  if (t.includes(marca.nome)) throw new Error(`<title> "${t}" anuncia a plataforma`);
+});
+
+await etapa("o link de um capítulo desdobra com o cartão da galeria", async () => {
+  /* O cartão mora no segmento da galeria; o do capítulo substituía o
+     `openGraph` e perdia a imagem — link com título e sem foto. */
+  const html = (await pegarComo(`/${g.gslug}/um-capitulo`, hostEstudio)).corpo;
+  const imagem = meta(html, "og:image") ?? "";
+  if (!imagem.includes(`/g/${g.tslug}/${g.gslug}/opengraph-image`)) {
+    throw new Error(`og:image do capítulo é "${imagem}"`);
+  }
 });
 
 await limparRodada(db);

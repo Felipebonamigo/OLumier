@@ -61,14 +61,57 @@ async function estudioDoEndereco(host: string | null): Promise<string | null> {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
+  // --- www do domínio canônico ---------------------------------------------
+  /*
+   * `www.galeriaatomo.com.br` e `galeriaatomo.com.br` serviam a mesma página,
+   * as duas com 200 — o bloco do Caddy entrega os dois nomes ao app sem
+   * redirecionar (ops/caddy-galeriaatomo.md). Para o buscador são dois sites
+   * com o conteúdo copiado, e a relevância da home se dividia entre eles.
+   * Permanente (308), para ele juntar as duas numa só (26/09/2026).
+   *
+   * Só o `www` do CANÔNICO. O domínio antigo não passa por aqui: a rota interna
+   * `olumier.com.br/g/...` continua servindo de propósito, porque é link de
+   * galeria já entregue (ver `testar-subdominio.mjs`, etapas LEGADO).
+   *
+   * A `/api` fica de fora: webhook e porteiro do certificado não seguem
+   * redirecionamento, e quem os chama pelo `www` precisa ser atendido ali.
+   */
+  const hostPedido = request.headers.get("host")?.split(":")[0].toLowerCase();
+  if (hostPedido === `www.${marca.dominio}` && !pathname.startsWith("/api")) {
+    return NextResponse.redirect(new URL(pathname + search, `https://${marca.dominio}`), 308);
+  }
+
   // --- subdomínio do estúdio ------------------------------------------------
   const estudio = await estudioDoEndereco(request.headers.get("host"));
   if (estudio) {
     // Rotas internas seguem intactas — reescrever /api ou /_next quebraria tudo.
+    // O `/icon.svg` entrou em 26/09/2026: sem ele, cada página aberta no
+    // endereço do estúdio pedia o ícone, e o pedido virava a renderização de
+    // uma galeria chamada "icon.svg" — consulta ao banco para devolver 404.
     const interna =
       pathname.startsWith("/api") ||
       pathname.startsWith("/_next") ||
-      pathname === "/favicon.ico";
+      pathname === "/favicon.ico" ||
+      pathname === "/icon.svg";
+
+    /*
+     * `robots.txt` e `sitemap.xml` do ESTÚDIO, e não os da casa: os da casa
+     * apontam para `galeriaatomo.com.br` e fecham o `/painel`, que aqui nem
+     * existe. Pela mesma leitura de endereço curto que vale para galeria,
+     * estes dois caíam na rota de galeria e devolviam 404 — o site que o
+     * estúdio divulga ficava sem mapa para o buscador (26/09/2026).
+     *
+     * As rotas de destino têm nome NEUTRO, e não `robots.txt`/`sitemap.xml`:
+     * o Next trata todo caminho que termina em `/sitemap.xml` como rota
+     * especial de metadados, com regras próprias de nome e de cache. Aqui
+     * elas são rotas comuns, e o endereço público continua o que o robô pede.
+     */
+    if (pathname === "/robots.txt") {
+      return NextResponse.rewrite(new URL(`/e/${estudio}/regras-para-robos`, request.url));
+    }
+    if (pathname === "/sitemap.xml") {
+      return NextResponse.rewrite(new URL(`/e/${estudio}/mapa-do-site`, request.url));
+    }
 
     if (!interna) {
       // O painel mora só no domínio principal: quem tenta entrar por um

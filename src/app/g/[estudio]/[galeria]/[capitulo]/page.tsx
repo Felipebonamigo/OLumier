@@ -43,10 +43,34 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { estudio, galeria } = await params;
   /* O cartão e o título são os da GALERIA: é ela que a pessoa está
      compartilhando, e o capítulo é onde ela abriu. */
-  return metadataDaGaleria({
+  const daGaleria = await metadataDaGaleria({
     params: Promise.resolve({ estudio, galeria }),
     searchParams: Promise.resolve({}),
   });
+  if (!daGaleria.openGraph) return daGaleria;
+
+  /*
+   * ── A IMAGEM TEM DE VIR NOMEADA AQUI (26/09/2026) ───────────────────────
+   *
+   * O `opengraph-image.tsx` mora no segmento da GALERIA, e o Next só pendura a
+   * imagem dele no segmento que tem o arquivo. Este segmento devolve um
+   * `openGraph` próprio — o da galeria, acima —, e bloco próprio SUBSTITUI o
+   * herdado inteiro, imagem junto. Resultado: o link de um capítulo
+   * ("/casamento/festa") desdobrava no WhatsApp com título e sem foto nenhuma.
+   * Achado medindo o HTML da auditoria de SEO; ninguém tinha mandado um link
+   * de capítulo e olhado.
+   */
+  const cartao = {
+    url: `/g/${estudio}/${galeria}/opengraph-image`,
+    width: 1200,
+    height: 630,
+    type: "image/png",
+  };
+  return {
+    ...daGaleria,
+    openGraph: { ...daGaleria.openGraph, images: [cartao] },
+    twitter: { ...daGaleria.twitter, images: [cartao.url] },
+  };
 }
 
 export default async function CapituloDaGaleria({ params, searchParams }: Props) {

@@ -11,10 +11,31 @@ import { TEMAS, PRESETS, OPCOES } from "@/config/aparencia";
 import { Revelar } from "@/components/revelar";
 import { ESPACOS, formatarGb } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
+import { metadadosDaCasa } from "@/lib/metadados";
 
-export const metadata: Metadata = {
-  title: `${marca.nome} — ${marca.tagline}`,
-};
+/*
+ * ── O QUE O BUSCADOR LÊ NÃO É O SLOGAN (26/09/2026) ───────────────────────
+ *
+ * O título era "Galeria Átomo — Onde o instante permanece." e a descrição,
+ * `marca.descricao` ("Galerias inteligentes de alto padrão visual."). As duas
+ * frases são boas na página e mudas no resultado de busca: nenhuma diz O QUE o
+ * produto é, e ninguém ainda procura pelo nome — com zero estúdios usando, a
+ * busca pela marca não existe. Quem chega procura pelo que precisa fazer.
+ *
+ * O slogan continua onde ele trabalha: no título grande do topo (preso por
+ * `testar-marca-plataforma.mjs`) e na sobrancelha, que lê `marca.descricao`.
+ * Aqui entra a frase que responde à busca, com o que a própria página já
+ * promete e o produto cumpre: 4K, marca e endereço do estúdio, celular, sem
+ * conta. "Fotógrafos e filmmakers" juntos, e nunca um só, pela mesma razão que
+ * tirou o "para fotógrafos" de `marca.descricao` em 16/09/2026.
+ */
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: `${marca.nome} — galeria online para fotógrafos e filmmakers`,
+  descricao:
+    "Entregue fotos e filmes em 4K com a marca e o endereço do seu estúdio. O cliente abre no celular, baixa e marca as favoritas sem criar conta.",
+  caminho: "/",
+  tituloInteiro: true,
+});
 
 /*
  * A página conta uma história em cinco atos: a promessa (hero, escuro), o
@@ -803,6 +824,8 @@ export default function Home() {
         <img
           src="/home/festa-mesa.jpg"
           alt=""
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 -z-20 h-full w-full object-cover"
         />
         <div
@@ -941,9 +964,17 @@ export default function Home() {
 
       {/* ── fecho: a última foto e o convite ───────────────────────────── */}
       <section className="sobre-foto relative isolate overflow-hidden border-t border-linha">
+        {/* `loading="lazy"` aqui e na foto da mesa não é só economia de rede.
+            Sem ele o React 19 pendura um `<link rel="preload">` no <head> para
+            toda <img> da página, e estas duas — 600 KB somadas, lá no fim da
+            rolagem — disputavam a banda com a foto do topo na primeira
+            pintura. Medido em 26/09/2026: três preloads de
+            imagem na home, e só um deles estava na tela. */}
         <img
           src="/home/cerimonia-arco.jpg"
           alt=""
+          loading="lazy"
+          decoding="async"
           className="absolute inset-0 -z-20 h-full w-full object-cover"
         />
         <div

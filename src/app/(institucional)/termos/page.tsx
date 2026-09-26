@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
+import { metadadosDaCasa } from "@/lib/metadados";
 
-export const metadata: Metadata = {
-  title: "Termos de Uso",
-  description: `Regras de uso do ${marca.nome}.`,
-};
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: "Termos de Uso",
+  descricao: `Regras de uso do ${marca.nome}.`,
+  caminho: "/termos",
+});
 
 /* A data é do TEXTO, não do arquivo: mexeu na regra, muda aqui. Termo que diz
  * ter sido atualizado em agosto e fala de coisa decidida depois é desonesto — e

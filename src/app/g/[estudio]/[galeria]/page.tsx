@@ -4,6 +4,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { marca } from "@/config/marca";
 import { CAMINHO_PUBLICO } from "@/proxy";
 import { urlDeLeitura } from "@/lib/r2";
+import { iconeDoEstudio } from "@/lib/icone-do-estudio";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
 import {
@@ -106,9 +107,18 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .join(" · ");
 
   return {
-    title: `${g.titulo} · ${g.estudio_nome}`,
+    /*
+     * `absolute` pula o modelo do layout raiz (`%s · Galeria Átomo`). Sem ele,
+     * a aba de toda entrega terminava no nome da plataforma — "Casamento ·
+     * Sirius Fotografia · Galeria Átomo" —, a mesma marca errada que o bloco
+     * acima tirou do cartão, só que um lugar mais para dentro (26/09/2026).
+     */
+    title: { absolute: `${g.titulo} · ${g.estudio_nome}` },
     // Galeria é pessoal: nunca deve aparecer em busca, mesmo com o link vazado.
     robots: { index: false, follow: false },
+    /* A logo do estúdio na aba só quando a capa a mostra: "nenhuma" tira a
+       assinatura da galeria inteira, e a aba é parte dela. */
+    icons: await iconeDoEstudio(lerAparencia(g.aparencia).logo === "nenhuma" ? null : g.estudio_logo),
     description: descricao,
     openGraph: {
       type: "website",

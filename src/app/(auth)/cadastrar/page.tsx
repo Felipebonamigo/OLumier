@@ -3,9 +3,17 @@ import { MINIMO_SENHA } from "@/lib/senha";
 import Link from "next/link";
 import { MarcaLockup } from "@/components/marca-tile";
 import { marca } from "@/config/marca";
+import { metadadosDaCasa } from "@/lib/metadados";
 import { FormCadastrar } from "./form";
 
-export const metadata: Metadata = { title: "Criar conta" };
+/* A promessa da descrição é a do formulário logo abaixo ("sem cartão agora"),
+   e não uma nova: cartão de link que promete o que a página não diz é o
+   primeiro lugar em que o cliente desconfia. */
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: "Criar conta",
+  descricao: `Crie a conta do seu estúdio no ${marca.nome} e teste grátis, sem cartão: suba uma entrega de verdade e mande o link para o seu cliente.`,
+  caminho: "/cadastrar",
+});
 
 export default function CadastrarPage() {
   return (
