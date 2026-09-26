@@ -54,6 +54,12 @@ export const marca = {
   nome: NOME,
   nomeSimples: "galeria-atomo",
   simbolo: "GA",
+  /*
+   * ⚠️ REJEITADA PELA ESTRATÉGIA DE MARCA (26/09/2026) — romântica e clichê
+   * para o posicionamento desejado. Continua aqui só porque ainda não há
+   * slogan aprovado para pôr no lugar, e a home espera a nova direção. Não
+   * reforce esta frase em tela nova; ver `docs/estrategia-de-marca.md`.
+   */
   tagline: "Onde o instante permanece.",
   /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
   dominio: "galeriaatomo.com.br",
