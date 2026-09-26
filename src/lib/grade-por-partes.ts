@@ -58,8 +58,13 @@ export interface Desenho<C> {
    * Os capítulos com alguma foto visível, na ordem da página, cada um só com
    * as fotos desenhadas. O que ainda não chegou ao desenho vem com `indices`
    * vazio — ver o porquê em `recortarParaDesenhar`.
+   *
+   * `inteiro` diz se o desenho chegou ao fim do capítulo. A grade "Colunas"
+   * precisa saber: só no fim de verdade ela reparte a última fileira para
+   * chegar à borda — ver `fileirasDeColunas`. No fim de uma leva, repartir
+   * faria fotos mudarem de fileira quando a leva seguinte entrasse.
    */
-  capitulos: (C & { indices: number[] })[];
+  capitulos: (C & { indices: number[]; inteiro: boolean })[];
   /** Quantas fotos visíveis existem, somando todos os capítulos. */
   visiveis: number;
   /** Ainda há foto visível fora do desenho? É o que liga a sentinela. */
@@ -89,7 +94,7 @@ export function recortarParaDesenhar<C extends CapituloParaDesenhar>(
   visivel: (indice: number) => boolean,
   limite: number,
 ): Desenho<C> {
-  const saida: (C & { indices: number[] })[] = [];
+  const saida: (C & { indices: number[]; inteiro: boolean })[] = [];
   let restante = Math.max(0, Math.floor(limite));
   let visiveis = 0;
 
@@ -99,7 +104,7 @@ export function recortarParaDesenhar<C extends CapituloParaDesenhar>(
     visiveis += doCapitulo.length;
     const desenhadas = doCapitulo.length <= restante ? doCapitulo : doCapitulo.slice(0, restante);
     restante -= desenhadas.length;
-    saida.push({ ...cap, indices: desenhadas });
+    saida.push({ ...cap, indices: desenhadas, inteiro: desenhadas.length === doCapitulo.length });
   }
 
   return { capitulos: saida, visiveis, falta: visiveis > limite };

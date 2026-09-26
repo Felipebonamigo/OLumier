@@ -116,6 +116,20 @@ console.log("\nO corte\n");
   } else {
     erro(`limite 180: ${cruzando.capitulos.map((x) => x.indices.length).join(" + ")}`);
   }
+
+  /* A grade "Colunas" só reparte a última fileira no fim de verdade do
+     capítulo (ver `fileirasDeColunas`). Chamar de inteiro o capítulo cortado
+     pela leva faria as fotos do fim dela mudarem de fileira quando a leva
+     seguinte entrasse. */
+  const inteiros = cruzando.capitulos.map((x) => x.inteiro).join();
+  if (inteiros === "true,false,false") {
+    ok("só o capítulo que o desenho alcançou inteiro é marcado inteiro");
+  } else {
+    erro(`limite 180 marcou inteiros: ${inteiros} — esperava true,false,false`);
+  }
+  const tudo = recortarParaDesenhar(g, todas, 600).capitulos.map((x) => x.inteiro).join();
+  if (tudo === "true,true,true") ok("e, desenhada a galeria toda, todos são");
+  else erro(`com as 600 desenhadas: ${tudo}`);
 }
 
 console.log("\nCom filtro ligado\n");

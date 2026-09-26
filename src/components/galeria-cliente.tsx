@@ -1125,6 +1125,12 @@ export function GaleriaCliente({
    */
   const [buscando, setBuscando] = useState(false);
   const [acabou, setAcabou] = useState(!fatia);
+  /* As fotos chegam agrupadas por capítulo (`listarMediasPublicas`): só o
+     capítulo da última foto que chegou pode ter mais a caminho. Os de antes
+     já vieram inteiros e fecham a última fileira sem esperar a galeria toda. */
+  const capituloAindaChegando = acabou
+    ? null
+    : (capitulos.find((capitulo) => capitulo.indices.at(-1) === itens.length - 1)?.id ?? null);
   const sentinela = useRef<HTMLDivElement | null>(null);
 
   const carregarMais = useCallback(async () => {
@@ -1792,12 +1798,10 @@ export function GaleriaCliente({
             <GaleriaGrade
               aparencia={aparencia}
               quantidade={cap.indices.length}
-              /* Galeria fatiada: enquanto o resto chega rolando, o fim deste
-                 lote não é o fim da galeria. Ver `fileirasDeColunas`. Mas as
-                 fotos chegam agrupadas por capítulo (`listarMediasPublicas`):
-                 se a última que chegou já é de outro, este veio inteiro e
-                 pode fechar a última fileira sem esperar a galeria toda. */
-              listaCompleta={acabou || capOriginal.indices.at(-1) !== itens.length - 1}
+              /* O fim do que está desenhado só é o fim do capítulo quando o
+                 desenho por partes chegou até ele E nenhuma foto dele ainda
+                 vem pela rede. Ver `fileirasDeColunas`. */
+              listaCompleta={cap.inteiro && cap.id !== capituloAindaChegando}
               proporcao={(k) => {
                 const it = itens[cap.indices[k]];
                 return it.largura && it.altura ? it.largura / it.altura : 4 / 5;
