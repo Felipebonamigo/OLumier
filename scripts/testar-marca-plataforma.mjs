@@ -229,39 +229,39 @@ etapa("nenhuma tela manda escrever para a caixa que não recebe", () => {
 });
 
 /*
- * ── O SLOGAN NÃO PODE MORAR EM DOIS LUGARES ──────────────────────────────
+ * ── A FRASE REJEITADA NÃO VOLTA (26/09/2026) ─────────────────────────────
  *
- * O hero da home escreve o slogan em DUAS linhas, com a segunda em âmbar — e
- * por isso não dá para montá-lo a partir de `marca.tagline` sem inventar uma
- * regra de corte que a próxima frase vai desobedecer. A cópia fica, então, mas
- * presa: o teste exige que as duas linhas do hero, juntas, sejam exatamente a
- * tagline.
+ * Até esta data o teste prendia a igualdade entre o <h1> da home e
+ * `marca.tagline`: o slogan morava nos dois lugares e não podia divergir. A
+ * estratégia de marca (`docs/estrategia-de-marca.md`, §15) rejeitou o slogan
+ * ("Onde o instante permanece.") e não aprovou outro; a home nova abre com a
+ * frase do briefing, que a estratégia explicitamente NÃO quer gravada como
+ * assinatura antes de validar. Os dois lugares passaram a dizer coisas
+ * diferentes de propósito.
  *
- * Sem isto, trocar o slogan em `marca.ts` muda o cartão do WhatsApp e o título
- * da aba, e deixa a home — o lugar onde ele aparece MAIOR — falando a frase
- * antiga. Ninguém percebe olhando o diff, porque os dois arquivos estão certos
- * separados.
+ * O que continua precisando de freio é o outro lado: a frase rejeitada
+ * reaparecer — no título de toda página, no cartão do WhatsApp, no hero — por
+ * um find-replace ou por alguém copiando a home antiga do histórico.
  */
-etapa("a home escreve exatamente a tagline de marca.ts", () => {
+const REJEITADAS = ["Onde o instante permanece", "Sua luz, entregue"];
+
+etapa("nenhuma frase rejeitada pela estratégia volta como assinatura", () => {
   const home = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8");
-  const hero = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(home)?.[1];
-  if (!hero) throw new Error("não achei o <h1> da home");
-
-  /* Tira marcação e junta o que sobra: o que interessa é o TEXTO que a pessoa
-     lê, e ele está partido entre um <br /> e um <span> colorido. */
-  const lido = hero
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\{[^}]*\}/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (lido !== marca.tagline) {
+  const og = readFileSync(path.join(RAIZ, "src/app/opengraph-image.tsx"), "utf8");
+  const volta = REJEITADAS.filter(
+    (f) =>
+      marca.tagline.includes(f) ||
+      marca.descricao.includes(f) ||
+      home.replace(/\/\*[^]*?\*\//g, "").includes(f) ||
+      og.includes(f),
+  );
+  if (volta.length) {
     throw new Error(
-      `o hero diz "${lido}" e marca.tagline diz "${marca.tagline}" — ` +
-        `o cartão do WhatsApp e a home ficariam com slogans diferentes`,
+      `"${volta.join('", "')}" voltou — a estratégia de marca rejeitou; ` +
+        `ver docs/estrategia-de-marca.md §15 antes de trocar a assinatura`,
     );
   }
-  return lido;
+  return `tagline: "${marca.tagline}"`;
 });
 
 console.log(falhou ? "\n✗ a troca de marca levou junto o que não devia" : "\n✓ marca ok");

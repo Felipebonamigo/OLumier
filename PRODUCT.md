@@ -135,7 +135,11 @@ Três coisas que um concorrente vizinho não copia de graça:
   mas **não tem DNS curinga**, e é o curinga que sustenta o subdomínio de cada
   estúdio. Enquanto ele não existir, mudar `marca.dominio` quebra os links já
   publicados. Ver `scripts/testar-marca-plataforma.mjs`.
-- Assinatura: **"Sua luz, entregue."**
+- Assinatura: **nenhum slogan oficial** (26/09/2026). "Onde o instante
+  permanece." foi rejeitada pela estratégia de marca, e "Sua luz, entregue." não
+  deve ser assumida. Antes de qualquer decisão de marca, texto, interface ou
+  apresentação, ler [`docs/estrategia-de-marca.md`](docs/estrategia-de-marca.md)
+  — a camada estratégica, com os conflitos que o produto no ar ainda tem com ela.
 - Voz: direta e concreta, sem jargão de marketing e sem promessa que o sistema
   não cumpre. A interface fala de coisas que o fotógrafo reconhece — "a pasta do
   casamento", "o filme de 30 GB", "não recebi" — em vez de falar de recursos.

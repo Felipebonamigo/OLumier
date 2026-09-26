@@ -16,6 +16,7 @@ import {
   type Plano,
   type Segmento,
 } from "@/config/planos";
+import { PRESETS } from "@/config/aparencia";
 
 /**
  * Os três tamanhos que viram botão, e o teto deles.
@@ -42,15 +43,25 @@ const TETO_BASE = BASES.at(-1)!.gb;
  * vender: o cofre é `lib/cofre.ts`, a lixeira é `PRAZO_LIXEIRA_DIAS`, o link
  * assinado é `armazem.ts`, e vídeo sem adicional é preso em `testar-planos.mjs`.
  */
-const INCLUSO = [
+/*
+ * O número de estilos sai de `PRESETS` desde 26/09/2026. Escrito à mão, dizia
+ * "quatro" com dez no ar — o mesmo defeito que a home já tinha corrigido no
+ * texto dela e que continuava aqui, dentro do preço.
+ *
+ * A linha do filme só entra quando o montador fala de filme (`comFilme`): a
+ * home esconde vídeo até ele ser validado (`config/lancamentos.ts`), e uma
+ * promessa na lista do preço é promessa do mesmo jeito.
+ */
+const LINHA_FILME = "Foto e filme no mesmo espaço, sem adicional por hora de vídeo";
+const incluso = (comFilme: boolean) => [
   "Galerias sem limite de quantidade",
   "Downloads sem limite de vezes",
-  "Foto e filme no mesmo espaço, sem adicional por hora de vídeo",
+  ...(comFilme ? [LINHA_FILME] : []),
   "Sua marca: logo, cor de destaque e endereço próprio",
   "Senha por galeria, quando você quiser",
   "Capítulos para dividir a entrega em momentos",
   "Favoritas: o cliente marca, você recebe a lista",
-  "Quatro estilos de galeria, com ajuste fino",
+  `${PRESETS.length} estilos de galeria, com ajuste fino`,
   "Cofre: entrega vencida sai do ar sem ser apagada",
   "Lixeira de 30 dias contra a mão errada",
   "Links assinados que expiram sozinhos",
@@ -150,6 +161,8 @@ function Peca({
 export function MontadorPlano({
   inicial,
   acao,
+  comFilme = true,
+  explicarCofre = true,
 }: {
   inicial?: Montagem;
   /**
@@ -158,6 +171,14 @@ export function MontadorPlano({
    * assina precisa saber se está mandando cobrar um mês ou dez.
    */
   acao?: (plano: Plano, ciclo: Ciclo) => ReactNode;
+  /**
+   * Mostra a escolha Foto/Filme e fala de vídeo. A home desliga enquanto o
+   * vídeo não é anunciado (`VIDEO_LIBERADO`); sem a escolha, o plano montado é
+   * de foto — quem filma escolhe isso no cadastro, como sempre.
+   */
+  comFilme?: boolean;
+  /** A explicação do cofre ao lado do espaço. A home já tem seção própria. */
+  explicarCofre?: boolean;
 }) {
   const [segmento, setSegmento] = useState<Segmento>(inicial?.segmento ?? "foto");
   const [espacoGb, setEspacoGb] = useState(inicial?.espacoGb ?? 1000);
@@ -168,33 +189,40 @@ export function MontadorPlano({
      primeiro clique, e aí a tela mostra "+2 TB" sobre um plano de 4 TB. */
   const terasAdicionais = Math.max(0, (espacoGb - TETO_BASE) / 1000);
 
-  const plano = montar({ segmento, espacoGb });
+  const plano = montar({ segmento: comFilme ? segmento : "foto", espacoGb });
+  /* Sem a peça do filme, os passos se renumeram — "2, 3" sem um "1" parece
+     que a página perdeu um pedaço. */
+  const n = (passo: number) => (comFilme ? passo : passo - 1);
 
   return (
     <div className="vidro rounded-3xl p-6 sm:p-8">
       {/* ── peça 1 ─────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        <Numero n={1} />
-        <span className={PASSO}>O que você entrega</span>
-      </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        {SEGMENTOS.map((s) => (
-          <Peca
-            key={s.id}
-            ativo={segmento === s.id}
-            onClick={() => setSegmento(s.id)}
-            titulo={s.nome}
-            detalhe={s.descricao}
-          />
-        ))}
-      </div>
-      <p className="mt-3 text-xs text-texto-soft">
-        Vídeo não custa mais caro aqui — você paga espaço, não hora de filme.
-      </p>
+      {comFilme && (
+        <>
+          <div className="flex items-center gap-3">
+            <Numero n={1} />
+            <span className={PASSO}>O que você entrega</span>
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {SEGMENTOS.map((s) => (
+              <Peca
+                key={s.id}
+                ativo={segmento === s.id}
+                onClick={() => setSegmento(s.id)}
+                titulo={s.nome}
+                detalhe={s.descricao}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-texto-soft">
+            Vídeo não custa mais caro aqui — você paga espaço, não hora de filme.
+          </p>
+        </>
+      )}
 
       {/* ── peça 2 ─────────────────────────────────────────────────────── */}
-      <div className="mt-9 flex items-center gap-3">
-        <Numero n={2} />
+      <div className={`${comFilme ? "mt-9" : ""} flex items-center gap-3`}>
+        <Numero n={n(2)} />
         <span className={PASSO}>Espaço do estúdio</span>
       </div>
       <p className="mt-2 text-sm text-texto-soft">
@@ -207,6 +235,7 @@ export function MontadorPlano({
        * descobre sozinho que ela existe — por isso a explicação vive aqui, ao
        * lado do preço, e não numa página de ajuda que ninguém abre.
        */}
+      {explicarCofre && (
       <div className="mt-3 rounded-2xl border border-linha bg-void/60 p-4 text-sm text-texto-soft">
         <p>
           Toda galeria tem um prazo no ar (você escolhe: 6 meses, 1 ano, 2 anos ou sem prazo).
@@ -219,6 +248,7 @@ export function MontadorPlano({
           Guardar entrega antiga <strong className="text-texto">não custa a mais</strong>.
         </p>
       </div>
+      )}
 
       {/*
         ── TRÊS TAMANHOS, E DEPOIS TERA ADICIONAL (05/09/2026) ──────────────
@@ -259,7 +289,8 @@ export function MontadorPlano({
             <strong className="font-medium text-texto-soft">
               {formatarReais(TB_ADICIONAL_CENTAVOS)}
             </strong>{" "}
-            por mês — sem adicional por hora de vídeo, sem cobrança por galeria.
+            por mês — {comFilme ? "sem adicional por hora de vídeo, " : ""}sem cobrança por
+            galeria.
           </p>
         </div>
 
@@ -301,7 +332,7 @@ export function MontadorPlano({
 
       {/* ── peça 3: como pagar ─────────────────────────────────────────── */}
       <div className="mt-9 flex items-center gap-3">
-        <Numero n={3} />
+        <Numero n={n(3)} />
         <span className={PASSO}>Como pagar</span>
       </div>
 
@@ -343,7 +374,7 @@ export function MontadorPlano({
       <div className="mt-8 rounded-2xl border border-linha bg-void/60 p-5">
         <p className={PASSO}>Incluso em qualquer tamanho</p>
         <ul className="mt-4 grid gap-x-8 gap-y-2.5 text-sm text-texto-soft sm:grid-cols-2">
-          {INCLUSO.map((item) => (
+          {incluso(comFilme).map((item) => (
             <li key={item} className="flex gap-2.5">
               <span aria-hidden className="mt-0.5 shrink-0 text-acento-alto">
                 ✓

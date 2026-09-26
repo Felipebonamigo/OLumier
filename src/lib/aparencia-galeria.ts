@@ -171,3 +171,16 @@ export async function padraoDoEstudio(tenantId: string): Promise<unknown | null>
   );
   return linha?.aparencia_padrao ?? null;
 }
+
+/**
+ * O mesmo padrão, já LIDO — para as telas que o desenham.
+ *
+ * O painel mostra o padrão como cartão (em Design e na criação da galeria), e
+ * cartão precisa de aparência completa: `lerAparencia` preenche o eixo que
+ * nasceu depois de o padrão ser salvo, do mesmo jeito que faz com a galeria.
+ * Null continua querendo dizer "nunca salvou".
+ */
+export async function padraoDoEstudioLido(tenantId: string): Promise<Aparencia | null> {
+  const bruto = await padraoDoEstudio(tenantId);
+  return bruto ? lerAparencia(bruto) : null;
+}

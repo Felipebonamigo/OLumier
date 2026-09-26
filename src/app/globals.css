@@ -491,3 +491,97 @@ html[data-js] .revelar[data-visivel] {
     color: var(--texto);
   }
 }
+
+/*
+ * ── A HOME NOVA (26/09/2026) ───────────────────────────────────────────────
+ *
+ * Clara, neutra e sem seletor de tema: o briefing pede uma interface que deixe
+ * as fotografias trazerem a cor (§3), e a página antiga, seguindo o tema do
+ * sistema, virava um véu leitoso sobre a foto no claro. `only light` trava as
+ * `light-dark()` do app inteiro dentro dela.
+ *
+ * Os tokens do APP são redefinidos aqui dentro porque a home reaproveita peças
+ * que falam neles — o montador de planos e o selo de beta. Redefinir o token,
+ * e não reescrever as peças, é o mesmo truque do `.sobre-foto`: a peça não
+ * precisa saber onde está.
+ *
+ * A tinta faz o papel do âmbar: o CTA é preto quase puro. A cor de destaque
+ * da marca é decisão da camada estratégica (ver `docs/home-leitura-critica.md`)
+ * e, quando vier, é uma linha — `--h-destaque`.
+ */
+.home {
+  color-scheme: only light;
+
+  --h-papel: #f4f3ef;
+  --h-branco: #ffffff;
+  --h-quente: #ebe4d8;
+  --h-tinta: #141414;
+  --h-tinta-2: #48484d;
+  --h-tinta-3: #606066;
+  --h-linha: rgba(20, 20, 20, 0.1);
+  --h-linha-forte: rgba(20, 20, 20, 0.2);
+  --h-destaque: var(--h-tinta);
+
+  --void: var(--h-papel);
+  --carbon: var(--h-branco);
+  --carbon-2: #ecebe6;
+  --texto: var(--h-tinta);
+  --texto-soft: var(--h-tinta-2);
+  --texto-faint: var(--h-tinta-3);
+  --exemplo: #9a9aa0;
+  --linha: var(--h-linha);
+  --linha-forte: var(--h-linha-forte);
+  --acento: var(--h-destaque);
+  --acento-alto: var(--h-destaque);
+  --marca-traco: var(--h-tinta);
+  --luz: var(--h-tinta);
+
+  background: var(--h-papel);
+  color: var(--h-tinta);
+  font-family: var(--font-home-texto), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.home-titulo {
+  font-family: var(--font-home-titulo), var(--font-home-texto), system-ui, sans-serif;
+  font-optical-sizing: auto;
+  letter-spacing: -0.025em;
+}
+
+/* O PLACEHOLDER da galeria editorial — ver `pretoEBranco` em
+   config/home-demonstracao.ts. Some junto com a foto provisória. */
+[data-demo-pb] img {
+  filter: grayscale(1) contrast(1.06);
+}
+
+/* O coração que acabou de ser marcado, na seção de seleção. */
+.home-coracao-pulsa {
+  animation: home-coracao-pulsa 0.7s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes home-coracao-pulsa {
+  0% {
+    transform: scale(0.4);
+  }
+  60% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* A fita de galerias do fecho. Pausa no hover pelo mesmo motivo da esteira
+   antiga: quem parou para olhar não deve perseguir. */
+.home-deriva {
+  animation: home-deriva 80s linear infinite;
+}
+.home-deriva:hover {
+  animation-play-state: paused;
+}
+@keyframes home-deriva {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

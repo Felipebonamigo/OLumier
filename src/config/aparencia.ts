@@ -985,6 +985,20 @@ export function presetEquivalente(a: Aparencia): string | null {
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
 
+/*
+ * A galeria está no PADRÃO DO ESTÚDIO? Comparação inteira, cor própria
+ * inclusive.
+ *
+ * Ao contrário de `presetEquivalente`, aqui a cor não tira ninguém do lugar: o
+ * padrão é a combinação do próprio fotógrafo, e o botão rosa pode ser
+ * justamente o que ele salvou. As duas passam por `lerAparencia` para a ordem
+ * das chaves não decidir nada — o editor espalha objetos, e `{...ap, cores}`
+ * põe a cor no fim de um e no meio do outro.
+ */
+export function mesmaAparencia(a: unknown, b: unknown): boolean {
+  return JSON.stringify(lerAparencia(a)) === JSON.stringify(lerAparencia(b));
+}
+
 // --- tradução para CSS --------------------------------------------------------
 
 /** Cada tema é um conjunto de variáveis; os componentes leem sempre as mesmas. */
