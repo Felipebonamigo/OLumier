@@ -10,15 +10,17 @@ import { usePedeMenosMovimento } from "./usa-celular";
  *
  * Briefing §10 e §23: "uma galeria grande com alguns corações marcados" e "um
  * coração é marcado". A grade é a do cliente (`GaleriaDemo`), o coração é o
- * mesmo desenho, e o contador é o que a galeria mostra quando o fotógrafo
- * combina um número: "12 de 40". O 40 é o exemplo que a página antiga já
- * usava; o limite, na galeria real, é o que o fotógrafo definir.
+ * mesmo desenho, e o contador é o que a galeria mostra.
+ *
+ * SEM "DE 40" (26/09/2026). O contador dizia "12 de 40 escolhidas", e a home
+ * passava a ideia de que a favorita tem teto — Felipe: "por que tem limite de
+ * 40? Deixa ilimitado". Na galeria real não há limite nenhum até o fotógrafo
+ * definir um; a demonstração mostra esse padrão.
  */
 
 const INICIAIS = [0, 3];
 const SEQUENCIA = [5, 1, 6, 2];
 const JA_ESCOLHIDAS = 9; // as que estariam fora da tela, para o contador ler como álbum
-const LIMITE = 40;
 
 export function SelecaoDemo({ identidade }: { identidade: Identidade }) {
   const [marcadas, setMarcadas] = useState<number[]>(INICIAIS);
@@ -51,8 +53,7 @@ export function SelecaoDemo({ identidade }: { identidade: Identidade }) {
         aria-live="off"
       >
         <span aria-hidden>♥ </span>
-        <span className="tabular-nums">{JA_ESCOLHIDAS + marcadas.length}</span> de {LIMITE}{" "}
-        escolhidas
+        <span className="tabular-nums">{JA_ESCOLHIDAS + marcadas.length}</span> escolhidas
       </p>
     </div>
   );

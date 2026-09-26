@@ -627,8 +627,9 @@ export default function Home() {
             </p>
             <ul className="mt-8 space-y-3 text-[var(--h-tinta-2)]">
               <li>
-                <strong className="font-medium text-[var(--h-tinta)]">O número combinado.</strong> A
-                galeria conta e para no limite que você definir, com prazo se você quiser.
+                <strong className="font-medium text-[var(--h-tinta)]">Sem limite, ou o número combinado.</strong>{" "}
+                O cliente marca quantas quiser. Se você definir um número, a galeria conta e para
+                nele, com prazo se você quiser.
               </li>
               <li>
                 <strong className="font-medium text-[var(--h-tinta)]">Cada pessoa com a sua lista.</strong>{" "}

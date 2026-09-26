@@ -87,9 +87,12 @@ try {
     publicada: true,
   });
   const classica = IDENTIDADES.find((i) => i.id === "classica");
+  /* Sem `selecao_limite`: é o padrão de toda galeria, e o print mostra o
+     padrão. Com 40 aqui a home dizia "até 40 por pessoa" e parecia que a
+     favorita tinha teto (Felipe, 26/09/2026: "por que tem limite de 40?"). */
   await db.query(
     `update galerias set subtitulo = 'Serra Gaúcha', data_evento = '2026-03-21',
-            aparencia = $2, selecao_limite = 40 where id = $1`,
+            aparencia = $2 where id = $1`,
     [g.id, JSON.stringify(classica.aparencia)],
   );
 
