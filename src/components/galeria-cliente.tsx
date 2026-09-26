@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
@@ -34,6 +34,7 @@ import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
 import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-visiveis";
 import { capitulosComOsExtras } from "@/lib/capitulos-da-rolagem";
+import { recortarParaDesenhar, PRIMEIRA_LEVA, LEVA } from "@/lib/grade-por-partes";
 import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
 export interface ItemGaleria {
@@ -1044,6 +1045,60 @@ export function GaleriaCliente({
       : [];
 
   /*
+   * ── A GRADE DESENHA POR PARTES (26/09/2026) ─────────────────────────────
+   *
+   * "A galeria parece lenta para abrir." Era: com 600 fotos, o documento
+   * saía com 600 cards — seis mil nós que o celular montava e hidratava antes
+   * de responder ao primeiro toque, para mostrar uma dúzia. Medido e explicado
+   * em `lib/grade-por-partes.ts`.
+   *
+   * Agora a grade nasce com `PRIMEIRA_LEVA` cards e ganha mais `LEVA` a cada
+   * vez que a rolagem chega perto do fim do que já foi desenhado. As fotos
+   * seguintes já estão em `itens` — nenhuma ida ao servidor, só o React
+   * acrescentando cards. Tudo o que não é desenho (filtro, slideshow,
+   * visualizador, menus, baixar) continua olhando a lista inteira.
+   *
+   * O corte é pelas fotos VISÍVEIS e respeita os filtros: "só as favoritas"
+   * mostra as primeiras favoritas, e não as favoritas que por acaso caíram
+   * nas 60 primeiras posições.
+   *
+   * `startTransition` porque acrescentar 120 cards é trabalho que pode
+   * esperar um toque: a rolagem e o coração respondem primeiro.
+   */
+  const [limiteDoDesenho, setLimiteDoDesenho] = useState(PRIMEIRA_LEVA);
+  const desenho = useMemo(
+    () => recortarParaDesenhar(capitulos, (i) => fotoVisivel(itens[i].id, filtros), limiteDoDesenho),
+    [capitulos, itens, filtros, limiteDoDesenho],
+  );
+  const faltaDesenhar = desenho.falta;
+  const sentinelaDoDesenho = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const alvo = sentinelaDoDesenho.current;
+    if (!alvo || !faltaDesenhar) return;
+    /*
+     * O observador é refeito a cada leva (`limiteDoDesenho` nas dependências),
+     * e isso é o que faz a tela alta funcionar: no monitor grande a leva nova
+     * pode não empurrar a sentinela para fora da margem, e um observador
+     * antigo só avisaria de novo quando ela saísse e voltasse. O novo avisa na
+     * hora, com o estado de agora, e a grade cresce até sair da margem.
+     *
+     * 1200 px de antecedência: a leva entra quando o fim do desenho está a uma
+     * dobra e meia de distância, antes de o dedo chegar lá.
+     */
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) {
+          startTransition(() => setLimiteDoDesenho((n) => n + LEVA));
+        }
+      },
+      { rootMargin: "0px 0px 1200px 0px" },
+    );
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, [faltaDesenhar, limiteDoDesenho]);
+
+  /*
    * ── AS PARTES DE UMA PASTA MAIOR QUE A TELA (16/09/2026) ─────────────────
    *
    * O corte por fatia serve no máximo `FOTOS_POR_TELA` fotos por documento, e
@@ -1098,7 +1153,11 @@ export function GaleriaCliente({
 
   useEffect(() => {
     const alvo = sentinela.current;
-    if (!alvo || acabou) return;
+    /* Enquanto falta desenhar, a sentinela da rede nem está na página — e
+       `faltaDesenhar` nas dependências é o que faz este efeito rodar de novo
+       quando ela entra. Sem isso ele olhava uma vez, não achava nada, e a
+       galeria fatiada parava nas primeiras 600 fotos. */
+    if (!alvo || acabou || faltaDesenhar) return;
     /*
      * `rootMargin` de 800 px embaixo: o pedido sai quando o fim está a uma
      * dobra de distância, não quando já chegou. É a diferença entre a galeria
@@ -1112,7 +1171,7 @@ export function GaleriaCliente({
     );
     observador.observe(alvo);
     return () => observador.disconnect();
-  }, [carregarMais, acabou]);
+  }, [carregarMais, acabou, faltaDesenhar]);
 
 
   /*
@@ -1178,7 +1237,12 @@ export function GaleriaCliente({
 
   const fimDaGaleria = (
     <>
-      {fatia && !acabou ? (
+      {/* A rede só é chamada quando tudo o que já chegou foi desenhado: com a
+          sentinela da rede logo abaixo dos primeiros cards, a galeria fatiada
+          pediria a segunda remessa ao servidor tendo 540 fotos na memória. */}
+      {faltaDesenhar ? (
+        <div ref={sentinelaDoDesenho} aria-hidden className="h-px" />
+      ) : fatia && !acabou ? (
         <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
           {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
         </div>
@@ -1186,7 +1250,7 @@ export function GaleriaCliente({
       {/* Só depois que as fotos deste capítulo acabaram: oferecer a saída no
           meio do carregamento é convidar a pessoa a sair antes de ver o que
           ainda está vindo. */}
-      {saidaDoCapitulo && (!fatia || acabou) && (
+      {saidaDoCapitulo && (!fatia || acabou) && !faltaDesenhar && (
         <div className="my-10 text-center">
           <Link
             href={saidaDoCapitulo.para}
@@ -1678,7 +1742,7 @@ export function GaleriaCliente({
 
 
       <div id="fotos" className="mt-8 scroll-mt-4">
-        {capitulos.map((capOriginal) => {
+        {desenho.capitulos.map((cap) => {
           /*
            * Com o filtro ligado, o capítulo mostra só o que foi marcado — e some
            * inteiro se nada ali foi. Manter um capítulo vazio com o título na
@@ -1687,10 +1751,15 @@ export function GaleriaCliente({
           /* Os dois filtros somam: "só as favoritas" E "só onde eu apareço"
              podem estar ligados ao mesmo tempo, e o resultado é a interseção.
              A regra mora em `lib/fotos-visiveis.ts` porque o slideshow precisa
-             da mesma resposta — duas cópias dela é como filtros discordam. */
-          const indices = capOriginal.indices.filter((i) => fotoVisivel(itens[i].id, filtros));
-          if (indices.length === 0) return null;
-          const cap = { ...capOriginal, indices };
+             da mesma resposta — duas cópias dela é como filtros discordam.
+             O corte do filtro e o do desenho por partes saem juntos de
+             `recortarParaDesenhar`. */
+          /* Capítulo que a rolagem ainda não alcançou: a seção já existe,
+             vazia e escondida, para o menu de capítulos enxergá-la desde já —
+             ver `recortarParaDesenhar`. */
+          if (cap.indices.length === 0) {
+            return <section key={cap.id} id={`cap-${cap.id}`} hidden />;
+          }
           return (
           <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
             {cap.nome && (
