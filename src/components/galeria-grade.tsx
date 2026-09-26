@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { DENSIDADES, LARGURA_DA_FOTO, type Aparencia } from "@/config/aparencia";
-import { agruparEmFileiras, colunasDaGrade, distribuirEmColunas } from "@/lib/grade-mural";
+import { agruparEmFileiras, colunasDaGrade } from "@/lib/grade-mural";
 
 /**
  * As cinco grades.
@@ -89,53 +89,6 @@ interface PropsGrade {
 }
 
 /**
- * MURAL — alturas variadas, ordem de LEITURA.
- *
- * Era `column-width` do CSS, que preenche uma coluna inteira antes de começar
- * a próxima: com 30 fotos em 3 colunas, a foto 21 aparecia no topo da terceira.
- * O sócio descreveu como "fotos do fim aparecerem bem em cima" — e não havia
- * como corrigir só com CSS, porque quem decide quantas fotos cabem por coluna é
- * o motor de multi-column, e ele não conta para ninguém. Ver `lib/grade-mural.ts`.
- */
-function Mural({
-  quantidade,
-  render,
-  proporcao,
-  largura,
-  gap,
-  minColunas,
-  maxColunas,
-}: Omit<PropsGrade, "aparencia"> & LimitesDaGrade) {
-  const [ref, colunas] = useColunas(largura, gap, minColunas, maxColunas);
-  /*
-   * A ALTURA ENTRA NA CONTA (16/09/2026).
-   *
-   * Repartir por contagem (`i % colunas`) deixava uma coluna com os retratos e
-   * a vizinha com as deitadas: mesmo número de fotos, quase o dobro de altura —
-   * "umas partes vazias e outra comprida", nas palavras do Felipe. A altura de
-   * uma foto numa coluna de largura 1 é `1 / proporção`; com ela,
-   * `distribuirEmColunas` fecha as colunas quase no mesmo rodapé sem mexer na
-   * ordem. Ver `lib/grade-mural.ts`.
-   */
-  const distribuicao = distribuirEmColunas(quantidade, colunas, (i) => 1 / proporcao(i));
-
-  return (
-    <div ref={ref} style={{ display: "flex", gap, alignItems: "flex-start" }}>
-      {distribuicao.map((indices, c) => (
-        <div
-          key={c}
-          /* `minWidth: 0` porque item de flex não encolhe abaixo do conteúdo por
-             padrão — sem isso, uma foto larga empurra a coluna e estoura a linha. */
-          style={{ display: "flex", flexDirection: "column", gap, flex: "1 1 0", minWidth: 0 }}
-        >
-          {indices.map((i) => render(i, {}, "block w-full"))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/**
  * PANORAMA — fileiras justificadas, com a foto deitada valendo por duas.
  *
  * Diferente do editorial, que promove uma a cada cinco sem olhar para a foto:
@@ -162,8 +115,16 @@ function Mural({
  * A ÚLTIMA FILEIRA é a exceção e continua com a altura das anteriores: uma
  * fileira com duas fotos esticadas até a borda desenharia duas fotos gigantes
  * no fim da galeria. Ela fica alinhada à esquerda, como num texto.
+ *
+ * ── E TAMBÉM A GRADE "COLUNAS" (26/09/2026) ─────────────────────────────
+ *
+ * Felipe, depois de quatro queixas do Juan sobre a ordem: "não pode trocar,
+ * ele tem que seguir a ordem". O mural de colunas não tinha como — ver o
+ * comentário de `lib/grade-mural.ts`. A "Colunas" passou a ser este mesmo
+ * componente com `deitadaValeDuas={false}`: cada fileira tem exatamente o
+ * número de fotos que a densidade dá de colunas.
  */
-function Panorama({
+function Fileiras({
   quantidade,
   render,
   proporcao,
@@ -171,7 +132,8 @@ function Panorama({
   gap,
   minColunas,
   maxColunas,
-}: Omit<PropsGrade, "aparencia"> & LimitesDaGrade) {
+  deitadaValeDuas,
+}: Omit<PropsGrade, "aparencia"> & LimitesDaGrade & { deitadaValeDuas: boolean }) {
   const [ref, colunas, larguraMedida] = useColunas(largura, gap, minColunas, maxColunas);
   const proporcoes = Array.from({ length: quantidade }, (_, i) => {
     const p = proporcao(i);
@@ -180,7 +142,7 @@ function Panorama({
        o tamanho da foto. */
     return Number.isFinite(p) && p > 0 ? p : 4 / 5;
   });
-  const fileiras = agruparEmFileiras(proporcoes, colunas);
+  const fileiras = agruparEmFileiras(proporcoes, colunas, deitadaValeDuas);
 
   /* Antes de medir, a largura é 0 e não há conta a fazer: o primeiro quadro
      desenha uma coluna, que é o que o servidor manda e o que o celular recebe.
@@ -197,8 +159,24 @@ function Panorama({
            justificado: as duas últimas fotos da galeria saem do tamanho de um
            pôster. Ela mantém a altura das outras e sobra espaço à direita. */
         const ultimaIncompleta = f === fileiras.length - 1 && fileiras.length > 1;
+        /*
+         * Na "Colunas" a última fileira tem a altura que TERIA se estivesse
+         * cheia — as fotos que faltam contadas pela média das que vieram. Com
+         * N fotos por fileira essa conta existe (na Panorama não: não se sabe
+         * quantas caberiam), e é ela que faz o fim da galeria ter o tamanho do
+         * resto em vez do palpite fixo de `alturaBase`. Fileira que fechou
+         * cheia é justificada como qualquer outra.
+         */
+        const alturaCheia =
+          (larguraMedida - gap * (colunas - 1)) / ((soma * colunas) / indices.length);
         const alturaDaFileira =
-          larguraMedida > 0 && !ultimaIncompleta ? util / soma : alturaBase;
+          larguraMedida <= 0
+            ? alturaBase
+            : !ultimaIncompleta
+              ? util / soma
+              : deitadaValeDuas
+                ? alturaBase
+                : Math.min(alturaCheia, util / soma);
 
         return (
           <div key={f} style={{ display: "flex", gap }}>
@@ -228,9 +206,11 @@ export function GaleriaGrade({ aparencia, quantidade, render, proporcao }: Props
   const largura = LARGURA_DA_FOTO[aparencia.densidade];
   const itens = Array.from({ length: quantidade }, (_, i) => i);
 
-  if (aparencia.grade === "colunas") {
+  /* "Colunas" e "Panorama" são o mesmo desenho — fileiras justificadas, na
+     ordem, sem cortar nada —, e diferem na conta da fileira. Ver `Fileiras`. */
+  if (aparencia.grade === "colunas" || aparencia.grade === "panorama") {
     return (
-      <Mural
+      <Fileiras
         quantidade={quantidade}
         render={render}
         proporcao={proporcao}
@@ -238,20 +218,7 @@ export function GaleriaGrade({ aparencia, quantidade, render, proporcao }: Props
         gap={gap}
         minColunas={minColunas}
         maxColunas={maxColunas}
-      />
-    );
-  }
-
-  if (aparencia.grade === "panorama") {
-    return (
-      <Panorama
-        quantidade={quantidade}
-        render={render}
-        proporcao={proporcao}
-        largura={largura}
-        gap={gap}
-        minColunas={minColunas}
-        maxColunas={maxColunas}
+        deitadaValeDuas={aparencia.grade === "panorama"}
       />
     );
   }

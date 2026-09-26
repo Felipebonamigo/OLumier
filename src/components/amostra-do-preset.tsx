@@ -316,25 +316,40 @@ export function AmostraDoPreset({
 
     if (g === "colunas" || g === "panorama") {
       /*
-       * Mural: colunas com alturas desencontradas, que é o que o olho
-       * reconhece como mural.
+       * FILEIRAS JUSTIFICADAS — desde 26/09/2026 é assim que as duas saem na
+       * galeria (ver `lib/grade-mural.ts`), e a amostra desenha o que a
+       * galeria faz: cada foto com a largura da sua proporção, a fileira toda
+       * na mesma altura, e a fileira com a deitada mais baixa que a outra.
        *
-       * As alturas são PROPORÇÕES e não pixels. Com pixels, a mesma amostra
-       * caberia no assistente (112 px de caixa) e transbordaria no editor de
-       * Design (80 px) — dois lugares, duas caixas, e o desenho tem de ser o
-       * mesmo nos dois.
+       * A diferença entre as duas é a conta da fileira, e é ela que aparece
+       * aqui: na "Colunas" toda fileira tem três fotos, a deitada inclusive;
+       * na "Panorama" a deitada vale por duas e divide a fileira com uma só.
+       *
+       * Larguras e alturas em PROPORÇÃO (flex), não em pixels: a mesma amostra
+       * cabe no assistente (112 px) e no editor de Design (80 px).
        */
-      const coluna = (a: string, b: string, primeira: string, segunda: string) => (
-        <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: vao, height: "100%" }}>
-          {foto(primeira, { height: a })}
-          {foto(segunda, { height: b })}
-        </span>
-      );
+      const fileira = (proporcoes: number[], cores: string[]) => {
+        const soma = proporcoes.reduce((t, x) => t + x, 0);
+        return (
+          <span style={{ display: "flex", gap: vao, flex: `${1 / soma} 1 0`, minHeight: 0 }}>
+            {proporcoes.map((x, k) => foto(cores[k], { flex: `${x} 1 0` }))}
+          </span>
+        );
+      };
+      const [r, d] = [2 / 3, 3 / 2];
       return (
-        <span style={{ ...base, display: "flex", gap: vao, alignItems: "flex-start" }}>
-          {coluna("60%", "34%", c.foto, c.fotoAlt)}
-          {coluna("38%", "56%", c.fotoAlt, c.foto)}
-          {coluna("50%", "44%", c.foto, c.fotoAlt)}
+        <span style={{ ...base, display: "flex", flexDirection: "column", gap: vao }}>
+          {g === "colunas" ? (
+            <>
+              {fileira([r, d, r], [c.foto, c.fotoAlt, c.foto])}
+              {fileira([r, r, r], [c.fotoAlt, c.foto, c.fotoAlt])}
+            </>
+          ) : (
+            <>
+              {fileira([d, r], [c.foto, c.fotoAlt])}
+              {fileira([r, r, r], [c.fotoAlt, c.foto, c.fotoAlt])}
+            </>
+          )}
         </span>
       );
     }

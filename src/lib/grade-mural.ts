@@ -18,6 +18,31 @@
  * Não há como consertar isso só com CSS: quem decide quantas fotos cabem em
  * cada coluna é o próprio motor de multi-column, e ele não expõe esse número.
  * Por isso a largura é MEDIDA no navegador e a distribuição é feita à mão.
+ *
+ * ── A GRADE "COLUNAS" VIROU FILEIRAS (26/09/2026) ─────────────────────────
+ *
+ * Até aqui ela era um mural de verdade: colunas de largura fixa, cada foto na
+ * coluna mais curta. Juan reclamou da ordem quatro vezes — a última com o
+ * print numerado à mão, "era pra ser 1 2 3 4 5, mas está 2 - 1 - 4 - 5 - 3" —
+ * e o Felipe fechou a questão: "não pode trocar, ele tem que seguir a ordem".
+ *
+ * Num mural de colunas com fotos de alturas diferentes isso é impossível, e
+ * não por falta de regra: com duas colunas, uma deitada e retratos depois, a
+ * única distribuição que nunca lê fora de ordem é empilhar tudo numa coluna
+ * só. Medido em galerias sortidas: a regra "coluna mais curta" lia 35 de cada
+ * 100 pares seguidos ao contrário; a melhor variante ainda lia 17, e as mais
+ * agressivas passavam a jogar fotos posteriores para cima das anteriores.
+ * Colunas iguais + nada cortado + ordem garantida só se consegue deixando
+ * buraco — 14% da grade vazia numa galeria com um quarto de horizontais.
+ *
+ * O Felipe escolheu ceder na LARGURA: a "Colunas" monta fileiras com o mesmo
+ * número de fotos que tem de colunas, cada fileira esticada até a borda. A
+ * ordem é a da leitura por construção — cada fileira é um trecho contínuo, da
+ * esquerda para a direita —, nada é cortado e não sobra buraco. A horizontal
+ * sai mais larga, na mesma altura das vizinhas.
+ *
+ * O que a separa da "Panorama" é a conta da fileira: lá a deitada vale por
+ * duas e a fileira tem menos fotos; aqui toda fileira tem exatamente N.
  */
 
 /** A partir daqui a foto conta como deitada — 4:3 (1,33) entra, quadrada não. */
@@ -39,113 +64,6 @@ export function colunasQueCabem(
 ): number {
   if (!Number.isFinite(larguraDisponivel) || larguraDisponivel <= 0) return 1;
   return Math.max(1, Math.floor((larguraDisponivel + gap) / (larguraAlvo + gap)));
-}
-
-/**
- * Até quanto duas colunas contam como niveladas: um quarto da altura de uma
- * foto QUADRADA, na escala em que a coluna mede 1 de largura (um retrato 2:3
- * mede 1,5; uma deitada 3:2, 0,67). Numa coluna de 300 px são 75 px — bem
- * mais que a diferença de recorte entre duas fotos "iguais", e menos que meia
- * altura de qualquer foto até 2:1. Ver `distribuirEmColunas`.
- */
-export const EMPATE_VISUAL = 0.25;
-
-/**
- * Reparte os índices entre as colunas, na ordem de LEITURA e pela ALTURA.
- *
- * Cada foto vai para a coluna mais CURTA no momento. Empate vai para a mais à
- * esquerda, então as primeiras fotos ainda ocupam 0, 1, 2 — o topo continua
- * sendo o começo da galeria, lido da esquerda para a direita, que é a regra que
- * este arquivo nasceu para proteger. Dentro de cada coluna os índices seguem
- * crescendo, então a leitura de cima para baixo também se mantém.
- *
- * ── O DEFEITO QUE ISTO CONSERTA (16/09/2026) ──────────────────────────────
- *
- * Era `i % colunas`: a foto 0 na coluna 0, a 1 na 1, a 2 na 2, a 3 na 0 de
- * novo. Repartia a CONTAGEM igualmente e ignorava a altura — e num mural as
- * alturas é que são desiguais, porque as fotos têm proporções diferentes e
- * nenhuma é cortada.
- *
- * Com sorte ruim, uma coluna junta os retratos e a vizinha junta as deitadas:
- * a mesma quantidade de fotos, quase o dobro de altura. Felipe, com a foto do
- * fim da galeria: "ficou estranho, umas partes vazias e outra comprida".
- *
- * Distribuir pela altura não muda a ordem e fecha o buraco: o rodapé das
- * colunas passa a terminar quase junto, e a diferença que resta é, no máximo, a
- * altura de uma foto.
- *
- * ── O EMPATE É O QUE O OLHO VÊ, NÃO O QUE O NÚMERO DIZ (26/09/2026) ────────
- *
- * Juan, com o print da galeria da Lu e do Marino numerado à mão: "era pra ser
- * nessa ordem dos números, mas está 2 - 1 - 4 - 5 - 3". E antes: "nas
- * horizontais, a preto e branco tá na frente".
- *
- * As fotos 1 e 2 do print começam na MESMA altura da tela, e 3, 4 e 5 também:
- * as colunas estavam niveladas. Niveladas a olho — no número, uma estava um ou
- * dois pixels mais curta, porque duas fotos "2:3" raramente têm exatamente a
- * mesma proporção depois de recortadas e exportadas. O `<` acima tratava isso
- * como uma coluna mais curta e mandava a foto 1 para lá, à direita; a 2, sua
- * versão em PB, caía à esquerda, na mesma fileira. A regra do empate existia —
- * "fica a mais à esquerda" — e só valia para empate exato, que com foto de
- * verdade quase nunca acontece.
- *
- * Então o empate passa a ser o que o olho enxerga como empate: colunas que não
- * diferem mais que `EMPATE_VISUAL` da mais curta contam como niveladas, e entre
- * elas vence a mais à esquerda.
- *
- * O que isto NÃO muda, e por quê: uma foto posterior nunca começa mais que
- * `EMPATE_VISUAL` acima de uma anterior — a mais curta só cresce, e a escolhida
- * está no máximo essa folga acima dela. Um quarto de foto quadrada é menos que
- * meia altura de qualquer foto até 2:1, então as duas continuam lidas na mesma
- * fileira, e aí a da esquerda é a primeira: nenhuma foto passa a aparecer
- * CLARAMENTE acima de uma anterior, que era a garantia da regra antiga. Uma
- * folga maior fecharia mais casos e quebraria essa garantia (medido; ver
- * `scripts/testar-grade-mural.mjs`).
- *
- * E o que ela não resolve: depois de uma deitada, uma coluna fica MESMO mais
- * curta — 0,8 foto —, e a foto seguinte vai para lá, esteja onde estiver. Num
- * mural de colunas com alturas diferentes nenhuma regra mantém toda leitura em
- * ordem sem deixar buraco. Quem precisa da sequência exata tem "Panorama" e
- * "Linhas", que montam fileiras.
- *
- * @param alturaDe Altura da foto `i` para uma coluna de largura 1 — ou seja,
- *   `1 / proporção`. Sem ela a repartição volta a ser por contagem, que é o
- *   certo quando as alturas não são conhecidas (a grade quadrada, por exemplo,
- *   onde toda foto tem a mesma).
- */
-export function distribuirEmColunas(
-  quantidade: number,
-  colunas: number,
-  alturaDe?: (i: number) => number,
-): number[][] {
-  const n = Math.max(1, Math.floor(colunas));
-  /* Colunas a mais que fotos ficariam vazias e ainda assim ocupariam largura,
-   * espremendo as que têm foto. Com poucas fotos, menos colunas. */
-  const usadas = Math.max(1, Math.min(n, quantidade));
-  const saida: number[][] = Array.from({ length: usadas }, () => []);
-  if (!alturaDe) {
-    for (let i = 0; i < quantidade; i++) saida[i % usadas].push(i);
-    return saida;
-  }
-
-  const altura = new Array<number>(usadas).fill(0);
-  for (let i = 0; i < quantidade; i++) {
-    let menor = altura[0];
-    for (let c = 1; c < usadas; c++) if (altura[c] < menor) menor = altura[c];
-    /* A mais à ESQUERDA entre as niveladas com a mais curta. Com todas as
-       colunas ainda zeradas isso põe as primeiras fotos em 0, 1, 2, como
-       sempre; depois, é o que impede um pixel de diferença de mandar a foto
-       para o outro lado da fileira. */
-    let escolhida = 0;
-    while (altura[escolhida] > menor + EMPATE_VISUAL) escolhida++;
-    saida[escolhida].push(i);
-    /* Proporção inválida (foto sem largura/altura no banco) não pode virar
-       NaN: uma coluna com altura NaN nunca mais seria escolhida, e todas as
-       fotos seguintes cairiam numa coluna só. */
-    const h = alturaDe(i);
-    altura[escolhida] += Number.isFinite(h) && h > 0 ? h : 1;
-  }
-  return saida;
 }
 
 /**
@@ -172,10 +90,16 @@ export function distribuirEmColunas(
  * @param unidadesPorFileira Quantas colunas a tela comporta. A deitada vale
  *   duas; as outras, uma. É o que mantém o panorama parecido com uma grade em
  *   vez de virar uma fileira só de vinte fotos.
+ * @param deitadaValeDuas `false` é a grade "Colunas" (26/09/2026): toda foto
+ *   vale uma, e cada fileira tem exatamente `unidadesPorFileira` fotos — o
+ *   número de colunas que a pessoa escolheu pela densidade. A deitada continua
+ *   saindo mais larga, porque a fileira é justificada pela proporção de cada
+ *   foto; o que muda é que ela não empurra ninguém para a fileira seguinte.
  */
 export function agruparEmFileiras(
   proporcoes: readonly number[],
   unidadesPorFileira: number,
+  deitadaValeDuas = true,
 ): number[][] {
   const teto = Math.max(1, Math.floor(unidadesPorFileira));
   const fileiras: number[][] = [];
@@ -183,7 +107,7 @@ export function agruparEmFileiras(
   let unidades = 0;
 
   for (let i = 0; i < proporcoes.length; i++) {
-    const peso = Math.min(teto, colunasDoItem(proporcoes[i], teto));
+    const peso = deitadaValeDuas ? Math.min(teto, colunasDoItem(proporcoes[i], teto)) : 1;
     /* Não cabe: fecha a fileira ANTES de pôr a foto. Fechar depois deixaria a
        fileira com mais unidades que a tela, e a conta da altura devolveria uma
        fileira mais baixa que as vizinhas — o degrau que a grade de CSS fazia. */
