@@ -189,6 +189,23 @@ try {
     }
   });
 
+  await etapa("o link do Atomatiza preenche o cadastro pelo fragmento, e só pelo fragmento", async () => {
+    const { lerPreenchimento } = await import("../src/lib/preenchimento-cadastro.ts");
+    const p = lerPreenchimento("#origem=atomatiza&documento=52998224725&email=oi%40sirius.com.br&estudio=Ana+%26+Bia");
+    igual(p.documento, "529.982.247-25", "documento formatado");
+    igual(p.email, "oi@sirius.com.br", "e-mail");
+    igual(p.estudio, "Ana & Bia", "estúdio");
+    igual(p.doAtomatiza, true, "origem");
+    igual(lerPreenchimento("").documento, "", "sem fragmento");
+    igual(lerPreenchimento("#documento=" + "9".repeat(40)).documento.replace(/\D/g, "").length, 14, "documento cortado");
+    igual(lerPreenchimento("#estudio=" + "x".repeat(500)).estudio.length, 80, "nome cortado");
+    /* O formulário lê `window.location.hash` — nunca a query, que iria para o
+     * log do servidor com o CPF dentro. */
+    const form = readFileSync("src/app/(auth)/cadastrar/form.tsx", "utf8");
+    if (!form.includes("window.location.hash")) throw new Error("o formulário não lê o fragmento");
+    if (/searchParams|location\.search/.test(form)) throw new Error("o formulário lê a query");
+  });
+
   /* ══ 2. Confirmar o e-mail ═══════════════════════════════════════════════ */
   console.log("\nconfirmação do e-mail");
 
