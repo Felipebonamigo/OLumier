@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 /* A data é do TEXTO, não do arquivo: mexeu na regra, muda aqui. Termo que diz
  * ter sido atualizado em agosto e fala de coisa decidida depois é desonesto — e
  * é o tipo de detalhe que ninguém confere e todo mundo repara. */
-const ATUALIZADO_EM = "27 de agosto de 2026";
+const ATUALIZADO_EM = "28 de setembro de 2026";
 
 export default function TermosPage() {
   return (
@@ -99,7 +99,15 @@ export default function TermosPage() {
 
       <h2>Pagamento</h2>
       <ul>
-        <li>O teste grátis dura 14 dias e não pede cartão nem documento.</li>
+        <li>
+          O teste grátis dura 14 dias e não pede cartão. Pede o CPF ou CNPJ do titular: é um teste
+          por documento.
+        </li>
+        <li>
+          Se o teste terminar sem assinatura, as galerias saem do ar 15 dias depois, e os arquivos
+          enviados durante o teste são apagados 60 dias depois do fim dele — com dois avisos por
+          e-mail antes, o último com 7 dias de antecedência. A conta continua existindo.
+        </li>
         <li>Depois, a assinatura é mensal, cobrada pelo Asaas (Pix, boleto ou cartão).</li>
         <li>Preços podem mudar, com aviso de pelo menos 30 dias por e-mail.</li>
         <li>Cancelou, vale até o fim do período já pago.</li>

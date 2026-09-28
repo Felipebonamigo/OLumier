@@ -49,6 +49,17 @@ export interface Tenant {
    * estúdio já pagou. Ver migração 021.
    */
   pago_ate: Date | null;
+  /**
+   * Quando o dono clicou no link de confirmação — nulo = pendente. Só trava o
+   * envio com o e-mail transacional ligado; ver `lib/confirmacao-email.ts` e a
+   * migração 045, que deu a data de criação a toda conta anterior.
+   */
+  email_confirmado_em: Date | null;
+  /* Os passos da limpeza do teste abandonado (migração 045). Quem os escreve é
+     só `lib/testes-abandonados.ts`. */
+  aviso_limpeza_em: Date | null;
+  aviso_limpeza_final_em: Date | null;
+  arquivos_limpos_em: Date | null;
   criado_em: Date;
 }
 
@@ -124,6 +135,14 @@ export async function criarTenant(dados: {
   email: string;
   senha: string;
   planoId: string;
+  /** Só dígitos. Pedido no cadastro desde a migração 045 — único entre as contas. */
+  cpfCnpj?: string | null;
+  /**
+   * false = a conta nasce com o e-mail PENDENTE e não envia fotos até o dono
+   * clicar no link. Omitido, nasce confirmada — é o padrão da coluna, e o que
+   * vale para toda conta criada fora do cadastro (testes, scripts).
+   */
+  emailConfirmado?: boolean;
 }) {
   const plano = planoPorId(dados.planoId);
   if (!plano) throw new Error("Plano inválido");
@@ -151,10 +170,20 @@ export async function criarTenant(dados: {
   const quota = BigInt(plano.quotaGb) * BigInt(GB);
 
   const linha = await consultarUm<Tenant>(
-    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes,
+                          cpf_cnpj, email_confirmado_em)
+     values ($1, $2, $3, $4, $5, $6, $7, case when $8::boolean then now() else null end)
      returning *`,
-    [slug, dados.nomeEstudio, dados.email.toLowerCase(), senhaHash, plano.id, quota.toString()],
+    [
+      slug,
+      dados.nomeEstudio,
+      dados.email.toLowerCase(),
+      senhaHash,
+      plano.id,
+      quota.toString(),
+      dados.cpfCnpj || null,
+      dados.emailConfirmado ?? true,
+    ],
   );
   return linha!;
 }

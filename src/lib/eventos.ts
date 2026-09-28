@@ -42,6 +42,11 @@ export const ACOES = {
   ASSINATURA_CANCELADA: "assinatura.cancelada",
   SENHA_TROCADA: "senha.trocada",
   CONTA_CRIADA: "conta.criada",
+  /* O teste abandonado (migração 045): os dois avisos e a limpeza. É o único
+   * lugar em que o SISTEMA apaga arquivo sem o fotógrafo ter pedido, e numa
+   * disputa a pergunta vai ser "fui avisado? quando?". */
+  AVISO_LIMPEZA_ENVIADO: "conta.aviso_limpeza",
+  ARQUIVOS_DO_TESTE_APAGADOS: "conta.arquivos_apagados",
   /* Consentimento para dado biométrico (LGPD art. 11): ligar é o aceite, e o
    * registro é a prova de quando; desligar apaga os vetores e o registro diz
    * quantos. Sem isto, "quando o estúdio consentiu?" não teria resposta. */

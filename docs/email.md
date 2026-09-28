@@ -3,6 +3,26 @@
 Este arquivo existe porque a mesma falta de DNS trava **três** coisas ao mesmo
 tempo, e as três parecem problemas separados quando aparecem.
 
+> **Atualização (28/09/2026) — agora são cinco.** Duas das travas contra a
+> conta de teste repetida (migração 045) só funcionam com o envio ligado, e
+> ficam **dormindo** até lá — de propósito, para ninguém ser travado por uma
+> porta que nós não abrimos:
+>
+> | Trava | Com o e-mail desligado (hoje) | Ligado |
+> |---|---|---|
+> | Confirmar o e-mail antes de enviar fotos | conta nova nasce confirmada | nasce pendente; o link sai no cadastro, e o painel mostra o recado com "mandar de novo" |
+> | Apagar os arquivos do teste abandonado | **nada é avisado, nada é apagado** | aviso aos 30 dias do vencimento, aviso final aos 53, apaga aos 60 (`src/lib/testes-abandonados.ts`) |
+>
+> A limpeza também exige a cobrança ligada (`ASAAS_API_KEY`): sem ela ninguém
+> tinha como assinar para salvar os arquivos. Ela roda dentro de
+> `scripts/limpar-lixeira.mjs` (temporizador `fotonio-lixeira`, 04:50), que
+> escreve no journal o que fez. Mais de 20 contas para apagar numa madrugada, e
+> ela para sem apagar nenhuma e manda alerta para `ALERTA_EMAIL_DESTINO` —
+> conferida a lista, rodar à mão com `--aplicar --liberar-teto`.
+>
+> O CPF/CNPJ único e o limite de 3 cadastros por IP por dia valem já, com ou
+> sem e-mail.
+
 ## O estado de hoje (17/09/2026)
 
 | O quê | Estado |

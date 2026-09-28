@@ -19,7 +19,8 @@
  *
  *    A única exceção é o trial abandonado, e ela mora em `galeriasNoAr`, não
  *    aqui: quem testou 14 dias e sumiu ocuparia disco para sempre. O casal
- *    ainda ganha 15 dias de janela, e nada é apagado.
+ *    ainda ganha 15 dias de janela. Os ARQUIVOS só saem aos 60 dias, depois de
+ *    dois avisos por e-mail — ver `lib/testes-abandonados.ts` (28/09/2026).
  *
  * 3. Cancelar para a RENOVAÇÃO, não o acesso. Ver `pago_ate` mais abaixo.
  *
@@ -48,7 +49,8 @@ export interface Situacao {
 const RECADOS: Record<MotivoBloqueio, string> = {
   trial_vencido:
     "Seu teste grátis terminou. Ative a assinatura em Conta para voltar a enviar arquivos. " +
-    "As galerias já publicadas ficam no ar por mais 15 dias — depois disso saem do ar, mas nada é apagado e assinar devolve tudo.",
+    "As galerias já publicadas ficam no ar por mais 15 dias — depois disso saem do ar, e os arquivos continuam guardados. " +
+    "Sem assinatura, eles são apagados 60 dias depois do fim do teste, sempre com dois avisos por e-mail antes. Assinar até lá devolve tudo.",
   inadimplente:
     "Há uma cobrança em aberto. Assim que o pagamento for confirmado, o envio volta automaticamente — as galerias já publicadas continuam no ar.",
   cancelado:
@@ -155,7 +157,7 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
  * `cancelado` e `inadimplente` ficam de fora porque os recados desses dois
  * estados prometem, por escrito, que as galerias publicadas continuam no ar.
  *
- * Nada é apagado: a galeria deixa de abrir e volta no dia em que o pagamento
+ * Nada é apagado AQUI: a galeria deixa de abrir e volta no dia em que o pagamento
  * confirmar, porque a regra é lida na hora e não gravada em lugar nenhum.
  *
  * Falha para o lado de MOSTRAR: sem data, com status desconhecido ou com

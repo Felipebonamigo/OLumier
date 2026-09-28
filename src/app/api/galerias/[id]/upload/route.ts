@@ -5,6 +5,7 @@ import { consultarUm } from "@/lib/db";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { situacaoDoTenant } from "@/lib/assinatura";
 import { asaasConfigurado } from "@/lib/asaas";
+import { precisaConfirmarEmail, RECADO_EMAIL_PENDENTE } from "@/lib/confirmacao-email";
 import {
   TIPOS_ACEITOS,
   LIMITE_POR_ARQUIVO,
@@ -131,6 +132,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const situacao = situacaoDoTenant(tenant, asaasConfigurado());
   if (!situacao.podeEnviar) {
     return NextResponse.json({ erro: situacao.recado }, { status: 402 });
+  }
+  /* E-mail ainda não confirmado (só com o envio de e-mail ligado) — ver
+   * lib/confirmacao-email.ts. 403, não 402: não há nada a pagar, há um clique. */
+  if (precisaConfirmarEmail(tenant)) {
+    return NextResponse.json({ erro: RECADO_EMAIL_PENDENTE }, { status: 403 });
   }
 
   const comprometido = await bytesUsados(tenantId);

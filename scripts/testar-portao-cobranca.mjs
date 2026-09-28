@@ -95,18 +95,25 @@ await etapa("trial VENCIDO não envia mais", () => {
   igual(s.podeEnviar, false, "trial vencido");
   igual(s.motivo, "trial_vencido", "motivo");
   /*
-   * O recado precisa dizer o PRAZO e que nada é apagado.
+   * O recado precisa dizer os DOIS PRAZOS e que há aviso antes de apagar.
    *
    * Até 27/08/2026 ele prometia que as galerias publicadas continuavam no ar, e
    * esta etapa prendia essa promessa. A carência de 15 dias
    * (`CARENCIA_POS_TRIAL_DIAS`) transformou a promessa em mentira com data, e
    * uma tela que esconde o prazo é pior que a política: o fotógrafo descobriria
    * no dia em que o cliente dele ligasse dizendo que o link parou.
+   *
+   * Em 28/09/2026 veio o segundo prazo: os arquivos do teste abandonado são
+   * apagados aos 60 dias (`lib/testes-abandonados.ts`). O recado dizia "nada é
+   * apagado", e virou a mesma mentira com data — então passa a dizer quando,
+   * e que o aviso por e-mail vem antes.
    */
-  if (!/15 dias/.test(s.recado ?? "") || !/nada é apagado/i.test(s.recado ?? "")) {
-    throw new Error("o recado não diz o prazo da carência e que nada é apagado");
+  const r = s.recado ?? "";
+  if (!/15 dias/.test(r) || !/60 dias/.test(r) || !/aviso/i.test(r)) {
+    throw new Error("o recado não diz a carência, o prazo de exclusão e o aviso antes dela");
   }
-  return "e promete que a galeria do cliente fica no ar";
+  if (/nada é apagado/i.test(r)) throw new Error("o recado ainda promete que nada é apagado");
+  return "com a carência, o prazo dos arquivos e o aviso";
 });
 
 await etapa("assinatura ativa envia mesmo com o trial vencido", () => {

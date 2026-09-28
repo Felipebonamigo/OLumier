@@ -338,10 +338,12 @@ export function ProvedorDeEnvio({
               const corpo = await preparo.json();
               if (!preparo.ok) {
                 // Sem espaço, tipo recusado ou grande demais: insistir não resolve.
+                // Nem e-mail por confirmar (403): o que resolve é o clique no link.
                 if (
                   preparo.status === 507 ||
                   preparo.status === 415 ||
-                  preparo.status === 413
+                  preparo.status === 413 ||
+                  preparo.status === 403
                 ) {
                   throw Object.assign(new Error(corpo.erro), { definitivo: true });
                 }

@@ -6,6 +6,11 @@ import { autenticar, buscarTenantPorEmail, criarTenant, emailJaUsado } from "@/l
 import { planoPorId, PLANO_INICIAL } from "@/config/planos";
 import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 import { emailConfigurado } from "@/lib/email";
+import { consultar } from "@/lib/db";
+import { conferirDocumento, soDigitos } from "@/lib/documento";
+import { colisaoDeDocumento, documentoEmUso, ipPodeCadastrar } from "@/lib/cadastro";
+import { enviarConfirmacao } from "@/lib/confirmacao-email";
+import { ipDaRequisicao } from "@/lib/origem";
 import { conferirSenhaNova } from "@/lib/senha";
 import { marca } from "@/config/marca";
 import {
@@ -86,18 +91,70 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
   const problemaSenha = conferirSenhaNova(senha, senhaConfirmacao);
   if (problemaSenha) return { erro: RECADO_SENHA[problemaSenha] };
   if (!planoPorId(planoId)) return { erro: "Plano inválido." };
-  if (await emailJaUsado(email)) return { erro: "Já existe uma conta com esse e-mail." };
 
-  const tenant = await criarTenant({ nomeEstudio, email, senha, planoId });
+  /*
+   * CPF/CNPJ no cadastro, e um por conta (migração 045). Trocar de e-mail é de
+   * graça; trocar de documento, não — é o que impede a mesma pessoa de emendar
+   * um teste grátis no outro. Ver `lib/cadastro.ts`.
+   */
+  const documento = soDigitos(String(form.get("documento") ?? ""));
+  const problemaDocumento = conferirDocumento(documento);
+  if (problemaDocumento) return { erro: problemaDocumento };
+
+  const ip = await ipDaRequisicao();
+  /* Freio por IP nas colisões de documento: sem ele, este formulário responderia
+   * "esse CPF já tem conta" para quem quisesse testar uma lista inteira. */
+  const chaveDoc = ip ? `cadastro-doc:${ip}` : null;
+  if (chaveDoc) {
+    const antes = podeTentar(chaveDoc);
+    if (!antes.permitido) {
+      return { erro: `Muitas tentativas. Tente de novo em ${emPalavras(antes.esperarSeg!)}.` };
+    }
+  }
+
+  if (await emailJaUsado(email)) return { erro: "Já existe uma conta com esse e-mail." };
+  if (await documentoEmUso(documento)) {
+    if (chaveDoc) registrarErro(chaveDoc);
+    return { erro: RECADO_DOCUMENTO_EM_USO };
+  }
+  if (!(await ipPodeCadastrar(ip))) {
+    return {
+      erro:
+        "Muitas contas foram criadas desta conexão hoje. Tente de novo amanhã — ou fale com a gente " +
+        `pelo WhatsApp ${marca.whatsappVisivel}, que resolvemos na hora.`,
+    };
+  }
+
+  /* Com o e-mail transacional ligado, a conta nasce PENDENTE e só envia fotos
+   * depois do clique no link. Desligado, nasce confirmada — não há link para
+   * clicar. Ver `lib/confirmacao-email.ts`. */
+  const pedirConfirmacao = emailConfigurado();
+
+  let tenant;
+  try {
+    tenant = await criarTenant({
+      nomeEstudio,
+      email,
+      senha,
+      planoId,
+      cpfCnpj: documento,
+      emailConfirmado: !pedirConfirmacao,
+    });
+  } catch (e) {
+    // Dois cadastros com o mesmo documento no mesmo segundo: o índice segura o segundo.
+    if (colisaoDeDocumento(e)) return { erro: RECADO_DOCUMENTO_EM_USO };
+    throw e;
+  }
 
   /*
    * O marco zero da conta. É o evento que ancora todos os outros: numa disputa,
    * "desde quando esse estúdio usa o serviço" e "com qual plano ele entrou" são
    * as duas primeiras perguntas, e nenhuma delas tem resposta confiável olhando
    * a tabela `tenants` — lá só existe o estado de hoje.
+   *
+   * É também a contagem do limite por IP (`cadastrosRecentesDoIp`).
    */
   const { registrarEvento, ACOES } = await import("@/lib/eventos");
-  const { ipDaRequisicao } = await import("@/lib/origem");
   await registrarEvento({
     tenantId: tenant.id,
     estudio: nomeEstudio,
@@ -106,12 +163,28 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
     alvoTipo: "conta",
     alvoId: tenant.id,
     detalhe: { plano: planoId, email },
-    ip: await ipDaRequisicao(),
+    ip,
   });
+
+  if (pedirConfirmacao && !(await enviarConfirmacao(tenant))) {
+    /* O e-mail estava "ligado" e o envio falhou mesmo assim. Travar a conta por
+     * um defeito do nosso lado é pior que deixá-la passar sem o clique. */
+    console.warn(`[cadastro] link de confirmação não saiu para ${tenant.id}; conta liberada`);
+    await consultar("update tenants set email_confirmado_em = now() where id = $1", [tenant.id]);
+  }
 
   await criarSessao(tenant.id);
   redirect("/painel");
 }
+
+/*
+ * Sem dizer QUAL e-mail é o da outra conta: o documento é de quem digitou, mas
+ * o e-mail pode ser de outra pessoa (o sócio, o ex-sócio), e esta tela não tem
+ * como saber.
+ */
+const RECADO_DOCUMENTO_EM_USO =
+  "Já existe uma conta com esse CPF/CNPJ. Entre por ela — se não lembra o e-mail, " +
+  `fale com a gente pelo WhatsApp ${marca.whatsappVisivel}.`;
 
 export async function sairAction() {
   await encerrarSessao();

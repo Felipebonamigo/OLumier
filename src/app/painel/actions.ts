@@ -39,6 +39,8 @@ import {
   cancelarAssinatura,
 } from "@/lib/asaas";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
+import { documentoEmUso } from "@/lib/cadastro";
+import { enviarConfirmacao } from "@/lib/confirmacao-email";
 import { situacaoDoTenant } from "@/lib/assinatura";
 import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
 import { lerSite, normalizarInstagram, normalizarWhatsapp } from "@/lib/site-estudio";
@@ -646,6 +648,14 @@ export async function criarAssinaturaAction(
   const doc = soDigitos(documento || tenant.cpf_cnpj || "");
   const problema = conferirDocumento(doc);
   if (problema) return { erro: problema };
+  /* Um documento, uma conta (migração 045) — também aqui, senão a conta antiga
+   * sem CPF assinaria com o documento de outra. Antes do Asaas, para não abrir
+   * cliente lá com um documento que não vai ficar gravado aqui. */
+  if (await documentoEmUso(doc, tenantId)) {
+    return {
+      erro: `Esse CPF/CNPJ já está em outra conta. Fale com a gente pelo WhatsApp ${marca.whatsappVisivel} para juntar as duas.`,
+    };
+  }
 
   try {
     const cliente = await garantirCliente({
@@ -1485,4 +1495,46 @@ export async function esquecerApelidoGaleriaAction(
 
   revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
   return { ok: `/${slug} deixou de abrir esta galeria.` };
+}
+
+// --- confirmação do e-mail ----------------------------------------------------
+
+export interface EstadoReenvio {
+  erro?: string;
+  enviado?: boolean;
+}
+
+/**
+ * Manda de novo o link de confirmação do e-mail (migração 045).
+ *
+ * Dois freios, porque cada clique aqui manda um e-mail de verdade, pago e
+ * contado contra a reputação do domínio: um intervalo mínimo entre dois envios
+ * — lido do banco, então vale mesmo depois de reiniciar o app — e o limite de
+ * tentativas de sempre, para ninguém transformar o botão em disparador.
+ */
+export async function reenviarConfirmacaoAction(): Promise<EstadoReenvio> {
+  const tenantId = await exigirTenant();
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { erro: "Conta não encontrada." };
+  if (tenant.email_confirmado_em) return { enviado: true };
+
+  const chave = `reenvio-confirmacao:${tenantId}`;
+  const veredito = podeTentar(chave);
+  if (!veredito.permitido) {
+    return { erro: `Muitos pedidos seguidos. Tente de novo em ${emPalavras(veredito.esperarSeg!)}.` };
+  }
+  const recente = await consultarUm(
+    "select 1 from confirmacoes_email where tenant_id = $1 and criado_em > now() - interval '1 minute'",
+    [tenantId],
+  );
+  if (recente) return { erro: "Acabamos de mandar um link. Confira a caixa de entrada e o spam." };
+
+  registrarErro(chave);
+  const saiu = await enviarConfirmacao(tenant);
+  if (!saiu) {
+    return {
+      erro: `Não conseguimos mandar o e-mail agora. Tente em alguns minutos — ou fale com a gente pelo WhatsApp ${marca.whatsappVisivel}.`,
+    };
+  }
+  return { enviado: true };
 }

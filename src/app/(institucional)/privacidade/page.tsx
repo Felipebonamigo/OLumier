@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 /** Data da última revisão do texto — precisa mudar junto com o conteúdo. */
-const ATUALIZADO_EM = "25 de agosto de 2026";
+const ATUALIZADO_EM = "28 de setembro de 2026";
 
 export default function PrivacidadePage() {
   return (
@@ -39,9 +39,9 @@ export default function PrivacidadePage() {
           sua senha, nem para te ajudar: se você perder, ela é substituída, nunca recuperada.
         </li>
         <li>
-          <strong>CPF ou CNPJ</strong> — pedido <em>somente</em> quando você ativa a assinatura,
-          porque o processador de pagamento exige para emitir a cobrança. Quem usa o teste grátis
-          nunca informa documento.
+          <strong>CPF ou CNPJ</strong> — pedido no cadastro, para garantir um teste grátis por
+          pessoa: não pode haver duas contas com o mesmo documento. É também o que vai na
+          cobrança, quando você assina — o processador de pagamento exige para emiti-la.
         </li>
       </ul>
 
@@ -142,6 +142,11 @@ export default function PrivacidadePage() {
         <li>
           <strong>Enquanto a conta existir.</strong> Galeria que vence vai para o cofre: sai do ar,
           mas <em>nada é apagado</em> — é o comportamento contratado.
+        </li>
+        <li>
+          <strong>Teste grátis que termina sem assinatura</strong>: os arquivos enviados durante o
+          teste são apagados 60 dias depois do fim dele, com dois avisos por e-mail antes. A conta
+          e os dados dela continuam, e você pode assinar quando quiser.
         </li>
         <li>
           <strong>Ao apagar uma galeria</strong>, ela vai para a lixeira e fica{" "}
