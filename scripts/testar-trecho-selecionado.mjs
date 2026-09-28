@@ -168,7 +168,11 @@ await etapa("a grade é de contato, e pula o que está fora da tela", async () =
     );
   }
 
-  const li = html.match(/<li class="[^"]*content-visibility[^"]*"/)?.[0];
+  /* `<li[^>]*class=`, e não `<li class=`: o que se prende é o ladrilho TER
+     `content-visibility`, não a classe ser o primeiro atributo dele. Em
+     28/09/2026 o `draggable` do arrastar passou na frente e este teste ficou
+     vermelho sem que a propriedade medida tivesse mudado. */
+  const li = html.match(/<li[^>]*class="[^"]*content-visibility[^"]*"/)?.[0];
   if (!li) {
     throw new Error(
       "os ladrilhos perderam o `content-visibility` — com 4.577 fotos a rolagem volta" +
