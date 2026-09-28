@@ -190,6 +190,116 @@ export function fileirasDeColunas(
 }
 
 /**
+ * As fileiras da grade "Linhas": fotos na altura-alvo, cada fileira
+ * justificada até a borda — sem cortar nada e sem sobra à direita.
+ *
+ * ── A BARRA BRANCA (28/09/2026) ───────────────────────────────────────────
+ *
+ * Felipe, com o print de uma galeria no celular: "tem fotos que não ocupam o
+ * tamanho correto, aquela ali tá com uma barra branca do lado".
+ *
+ * A "Linhas" era `flex-wrap` com `flex-grow` igual à proporção da foto, e isso
+ * tem um canto que o CSS define assim de propósito: quando a SOMA dos
+ * `flex-grow` de uma linha é menor que 1, a linha distribui só essa FRAÇÃO da
+ * sobra. Uma foto vertical (2:3) sozinha na linha — porque a seguinte era
+ * deitada e não cabia ao lado — crescia 67% da sobra e parava; os outros 33%
+ * eram a barra. As medidas do print batem com essa conta a 2 px. E a foto que
+ * crescia era cortada, porque a altura era fixa: a promessa "nada é cortado"
+ * desta grade não valia justamente onde ela esticava.
+ *
+ * Agora é a mesma matemática da Panorama e da Colunas — fileira justificada,
+ * altura = largura útil ÷ soma das proporções —, com a quebra escolhida pela
+ * altura: a fileira fecha quando a próxima foto a faria passar da borda, e
+ * essa foto entra ou abre a fileira seguinte conforme o que deixar a altura
+ * mais perto da alvo. A vertical que ficava sozinha agora divide a fileira
+ * com a deitada, as duas um pouco mais baixas.
+ *
+ * ── O FIM ─────────────────────────────────────────────────────────────────
+ *
+ * A última fileira escolhe entre esticar até a borda e juntar-se à anterior —
+ * o que ficar mais perto da altura-alvo —, desde que o resultado fique entre
+ * a metade e o dobro dela. Não dando (um capítulo de uma foto vertical), ela
+ * fica na altura-alvo, alinhada à esquerda, como a Colunas faz.
+ *
+ * Com a lista ainda chegando (`listaCompleta = false` — a leva seguinte do
+ * desenho, ou a rede), a última fileira não estica nem se junta: é o fim de um
+ * lote. As outras não mudam quando o resto chega — a quebra de cada fileira só
+ * depende das fotos dela e da primeira da seguinte.
+ */
+export interface FileirasPorAltura {
+  fileiras: number[][];
+  /** A última fileira estica até a borda? Sem esticar, fica na altura-alvo. */
+  ultimaEstica: boolean;
+}
+
+export function fileirasPorAltura(
+  proporcoes: readonly number[],
+  largura: number,
+  alturaAlvo: number,
+  gap: number,
+  listaCompleta = true,
+): FileirasPorAltura {
+  if (proporcoes.length === 0) return { fileiras: [], ultimaEstica: false };
+  /* Antes de medir não há largura para dividir: uma foto por fileira, que é o
+     primeiro quadro de todas as grades de fileira. */
+  if (!(largura > 0) || !(alturaAlvo > 0)) {
+    return { fileiras: proporcoes.map((_, i) => [i]), ultimaEstica: false };
+  }
+
+  const justificada = (soma: number, fotos: number) => (largura - gap * (fotos - 1)) / soma;
+  /* Distância em escala de proporção: 2× mais alta e 2× mais baixa pesam igual. */
+  const distancia = (altura: number) => Math.abs(Math.log(altura / alturaAlvo));
+
+  const fileiras: number[][] = [];
+  let atual: number[] = [];
+  let soma = 0;
+  const fechar = () => {
+    fileiras.push(atual);
+    atual = [];
+    soma = 0;
+  };
+
+  for (let i = 0; i < proporcoes.length; i++) {
+    const p = proporcoes[i];
+    if (atual.length > 0 && (soma + p) * alturaAlvo + gap * atual.length >= largura) {
+      const com = justificada(soma + p, atual.length + 1);
+      const sem = justificada(soma, atual.length);
+      if (distancia(com) <= distancia(sem)) {
+        atual.push(i);
+        fechar();
+        continue;
+      }
+      fechar();
+    }
+    atual.push(i);
+    soma += p;
+    /* Uma foto sozinha já mais larga que a tela na altura-alvo (um panorama
+       3:1 no celular) fecha a própria fileira, um pouco mais baixa. */
+    if (atual.length === 1 && p * alturaAlvo >= largura) fechar();
+  }
+
+  if (atual.length === 0) return { fileiras, ultimaEstica: true };
+  if (!listaCompleta) {
+    fileiras.push(atual);
+    return { fileiras, ultimaEstica: false };
+  }
+
+  const dentro = (altura: number) => altura <= alturaAlvo * 2 && altura >= alturaAlvo / 2;
+  const estica = justificada(soma, atual.length);
+  const anterior = fileiras[fileiras.length - 1];
+  const junta = anterior
+    ? justificada(anterior.reduce((t, k) => t + proporcoes[k], 0) + soma, anterior.length + atual.length)
+    : NaN;
+
+  if (anterior && dentro(junta) && (!dentro(estica) || distancia(junta) < distancia(estica))) {
+    anterior.push(...atual);
+    return { fileiras, ultimaEstica: true };
+  }
+  fileiras.push(atual);
+  return { fileiras, ultimaEstica: dentro(estica) };
+}
+
+/**
  * Esta fileira da "Colunas" pode ser esticada até a borda?
  *
  * Esticar deixa as fotos `colunas ÷ fotos` vezes maiores que numa fileira

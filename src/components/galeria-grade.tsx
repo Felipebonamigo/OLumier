@@ -7,6 +7,7 @@ import {
   colunasDaGrade,
   fileiraChegaNaBorda,
   fileirasDeColunas,
+  fileirasPorAltura,
 } from "@/lib/grade-mural";
 
 /**
@@ -132,8 +133,15 @@ interface PropsGrade {
  * Felipe, depois de quatro queixas do Juan sobre a ordem: "não pode trocar,
  * ele tem que seguir a ordem". O mural de colunas não tinha como — ver o
  * comentário de `lib/grade-mural.ts`. A "Colunas" passou a ser este mesmo
- * componente com `deitadaValeDuas={false}`: cada fileira tem exatamente o
- * número de fotos que a densidade dá de colunas.
+ * componente: cada fileira tem exatamente o número de fotos que a densidade
+ * dá de colunas.
+ *
+ * ── E A "LINHAS" (28/09/2026) ───────────────────────────────────────────
+ *
+ * Era `flex-wrap` com `flex-grow`, e a foto vertical sozinha numa linha
+ * crescia só dois terços da sobra — a barra branca do print do Felipe. Ver
+ * `fileirasPorAltura`. Aqui as fileiras saem na altura-alvo da densidade,
+ * justificadas até a borda como as das outras duas.
  */
 function Fileiras({
   quantidade,
@@ -143,9 +151,9 @@ function Fileiras({
   gap,
   minColunas,
   maxColunas,
-  deitadaValeDuas,
+  modo,
   listaCompleta = true,
-}: Omit<PropsGrade, "aparencia"> & LimitesDaGrade & { deitadaValeDuas: boolean }) {
+}: Omit<PropsGrade, "aparencia"> & LimitesDaGrade & { modo: "colunas" | "panorama" | "linhas" }) {
   const [ref, colunas, larguraMedida] = useColunas(largura, gap, minColunas, maxColunas);
   const proporcoes = Array.from({ length: quantidade }, (_, i) => {
     const p = proporcao(i);
@@ -154,9 +162,18 @@ function Fileiras({
        o tamanho da foto. */
     return Number.isFinite(p) && p > 0 ? p : 4 / 5;
   });
-  const fileiras = deitadaValeDuas
-    ? agruparEmFileiras(proporcoes, colunas)
-    : fileirasDeColunas(quantidade, colunas, listaCompleta);
+  const deitadaValeDuas = modo === "panorama";
+  /* A altura-alvo da "Linhas" — a mesma de antes, quando ela era `flex-wrap`. */
+  const alturaAlvo = Math.round(largura * 0.85);
+  const porAltura =
+    modo === "linhas"
+      ? fileirasPorAltura(proporcoes, larguraMedida, alturaAlvo, gap, listaCompleta)
+      : null;
+  const fileiras = porAltura
+    ? porAltura.fileiras
+    : deitadaValeDuas
+      ? agruparEmFileiras(proporcoes, colunas)
+      : fileirasDeColunas(quantidade, colunas, listaCompleta);
 
   /* Antes de medir, a largura é 0 e não há conta a fazer: o primeiro quadro
      desenha uma coluna, que é o que o servidor manda e o que o celular recebe.
@@ -184,8 +201,14 @@ function Fileiras({
          */
         const alturaCheia =
           (larguraMedida - gap * (colunas - 1)) / ((soma * colunas) / indices.length);
+        /* Na "Linhas" toda fileira é justificada, menos a última quando
+           `fileirasPorAltura` decidiu que ela fica na altura-alvo. */
         const alturaDaFileira =
-          larguraMedida <= 0
+          porAltura
+            ? larguraMedida > 0 && (f < fileiras.length - 1 || porAltura.ultimaEstica)
+              ? util / soma
+              : alturaAlvo
+          : larguraMedida <= 0
             ? alturaBase
             : deitadaValeDuas
               ? ultimaIncompleta
@@ -229,9 +252,10 @@ export function GaleriaGrade({
   const largura = LARGURA_DA_FOTO[aparencia.densidade];
   const itens = Array.from({ length: quantidade }, (_, i) => i);
 
-  /* "Colunas" e "Panorama" são o mesmo desenho — fileiras justificadas, na
-     ordem, sem cortar nada —, e diferem na conta da fileira. Ver `Fileiras`. */
-  if (aparencia.grade === "colunas" || aparencia.grade === "panorama") {
+  /* "Colunas", "Panorama" e "Linhas" são o mesmo desenho — fileiras
+     justificadas, na ordem, sem cortar nada —, e diferem na conta da fileira.
+     Ver `Fileiras`. */
+  if (aparencia.grade === "colunas" || aparencia.grade === "panorama" || aparencia.grade === "linhas") {
     return (
       <Fileiras
         quantidade={quantidade}
@@ -241,27 +265,9 @@ export function GaleriaGrade({
         gap={gap}
         minColunas={minColunas}
         maxColunas={maxColunas}
-        deitadaValeDuas={aparencia.grade === "panorama"}
+        modo={aparencia.grade}
         listaCompleta={listaCompleta}
       />
-    );
-  }
-
-  // LINHAS — fileiras justificadas. O flex-grow proporcional à largura da foto
-  // faz cada fileira preencher a linha inteira sem cortar nada.
-  if (aparencia.grade === "linhas") {
-    const altura = Math.round(largura * 0.85);
-    return (
-      <div style={{ display: "flex", flexWrap: "wrap", gap }}>
-        {itens.map((i) => {
-          const p = proporcao(i);
-          return render(
-            i,
-            { flexGrow: p, flexBasis: `${p * altura}px`, height: `${altura}px` },
-            "block",
-          );
-        })}
-      </div>
     );
   }
 

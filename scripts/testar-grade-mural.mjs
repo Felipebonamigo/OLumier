@@ -37,6 +37,7 @@ const {
   ehDeitada,
   fileiraChegaNaBorda,
   fileirasDeColunas,
+  fileirasPorAltura,
 } = mod;
 
 let falhou = false;
@@ -338,6 +339,81 @@ etapa("só a última fileira pode vir incompleta", () => {
 
 etapa("galeria vazia não inventa fileira", () => {
   igual(agruparEmFileiras([], 4), [], "nenhuma foto");
+});
+
+
+console.log("\nLinhas: fileiras na altura-alvo, até a borda\n");
+
+/* A "Linhas" desde 28/09/2026 — ver `fileirasPorAltura`. Os números são os do
+   celular: 358 px úteis, altura-alvo 145 (compacta), respiro 4. */
+const V = 2 / 3, H = 3 / 2, W = 2;
+const LARG = 358, ALVO = 145, GAP = 4;
+const alturas = (proporcoes, r) =>
+  r.fileiras.map((f) => (LARG - GAP * (f.length - 1)) / f.reduce((t, i) => t + proporcoes[i], 0));
+
+etapa("a vertical não fica sozinha antes de uma deitada — a barra branca do print", () => {
+  /* O print do Felipe: a vertical sem vizinha cabendo ao lado crescia 2/3 da
+     sobra (soma de flex-grow < 1) e o resto ficava branco. */
+  const proporcoes = [V, W, V, V, V, W, H, V];
+  const r = fileirasPorAltura(proporcoes, LARG, ALVO, GAP);
+  for (const f of r.fileiras.slice(0, -1)) {
+    if (f.length === 1 && proporcoes[f[0]] < 1) throw new Error(`vertical sozinha na fileira ${JSON.stringify(f)}`);
+  }
+  igual(r.fileiras[0], [0, 1], "primeira fileira");
+  return r.fileiras.map((f) => `[${f.join(",")}]`).join(" ");
+});
+
+etapa("toda fileira do meio chega à borda, perto da altura-alvo", () => {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let rodada = 0; rodada < 200; rodada++) {
+    const proporcoes = Array.from({ length: 5 + Math.floor(rnd() * 80) }, () => [V, V, V, H, H, W, 1, 4 / 5, 3][Math.floor(rnd() * 9)]);
+    const r = fileirasPorAltura(proporcoes, LARG, ALVO, GAP);
+    alturas(proporcoes, r).slice(0, -1).forEach((a, f) => {
+      if (a < ALVO / 2 || a > ALVO * 2) throw new Error(`rodada ${rodada}, fileira ${f}: altura ${a.toFixed(0)}`);
+    });
+  }
+  return "200 galerias sortidas";
+});
+
+etapa("toda foto entra exatamente uma vez, na ordem", () => {
+  const proporcoes = Array.from({ length: 41 }, (_, i) => [V, H, W, V, 1][i % 5]);
+  igual(fileirasPorAltura(proporcoes, LARG, ALVO, GAP).fileiras.flat(), proporcoes.map((_, i) => i), "ordem");
+});
+
+etapa("o fim não deixa faixa branca: estica ou junta com a anterior", () => {
+  /* Três verticais cabem numa fileira; a quarta sozinha no fim se junta à
+     de cima em vez de virar um pôster ou deixar o resto da linha vazio. */
+  const proporcoes = [V, V, V, V];
+  const r = fileirasPorAltura(proporcoes, LARG, ALVO, GAP);
+  igual(r.fileiras, [[0, 1, 2, 3]], "fileiras");
+  igual(r.ultimaEstica, true, "a última estica");
+  /* Duas deitadas fecham uma fileira; a vertical que sobra no fim entra nela
+     (esticada sozinha ela teria 3,7 vezes a altura-alvo). */
+  igual(fileirasPorAltura([H, H, V], LARG, ALVO, GAP), { fileiras: [[0, 1, 2]], ultimaEstica: true }, "junta");
+});
+
+etapa("capítulo de uma foto vertical fica na altura-alvo, e não do tamanho da tela", () => {
+  const r = fileirasPorAltura([V], LARG, ALVO, GAP);
+  igual(r, { fileiras: [[0]], ultimaEstica: false }, "uma vertical");
+  igual(fileirasPorAltura([H, H], LARG, ALVO, GAP).ultimaEstica, true, "duas deitadas esticam");
+});
+
+etapa("enquanto a galeria ainda chega, só o fim do lote espera", () => {
+  /* As fileiras de um lote são as mesmas depois que o resto chega — só a
+     última muda. Senão a foto pularia de fileira na frente da pessoa. */
+  const proporcoes = Array.from({ length: 60 }, (_, i) => [V, H, V, W, V, V, H][i % 7]);
+  const inteiro = fileirasPorAltura(proporcoes, LARG, ALVO, GAP).fileiras;
+  for (const corte of [10, 23, 37, 51]) {
+    const lote = fileirasPorAltura(proporcoes.slice(0, corte), LARG, ALVO, GAP, false);
+    igual(lote.ultimaEstica, false, `a última do lote de ${corte} não estica`);
+    igual(lote.fileiras.slice(0, -1), inteiro.slice(0, lote.fileiras.length - 1), `lote de ${corte}`);
+  }
+});
+
+etapa("antes de medir, uma foto por fileira; galeria vazia, nenhuma", () => {
+  igual(fileirasPorAltura([V, H], 0, ALVO, GAP).fileiras, [[0], [1]], "sem largura");
+  igual(fileirasPorAltura([], LARG, ALVO, GAP).fileiras, [], "vazia");
 });
 
 console.log(falhou ? "\n✗ mural com falha\n" : "\n✓ mural ok\n");
