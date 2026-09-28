@@ -365,17 +365,45 @@ export async function republicarMedia(
  * O filtro por tenant está no próprio DELETE, e não numa consulta antes: entre
  * conferir e apagar cabe uma troca de dono, e o banco não deixa essa fresta.
  */
-export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
+export async function apagarTodasAsMedias(
+  galeriaId: string,
+  tenantId: string,
+  /**
+   * AS ESCOLHIDAS, ou todas (28/09/2026).
+   *
+   * Juan: "Marquei algumas que eu quero excluir. Mas não tem botão de excluir.
+   * Só apagar todas. Ou apagar individualmente." A barra de seleção já prometia
+   * o contrário por escrito, e oferecia apenas o mover.
+   *
+   * `undefined` é "todas", que é o que esta função sempre fez. Uma LISTA apaga
+   * só aquelas — e lista VAZIA apaga nada, que é diferente de não ter lista:
+   * quem pediu para apagar zero fotos pediu para apagar zero fotos, e cair no
+   * caminho de "todas" aqui seria apagar um casamento inteiro por causa de um
+   * array vazio.
+   */
+  ids?: string[],
+) {
   const galeria = await consultarUm<{ id: string; titulo: string }>(
     "select id, titulo from galerias where id = $1 and tenant_id = $2",
     [galeriaId, tenantId],
   );
   if (!galeria) return null;
+  if (ids?.length === 0) return [];
 
-  const apagadas = await consultar<Media>(
-    "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
-    [galeriaId, tenantId],
-  );
+  /* O `galeria_id` e o `tenant_id` ficam no WHERE mesmo com a lista de ids: a
+     lista vem do navegador, e é o filtro que impede um id de outra galeria —
+     ou de outro estúdio — apagar o que não é dele. */
+  const apagadas = ids
+    ? await consultar<Media>(
+        `delete from medias
+          where galeria_id = $1 and tenant_id = $2 and id = any($3::uuid[])
+          returning *`,
+        [galeriaId, tenantId, ids],
+      )
+    : await consultar<Media>(
+        "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
+        [galeriaId, tenantId],
+      );
 
   if (apagadas.length > 0) {
     const { registrarEvento, ACOES } = await import("./eventos");
@@ -389,7 +417,7 @@ export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
         galeria: galeria.titulo,
         quantas: String(apagadas.length),
         bytes: String(apagadas.reduce((s, m) => s + Number(m.bytes), 0)),
-        motivo: "todas de uma vez",
+        motivo: ids ? "as selecionadas" : "todas de uma vez",
       },
     });
   }
