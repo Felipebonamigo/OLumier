@@ -1772,7 +1772,21 @@ export function GaleriaCliente({
           }
           return (
           <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
-            {cap.nome && (
+            {cap.nome && cap.id !== capituloAtivo && (
+              /*
+                COM O CAPÍTULO ABERTO, O TÍTULO SAI (28/09/2026).
+
+                Juan: "acho feio o nome do título aparecer duas vezes tão perto
+                um do outro". Aberto um capítulo, a barra já mostra a pastilha
+                dele ACESA — e este título repetia o mesmo texto três linhas
+                abaixo, com a foto ainda nem tendo começado.
+
+                Some só o do capítulo ABERTO. Na galeria inteira ele fica: ali
+                é ele que separa uma seção da outra enquanto se rola, e a
+                pastilha lá de cima já saiu da tela. Apagar sempre resolveria
+                esta queixa criando outra — a galeria virando uma tira de fotos
+                sem divisão nenhuma.
+              */
               /*
                 O NOME DO CAPÍTULO SEGUE O ALINHAMENTO, E NÃO É DA COR DO BOTÃO.
 

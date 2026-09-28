@@ -163,6 +163,40 @@ try {
   });
 
   /*
+   * ── O NOME DO CAPÍTULO, DUAS VEZES, A UM DEDO DE DISTÂNCIA (28/09/2026) ──
+   *
+   * Juan: "acho feio o nome do título aparecer duas vezes tão perto um do
+   * outro". Com o capítulo ABERTO, a barra já mostra a pastilha dele acesa — e
+   * o título da seção repetia o mesmo texto três linhas abaixo.
+   *
+   * Fora do capítulo aberto o título CONTINUA: ali ele separa uma seção da
+   * outra enquanto se rola, e a pastilha lá em cima já saiu da tela. As duas
+   * etapas andam juntas de propósito — apagar o título sempre resolveria esta
+   * queixa criando outra, a galeria inteira virando uma tira de fotos sem
+   * divisão nenhuma.
+   */
+  const tituloDaSecao = (h) =>
+    (h.match(/<h2[^>]*>\s*Festa\s*<\/h2>/gi) ?? []).length;
+
+  await etapa("com o capítulo aberto, o nome dele não aparece duas vezes", async () => {
+    const h = await html("?cap=festa");
+    if (!/festa/i.test(h)) throw new Error("a bancada não tem a Festa — não provaria nada");
+    const titulos = tituloDaSecao(h);
+    if (titulos > 0) {
+      throw new Error(`o título da seção repete o que a pastilha acesa já diz (${titulos}×)`);
+    }
+    return "só na barra";
+  });
+
+  await etapa("na galeria inteira o título da seção continua", async () => {
+    const h = await html("");
+    if (tituloDaSecao(h) === 0) {
+      throw new Error("sem capítulo aberto o título sumiu — a galeria perde a divisão ao rolar");
+    }
+    return "separa as seções";
+  });
+
+  /*
    * O PONTO DESTE ARQUIVO: a 601ª foto da Festa tem de ser alcançável. Antes
    * de 11/09 não era; entre 11/09 e 16/09 era por um link; hoje é rolando.
    */
