@@ -198,6 +198,9 @@ export function GaleriaCliente({
     limite: number | null;
     aberta: boolean;
     motivo: "fechada" | "prazo" | null;
+    /** O fotógrafo combinou limite ou prazo. Sem isso as favoritas são
+        livres e não há "Terminei minha escolha" — ver `EstadoSelecao.combinada`. */
+    combinada: boolean;
   };
 }) {
   /*
@@ -1337,6 +1340,7 @@ export function GaleriaCliente({
                   );
                 },
                 selecaoAberta: selecao.aberta,
+                podeEncerrar: selecao.aberta && selecao.combinada,
                 limite,
                 cheia,
                 encerrar: encerrarSelecao,

@@ -3,7 +3,15 @@ import Link from "next/link";
 import { exigirAdmin, metadataDeAdmin } from "@/lib/portao-admin";
 import { fotosDaHome, trocasDaHome } from "@/lib/fotos-da-home";
 import { armazenamentoConfigurado } from "@/lib/r2";
-import { LUGARES_DA_HOME, nomeDoLugar, ondeAparece } from "@/config/home-demonstracao";
+import {
+  GALERIAS_DA_HOME,
+  identidadePorId,
+  lugaresDaGaleria,
+  nomeDoLugar,
+  ondeAparece,
+  type FotosDaHome,
+  type LugarDaHome,
+} from "@/config/home-demonstracao";
 import { FotoDaHomeAdmin } from "@/components/foto-da-home-admin";
 import { dataHora } from "@/components/admin-pecas";
 
@@ -26,6 +34,8 @@ export const dynamic = "force-dynamic";
  *
  * Cada foto é um LUGAR, e a frase de onde ele aparece sai das identidades de
  * `config/home-demonstracao.ts` (`ondeAparece`), não de uma lista à parte.
+ * Os lugares vêm agrupados por galeria de exemplo: cada galeria é um
+ * casamento, e trocar as fotos dela é trocar as de um casamento só.
  */
 export default async function FotosDaHomePage() {
   await exigirAdmin();
@@ -62,23 +72,54 @@ export default async function FotosDaHomePage() {
         </p>
       )}
 
-      <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {LUGARES_DA_HOME.map((lugar) => {
-          const troca = porLugar.get(lugar);
-          return (
-            <FotoDaHomeAdmin
-              /* A chave muda com a foto: depois de uma troca o cartão nasce
-                 de novo, com a descrição e o foco da foto nova. */
-              key={`${lugar}:${fotos[lugar].src}`}
-              lugar={lugar}
-              nome={nomeDoLugar(lugar)}
-              onde={ondeAparece(lugar)}
-              foto={fotos[lugar]}
-              trocada={troca ? { quando: dataHora(troca.trocada_em), quem: troca.quem } : null}
-            />
-          );
-        })}
-      </ul>
+      {GALERIAS_DA_HOME.map((g) => {
+        const ident = identidadePorId(g);
+        return (
+          <section key={g} className="mt-10">
+            <h2 className="text-lg font-semibold">{ident?.titulo ?? g}</h2>
+            <p className="text-sm text-texto-soft">
+              {ident?.rotulo}
+              {ident?.pretoEBranco ? " · aparece em preto e branco na página" : ""}
+            </p>
+            <Lugares lugares={lugaresDaGaleria(g)} fotos={fotos} porLugar={porLugar} />
+          </section>
+        );
+      })}
+
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold">Fora das galerias</h2>
+        <Lugares lugares={["respiro"]} fotos={fotos} porLugar={porLugar} />
+      </section>
     </main>
+  );
+}
+
+function Lugares({
+  lugares,
+  fotos,
+  porLugar,
+}: {
+  lugares: LugarDaHome[];
+  fotos: FotosDaHome;
+  porLugar: Map<string, { trocada_em: Date; quem: string | null }>;
+}) {
+  return (
+    <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {lugares.map((lugar) => {
+        const troca = porLugar.get(lugar);
+        return (
+          <FotoDaHomeAdmin
+            /* A chave muda com a foto: depois de uma troca o cartão nasce
+               de novo, com a descrição e o foco da foto nova. */
+            key={`${lugar}:${fotos[lugar].src}`}
+            lugar={lugar}
+            nome={nomeDoLugar(lugar)}
+            onde={ondeAparece(lugar)}
+            foto={fotos[lugar]}
+            trocada={troca ? { quando: dataHora(troca.trocada_em), quem: troca.quem } : null}
+          />
+        );
+      })}
+    </ul>
   );
 }

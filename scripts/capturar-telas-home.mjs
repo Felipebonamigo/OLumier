@@ -34,7 +34,9 @@ import { cookieDeSessao } from "./sessao-de-teste.mjs";
 exigirBancoDeTeste();
 
 const { chromium } = createRequire(import.meta.url)("playwright");
-const { IDENTIDADES, FOTOS_PADRAO } = await import("../src/config/home-demonstracao.ts");
+const { GALERIA_EM_DESTAQUE, FOTOS_PADRAO, identidadePorId, lugaresDaGaleria } = await import(
+  "../src/config/home-demonstracao.ts"
+);
 const { CHAVE_TEMA } = await import("../src/config/tema.ts");
 const { pessoaPorEmail, alternarDaPessoa } = await import("../src/lib/favoritas.ts");
 
@@ -43,8 +45,8 @@ const RAIZ = path.resolve(import.meta.dirname, "..");
 const DESTINO = path.join(RAIZ, "public/home/produto");
 mkdirSync(DESTINO, { recursive: true });
 
-/* As fotos são as PADRÃO da home (`FOTOS_PADRAO`), na ordem da galeria
-   "Natural e contemporânea" — a capa primeiro. Assim o print do painel mostra as
+/* As fotos são as PADRÃO da home (`FOTOS_PADRAO`), na ordem da galeria em
+   destaque (`GALERIA_EM_DESTAQUE`, a de fotos de verdade) — a capa primeiro. Assim o print do painel mostra as
    mesmas fotos da página em volta dele, e trocar um padrão no config muda os
    prints na próxima rodada, sem esta lista precisar ser lembrada.
 
@@ -52,12 +54,13 @@ mkdirSync(DESTINO, { recursive: true });
    `public/home/demo`: a fila de envio mostra o nome, e é assim que ela se
    parece num casamento de verdade. E sobem em JPEG, que é o que sai da
    câmera — a derivada WebP do site vira JPEG aqui. */
-const classicaDaHome = IDENTIDADES.find((i) => i.id === "classica");
-const ORDEM = [classicaDaHome.capa, ...classicaDaHome.fotos.filter((f) => f !== classicaDaHome.capa)];
-const pasta = mkdtempSync(path.join(tmpdir(), "ana-pedro-"));
+const destaque = identidadePorId(GALERIA_EM_DESTAQUE);
+const ORDEM = lugaresDaGaleria(GALERIA_EM_DESTAQUE);
+const prefixo = destaque.slug.replace(/-e-/g, "_").replace(/-/g, "_").toUpperCase();
+const pasta = mkdtempSync(path.join(tmpdir(), "vitrine-"));
 const arquivos = await Promise.all(
   ORDEM.map(async (lugar, i) => {
-    const alvo = path.join(pasta, `ANA_PEDRO_${String(142 + i * 7).padStart(4, "0")}.jpg`);
+    const alvo = path.join(pasta, `${prefixo}_${String(142 + i * 7).padStart(4, "0")}.jpg`);
     await sharp(path.join(RAIZ, "public", FOTOS_PADRAO[lugar].src)).jpeg({ quality: 90 }).toFile(alvo);
     return alvo;
   }),
@@ -82,18 +85,16 @@ try {
   const estudio = await estudioDaRodada(db, { nome: "Seu Estúdio" });
   const g = await galeriaDaRodada(db, {
     nome: "vitrine",
-    titulo: "Ana & Pedro",
+    titulo: destaque.titulo,
     medias: 0,
     publicada: true,
   });
-  const classica = IDENTIDADES.find((i) => i.id === "classica");
   /* Sem `selecao_limite`: é o padrão de toda galeria, e o print mostra o
      padrão. Com 40 aqui a home dizia "até 40 por pessoa" e parecia que a
      favorita tinha teto (Felipe, 26/09/2026: "por que tem limite de 40?"). */
   await db.query(
-    `update galerias set subtitulo = 'Serra Gaúcha', data_evento = '2026-03-21',
-            aparencia = $2 where id = $1`,
-    [g.id, JSON.stringify(classica.aparencia)],
+    `update galerias set subtitulo = $3, data_evento = $4, aparencia = $2 where id = $1`,
+    [g.id, JSON.stringify(destaque.aparencia), destaque.local, destaque.dataEvento],
   );
 
   const [nomeCookie, valorCookie] = cookieDeSessao(estudio.id).split(";")[0].split("=");
@@ -154,7 +155,7 @@ try {
      grande quando o fotógrafo escolheu uma (ver `galeria-capa.tsx`): sem isto,
      o print "Entregue" saía só com o título, diferente do celular da home. A
      primeira que subiu é a capa da identidade (ver `ORDEM`). */
-  const capaDaHome = FOTOS_PADRAO[classicaDaHome.capa];
+  const capaDaHome = FOTOS_PADRAO[destaque.capa];
   await db.query(
     `update galerias set
        capa_media_id = (select id from medias where galeria_id = $1 order by ordem, criado_em limit 1),

@@ -11,6 +11,7 @@ import { ESPACOS, formatarGb, formatarReais } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 import { DOMINIO_PROPRIO_LIBERADO, VIDEO_LIBERADO } from "@/config/lancamentos";
 import {
+  GALERIA_EM_DESTAQUE,
   IDENTIDADES,
   LUGAR_DO_COFRE,
   identidadePorId,
@@ -372,8 +373,10 @@ export const revalidate = 3600;
 
 export default async function Home() {
   const fotos = await fotosDaHome();
-  const [viva, editorial, classica, noite] = IDENTIDADES;
-  const baseDaTroca = identidadePorId("viva") ?? viva;
+  const [delicada, editorial, classica, noite] = IDENTIDADES;
+  /* A galeria de fotos de verdade (Vanessa & Kalil) é a que representa o
+     produto sozinha: a troca de identidade, o celular, a seleção e o cofre. */
+  const destaque = identidadePorId(GALERIA_EM_DESTAQUE) ?? delicada;
 
   return (
     <main className={`home overflow-x-clip ${fonteTitulo.variable} ${fonteTexto.variable}`}>
@@ -438,7 +441,7 @@ export default async function Home() {
             </div>
             <p className="mt-4 text-sm text-[var(--h-tinta-3)]">14 dias grátis · sem cartão</p>
           </div>
-          <HeroGalerias identidades={[viva, editorial, classica]} fotos={fotos} />
+          <HeroGalerias identidades={[delicada, editorial, classica]} fotos={fotos} />
         </div>
       </section>
 
@@ -509,7 +512,7 @@ export default async function Home() {
               Troque a capa, a fonte e as cores: é a galeria de verdade, redesenhada na hora.
             </p>
           </Revelar>
-          <TrocaIdentidade base={baseDaTroca} fotos={fotos} />
+          <TrocaIdentidade base={destaque} fotos={fotos} />
         </div>
       </section>
 
@@ -599,7 +602,7 @@ export default async function Home() {
             <div className="relative w-[300px] rounded-[2.6rem] bg-[#141414] p-2.5 shadow-[0_40px_90px_-30px_rgba(20,20,20,0.55)]">
               <div className="relative h-[620px] overflow-hidden rounded-[2.1rem] bg-white">
                 <iframe
-                  src="/demonstracao/classica"
+                  src={`/demonstracao/${destaque.id}`}
                   title="Galeria de demonstração, como o cliente vê no celular"
                   loading="lazy"
                   width={390}
@@ -672,7 +675,7 @@ export default async function Home() {
             </p>
           </Revelar>
           <div>
-            <SelecaoDemo identidade={classica} fotos={fotos} />
+            <SelecaoDemo identidade={destaque} fotos={fotos} />
             {/* O painel entra por cima do canto da grade: é a mesma escolha,
                 vista do lado do fotógrafo. */}
             {/* Abaixo de 640 px o print do painel vira um borrão de letra miúda:
@@ -762,7 +765,7 @@ export default async function Home() {
             </p>
           </Revelar>
           <div className="mt-14">
-            <CofreDemo foto={fotos[LUGAR_DO_COFRE]} />
+            <CofreDemo foto={fotos[LUGAR_DO_COFRE]} titulo={destaque.titulo} />
           </div>
           <p className="mx-auto mt-10 max-w-[52ch] text-center text-[var(--h-tinta-2)]">
             Quando precisar novamente, restaure a galeria e continue de onde parou.
@@ -952,7 +955,7 @@ export default async function Home() {
       <section className="overflow-hidden py-24 lg:py-32">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="flex snap-x gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible">
-            {[noite, viva, editorial].map((ident) => (
+            {[noite, delicada, editorial].map((ident) => (
               <GaleriaDemo
                 key={ident.id}
                 identidade={ident}

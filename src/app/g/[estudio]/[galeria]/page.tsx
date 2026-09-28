@@ -779,7 +779,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             </p>
             <GaleriaCliente
               favoritasIniciais={[]}
-              selecaoInicial={{ limite: null, aberta: false, motivo: null }}
+              selecaoInicial={{ limite: null, aberta: false, motivo: null, combinada: false }}
               itens={fotosDeDemonstracao(aparencia.tema)}
               permiteDownload={false}
               galeriaId={galeria.id}
@@ -801,6 +801,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               limite: selecao.limite,
               aberta: selecao.aberta,
               motivo: selecao.motivo,
+              combinada: selecao.combinada,
             }}
             itens={itens}
             permiteDownload={galeria.permite_download}

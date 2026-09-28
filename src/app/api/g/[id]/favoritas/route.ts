@@ -120,6 +120,11 @@ export async function PUT(_request: NextRequest, { params }: { params: Promise<{
   if (!permissao.ok) return NextResponse.json({ erro: "sem acesso" }, { status: permissao.status });
 
   const antes = await estadoSelecao(id);
+  /* Sem escolha combinada não há o que encerrar: as favoritas são livres. O
+     botão nem aparece; isto é para quem chama a rota por fora. */
+  if (!antes.combinada) {
+    return NextResponse.json({ erro: "sem escolha combinada" }, { status: 409 });
+  }
   if (!antes.aberta) {
     // Já estava fechada: para quem clicou, o resultado é o mesmo que ele queria.
     return NextResponse.json({ fechada: true, total: antes.total, motivo: antes.motivo });

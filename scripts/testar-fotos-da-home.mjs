@@ -94,31 +94,31 @@ try {
   });
 
   await etapa("a troca vale por cima do padrão, só no lugar dela", () => {
-    const f = mesclarFotosDaHome(FOTOS_PADRAO, [linha("foto1")]);
-    if (!f.foto1.src.startsWith("/api/home/foto/foto1?v=")) throw new Error(`src: ${f.foto1.src}`);
-    if (!f.foto1.miniatura?.includes("t=miniatura")) throw new Error("miniatura sem o tamanho pequeno");
-    igual([f.foto1.largura, f.foto1.altura], [1333, 2000], "medidas da troca");
-    igual(f.foto1.descricao, "Noivos no jardim", "descrição normalizada");
-    igual([f.foto1.focoX, f.foto1.focoY], [40, 30], "foco");
-    igual(f.foto2, FOTOS_PADRAO.foto2, "o vizinho não mudou");
+    const f = mesclarFotosDaHome(FOTOS_PADRAO, [linha("delicada-1")]);
+    if (!f["delicada-1"].src.startsWith("/api/home/foto/delicada-1?v=")) throw new Error(`src: ${f["delicada-1"].src}`);
+    if (!f["delicada-1"].miniatura?.includes("t=miniatura")) throw new Error("miniatura sem o tamanho pequeno");
+    igual([f["delicada-1"].largura, f["delicada-1"].altura], [1333, 2000], "medidas da troca");
+    igual(f["delicada-1"].descricao, "Noivos no jardim", "descrição normalizada");
+    igual([f["delicada-1"].focoX, f["delicada-1"].focoY], [40, 30], "foco");
+    igual(f["delicada-2"], FOTOS_PADRAO["delicada-2"], "o vizinho não mudou");
   });
 
   await etapa("linha ruim é ignorada e o lugar fica com o padrão", () => {
     const ruins = [
-      linha("foto9"), // lugar que não existe (ou saiu do código)
-      linha("foto2", { largura: 0 }),
-      linha("foto3", { altura: 1.5 }),
-      linha("foto4", { chave: "estudio-x/galeria/foto.webp" }),
-      linha("foto5", { chave: chave("foto6", "foto") }), // chave de OUTRO lugar
+      linha("foto1"), // lugar que saiu do código (o nome de antes das galerias)
+      linha("delicada-2", { largura: 0 }),
+      linha("editorial-3", { altura: 1.5 }),
+      linha("noite-4", { chave: "estudio-x/galeria/foto.webp" }),
+      linha("classica-2", { chave: chave("classica-3", "foto") }), // chave de OUTRO lugar
     ];
     const f = mesclarFotosDaHome(FOTOS_PADRAO, ruins);
     igual(f, FOTOS_PADRAO, "fotos");
   });
 
   await etapa("miniatura inválida não derruba a troca — a grade usa a grande", () => {
-    const f = mesclarFotosDaHome(FOTOS_PADRAO, [linha("foto1", { chave_miniatura: "qualquer/coisa.webp" })]);
-    igual(f.foto1.miniatura, undefined, "miniatura");
-    if (!f.foto1.src.startsWith("/api/home/foto/foto1")) throw new Error("a troca se perdeu");
+    const f = mesclarFotosDaHome(FOTOS_PADRAO, [linha("delicada-1", { chave_miniatura: "qualquer/coisa.webp" })]);
+    igual(f["delicada-1"].miniatura, undefined, "miniatura");
+    if (!f["delicada-1"].src.startsWith("/api/home/foto/delicada-1")) throw new Error("a troca se perdeu");
   });
 
   console.log("\nA chave que o navegador manda\n");
@@ -134,13 +134,13 @@ try {
 
   await etapa("chave forjada é recusada", () => {
     const tentativas = [
-      [chave("foto2", "foto"), "foto1", "foto", "de outro lugar"],
-      [chave("foto1", "miniatura"), "foto1", "foto", "de outro tamanho"],
-      ["estudio-123/galeria-9/foto-de-casamento.webp", "foto1", "foto", "de um cliente"],
-      [`plataforma/home/foto1/../../estudio/${UUID}-foto.webp`, "foto1", "foto", "subindo pasta"],
-      [`plataforma/home/foto1/nao-e-uuid-foto.webp`, "foto1", "foto", "sem uuid"],
-      [`${chave("foto1", "foto")}.png`, "foto1", "foto", "extensão a mais"],
-      [null, "foto1", "foto", "nula"],
+      [chave("delicada-2", "foto"), "delicada-1", "foto", "de outro lugar"],
+      [chave("delicada-1", "miniatura"), "delicada-1", "foto", "de outro tamanho"],
+      ["estudio-123/galeria-9/foto-de-casamento.webp", "delicada-1", "foto", "de um cliente"],
+      [`plataforma/home/delicada-1/../../estudio/${UUID}-foto.webp`, "delicada-1", "foto", "subindo pasta"],
+      [`plataforma/home/delicada-1/nao-e-uuid-foto.webp`, "delicada-1", "foto", "sem uuid"],
+      [`${chave("delicada-1", "foto")}.png`, "delicada-1", "foto", "extensão a mais"],
+      [null, "delicada-1", "foto", "nula"],
     ];
     for (const [c, lugar, t, rotulo] of tentativas) {
       if (ehChaveDaFotoDaHome(c, lugar, t)) throw new Error(`aceitou chave ${rotulo}: ${c}`);
@@ -179,7 +179,12 @@ try {
   });
 
   await etapa("o admin sabe dizer onde cada foto aparece", () => {
-    if (!ondeAparece("foto1").some((o) => o.includes("capa do exemplo"))) throw new Error("foto1 é capa");
+    if (!ondeAparece("delicada-1").some((o) => o.includes('capa da galeria "Vanessa & Kalil"'))) {
+      throw new Error("delicada-1 é a capa da Vanessa & Kalil");
+    }
+    if (ondeAparece("delicada-2").some((o) => o.includes("capa"))) throw new Error("delicada-2 não é capa");
+    if (!ondeAparece("delicada-2").some((o) => o.includes("celular"))) throw new Error("a galeria em destaque some do celular");
+    if (!ondeAparece("editorial-2").some((o) => o.includes("preto e branco"))) throw new Error("editorial é em preto e branco");
     if (!ondeAparece(LUGAR_DO_COFRE).some((o) => o.includes("Cofre"))) throw new Error("cofre sumiu");
     if (!ondeAparece("respiro")[0].includes("fim")) throw new Error("respiro");
   });
@@ -195,13 +200,13 @@ try {
   await db.query(
     `insert into fotos_da_home (lugar, chave, chave_miniatura, largura, altura, descricao, foco_x, foco_y)
      values ($1, $2, $3, 1333, 2000, 'Noivos no jardim', 40, 30)`,
-    ["foto1", chave("foto1", "foto"), chave("foto1", "miniatura")],
+    ["delicada-1", chave("delicada-1", "foto"), chave("delicada-1", "miniatura")],
   );
 
   await etapa("com troca no banco, a função devolve a troca", async () => {
     const f = await fotosDaHome();
-    if (!f.foto1.src.startsWith("/api/home/foto/foto1?v=")) throw new Error(`src: ${f.foto1.src}`);
-    igual(f.foto2, FOTOS_PADRAO.foto2, "o resto");
+    if (!f["delicada-1"].src.startsWith("/api/home/foto/delicada-1?v=")) throw new Error(`src: ${f["delicada-1"].src}`);
+    igual(f["delicada-2"], FOTOS_PADRAO["delicada-2"], "o resto");
   });
 
   let servidor = false;
@@ -222,9 +227,9 @@ try {
     };
 
     await etapa("a troca redireciona para o link assinado da foto grande", async () => {
-      const r = await destino("/api/home/foto/foto1?v=x");
+      const r = await destino("/api/home/foto/delicada-1?v=x");
       igual(r.status, 302, "status");
-      if (!r.local.includes(chave("foto1", "foto"))) {
+      if (!r.local.includes(chave("delicada-1", "foto"))) {
         throw new Error(`foi para ${r.local}`);
       }
       if (!/X-Amz-Signature=/.test(r.local)) throw new Error("o link não é assinado");
@@ -232,13 +237,13 @@ try {
     });
 
     await etapa("a miniatura redireciona para a pequena", async () => {
-      const r = await destino("/api/home/foto/foto1?v=x&t=miniatura");
-      if (!r.local.includes(chave("foto1", "miniatura"))) throw new Error(`foi para ${r.local}`);
+      const r = await destino("/api/home/foto/delicada-1?v=x&t=miniatura");
+      if (!r.local.includes(chave("delicada-1", "miniatura"))) throw new Error(`foi para ${r.local}`);
     });
 
     await etapa("lugar sem troca cai na foto padrão", async () => {
-      const r = await destino("/api/home/foto/foto2");
-      igual([r.status, r.local], [302, FOTOS_PADRAO.foto2.src], "redirecionamento");
+      const r = await destino("/api/home/foto/delicada-2");
+      igual([r.status, r.local], [302, FOTOS_PADRAO["delicada-2"].src], "redirecionamento");
     });
 
     await etapa("lugar inventado não existe", async () => {
@@ -269,12 +274,12 @@ try {
           const r = await fetch(`${BASE}/api/admin/home/foto`, {
             method: metodo,
             headers: { "Content-Type": "application/json", ...headers },
-            body: JSON.stringify({ lugar: "foto1" }),
+            body: JSON.stringify({ lugar: "delicada-1" }),
           });
           igual(r.status, 404, `${metodo} ${headers.cookie ? "estúdio comum" : "sem sessão"}`);
         }
       }
-      const { rows } = await db.query("select count(*)::int n from fotos_da_home where lugar = 'foto1'");
+      const { rows } = await db.query("select count(*)::int n from fotos_da_home where lugar = 'delicada-1'");
       igual(rows[0].n, 1, "a troca continua lá — o DELETE recusado não apagou nada");
     });
   }

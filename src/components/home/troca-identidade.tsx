@@ -50,7 +50,7 @@ export function TrocaIdentidade({ base, fotos }: { base: Identidade; fotos: Foto
           </span>
           <span className="mx-auto truncate rounded-full bg-black/[0.04] px-3 py-0.5 font-mono text-[11px] text-[var(--h-tinta-2)]">
             <strong className="font-semibold text-[var(--h-tinta)]">seuestudio</strong>.
-            {marca.dominio}/marina-e-caio
+            {marca.dominio}/{base.slug}
           </span>
         </div>
         <GaleriaDemo

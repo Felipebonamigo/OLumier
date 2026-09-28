@@ -30,8 +30,12 @@ const ESTADOS = [
   { rotulo: "Restaurada", detalhe: "Um clique e ela volta, no mesmo endereço.", cor: "#1f7a4d" },
 ] as const;
 
-/** `foto`: a do lugar `LUGAR_DO_COFRE`, já com a troca do admin se houver. */
-export function CofreDemo({ foto }: { foto: FotoDemo }) {
+/**
+ * `foto`: a do lugar `LUGAR_DO_COFRE`, já com a troca do admin se houver.
+ * `titulo`: o nome da galeria dona dessa foto — o cartão não pode dizer um
+ * casal e mostrar outro.
+ */
+export function CofreDemo({ foto, titulo }: { foto: FotoDemo; titulo: string }) {
   const [atual, setAtual] = useState(0);
   const menosMovimento = usePedeMenosMovimento();
 
@@ -59,7 +63,7 @@ export function CofreDemo({ foto }: { foto: FotoDemo }) {
           }`}
         />
         <div className="min-w-0">
-          <p className="truncate font-medium">Ana &amp; Pedro</p>
+          <p className="truncate font-medium">{titulo}</p>
           <p className="mt-1 flex items-center gap-1.5 text-sm" aria-live="polite">
             <span
               aria-hidden

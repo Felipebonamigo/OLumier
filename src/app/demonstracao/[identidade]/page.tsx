@@ -119,7 +119,7 @@ export default async function DemonstracaoPage({
           modoProvavel="menu"
           enderecoBase={`/demonstracao/${identidade.id}`}
           favoritasIniciais={[itens[0].id, itens[3].id]}
-          selecaoInicial={{ limite: null, aberta: false, motivo: null }}
+          selecaoInicial={{ limite: null, aberta: false, motivo: null, combinada: false }}
         />
       </div>
       <footer className="mt-16 text-center">

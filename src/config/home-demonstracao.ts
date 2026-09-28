@@ -11,34 +11,30 @@ import { lerAparencia, type Aparencia } from "@/config/aparencia";
  * não tem um desenho próprio de "galeria de mentira" — se o produto mudar, a
  * vitrine muda junto.
  *
- * ── AS FOTOS MUDAM PELO ADMIN (28/09/2026) ────────────────────────────────
+ * ── UMA GALERIA, UM CASAMENTO (28/09/2026) ────────────────────────────────
  *
- * Felipe mandou as primeiras fotos autorais e pediu para trocar as fotos da
- * home pela administração. Cada foto passou a ser um LUGAR — `foto1` a `foto8`
- * nas galerias de exemplo, `respiro` na foto grande perto do fim — com uma
- * foto PADRÃO aqui, no repositório. O admin troca a foto de um lugar
- * (`/painel/admin/home`), e a troca vale por cima do padrão até alguém voltar
- * ao padrão. Quem junta as duas coisas é `lib/fotos-da-home.ts`.
+ * As primeiras fotos autorais chegaram espalhadas pelas quatro galerias de
+ * exemplo, e o mesmo casal aparecia como "Marina & Caio" numa e "Ana & Pedro"
+ * na outra. Felipe: "todas as fotos que mandei são de uma galeria só" — a da
+ * Vanessa & Kalil, fotografada pela Carol. Desde então CADA GALERIA TEM AS
+ * SUAS FOTOS: a Vanessa & Kalil, as do casamento dela; as outras, as
+ * provisórias do começo (Unsplash, licença livre), até chegarem galerias de
+ * verdade — a do Juan vem para o lugar da Ana & Pedro.
  *
- * Os lugares têm nome neutro de propósito. Antes eles se chamavam pelo que a
- * foto mostrava ("baloes", "praia"); com a foto trocável, o nome passaria a
- * mentir sobre o que está lá.
+ * ── AS FOTOS MUDAM PELO ADMIN ─────────────────────────────────────────────
  *
- * O briefing da home (§24) pede curadoria autoral em cinco grupos, e cada
- * padrão leva o grupo que está segurando:
- *
- *   A · cor e vida    B · editorial    C · documental
- *   D · clássico      E · fora do casamento (nenhuma ainda)
- *
- * `foto5` a `foto8` ainda são as fotos provisórias do começo (Unsplash,
- * licença livre).
+ * Cada foto é um LUGAR — `<galeria>-<n>` (`delicada-1`, `editorial-4`…) e o
+ * `respiro`, a foto grande perto do fim — com uma foto PADRÃO aqui, no
+ * repositório. O admin troca a foto de um lugar (`/painel/admin/home`), e a
+ * troca vale por cima do padrão até alguém voltar ao padrão. Quem junta as
+ * duas coisas é `lib/fotos-da-home.ts`. O lugar 1 de cada galeria é a capa.
  *
  * ── OS NOMES ──────────────────────────────────────────────────────────────
  *
- * Nenhuma galeria leva nome de estúdio inventado: todas assinam "Seu Estúdio".
- * `PRODUCT.md` proíbe fabricar cliente, e um "Estúdio Aurora" numa vitrine de
- * exemplos é exatamente um cliente fabricado. Além disso, a frase que a seção
- * quer que o visitante escute é "isto pode ser o SEU".
+ * Nenhuma galeria leva nome de estúdio: todas assinam "Seu Estúdio" — a frase
+ * que a seção quer que o visitante escute é "isto pode ser o SEU". A Vanessa &
+ * Kalil é um casamento de verdade, com o nome, a data e o lugar que o Felipe
+ * passou; as outras são inventadas, como sempre foram.
  */
 
 export type Curadoria = "A" | "B" | "C" | "D" | "E";
@@ -52,7 +48,7 @@ export interface FotoDemo {
   miniatura?: string;
   largura: number;
   altura: number;
-  /** O grupo da curadoria que o padrão segura. A foto do admin não tem. */
+  /** O grupo da curadoria do briefing (§24). A foto do admin não tem. */
   curadoria?: Curadoria;
   /** O que a foto mostra — para o `alt` e para quem for trocá-la. */
   descricao: string;
@@ -65,159 +61,136 @@ export interface FotoDemo {
   focoY: number;
 }
 
-export const LUGARES_DA_HOME = [
-  "foto1",
-  "foto2",
-  "foto3",
-  "foto4",
-  "foto5",
-  "foto6",
-  "foto7",
-  "foto8",
-  "respiro",
-] as const;
+/*
+ * O ACERVO — cada arquivo uma vez só, e as galerias escolhem dele.
+ *
+ * Vanessa & Kalil: WebP de 1500 px (2000 no gramado, que é a foto grande do
+ * fim), qualidade 76 — acima das provisórias porque a granulação some a 72.
+ * Provisórias: 1100 px, qualidade 72. As medidas são as do arquivo: a grade
+ * monta as fileiras pela proporção antes de a foto chegar, e
+ * `testar-fotos-da-home` confere uma por uma.
+ */
+const ACERVO = {
+  // Vanessa & Kalil — 1º de maio de 2026, Porto Alegre. Fotos da Carol.
+  guardaChuva: { src: "/home/demo/guarda-chuva.webp", largura: 1000, altura: 1500, curadoria: "D", descricao: "Noivos caminhando pelo jardim debaixo de um guarda-chuva branco", focoX: 45, focoY: 58 },
+  ternoMarrom: { src: "/home/demo/terno-marrom.webp", largura: 1000, altura: 1500, curadoria: "B", descricao: "Noivos de mãos dadas, terno marrom e vestido tomara que caia", focoX: 50, focoY: 45 },
+  convidadosChuva: { src: "/home/demo/convidados-chuva.webp", largura: 1000, altura: 1500, curadoria: "C", descricao: "Casal de convidados abraçado na cerimônia, debaixo de chuva", focoX: 45, focoY: 38 },
+  noivaMesa: { src: "/home/demo/noiva-mesa-pb.webp", largura: 1000, altura: 1500, curadoria: "C", descricao: "A noiva sorrindo à mesa do jantar, em preto e branco", focoX: 50, focoY: 35 },
+  caminhada: { src: "/home/demo/caminhada-grama.webp", largura: 2000, altura: 1333, curadoria: "B", descricao: "Os noivos caminhando pelo gramado, vistos da cintura para baixo", focoX: 50, focoY: 50 },
+  // Provisórias (Unsplash, licença livre).
+  cadeiras: { src: "/home/demo/cerimonia-arco.webp", largura: 1100, altura: 734, curadoria: "D", descricao: "Duas cadeiras de cerimônia no gramado", focoX: 50, focoY: 50 },
+  baloes: { src: "/home/demo/festa-mesa.webp", largura: 1100, altura: 734, curadoria: "A", descricao: "Casal soltando balões vermelhos com os convidados", focoX: 50, focoY: 50 },
+  contraluz: { src: "/home/demo/hero-casamento.webp", largura: 1100, altura: 733, curadoria: "D", descricao: "Casal em contraluz segurando o buquê", focoX: 50, focoY: 50 },
+  maos: { src: "/home/demo/madrinhas.webp", largura: 1100, altura: 733, curadoria: "B", descricao: "Mãos dadas e a sombra do casal na grama", focoX: 50, focoY: 50 },
+  alianca: { src: "/home/demo/maos-alianca.webp", largura: 1100, altura: 733, curadoria: "C", descricao: "Mãos com a aliança sobre o buquê", focoX: 50, focoY: 50 },
+  palmeira: { src: "/home/demo/noiva-retrato.webp", largura: 760, altura: 1140, curadoria: "C", descricao: "Casal rindo embaixo de uma palmeira", focoX: 50, focoY: 50 },
+  confete: { src: "/home/demo/noivos-beijo.webp", largura: 760, altura: 1140, curadoria: "A", descricao: "Beijo entre confetes e madrinhas de azul", focoX: 50, focoY: 50 },
+  praia: { src: "/home/demo/vestido.webp", largura: 760, altura: 1140, curadoria: "B", descricao: "Casal na praia com o véu ao vento", focoX: 50, focoY: 50 },
+} as const satisfies Record<string, FotoDemo>;
 
-export type LugarDaHome = (typeof LUGARES_DA_HOME)[number];
-/** Os lugares das galerias de exemplo — o `respiro` não entra em galeria. */
-export type IdFoto = Exclude<LugarDaHome, "respiro">;
-export type FotosDaHome = Record<LugarDaHome, FotoDemo>;
+export const GALERIAS_DA_HOME = ["delicada", "editorial", "classica", "noite"] as const;
+export type IdGaleria = (typeof GALERIAS_DA_HOME)[number];
 
-export function ehLugarDaHome(v: unknown): v is LugarDaHome {
-  return typeof v === "string" && (LUGARES_DA_HOME as readonly string[]).includes(v);
-}
-
-/* Derivadas em WebP geradas com o sharp. As autorais têm lado maior de 1500 px
-   (2000 no respiro, que ocupa a largura da tela), qualidade 76 — acima das
-   provisórias porque a granulação delas some a 72. As dimensões são as do
-   arquivo gerado: a grade usa a proporção para montar as fileiras antes da
-   foto chegar. */
-export const FOTOS_PADRAO: FotosDaHome = {
-  foto1: {
-    src: "/home/demo/convidados-chuva.webp",
-    largura: 1000,
-    altura: 1500,
-    curadoria: "C",
-    descricao: "Casal de convidados abraçado na cerimônia, debaixo de chuva",
-    focoX: 45,
-    focoY: 38,
-  },
-  foto2: {
-    src: "/home/demo/terno-marrom.webp",
-    largura: 1000,
-    altura: 1500,
-    curadoria: "B",
-    descricao: "Noivos de mãos dadas, terno marrom e vestido tomara que caia",
-    focoX: 50,
-    focoY: 45,
-  },
-  foto3: {
-    src: "/home/demo/guarda-chuva.webp",
-    largura: 1000,
-    altura: 1500,
-    curadoria: "D",
-    descricao: "Noivos caminhando pelo jardim debaixo de um guarda-chuva branco",
-    focoX: 45,
-    focoY: 58,
-  },
-  foto4: {
-    src: "/home/demo/noiva-mesa-pb.webp",
-    largura: 1000,
-    altura: 1500,
-    curadoria: "C",
-    descricao: "A noiva sorrindo à mesa do jantar, em preto e branco",
-    focoX: 50,
-    focoY: 35,
-  },
-  foto5: {
-    src: "/home/demo/cerimonia-arco.webp",
-    largura: 1100,
-    altura: 734,
-    curadoria: "D",
-    descricao: "Duas cadeiras de cerimônia no gramado",
-    focoX: 50,
-    focoY: 50,
-  },
-  foto6: {
-    src: "/home/demo/maos-alianca.webp",
-    largura: 1100,
-    altura: 733,
-    curadoria: "C",
-    descricao: "Mãos com a aliança sobre o buquê",
-    focoX: 50,
-    focoY: 50,
-  },
-  foto7: {
-    src: "/home/demo/noiva-retrato.webp",
-    largura: 760,
-    altura: 1140,
-    curadoria: "C",
-    descricao: "Casal rindo embaixo de uma palmeira",
-    focoX: 50,
-    focoY: 50,
-  },
-  foto8: {
-    src: "/home/demo/noivos-beijo.webp",
-    largura: 760,
-    altura: 1140,
-    curadoria: "A",
-    descricao: "Beijo entre confetes e madrinhas de azul",
-    focoX: 50,
-    focoY: 50,
-  },
-  respiro: {
-    src: "/home/demo/caminhada-grama.webp",
-    largura: 2000,
-    altura: 1333,
-    curadoria: "B",
-    descricao: "Os noivos caminhando pelo gramado, vistos da cintura para baixo",
-    focoX: 50,
-    focoY: 50,
-  },
+/**
+ * As fotos padrão de cada galeria, NA ORDEM DOS LUGARES: a primeira é a capa
+ * (lugar 1), e a grade mostra todas.
+ */
+const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
+  delicada: [ACERVO.guardaChuva, ACERVO.ternoMarrom, ACERVO.convidadosChuva, ACERVO.noivaMesa, ACERVO.caminhada],
+  editorial: [ACERVO.praia, ACERVO.maos, ACERVO.alianca, ACERVO.palmeira, ACERVO.contraluz, ACERVO.cadeiras, ACERVO.confete, ACERVO.baloes],
+  classica: [ACERVO.contraluz, ACERVO.palmeira, ACERVO.alianca, ACERVO.cadeiras, ACERVO.praia, ACERVO.confete, ACERVO.maos, ACERVO.baloes],
+  noite: [ACERVO.maos, ACERVO.contraluz, ACERVO.palmeira, ACERVO.cadeiras, ACERVO.confete, ACERVO.alianca, ACERVO.praia, ACERVO.baloes],
 };
 
+/** Um lugar de galeria: `delicada-1`, `noite-8`… O 1 é a capa. */
+export type IdFoto = `${IdGaleria}-${number}`;
+export type LugarDaHome = IdFoto | "respiro";
+export type FotosDaHome = Record<LugarDaHome, FotoDemo>;
+
+/** Os lugares de uma galeria, na ordem: o primeiro é a capa. */
+export function lugaresDaGaleria(galeria: IdGaleria): IdFoto[] {
+  return FOTOS_DAS_GALERIAS[galeria].map((_, i) => `${galeria}-${i + 1}` as IdFoto);
+}
+
+export const LUGARES_DA_HOME: LugarDaHome[] = [
+  ...GALERIAS_DA_HOME.flatMap(lugaresDaGaleria),
+  "respiro",
+];
+
+const CONJUNTO_DE_LUGARES = new Set<string>(LUGARES_DA_HOME);
+
+export function ehLugarDaHome(v: unknown): v is LugarDaHome {
+  return typeof v === "string" && CONJUNTO_DE_LUGARES.has(v);
+}
+
+export const FOTOS_PADRAO: FotosDaHome = Object.fromEntries([
+  ...GALERIAS_DA_HOME.flatMap((g) =>
+    FOTOS_DAS_GALERIAS[g].map((f, i) => [`${g}-${i + 1}`, { ...f }] as const),
+  ),
+  ["respiro", { ...ACERVO.caminhada }],
+]) as FotosDaHome;
+
 export interface Identidade {
-  id: string;
+  id: IdGaleria;
   /** Como a seção de exemplos chama o jeito de fotografar — não é nome de preset. */
   rotulo: string;
   titulo: string;
   /** O fim do endereço na barra do navegador desenhado em volta da galeria. */
   slug: string;
   data: string;
+  /** A mesma data, para o banco — o script dos prints cria a galeria com ela. */
+  dataEvento: string;
   local: string;
   capa: IdFoto;
   fotos: IdFoto[];
   aparencia: Aparencia;
   /**
    * Tratamento de PLACEHOLDER. A galeria editorial precisa ler como outro
-   * fotógrafo, e com as mesmas oito fotos coloridas não leria; em preto e
-   * branco lê. Sai quando chegar a curadoria do grupo B — não é recurso do
-   * produto, e a página não diz que é.
+   * fotógrafo, e com as mesmas fotos coloridas das outras não leria; em preto
+   * e branco lê. Não é recurso do produto, e a página não diz que é.
    */
   pretoEBranco?: boolean;
 }
 
+/** A grade mostra a capa por último: a galeria abre com ela lá em cima. */
+function fotosDaGrade(galeria: IdGaleria): IdFoto[] {
+  const [capa, ...resto] = lugaresDaGaleria(galeria);
+  return [...resto, capa];
+}
+
 export const IDENTIDADES: Identidade[] = [
   {
-    id: "viva",
-    rotulo: "Documental e colorida",
-    titulo: "Marina & Caio",
-    slug: "marina-e-caio",
-    data: "12 de outubro de 2025",
-    local: "Olinda",
-    capa: "foto1",
-    fotos: ["foto8", "foto6", "foto7", "foto1", "foto4", "foto2", "foto5", "foto3"],
+    /*
+     * ── VANESSA & KALIL (28/09/2026) ──────────────────────────────────────
+     *
+     * Um casamento de verdade, fotografado pela Carol — 1º de maio de 2026,
+     * Porto Alegre —, no lugar da "Marina & Caio" inventada. O desenho é o
+     * das galerias que a Carol entrega (o modelo "Convite", pedido dela em
+     * 31/08/2026): papel branco, a foto emoldurada, o nome numa serifada de
+     * convite e o "ver galeria" no pé. É esta galeria que aparece no celular
+     * da home, na seleção, no cofre e nos prints do painel
+     * (`GALERIA_EM_DESTAQUE`).
+     */
+    id: "delicada",
+    rotulo: "Clara e delicada",
+    titulo: "Vanessa & Kalil",
+    slug: "vanessa-e-kalil",
+    data: "1º de maio de 2026",
+    dataEvento: "2026-05-01",
+    local: "Porto Alegre",
+    capa: "delicada-1",
+    fotos: fotosDaGrade("delicada"),
     aparencia: lerAparencia({
-      capa: "imersa",
+      capa: "convite",
       tema: "claro",
-      cores: { fundo: "#f6f1ea", texto: "#1f1a16", destaque: "#d9472b" },
-      tipografia: "work",
-      peso: "forte",
+      tipografia: "bodoni",
+      peso: "leve",
       grade: "colunas",
-      densidade: "normal",
-      canto: "reto",
-      alinhamento: "esquerda",
-      alturaCapa: "media",
-      fonteDetalhe: "texto",
+      densidade: "compacta",
+      logo: "discreta",
+      canto: "suave",
+      alinhamento: "centro",
+      alturaCapa: "cheia",
     }),
   },
   {
@@ -226,9 +199,10 @@ export const IDENTIDADES: Identidade[] = [
     titulo: "Helena e Rafael",
     slug: "helena-e-rafael",
     data: "Março de 2026",
+    dataEvento: "2026-03-14",
     local: "São Paulo",
-    capa: "foto2",
-    fotos: ["foto4", "foto2", "foto6", "foto7", "foto3", "foto5", "foto8", "foto1"],
+    capa: "editorial-1",
+    fotos: fotosDaGrade("editorial"),
     pretoEBranco: true,
     aparencia: lerAparencia({
       capa: "dividida",
@@ -248,29 +222,28 @@ export const IDENTIDADES: Identidade[] = [
     /*
      * ── NO DESENHO DE QUEM FOTOGRAFA HOJE (28/09/2026) ─────────────────────
      *
-     * Era capa convite, creme e letra cursiva (Great Vibes). Felipe, sobre o
-     * print da entrega e o celular da home: "o modelo de galeria que aparece
-     * aqui não é o mais bonito [...] como Carol e Juan são fotógrafos atuais,
-     * eles querem algo mais parecido com o estilo deles". A cursiva sobre
-     * creme é justamente o código de "casamento premium" que a estratégia de
-     * marca pede para evitar (§12).
+     * Era capa convite, creme e letra cursiva (Great Vibes). Felipe: "como
+     * Carol e Juan são fotógrafos atuais, eles querem algo mais parecido com
+     * o estilo deles". A cursiva sobre creme é justamente o código de
+     * "casamento premium" que a estratégia de marca pede para evitar (§12).
      *
-     * O desenho novo é o das galerias que eles entregam: a capa jornal ("a
-     * referência do Sirius" em `galeria-capa.tsx`) — fundo claro, a etiqueta
-     * "Casamento" em cima, o nome grande numa serifada forte e a foto grande
-     * logo abaixo —, como na galeria Júlia & Gustavo que o Felipe mostrou.
-     * Grade "Colunas", a que o Juan usa nas entregas: na ordem, sem cortar
-     * foto e sem fileira curta no fim, bem juntas. É esta identidade que
-     * aparece no print "Entregue", no celular da home e no hero.
+     * O desenho é o das galerias do Juan: a capa jornal ("a referência do
+     * Sirius" em `galeria-capa.tsx`) — fundo claro, a etiqueta "Casamento"
+     * em cima, o nome grande numa serifada forte e a foto grande logo
+     * abaixo —, e a grade "Colunas", a que ele usa nas entregas.
+     *
+     * O lugar é da galeria do Juan, que ele vai mandar: até lá, as fotos são
+     * as provisórias.
      */
     id: "classica",
     rotulo: "Natural e contemporânea",
     titulo: "Ana & Pedro",
     slug: "ana-e-pedro",
     data: "21 de março de 2026",
+    dataEvento: "2026-03-21",
     local: "Serra Gaúcha",
-    capa: "foto3",
-    fotos: ["foto7", "foto6", "foto5", "foto2", "foto8", "foto3", "foto4", "foto1"],
+    capa: "classica-1",
+    fotos: fotosDaGrade("classica"),
     aparencia: lerAparencia({
       capa: "jornal",
       tema: "claro",
@@ -290,9 +263,10 @@ export const IDENTIDADES: Identidade[] = [
     titulo: "Júlia & Tomás",
     slug: "julia-e-tomas",
     data: "8 de novembro de 2025",
+    dataEvento: "2025-11-08",
     local: "Paraty",
-    capa: "foto4",
-    fotos: ["foto3", "foto7", "foto5", "foto8", "foto6", "foto2", "foto1", "foto4"],
+    capa: "noite-1",
+    fotos: fotosDaGrade("noite"),
     aparencia: lerAparencia({
       capa: "imersa",
       tema: "noite",
@@ -307,31 +281,46 @@ export const IDENTIDADES: Identidade[] = [
 
 export const identidadePorId = (id: string) => IDENTIDADES.find((i) => i.id === id);
 
-/** Como o admin chama cada lugar: "Foto 1" a "Foto 8", e a do fim. */
-export function nomeDoLugar(lugar: LugarDaHome): string {
-  return lugar === "respiro" ? "Foto grande do fim" : `Foto ${lugar.slice("foto".length)}`;
+/**
+ * A galeria que representa o produto nos pedaços que mostram UMA galeria só:
+ * o celular de demonstração, a seleção, o cartão do cofre e os prints do
+ * painel (`scripts/capturar-telas-home.mjs`). É a de fotos de verdade.
+ */
+export const GALERIA_EM_DESTAQUE: IdGaleria = "delicada";
+
+/** A foto do cartão da galeria na seção "Cofre" (`CofreDemo`): a capa da galeria em destaque. */
+export const LUGAR_DO_COFRE: IdFoto = `${GALERIA_EM_DESTAQUE}-1`;
+
+/** A galeria de um lugar, ou `null` para o `respiro`. */
+export function galeriaDoLugar(lugar: LugarDaHome): Identidade | null {
+  if (lugar === "respiro") return null;
+  return identidadePorId(lugar.slice(0, lugar.lastIndexOf("-"))) ?? null;
 }
 
-/** A foto do cartão da galeria na seção "Cofre" (`CofreDemo`). */
-export const LUGAR_DO_COFRE: IdFoto = "foto3";
+/** Como o admin chama cada lugar dentro da galeria: "Foto 1 · capa", "Foto 2"… */
+export function nomeDoLugar(lugar: LugarDaHome): string {
+  if (lugar === "respiro") return "Foto grande do fim";
+  const n = lugar.slice(lugar.lastIndexOf("-") + 1);
+  return galeriaDoLugar(lugar)?.capa === lugar ? `Foto ${n} · capa` : `Foto ${n}`;
+}
 
 /**
  * Onde a foto de cada lugar aparece na home — é o que a tela do admin mostra
  * ao lado dela. Sai das identidades, e não de uma lista escrita à mão: trocar
- * a capa de um exemplo aqui muda a frase lá sem ninguém lembrar.
+ * a capa de uma galeria aqui muda a frase lá sem ninguém lembrar.
  */
 export function ondeAparece(lugar: LugarDaHome): string[] {
   if (lugar === "respiro") {
     return ['a foto grande de ponta a ponta, perto do fim ("O trabalho é seu")'];
   }
+  const g = galeriaDoLugar(lugar);
+  if (!g) return [];
+  const pb = g.pretoEBranco ? " (em preto e branco)" : "";
   const onde: string[] = [];
-  for (const i of IDENTIDADES) {
-    if (i.capa === lugar) {
-      onde.push(`capa do exemplo "${i.rotulo}"${i.pretoEBranco ? " (em preto e branco)" : ""}`);
-    }
-  }
+  if (g.capa === lugar) onde.push(`a capa da galeria "${g.titulo}"${pb}`);
+  onde.push(`a grade da galeria "${g.titulo}"${pb}`);
   if (lugar === LUGAR_DO_COFRE) onde.push('a miniatura do cartão na seção "Cofre"');
-  onde.push("a grade das galerias de exemplo e do celular de demonstração");
+  if (g.id === GALERIA_EM_DESTAQUE) onde.push("o celular de demonstração e os prints do painel");
   return onde;
 }
 

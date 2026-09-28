@@ -91,8 +91,21 @@ await etapa("o menu das FAVORITAS está lá", async () => {
   /* O conteúdo tem de vir no HTML mesmo fechado — é o que `<details>` dá de
      graça, e é o que faz este arquivo poder conferir os itens. */
   if (!/Ver só as favoritas/.test(b)) throw new Error("o menu não traz o filtro das favoritas");
-  if (!/Terminei minha escolha/.test(b)) {
-    throw new Error("o menu não traz o encerrar a escolha");
+  /* Sem limite nem prazo, favorita é favorita: nada para encerrar
+     (28/09/2026 — ver `EstadoSelecao.combinada`). */
+  if (/Terminei minha escolha/.test(b)) {
+    throw new Error("oferece encerrar a escolha numa galeria sem escolha combinada");
+  }
+  return "filtro, sem encerrar";
+});
+
+await etapa("com um número combinado, o menu oferece encerrar a escolha", async () => {
+  await db.query("update galerias set selecao_limite = 30 where id = $1", [g.id]);
+  try {
+    const b = await barra();
+    if (!/Terminei minha escolha/.test(b)) throw new Error("o menu não traz o encerrar a escolha");
+  } finally {
+    await db.query("update galerias set selecao_limite = null where id = $1", [g.id]);
   }
   return "filtro + encerrar";
 });
@@ -125,14 +138,29 @@ await etapa("sem download liberado, o menu Baixar não existe", async () => {
 
 await etapa("escolha encerrada e nenhuma favorita: sem menu Favoritas", async () => {
   /* Um menu que só teria a frase "escolha encerrada" dentro não é menu, é
-     enfeite — e some para não anunciar um comando que não responde. */
-  await db.query("update galerias set selecao_fechada_em = now() where id = $1", [g.id]);
+     enfeite — e some para não anunciar um comando que não responde. Com um
+     número combinado: sem limite nem prazo não existe escolha para encerrar
+     (28/09/2026 — ver `EstadoSelecao.combinada`). */
+  await db.query("update galerias set selecao_limite = 30, selecao_fechada_em = now() where id = $1", [g.id]);
   try {
     const b = await barra();
     if (/<summary[^>]*>[^]*?Favoritas[^]*?<\/summary>/.test(b)) {
       throw new Error("o menu Favoritas ficou, sem ter o que oferecer");
     }
     return "some";
+  } finally {
+    await db.query("update galerias set selecao_limite = null, selecao_fechada_em = null where id = $1", [g.id]);
+  }
+});
+
+await etapa("um 'terminei' antigo sem número combinado não esconde as favoritas", async () => {
+  /* A galeria da Carol: encerrada por um clique, sem limite nem prazo. Os
+     corações e o menu têm de continuar lá. */
+  await db.query("update galerias set selecao_fechada_em = now() where id = $1", [g.id]);
+  try {
+    const b = await barra();
+    if (!/<summary[^>]*>[^]*?Favoritas[^]*?<\/summary>/.test(b)) throw new Error("o menu Favoritas sumiu");
+    if (/Escolha encerrada/.test(await pegar())) throw new Error("a galeria diz 'Escolha encerrada'");
   } finally {
     await db.query("update galerias set selecao_fechada_em = null where id = $1", [g.id]);
   }
