@@ -138,7 +138,8 @@ texto.
 
 ## 8. Fluxo de entrega
 
-- Headline: **Da pasta ao cliente.**
+- Headline: **Suba. Personalize. Entregue.** *(Era "Da pasta ao cliente."; trocada
+  a pedido do Felipe em 28/09/2026.)*
 - Subtexto: *Um fluxo intuitivo para transformar um trabalho pronto em uma
   entrega pronta.*
 
@@ -385,7 +386,7 @@ demonstração e confiança — a expressão tem de ser própria.
 ## 30. Hierarquia pedida
 
 Header → Hero → Uma galeria. Várias identidades. → Seu trabalho. Sua marca. Seu
-endereço. → Da pasta ao cliente. → Intuitiva para quem entrega/recebe. → A
+endereço. → Suba. Personalize. Entregue. → Intuitiva para quem entrega/recebe. → A
 seleção acontece dentro da própria galeria. → Brasileira desde o começo. →
 Cofre → Recursos → Foto + vídeo (só quando validado) → Respiro fotográfico →
 Planos → Três perguntas → Segurança → FAQ → CTA final → Footer.

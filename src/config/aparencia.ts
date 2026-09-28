@@ -359,6 +359,18 @@ export interface CoresProprias {
    * passa a ser a do tamanho da letra, que já as separa.
    */
   detalhe?: string;
+  /**
+   * A cor do NOME na capa, separada do texto.
+   *
+   * Felipe, 28/09/2026: "poderia ter mais uma opção de cores: título. O título
+   * ser separado do texto. Pois eu queria o título de uma cor e o restante dos
+   * textos em um tom mais escuro".
+   *
+   * Pelo mesmo motivo do `detalhe`, fica fora da paleta: pinta uma palavra só,
+   * o nome do casal, e não entra na derivação dos outros tons. Sem ela, o
+   * título continua herdando a cor do texto, como sempre.
+   */
+  titulo?: string;
 }
 
 export interface Aparencia {
@@ -625,7 +637,7 @@ function lerCores(bruto: unknown): CoresProprias | null {
   if (!bruto || typeof bruto !== "object") return null;
   const o = bruto as Record<string, unknown>;
   const cores: CoresProprias = {};
-  for (const chave of ["fundo", "texto", "destaque", "detalhe"] as const) {
+  for (const chave of ["fundo", "texto", "destaque", "detalhe", "titulo"] as const) {
     const v = o[chave];
     if (typeof v !== "string") continue;
     const t = v.toLowerCase();

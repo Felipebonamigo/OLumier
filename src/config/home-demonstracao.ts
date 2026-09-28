@@ -245,8 +245,26 @@ export const IDENTIDADES: Identidade[] = [
     }),
   },
   {
+    /*
+     * ── NO DESENHO DE QUEM FOTOGRAFA HOJE (28/09/2026) ─────────────────────
+     *
+     * Era capa convite, creme e letra cursiva (Great Vibes). Felipe, sobre o
+     * print da entrega e o celular da home: "o modelo de galeria que aparece
+     * aqui não é o mais bonito [...] como Carol e Juan são fotógrafos atuais,
+     * eles querem algo mais parecido com o estilo deles". A cursiva sobre
+     * creme é justamente o código de "casamento premium" que a estratégia de
+     * marca pede para evitar (§12).
+     *
+     * O desenho novo é o das galerias que eles entregam: a capa jornal ("a
+     * referência do Sirius" em `galeria-capa.tsx`) — fundo claro, a etiqueta
+     * "Casamento" em cima, o nome grande numa serifada forte e a foto grande
+     * logo abaixo —, como na galeria Júlia & Gustavo que o Felipe mostrou.
+     * Grade "Colunas", a que o Juan usa nas entregas: na ordem, sem cortar
+     * foto e sem fileira curta no fim, bem juntas. É esta identidade que
+     * aparece no print "Entregue", no celular da home e no hero.
+     */
     id: "classica",
-    rotulo: "Natural e clássica",
+    rotulo: "Natural e contemporânea",
     titulo: "Ana & Pedro",
     slug: "ana-e-pedro",
     data: "21 de março de 2026",
@@ -254,13 +272,16 @@ export const IDENTIDADES: Identidade[] = [
     capa: "foto3",
     fotos: ["foto7", "foto6", "foto5", "foto2", "foto8", "foto3", "foto4", "foto1"],
     aparencia: lerAparencia({
-      capa: "convite",
-      tema: "creme",
-      tipografia: "manuscrita",
-      grade: "linhas",
-      densidade: "normal",
-      canto: "suave",
-      alturaCapa: "media",
+      capa: "jornal",
+      tema: "claro",
+      tipografia: "playfair",
+      peso: "forte",
+      rotulo: "Casamento",
+      grade: "colunas",
+      densidade: "compacta",
+      canto: "reto",
+      alinhamento: "centro",
+      alturaCapa: "cheia",
     }),
   },
   {

@@ -37,6 +37,10 @@ import {
   presetEquivalente,
 } from "../src/config/aparencia.ts";
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
+const RAIZ = path.resolve(import.meta.dirname, "..");
 let falhou = false;
 function etapa(nome, fn) {
   try {
@@ -166,6 +170,43 @@ etapa("as três cores da paleta continuam derivando o resto", () => {
   const b = variaveisDoTema(lerAparencia({ tema: "claro" }));
   if (a["--g-suave"] === b["--g-suave"] || a["--g-tenue"] === b["--g-tenue"]) {
     throw new Error("a cor do texto parou de derivar os tons suave e tênue");
+  }
+});
+
+console.log("\na cor do título");
+
+/*
+ * Felipe, 28/09/2026: "o título de uma cor e o restante dos textos em um tom
+ * mais escuro". A mesma natureza da cor das letrinhas: pinta o nome na capa e
+ * mais nada.
+ */
+etapa("a cor do título é lida e validada como as outras", () => {
+  igual(lerAparencia({ cores: { titulo: "#7A5C3E" } }).cores?.titulo, "#7a5c3e", "cor do título");
+  for (const lixo of ["navy", "#abc", "#7a5c3", "url(x)", 0, null]) {
+    if (lerAparencia({ cores: { titulo: lixo } }).cores?.titulo !== undefined) {
+      throw new Error(`aceitou ${JSON.stringify(lixo)} como cor do título`);
+    }
+  }
+});
+
+etapa("a cor do título NÃO mexe nas variáveis do tema", () => {
+  /* O texto continua escuro enquanto o título muda: é esse o pedido. Se a cor
+     do título entrasse na derivação, o texto mudaria junto. */
+  const sem = variaveisDoTema(lerAparencia({ tema: "claro", cores: { texto: "#1f1f1f" } }));
+  const com = variaveisDoTema(
+    lerAparencia({ tema: "claro", cores: { texto: "#1f1f1f", titulo: "#7a5c3e" } }),
+  );
+  for (const chave of Object.keys(sem)) igual(com[chave], sem[chave], `${chave} mudou por causa da cor do título`);
+});
+
+etapa("a capa pinta o NOME com ela, e só quando ela existe", () => {
+  const capa = readFileSync(path.join(RAIZ, "src/components/galeria-capa.tsx"), "utf8");
+  const h1 = capa.slice(capa.indexOf("<h1"), capa.indexOf("</h1>"));
+  if (!/corTitulo \? \{ color: corTitulo \}/.test(h1)) {
+    throw new Error("o <h1> da capa não usa a cor do título");
+  }
+  if (!/const corTitulo = aparencia\.cores\?\.titulo/.test(capa)) {
+    throw new Error("a capa não lê `cores.titulo`");
   }
 });
 

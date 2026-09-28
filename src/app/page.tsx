@@ -513,12 +513,15 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ── 4 · da pasta ao cliente ─────────────────────────────────────── */}
+      {/* ── 4 · como funciona ──────────────────────────────────────────────
+          O título era "Da pasta ao cliente." (briefing §8); Felipe pediu outra
+          frase em 28/09/2026. O título agora nomeia os três passos que vêm
+          logo abaixo. */}
       <section id="como-funciona" className="scroll-mt-16 border-y border-[var(--h-linha)] bg-white py-24 lg:py-32">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <Revelar className="max-w-2xl">
             <Marcador>Como funciona</Marcador>
-            <h2 className={`${TITULO_SECAO} mt-4`}>Da pasta ao cliente.</h2>
+            <h2 className={`${TITULO_SECAO} mt-4`}>Suba. Personalize. Entregue.</h2>
             <p className={`${TEXTO_SECAO} mt-5`}>
               Um fluxo intuitivo para transformar um trabalho pronto em uma entrega pronta.
             </p>

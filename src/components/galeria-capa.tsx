@@ -75,6 +75,9 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   /* A cor escolhida vale para as três letrinhas de texto; sem ela, cada uma
      mantém o tom derivado que sempre teve. Ver `CoresProprias.detalhe`. */
   const corDetalhe = aparencia.cores?.detalhe;
+  /* O nome do casal pode ter cor própria, separada do texto. Sem ela, herda a
+     cor do texto como sempre herdou. Ver `CoresProprias.titulo`. */
+  const corTitulo = aparencia.cores?.titulo;
 
   /*
    * A logo, quando existe, SUBSTITUI o nome em texto — não acompanha.
@@ -291,6 +294,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
              mínimo e escreve o nome uma letra por linha. Os dois não convivem. */
           className={`${linhas || quebrarPalavra ? "" : "text-balance"} ${alinharBloco}`}
           style={{
+            ...(corTitulo ? { color: corTitulo } : {}),
             fontFamily: fonteTitulo,
             fontWeight: peso,
             lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05,

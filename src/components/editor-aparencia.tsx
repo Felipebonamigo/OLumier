@@ -178,6 +178,11 @@ function BarraDoTitulo({ ap, mudar }: PecaProps) {
  */
 const ROTULOS_DE_COR = [
   { chave: "fundo", variavel: "--g-fundo", titulo: "Fundo" },
+  /* O título vem antes do texto porque é o primeiro que se lê na capa, e
+     porque a razão de existir dele é ser DIFERENTE do texto (Felipe,
+     28/09/2026): lado a lado, a escolha fica óbvia. Parte da cor do texto,
+     que é a que ele herda até alguém mexer. */
+  { chave: "titulo", variavel: "--g-texto", titulo: "Título" },
   { chave: "texto", variavel: "--g-texto", titulo: "Texto" },
   { chave: "destaque", variavel: "--g-destaque", titulo: "Botões" },
   /* Fica por último porque é a mais fina das quatro: as três de cima pintam a
@@ -257,7 +262,10 @@ function CoresProprias({ ap, mudar }: PecaProps) {
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         {ROTULOS_DE_COR.map(({ chave, variavel, titulo }) => {
-          const atual = ap.cores?.[chave] ?? doTema[variavel];
+          /* O título herda o texto: sem cor própria, o seletor dele começa na
+             cor do texto de agora, própria ou do tema. */
+          const atual =
+            ap.cores?.[chave] ?? (chave === "titulo" ? ap.cores?.texto : undefined) ?? doTema[variavel];
           const propria = Boolean(ap.cores?.[chave]);
           return (
             <label

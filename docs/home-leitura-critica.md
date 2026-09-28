@@ -88,7 +88,7 @@ abaixo foi conferida no código desta data.*
 | 1 | Hero | eyebrow, headline e texto do briefing; três galerias reais em identidades diferentes, uma na frente, alternando devagar | `GaleriaCapa` + `GaleriaGrade` |
 | 2 | Uma galeria. Várias identidades. (`#exemplos`) | quatro galerias completas (capa + grade), com a combinação real de cada uma escrita embaixo | `PRESETS`/`OPCOES` |
 | 3 | Seu trabalho. Sua marca. Seu endereço. | uma galeria dentro de um navegador com `seuestudio.galeriaatomo.com.br`; o visitante troca capa, fonte e cor e ela muda na hora | opções reais do editor |
-| 4 | Da pasta ao cliente. (`#como-funciona`) | 01 Suba · 02 Personalize · 03 Entregue, cada um com a tela real | prints do painel + galeria |
+| 4 | Suba. Personalize. Entregue. (`#como-funciona`; era "Da pasta ao cliente.") | 01 Suba · 02 Personalize · 03 Entregue, cada um com a tela real | prints do painel + galeria |
 | 5 | Intuitiva para quem entrega. Intuitiva para quem recebe. | celular com a galeria rolando + a lista do que o cliente faz | componentes reais |
 | 6 | A seleção acontece dentro da própria galeria. | grade com corações marcando, contador "12 de 40", o painel da seleção | componentes reais + print |
 | 7 | Brasileira desde o começo. | quatro provas concretas + o complemento do beta | `planos.ts`, `marca.ts` |

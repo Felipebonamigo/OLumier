@@ -44,7 +44,7 @@ const DESTINO = path.join(RAIZ, "public/home/produto");
 mkdirSync(DESTINO, { recursive: true });
 
 /* As fotos são as PADRÃO da home (`FOTOS_PADRAO`), na ordem da galeria
-   "Natural e clássica" — a capa primeiro. Assim o print do painel mostra as
+   "Natural e contemporânea" — a capa primeiro. Assim o print do painel mostra as
    mesmas fotos da página em volta dele, e trocar um padrão no config muda os
    prints na próxima rodada, sem esta lista precisar ser lembrada.
 
@@ -149,6 +149,19 @@ try {
     if (rows[0].n >= arquivos.length) break;
     await p.waitForTimeout(1000);
   }
+
+  /* A capa ESCOLHIDA, com o foco da home. A capa jornal só mostra a foto
+     grande quando o fotógrafo escolheu uma (ver `galeria-capa.tsx`): sem isto,
+     o print "Entregue" saía só com o título, diferente do celular da home. A
+     primeira que subiu é a capa da identidade (ver `ORDEM`). */
+  const capaDaHome = FOTOS_PADRAO[classicaDaHome.capa];
+  await db.query(
+    `update galerias set
+       capa_media_id = (select id from medias where galeria_id = $1 order by ordem, criado_em limit 1),
+       capa_foco_x = $2, capa_foco_y = $3
+     where id = $1`,
+    [g.id, capaDaHome.focoX, capaDaHome.focoY],
+  );
 
   // ── 02 · PERSONALIZE: o editor de design com a prévia ─────────────────
   /* No grupo "Cor", que é curto: assim o ajuste e a prévia cabem na mesma
