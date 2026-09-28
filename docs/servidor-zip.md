@@ -78,6 +78,27 @@ Um ZIP pronto sem pedido há `ZIP_CACHE_DIAS` (14) é apagado; passando de
 `ZIP_CACHE_MAX_GB` (150), o mais antigo sai primeiro. Bate com o padrão de uso:
 muito na semana do lançamento, nada depois.
 
+### Quanto disco
+
+O volume guarda os ZIPs dos lançamentos RECENTES, não de todas as galerias.
+Ele tem de caber o pico de uma a duas semanas: com 20 GB por casamento,
+100 GB seguram uns 4 lançamentos simultâneos, 1 TB uns 40. Abaixo disso o
+cache vira rodízio (24/09/2026, "50 galerias no mesmo fim de semana"): cada
+ZIP é empurrado para fora antes de ser baixado de novo, e cada pedido volta a
+ler o B2 — nada quebra, mas é o desperdício que o servidor existe para evitar.
+O sinal é o painel: a fração "do arquivo guardado" abaixo de 50%. A ação é
+aumentar o volume na Hetzner (Volumes → Resize, `resize2fs`, e rodar o
+instalador de novo, que recalcula o teto em 85% do disco).
+
+Antes de cada montagem o servidor confere o espaço e apaga os ZIPs prontos
+menos usados na hora; se nem assim couber, entrega em fluxo sem guardar.
+
+Um ZIP montado de novo sai **idêntico byte a byte** ao anterior (a data
+dentro dele é a do conteúdo, não a da montagem), então o "Retomar" do
+navegador continua funcionando depois de um rodízio. Se por algum motivo a
+identidade não bater (`If-Range`), vai o arquivo inteiro em vez de um pedaço
+errado.
+
 ### Montagem única
 
 Trinta cliques no mesmo segundo (o link chegou no grupo da família) viram UMA
@@ -106,16 +127,27 @@ originais são abertos à frente do que está sendo escrito, porque o B2 está a
 2. DNS: `zip.galeriaatomo.com.br` → IP do servidor, **nuvem cinza** (DNS only).
    Com o proxy laranja da Cloudflare na frente, o ZIP cairia exatamente no caso
    restrito dos termos da CDN deles (arquivo grande de origem externa).
-3. Na máquina, como root:
+3. O repositório é privado: a máquina precisa de uma chave de leitura. Na
+   máquina, como root, gerar a chave e cadastrá-la no GitHub em
+   Settings → Deploy keys (sem permissão de escrita):
 
    ```
-   curl -fsSL https://raw.githubusercontent.com/Felipebonamigo/GaleriaAtomo/master/ops/instalar-servidor-zip.sh | bash
+   ssh-keygen -t ed25519 -N "" -f /root/.ssh/id_ed25519 -C zip-hetzner
+   cat /root/.ssh/id_ed25519.pub
    ```
 
-   Ele instala o Node, cria o usuário, clona o código, pergunta a URL do app e
-   o segredo (ou gera um), sobe a unidade `fotonio-zip` e configura o Caddy
-   com TLS. Rodar de novo atualiza o código.
-4. No app (`.env.production` do VPS), acrescentar e reiniciar:
+4. Ainda como root, clonar e rodar o instalador:
+
+   ```
+   ssh-keyscan github.com >> /root/.ssh/known_hosts
+   git clone --depth 1 git@github.com:Felipebonamigo/GaleriaAtomo.git /opt/fotonio-zip
+   bash /opt/fotonio-zip/ops/instalar-servidor-zip.sh
+   ```
+
+   Ele instala o Node, cria o usuário, pergunta a URL do app e o segredo (ou
+   gera um), sobe a unidade `fotonio-zip` e configura o Caddy com TLS. Rodar
+   de novo atualiza o código.
+5. No app (`.env.production` do VPS), acrescentar e reiniciar:
 
    ```
    ZIP_SERVIDOR_URL=https://zip.galeriaatomo.com.br
@@ -123,7 +155,7 @@ originais são abertos à frente do que está sendo escrito, porque o B2 está a
    ```
 
    O próximo clique em "baixar" já vai pelo servidor. Sem deploy.
-5. Conferir no painel de administração, bloco **Tráfego e custo da entrega**:
+6. Conferir no painel de administração, bloco **Tráfego e custo da entrega**:
    o aviso "servidor de ZIP não configurado" some, e os ZIPs passam a aparecer
    como montados/entregues com origem no servidor.
 
@@ -145,6 +177,20 @@ corrente:
   somado** — é o "R$ 50 por TB" acompanhado mês a mês;
 - avisos com a ação: reserva em uso, 60%/90% da franquia, excedente cobrado,
   cache que não segura, downloads caindo.
+
+**Disco do servidor de ZIP.** O servidor relata cada ZIP pronto que apagou
+para caber outro (`despejo`, migração 042). Uma remontagem — a mesma galeria
+montada de novo, mesmo tamanho, em menos de 14 dias — é o disco pequeno
+custando leitura do B2. Três remontagens no mês viram aviso de **erro** com o
+tamanho sugerido ("aumente o volume para pelo menos X GB"), calculado pelos
+ZIPs completos distintos dos últimos 14 dias ÷ 0,85. A fração "do arquivo
+guardado" conta só galeria inteira e capítulo: favoritas nunca são guardadas.
+
+**E-mail semanal.** O vigia do VPS (`ops/fotonio-vigia.sh`) pergunta uma vez
+por semana a `scripts/avisos-da-entrega.mjs` se o bloco tem aviso de erro e,
+se tiver, manda pelo mesmo Resend do "site fora do ar" (`ALERTA_EMAIL_DESTINO`
+em `/opt/atomatiza-secrets.env`). Semana sem erro, semana sem e-mail. Falha
+de cálculo ou de envio tenta de novo em 1 hora.
 
 As contas estão em `src/lib/metricas-entrega.ts` (puras, testadas em
 `scripts/testar-metricas-entrega.mjs`); os preços e franquias em

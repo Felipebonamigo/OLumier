@@ -53,6 +53,11 @@ export const ACOES = {
    * quantos. Sem isto, "quando o estúdio consentiu?" não teria resposta. */
   ROSTOS_LIGADOS: "rostos.ligados",
   ROSTOS_DESLIGADOS: "rostos.desligados",
+  /* A foto da página inicial trocada pelo admin (migração 043). É a vitrine
+   * pública da plataforma: "quem pôs essa foto aí, e quando?" precisa de
+   * resposta, e a foto do lugar anterior é apagada do bucket na troca. */
+  HOME_FOTO_TROCADA: "home.foto.trocada",
+  HOME_FOTO_RESTAURADA: "home.foto.restaurada",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque

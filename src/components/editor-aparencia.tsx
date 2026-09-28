@@ -6,6 +6,7 @@ import {
   OPCOES,
   PRESETS,
   presetEquivalente,
+  mesmaAparencia,
   FONTES_TITULO,
   VIEWPORTS_PREVIA,
   PALETAS,
@@ -20,8 +21,14 @@ import {
   salvarRascunhoAparenciaAction,
   salvarPadraoDoEstudioAction,
   esquecerPadraoDoEstudioAction,
+  salvarEstiloAction,
+  renomearEstiloAction,
+  apagarEstiloAction,
+  tornarEstiloPadraoAction,
 } from "@/app/painel/actions";
+import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
+import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -176,8 +183,18 @@ function BarraDoTitulo({ ap, mudar }: PecaProps) {
  */
 const ROTULOS_DE_COR = [
   { chave: "fundo", variavel: "--g-fundo", titulo: "Fundo" },
+  /* O título vem antes do texto porque é o primeiro que se lê na capa, e
+     porque a razão de existir dele é ser DIFERENTE do texto (Felipe,
+     28/09/2026): lado a lado, a escolha fica óbvia. Parte da cor do texto,
+     que é a que ele herda até alguém mexer. */
+  { chave: "titulo", variavel: "--g-texto", titulo: "Título" },
   { chave: "texto", variavel: "--g-texto", titulo: "Texto" },
   { chave: "destaque", variavel: "--g-destaque", titulo: "Botões" },
+  /* Fica por último porque é a mais fina das quatro: as três de cima pintam a
+     galeria inteira, esta pinta a sobrancelha, a data e a assinatura da capa.
+     "Detalhes da capa" e não "Detalhes": a pessoa precisa saber ONDE vai ver o
+     efeito, senão escolhe uma cor e conclui que o seletor está quebrado. */
+  { chave: "detalhe", variavel: "--g-suave", titulo: "Detalhes da capa" },
 ] as const;
 
 function CoresProprias({ ap, mudar }: PecaProps) {
@@ -250,7 +267,10 @@ function CoresProprias({ ap, mudar }: PecaProps) {
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         {ROTULOS_DE_COR.map(({ chave, variavel, titulo }) => {
-          const atual = ap.cores?.[chave] ?? doTema[variavel];
+          /* O título herda o texto: sem cor própria, o seletor dele começa na
+             cor do texto de agora, própria ou do tema. */
+          const atual =
+            ap.cores?.[chave] ?? (chave === "titulo" ? ap.cores?.texto : undefined) ?? doTema[variavel];
           const propria = Boolean(ap.cores?.[chave]);
           return (
             <label
@@ -368,7 +388,9 @@ const CAPAS_SEM_FOTO: string[] = ["minima"];
 const nomeDaCapa = (id: string) => OPCOES.capa.find((o) => o.id === id)?.nome ?? id;
 
 const GRUPOS = [
-  { id: "estilos", nome: "Estilos prontos" },
+  /* "Estilos", e não mais "Estilos prontos": desde 26/09/2026 o primeiro
+     cartão é o padrão do estúdio, que não é pronto nosso — é dele. */
+  { id: "estilos", nome: "Estilos" },
   { id: "capa", nome: "Capa" },
   { id: "tipografia", nome: "Tipografia" },
   { id: "cor", nome: "Cor" },
@@ -383,7 +405,8 @@ export function EditorAparencia({
   inicial,
   publicado,
   temFontePropria,
-  temPadraoDoEstudio = false,
+  padraoDoEstudio = null,
+  estilosDoEstudio = [],
   slotCapa,
 }: {
   galeriaId: string;
@@ -400,8 +423,12 @@ export function EditorAparencia({
   publicado: Aparencia;
   /** O estúdio enviou uma fonte? Decide se a opção aparece no seletor. */
   temFontePropria: boolean;
-  /** Já existe um padrão de design salvo neste estúdio. Ver `padraoDoEstudio`. */
-  temPadraoDoEstudio?: boolean;
+  /** O design que o estúdio salvou como padrão, ou null se nunca salvou. Ver
+      `padraoDoEstudio` em lib/aparencia-galeria.ts. */
+  padraoDoEstudio?: Aparencia | null;
+  /** Os até cinco estilos salvos do estúdio, com nome (28/09/2026). Ver
+      `lib/estilos-do-estudio.ts`. */
+  estilosDoEstudio?: EstiloDoEstudio[];
 }) {
   /* Qual grupo do ajuste fino está aberto. Só desenho: não entra no rascunho
      nem na publicação — trocar de grupo não é mexer na galeria. */
@@ -487,11 +514,58 @@ export function EditorAparencia({
    * Felipe: "adicionar algum método de 'salvar padrão criado', para sempre se
    * repetir na hora do design da capa".
    *
-   * O estado local existe só para o recado da tela. O que vale é o que está no
-   * tenant, e ele não mexe em galeria nenhuma — nem nesta: é uma decisão sobre
-   * o que vem DEPOIS. Ver `salvarPadraoDoEstudioAction`.
+   * O que vale é o que está no tenant, e salvar não mexe em galeria nenhuma —
+   * nem nesta: é uma decisão sobre o que vem DEPOIS. Ver
+   * `salvarPadraoDoEstudioAction`.
+   *
+   * ── O ESTADO GUARDA O DESENHO, E NÃO SÓ "EXISTE UM" (26/09/2026) ───────
+   *
+   * Até aqui era um booleano, para escolher o recado. E o padrão salvo não
+   * aparecia em lugar nenhum: não virava cartão em Estilos, não aparecia na
+   * criação da galeria, e a tela nunca dizia "esta galeria está no seu
+   * padrão". Os sócios salvaram e não conseguiram mais achar — "os estilos
+   * salvos não estão fácil de achar, não conseguimos descobrir onde estão".
+   *
+   * Guardar a aparência inteira é o que deixa o padrão ser MOSTRADO (o
+   * primeiro cartão de Estilos, com a mesma amostra dos outros) e APLICADO a
+   * uma galeria que já existe, que antes não tinha caminho nenhum.
    */
-  const [padrao, setPadrao] = useState({ salvo: temPadraoDoEstudio, recado: "" });
+  const [padrao, setPadrao] = useState<{ aparencia: Aparencia | null; recado: string }>({
+    aparencia: padraoDoEstudio,
+    recado: "",
+  });
+  const noPadrao = padrao.aparencia !== null && mesmaAparencia(ap, padrao.aparencia);
+
+  /*
+   * ── MEUS ESTILOS: ATÉ CINCO, COM NOME (28/09/2026) ─────────────────────
+   *
+   * Juan: "Ela pode salvar até 5 padrões próprios e dar nome pra eles. Eu
+   * criei uns 3 que eu gostei, mas só pode salvar um." O padrão continua
+   * sendo UM — o design com que a galeria nova nasce —, e os estilos são as
+   * combinações que o fotógrafo quer ter à mão. Qualquer um vira o padrão com
+   * um clique. A lista na tela é sempre a que o servidor devolveu.
+   */
+  const [estilos, setEstilos] = useState<EstiloDoEstudio[]>(estilosDoEstudio);
+  const [nomeNovo, setNomeNovo] = useState("");
+  const [renomeando, setRenomeando] = useState<{ id: string; nome: string } | null>(null);
+  const [recadoEstilos, setRecadoEstilos] = useState("");
+  const estiloNoAr = estilos.find((e) => mesmaAparencia(ap, e.aparencia));
+  const cheio = estilos.length >= 5;
+
+  function comEstilos(
+    acao: (f: FormData) => Promise<{ ok?: string; erro?: string; estilos?: EstiloDoEstudio[] }>,
+    campos: Record<string, string>,
+    depois?: () => void,
+  ) {
+    iniciar(async () => {
+      const f = new FormData();
+      for (const [k, v] of Object.entries(campos)) f.set(k, v);
+      const r = await acao(f);
+      if (r.estilos) setEstilos(r.estilos);
+      setRecadoEstilos(r.erro ?? r.ok ?? "");
+      if (!r.erro) depois?.();
+    });
+  }
 
   const presetAtivo = presetEquivalente(ap);
   const sujo = JSON.stringify(ap) !== JSON.stringify(salvo);
@@ -594,7 +668,11 @@ export function EditorAparencia({
           {erro ??
             (sujo
               ? "alterações não publicadas"
-              : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
+              : noPadrao
+                ? "no ar: meu padrão"
+                : estiloNoAr
+                  ? `no ar: ${estiloNoAr.nome}`
+                  : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
         </span>
       </div>
 
@@ -648,6 +726,140 @@ export function EditorAparencia({
         <div className="mt-4 grid min-w-0 flex-1 gap-4 sm:mt-0">
           {grupo === "estilos" && (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {/*
+                O PADRÃO DO ESTÚDIO É O PRIMEIRO CARTÃO (26/09/2026).
+
+                Ele é a escolha de sempre do fotógrafo, então vem antes das
+                nossas. Mesma amostra e mesmo gesto dos outros cartões: um
+                clique aplica nesta galeria, e publicar continua sendo o único
+                jeito de o cliente ver.
+
+                Sem padrão salvo, o lugar fica reservado por um aviso tracejado
+                que diz onde ele nasce — quem procura o recurso acha a porta
+                aqui, que é onde se escolhe estilo, e não só lá embaixo.
+              */}
+              {padrao.aparencia ? (
+                <button
+                  type="button"
+                  onClick={() => padrao.aparencia && mudar(padrao.aparencia)}
+                  className={`rounded-lg border p-3 text-left transition ${
+                    noPadrao
+                      ? "border-acento bg-acento/5"
+                      : "border-linha hover:border-acento hover:bg-acento/5"
+                  }`}
+                >
+                  <AmostraDoPreset aparencia={padrao.aparencia} className="mb-2 h-20 w-full" />
+                  {/* Quando o padrão é um dos estilos salvos, o cartão diz qual —
+                      senão parecem dois estilos iguais sem explicação. */}
+                  <span className="block truncate text-sm font-medium">
+                    Meu padrão
+                    {(() => {
+                      const igual = estilos.find((e) => padrao.aparencia && mesmaAparencia(e.aparencia, padrao.aparencia));
+                      return igual ? <span className="font-normal text-texto-faint"> · {igual.nome}</span> : null;
+                    })()}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">
+                    O design que você salvou. Toda galeria nova já nasce assim.
+                  </span>
+                </button>
+              ) : (
+                <div className="rounded-lg border border-dashed border-linha-forte p-3">
+                  <span className="block text-sm font-medium text-texto-soft">Meu padrão</span>
+                  <span className="mt-1 block text-[11px] leading-snug text-texto-faint">
+                    Monte o seu design e aperte{" "}
+                    <strong className="font-medium text-texto-soft">Salvar como meu padrão</strong>,
+                    logo abaixo. Ele passa a aparecer aqui e na criação de toda galeria nova.
+                  </span>
+                </div>
+              )}
+              {estilos.map((e) => {
+                const ativo = mesmaAparencia(ap, e.aparencia);
+                const ehPadrao = padrao.aparencia !== null && mesmaAparencia(e.aparencia, padrao.aparencia);
+                const editando = renomeando?.id === e.id;
+                return (
+                  /* Um `div`, e não um botão, em volta: renomear e apagar são
+                     botões, e botão dentro de botão é HTML inválido. */
+                  <div
+                    key={e.id}
+                    className={`rounded-lg border p-3 transition ${
+                      ativo ? "border-acento bg-acento/5" : "border-linha hover:border-acento"
+                    }`}
+                  >
+                    <button type="button" onClick={() => mudar(e.aparencia)} className="block w-full text-left">
+                      <AmostraDoPreset aparencia={e.aparencia} className="mb-2 h-20 w-full" />
+                    </button>
+                    {editando ? (
+                      <form
+                        onSubmit={(ev) => {
+                          ev.preventDefault();
+                          comEstilos(renomearEstiloAction, { id: e.id, nome: renomeando.nome }, () =>
+                            setRenomeando(null),
+                          );
+                        }}
+                        className="flex items-center gap-1"
+                      >
+                        <input
+                          autoFocus
+                          value={renomeando.nome}
+                          maxLength={40}
+                          onChange={(ev) => setRenomeando({ id: e.id, nome: ev.target.value })}
+                          aria-label="Novo nome do estilo"
+                          className="min-w-0 flex-1 rounded border border-linha bg-transparent px-2 py-1 text-sm"
+                        />
+                        <button type="submit" disabled={salvando} className="text-[11px] text-acento">
+                          ok
+                        </button>
+                      </form>
+                    ) : (
+                      <button type="button" onClick={() => mudar(e.aparencia)} className="block w-full text-left">
+                        <span className="block truncate text-sm font-medium">{e.nome}</span>
+                      </button>
+                    )}
+                    <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-texto-faint">
+                      {ehPadrao ? (
+                        <span>padrão das galerias novas</span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={salvando}
+                          onClick={() =>
+                            iniciar(async () => {
+                              const f = new FormData();
+                              f.set("id", e.id);
+                              const r = await tornarEstiloPadraoAction(f);
+                              if (r.padrao) setPadrao({ aparencia: r.padrao, recado: "" });
+                              setRecadoEstilos(r.erro ?? r.ok ?? "");
+                            })
+                          }
+                          className="underline-offset-4 hover:text-texto hover:underline"
+                        >
+                          tornar padrão
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={salvando}
+                        onClick={() => setRenomeando(editando ? null : { id: e.id, nome: e.nome })}
+                        className="underline-offset-4 hover:text-texto hover:underline"
+                      >
+                        renomear
+                      </button>
+                      <button
+                        type="button"
+                        disabled={salvando}
+                        onClick={() => {
+                          if (confirm(`Apagar o estilo “${e.nome}”? Nenhuma galeria muda.`)) {
+                            comEstilos(apagarEstiloAction, { id: e.id });
+                          }
+                        }}
+                        className="underline-offset-4 hover:text-alerta hover:underline"
+                      >
+                        apagar
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
               {PRESETS.map((p) => {
                 const ativo = presetAtivo === p.id;
                 return (
@@ -661,11 +873,25 @@ export function EditorAparencia({
                         : "border-linha hover:border-acento hover:bg-acento/5"
                     }`}
                   >
-                    <span className="flex items-center gap-2">
-                      <MiniaturaPreset aparencia={p.aparencia} />
-                      <span className="text-sm font-medium">{p.nome}</span>
-                    </span>
-                    <span className="mt-1.5 block text-[11px] leading-snug text-texto-faint">
+                    {/*
+                      ── O RABISCO MOSTRAVA UM EIXO DE CINCO (25/09/2026) ────
+
+                      Juan, escolhendo estilo: "tem várias super iguais, não dá
+                      pra perceber qual a diferença entre elas".
+
+                      Aqui era um rabisco de 32×24 px com a GRADE e nada de
+                      tipografia; no assistente era uma tarja com a TIPOGRAFIA
+                      e nada de grade. Duas amostras diferentes para a mesma
+                      decisão, e nenhuma das duas desenhava a capa — que é
+                      justamente o que separa um preset do outro.
+
+                      Agora é a mesma amostra dos dois lados, e ela desenha a
+                      página: capa, título na fonte do preset, grade com a
+                      densidade e o canto dele.
+                    */}
+                    <AmostraDoPreset aparencia={p.aparencia} className="mb-2 h-20 w-full" />
+                    <span className="block text-sm font-medium">{p.nome}</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">
                       {p.desc}
                     </span>
                   </button>
@@ -809,6 +1035,12 @@ export function EditorAparencia({
                 mudar={mudar}
                 ocultar={temFontePropria ? undefined : ["propria"]}
               />
+              {/* E por fim as letrinhas — a sobrancelha, a data, a assinatura e
+                  o botão da capa. Vem depois das outras duas porque as duas
+                  opções interessantes dele APONTAM para elas: "a do nome do
+                  casal" é o primeiro eixo desta coluna, "a do texto" é o de
+                  cima. Escolher nesta ordem é ler a escada de baixo para cima. */}
+              <Eixo eixo="fonteDetalhe" titulo="Letrinhas da capa" ap={ap} mudar={mudar} />
             </>
           )}
           {grupo === "cor" && (
@@ -843,25 +1075,68 @@ export function EditorAparencia({
         aparência é lido como "aplicar", e aplicar em entregas já feitas seria
         reescrever o trabalho de alguém a partir de um clique.
       */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-4">
+      {/*
+        MEUS ESTILOS (28/09/2026) — no mesmo lugar e pela mesma razão do
+        padrão logo abaixo: a pessoa acabou de montar a combinação e está
+        olhando para ela. Salvar não mexe em galeria nenhuma, nem nesta.
+      */}
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          comEstilos(salvarEstiloAction, { nome: nomeNovo, aparencia: JSON.stringify(ap) }, () => setNomeNovo(""));
+        }}
+        className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-4"
+      >
+        <div className="min-w-0">
+          <span className="block text-xs font-medium text-texto-soft">
+            Meus estilos <span className="font-normal text-texto-faint">· {estilos.length} de 5</span>
+          </span>
+          <p className="mt-0.5 max-w-[60ch] text-[11px] leading-snug text-texto-faint" role="status" aria-live="polite">
+            {recadoEstilos ||
+              (cheio
+                ? "Você já tem 5 estilos salvos. Apague um em Estilos para guardar outro."
+                : "Guarde esta combinação com um nome — ela aparece em Estilos e na criação de toda galeria nova. Nenhuma galeria muda.")}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <input
+            value={nomeNovo}
+            onChange={(ev) => setNomeNovo(ev.target.value)}
+            maxLength={40}
+            placeholder="Nome do estilo"
+            aria-label="Nome do estilo"
+            disabled={cheio}
+            className="w-40 rounded-lg border border-linha bg-transparent px-3 py-2 text-xs disabled:opacity-40"
+          />
+          <button
+            type="submit"
+            disabled={salvando || cheio || !nomeNovo.trim()}
+            className="rounded-lg border border-linha-forte px-4 py-2 text-xs transition hover:bg-carbon-2 disabled:opacity-40"
+          >
+            Salvar estilo
+          </button>
+        </div>
+      </form>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-4">
         <div className="min-w-0">
           <span className="block text-xs font-medium text-texto-soft">Padrão do estúdio</span>
           <p className="mt-0.5 max-w-[60ch] text-[11px] leading-snug text-texto-faint">
             {padrao.recado ||
-              (padrao.salvo
-                ? "Toda galeria nova nasce com o seu design salvo. Salvar de novo substitui o anterior; nenhuma galeria existente muda."
-                : "Guarde esta combinação e toda galeria nova já nasce assim. Nenhuma galeria existente muda — nem esta.")}
+              (padrao.aparencia
+                ? "Toda galeria nova nasce com o seu design salvo, e ele fica em Estilos como “Meu padrão”. Salvar de novo substitui o anterior; nenhuma galeria existente muda."
+                : "Guarde esta combinação e toda galeria nova já nasce assim — ela fica em Estilos como “Meu padrão”. Nenhuma galeria existente muda, nem esta.")}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {padrao.salvo && (
+          {padrao.aparencia && (
             <button
               type="button"
               disabled={salvando}
               onClick={() =>
                 iniciar(async () => {
                   const r = await esquecerPadraoDoEstudioAction();
-                  setPadrao({ salvo: false, recado: r.ok ?? "" });
+                  setPadrao({ aparencia: null, recado: r.ok ?? "" });
                 })
               }
               className="rounded-lg px-3 py-2 text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
@@ -877,12 +1152,15 @@ export function EditorAparencia({
                 const f = new FormData();
                 f.set("aparencia", JSON.stringify(ap));
                 const r = await salvarPadraoDoEstudioAction(f);
-                setPadrao({ salvo: !r.erro, recado: r.erro ?? r.ok ?? "" });
+                setPadrao((atual) => ({
+                  aparencia: r.erro ? atual.aparencia : ap,
+                  recado: r.erro ?? r.ok ?? "",
+                }));
               })
             }
             className="rounded-lg border border-linha-forte px-4 py-2 text-xs transition hover:bg-carbon-2 disabled:opacity-40"
           >
-            {padrao.salvo ? "Salvar de novo como padrão" : "Salvar como meu padrão"}
+            {padrao.aparencia ? "Salvar de novo como padrão" : "Salvar como meu padrão"}
           </button>
         </div>
       </div>
@@ -1067,60 +1345,3 @@ export function EditorAparencia({
   );
 }
 
-/**
- * Rabisco do preset — ajuda a escolher sem precisar abrir.
- *
- * Deduzido da APARÊNCIA, não escrito por id. Antes havia um desenho codificado
- * para cada um dos quatro presets e um genérico para o resto; ao acrescentar
- * quatro em 27/08/2026, os quatro novos cairiam todos no mesmo rabisco — o
- * oposto do trabalho dele, que é diferenciar.
- *
- * O tema dá o papel, a grade dá o arranjo. Preset novo ganha o seu de graça, e
- * ninguém precisa lembrar de vir aqui.
- */
-function MiniaturaPreset({ aparencia }: { aparencia: Aparencia }) {
-  const comum = "h-6 w-8 shrink-0 rounded-[3px] border border-linha p-[3px]";
-
-  /* O papel de cada tema, e a tinta que aparece por cima dele. Valores crus e
-   * não tokens: isto é um rabisco de OUTRO tema dentro do painel, e usar as
-   * cores do painel faria os três rabiscos ficarem iguais. */
-  const papel =
-    aparencia.tema === "noite"
-      ? { fundo: "#07080b", cheio: "#d9a441", vazio: "rgba(190,205,230,0.32)" }
-      : aparencia.tema === "creme"
-        ? { fundo: "#f2ebdd", cheio: "#927659", vazio: "#c0ab8e" }
-        : { fundo: "#ffffff", cheio: "#9ca3af", vazio: "#d1d5db" };
-
-  const bloco = (cor: string, extra = "") => (
-    <span className={extra} style={{ background: cor }} />
-  );
-
-  return (
-    <span className={comum} style={{ background: papel.fundo }}>
-      {aparencia.grade === "editorial" ? (
-        <span className="grid h-full grid-cols-3 grid-rows-2 gap-[1px]">
-          {bloco(papel.cheio, "col-span-2 row-span-2")}
-          {bloco(papel.vazio)}
-          {bloco(papel.vazio)}
-        </span>
-      ) : aparencia.grade === "linhas" ? (
-        <span className="flex h-full flex-col gap-[1px]">
-          {bloco(papel.cheio, "flex-1")}
-          {bloco(papel.vazio, "flex-1")}
-        </span>
-      ) : aparencia.grade === "colunas" ? (
-        <span className="flex h-full items-end gap-[1px]">
-          {bloco(papel.cheio, "h-full flex-1")}
-          {bloco(papel.vazio, "h-2/3 flex-1")}
-          {bloco(papel.cheio, "h-5/6 flex-1")}
-        </span>
-      ) : (
-        <span className="grid h-full grid-cols-3 grid-rows-2 gap-[1px]">
-          {Array.from({ length: 6 }, (_, i) => (
-            <span key={i} style={{ background: i % 2 ? papel.vazio : papel.cheio }} />
-          ))}
-        </span>
-      )}
-    </span>
-  );
-}

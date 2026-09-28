@@ -181,7 +181,7 @@ Três coisas entraram para isso, todas dentro do desenho que já existia:
 | `GET /api/galerias/:id` | como está a entrega: estado, contagem, endereço canônico e o `noAr` **calculado** (a régua da página pública, nunca a coluna `publicada` crua) | `leitura` |
 | `POST /api/galerias` + `referenciaExterna` | criar a galeria de um contrato, com **idempotência**: a mesma referência devolve a mesma galeria (200), nunca uma `ana-pedro-2` | `envio` |
 
-A procedência fica em `galerias.origem`/`origem_ref` (migração 041), com índice único
+A procedência fica em `galerias.origem`/`origem_ref` (migração 045), com índice único
 parcial por `(tenant, origem, origem_ref)` que deixa a lixeira de fora — apagar a
 galeria errada não pode trancar o contrato até a purga. A referência é **opaca**:
 guardamos e devolvemos, nunca interpretamos. Nenhum dado do contrato (valor, cliente,
@@ -332,6 +332,57 @@ fica.
 Vale notar o que isto revela: a chave de API é a porta, mas o que faz o plugin valer
 alguma coisa é esta rota. Se um dia o plugin for descartado e a chave continuar, esta
 rota continua útil de qualquer jeito — reenviar um arquivo corrigido é pedido normal.
+
+---
+
+## Quando a conta ainda não existe — `POST /api/provisionar`
+
+Tudo acima supõe que o estúdio já é cliente daqui: ele gera a chave no painel e
+cola do outro lado. Isso resolve quem já usa os dois, e deixa de fora
+exatamente quem a gente quer atrair — o fotógrafo que já usa o Atomatiza e
+**ainda não tem galeria**. Para ele, ligar os dois era preencher um segundo
+cadastro aqui, voltar lá, gerar chave, colar. Quatro passos para dizer "sim".
+
+Esta rota faz o caminho inteiro a partir de um gesto só, do lado de lá.
+
+```http
+POST /api/provisionar
+x-provisionamento-segredo: <segredo de plataforma>
+
+{ "nomeEstudio": "Sirius Fotografia",
+  "email": "contato@sirius.com.br",
+  "referenciaExterna": "<id do estúdio no Atomatiza>" }
+```
+
+Devolve `tenantId`, `slug`, `nomeEstudio`, `dominio`, `escopo` e a **chave** —
+que sai uma vez e nunca mais, igual à criação pelo painel.
+
+**O que muda na lei do pareamento:** a posse da chave deixa de ser a única
+prova. O que entra no lugar é um segredo de **plataforma**, não de estúdio, e
+ele autoriza uma coisa só — criar conta nova em teste. Não lê nada, não mexe em
+conta existente, não publica galeria. Sem ele configurado a porta responde 503
+e fica fechada; nunca aberta por omissão.
+
+**O que não muda:** dinheiro não atravessa (a conta nasce no plano inicial, em
+teste). PII do casal não atravessa — o que vem é o nome e o e-mail do
+**estúdio**, que é a mesma pessoa dos dois lados. E senha não atravessa em
+direção nenhuma: a conta nasce com uma senha aleatória que ninguém guarda, e o
+acesso vem por um link de definir senha enviado ao fotógrafo. O outro produto
+nunca sabe a senha daqui — e não teria como perguntar.
+
+**Repetir é seguro, e é por isso que a referência é obrigatória.** A resposta
+pode se perder depois de a conta nascer; o fotógrafo clica de novo. A mesma
+referência devolve o **mesmo** estúdio e uma chave nova (migração 047, índice
+único parcial). Sem isso, a segunda tentativa esbarraria no e-mail único e ele
+ficaria com uma conta que não consegue ligar.
+
+**Quem já tem conta com aquele e-mail é recusado com 409**, nunca duplicado — a
+alternativa seria o fotógrafo com as galerias espalhadas em dois estúdios, sem
+jeito de juntar depois. O recado diz o que fazer: entre, gere uma chave, cole.
+
+`scripts/testar-provisionamento.mjs` prende as nove pontas, e foi conferido que
+reprova com o defeito plantado (ignorar a referência): acusa *"recusou o retry:
+email_ja_usado"*, que é o sintoma exato que o fotógrafo veria.
 
 ---
 

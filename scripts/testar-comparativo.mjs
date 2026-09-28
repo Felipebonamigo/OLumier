@@ -29,6 +29,8 @@
  */
 import { ESPACOS, formatarGb } from "../src/config/planos.ts";
 import { PRAZO_LIXEIRA_DIAS } from "../src/lib/tenants.ts";
+import { OPCOES } from "../src/config/aparencia.ts";
+import { VIDEO_LIBERADO } from "../src/config/lancamentos.ts";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 
@@ -206,14 +208,45 @@ await etapa("a resposta sobre guarda aponta para a página de segurança", () =>
  */
 console.log("\na home vende o que existe");
 
+/*
+ * ── 26/09/2026: A HOME NOVA, E DUAS REGRAS QUE MUDARAM ────────────────────
+ *
+ * O NÚMERO DE FONTES sai de `OPCOES`. A etapa exigia "nove fontes" escrito, e
+ * com isso prendia a home num número que já era mentira (são 21, mais a do
+ * estúdio): o teste que existia para a página não vender DE MENOS estava
+ * obrigando-a a vender de menos. Agora ele exige o número de verdade.
+ *
+ * O FILME segue o interruptor de `config/lancamentos.ts`. Existe no código,
+ * mas a estratégia de marca só deixa anunciar o que foi validado com entrega
+ * real (`docs/estrategia-de-marca.md` §6). Desligado, a etapa se inverte: a
+ * home NÃO pode falar de filme nem de 4K. Ligado, volta a ser obrigatório.
+ */
+const FONTES_DE_TITULO = OPCOES.tipografia.filter((o) => o.id !== "propria").length;
 const VENDAS = [
-  ["a escolha do álbum", /escolha do álbum/i],
+  ["a escolha do álbum", /álbum/i],
   ["a lista pronta para o Lightroom", /Lightroom/],
   ["capítulos nascendo das pastas", /pastas? viram? capítulos|subpastas viram capítulos/i],
-  ["o filme em 4K dentro da galeria", /4K/],
-  ["as nove fontes de título", /nove fontes/i],
+  ...(VIDEO_LIBERADO ? [["o filme em 4K dentro da galeria", /4K/]] : []),
+  [`as ${FONTES_DE_TITULO} fontes de título`, new RegExp(`${FONTES_DE_TITULO}(<!-- -->)?\\s*(<!-- -->)?fontes`)],
   ["a vitrine do estúdio", /vitrine/i],
 ];
+
+if (!VIDEO_LIBERADO) {
+  await etapa("a home não promete vídeo antes de ele ser liberado", () => {
+    /* Só o TEXTO da página: o HTML também carrega o bundle e o payload do
+       React, onde "filme" pode aparecer em nome de componente. */
+    const texto = html
+      .replace(/<script[\s\S]*?<\/script>/g, " ")
+      .replace(/<[^>]+>/g, " ");
+    const achado = /\b4K\b|filmmaker|\bfilmes?\b|\bvídeos?\b/i.exec(texto);
+    if (achado) {
+      throw new Error(
+        `a home diz "${achado[0]}" com VIDEO_LIBERADO desligado — ` +
+          `ligue o interruptor em config/lancamentos.ts quando o vídeo for validado`,
+      );
+    }
+  });
+}
 
 for (const [nome, padrao] of VENDAS) {
   await etapa(`a home conta sobre ${nome}`, () => {

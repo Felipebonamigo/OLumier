@@ -10,7 +10,9 @@ import {
   BOTAO_PRIMARIO,
   BOTAO_SECUNDARIO,
 } from "@/components/form-ui";
-import { FONTES_TITULO, PRESETS, TEMAS } from "@/config/aparencia";
+import { PRESETS, mesmaAparencia, type Aparencia } from "@/config/aparencia";
+import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
+import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
 /**
  * Criar galeria em três etapas.
@@ -51,10 +53,16 @@ function Botao({ ultima }: { ultima: boolean }) {
 
 export function AssistenteNovaGaleria({
   capitulosSugeridos,
+  padraoDoEstudio = null,
+  estilosDoEstudio = [],
   slotLogo,
 }: {
   /** Vem do servidor: `lib/secoes.ts` é server-only e não pode ser importado aqui. */
   capitulosSugeridos: readonly string[];
+  /** O design que o estúdio salvou como padrão, ou null se nunca salvou. */
+  padraoDoEstudio?: Aparencia | null;
+  /** Os até cinco estilos salvos do estúdio, com nome (28/09/2026). */
+  estilosDoEstudio?: EstiloDoEstudio[];
   /** A logo do estúdio, montada no servidor — aparece junto do estilo. */
   slotLogo?: ReactNode;
 }) {
@@ -62,6 +70,10 @@ export function AssistenteNovaGaleria({
   const [etapa, setEtapa] = useState(0);
   const [titulo, setTitulo] = useState("");
   const [preset, setPreset] = useState<string>("");
+  /* Um estilo salvo do estúdio, pelo id. Escolher um apaga o preset e
+     vice-versa: a galeria nasce com UMA decisão — ver
+     `aparenciaInicialDaGaleria`. */
+  const [estilo, setEstilo] = useState<string>("");
   const [capitulos, setCapitulos] = useState<string[]>([]);
 
   const semNome = titulo.trim().length === 0;
@@ -97,7 +109,10 @@ export function AssistenteNovaGaleria({
         ))}
       </ol>
 
-      <div className={etapa === 0 ? "mt-6 flex flex-col gap-4" : "hidden"}>
+      {/* O formulário continua estreito de propósito: campo de texto largo
+          demais faz o olho perder o começo da linha. Ver o comentário da
+          largura em `page.tsx`. */}
+      <div className={etapa === 0 ? "mt-6 flex max-w-2xl flex-col gap-4" : "hidden"}>
         <Campo
           label="Nome da galeria"
           name="titulo"
@@ -112,46 +127,134 @@ export function AssistenteNovaGaleria({
       </div>
 
       <div className={etapa === 1 ? "mt-6" : "hidden"}>
+        {/*
+          ── O PADRÃO DO ESTÚDIO APARECE AQUI (26/09/2026) ─────────────────
+
+          "Os estilos salvos não estão fácil de achar, não conseguimos
+          descobrir onde estão." Ele já valia nesta tela — `criarGaleriaAction`
+          usa o padrão quando nenhum cartão é marcado —, mas de um jeito
+          invisível: a etapa mostrava só os nossos dez, nenhum marcado, e quem
+          tinha salvo o próprio design achava que ele tinha sumido. Pior:
+          apontar um cartão para "procurar" o seu trocava o padrão por outro.
+
+          Agora ele é o primeiro cartão e já vem marcado, porque é o que
+          acontece se ninguém mexer. Marcá-lo manda `preset` vazio — o mesmo
+          caminho de antes, e a mesma ordem que `testar-padrao-do-estudio`
+          prende no servidor. Sem padrão salvo, a frase diz onde ele nasce.
+        */}
         <p className="text-sm text-texto-soft">
-          Como a galeria vai aparecer para o cliente. Dá para trocar tudo depois, em Design.
+          {padraoDoEstudio
+            ? "Como a galeria vai aparecer para o cliente. Ela já nasce no seu padrão — escolha outro estilo só se esta entrega pedir. Dá para trocar tudo depois, em Design."
+            : "Como a galeria vai aparecer para o cliente. Dá para trocar tudo depois, em Design."}
         </p>
+        {!padraoDoEstudio && (
+          <p className="mt-1 text-xs text-texto-faint">
+            Tem um design seu? Monte-o na aba Design de qualquer galeria e aperte “Salvar como meu
+            padrão” — ele passa a aparecer aqui como a primeira opção.
+          </p>
+        )}
         <input type="hidden" name="preset" value={preset} />
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {PRESETS.map((p) => {
-            const tema = TEMAS[p.aparencia.tema];
-            const escolhido = preset === p.id;
+        <input type="hidden" name="estilo" value={estilo} />
+        {/* Mais colunas conforme a tela, porque aqui a largura VIRA amostra:
+            com três colunas dentro de 672 px cada "Ana & Pedro" saía com ~155
+            px, e escolher a cara da entrega por uma miniatura desse tamanho é
+            escolher no escuro. O teto é cinco — passando disso a amostra volta
+            a encolher, e o nome do estilo começa a quebrar. */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          {padraoDoEstudio && (
+            <button
+              type="button"
+              onClick={() => {
+                setPreset("");
+                setEstilo("");
+              }}
+              aria-pressed={preset === "" && estilo === ""}
+              className={`rounded-xl border p-3 text-left transition ${
+                preset === "" && estilo === "" ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+              }`}
+            >
+              <AmostraDoPreset aparencia={padraoDoEstudio} className="mb-2 h-28 w-full" />
+              <span className="block truncate text-sm font-medium">
+                Meu padrão
+                {(() => {
+                  const igual = estilosDoEstudio.find((e) => mesmaAparencia(e.aparencia, padraoDoEstudio));
+                  return igual ? <span className="font-normal text-texto-faint"> · {igual.nome}</span> : null;
+                })()}
+              </span>
+              <span className="mt-0.5 block text-xs text-texto-faint">
+                O design que você salvou.
+              </span>
+            </button>
+          )}
+          {/* Os estilos salvos do estúdio (até cinco) vêm logo depois do
+              padrão: são dele, e são o que ele procura antes dos nossos. */}
+          {estilosDoEstudio.map((e) => {
+            const escolhido = estilo === e.id;
             return (
               <button
-                key={p.id}
+                key={e.id}
                 type="button"
-                onClick={() => setPreset(escolhido ? "" : p.id)}
+                onClick={() => {
+                  setEstilo(escolhido ? "" : e.id);
+                  setPreset("");
+                }}
                 aria-pressed={escolhido}
                 className={`rounded-xl border p-3 text-left transition ${
                   escolhido ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
                 }`}
               >
-                {/* Amostra honesta: o fundo e a letra que o preset realmente usa. */}
-                <span
-                  className="mb-2 flex h-14 items-center justify-center rounded-lg text-lg"
-                  style={{
-                    background: tema["--g-fundo"],
-                    color: tema["--g-texto"],
-                    border: `1px solid ${tema["--g-linha"]}`,
-                    fontFamily: FONTES_TITULO[p.aparencia.tipografia],
-                  }}
-                >
-                  Ana &amp; Pedro
-                </span>
+                <AmostraDoPreset aparencia={e.aparencia} className="mb-2 h-28 w-full" />
+                <span className="block truncate text-sm font-medium">{e.nome}</span>
+                <span className="mt-0.5 block text-xs text-texto-faint">Um estilo seu.</span>
+              </button>
+            );
+          })}
+          {PRESETS.map((p) => {
+            const escolhido = preset === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => {
+                  setPreset(escolhido ? "" : p.id);
+                  setEstilo("");
+                }}
+                aria-pressed={escolhido}
+                className={`rounded-xl border p-3 text-left transition ${
+                  escolhido ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+                }`}
+              >
+                {/*
+                  ── A AMOSTRA MOSTRAVA DOIS EIXOS DE CINCO (25/09/2026) ─────
+
+                  Juan: "essas prévias dos estilos não fazem sentido, tem
+                  várias super iguais, não dá pra perceber qual a diferença
+                  entre elas. Pra mim a 'ateliê', 'marfim' e 'caligrafia' são
+                  iguais. Convite e revista também."
+
+                  Aqui era uma tarja de 56 px com o fundo do tema e o nome na
+                  fonte do título — tema e tipografia, e mais nada. O que
+                  separa "Ateliê" de "Marfim" é a CAPA: um abre com foto ao
+                  lado do nome, o outro abre sem foto nenhuma. Nada disso
+                  chegava à tela, então os dois eram o mesmo retângulo creme
+                  com a mesma manuscrita, e ele estava descrevendo o que via.
+
+                  `AmostraDoPreset` desenha a página em miniatura, e é a mesma
+                  do editor de Design — eram duas amostras diferentes para a
+                  mesma decisão, cada uma mostrando metade.
+                */}
+                <AmostraDoPreset aparencia={p.aparencia} className="mb-2 h-28 w-full" />
                 <span className="block text-sm font-medium">{p.nome}</span>
                 <span className="mt-0.5 block text-xs text-texto-faint">{p.desc}</span>
               </button>
             );
           })}
         </div>
-        {slotLogo && <div className="mt-6">{slotLogo}</div>}
+        {/* A logo é formulário, não amostra: não acompanha a grade. */}
+        {slotLogo && <div className="mt-6 max-w-2xl">{slotLogo}</div>}
       </div>
 
-      <div className={etapa === 2 ? "mt-6" : "hidden"}>
+      <div className={etapa === 2 ? "mt-6 max-w-2xl" : "hidden"}>
         <p className="text-sm text-texto-soft">
           Os momentos do evento. O cliente ganha um menu para pular direto ao que quer ver — e
           você manda as fotos já para o capítulo certo.

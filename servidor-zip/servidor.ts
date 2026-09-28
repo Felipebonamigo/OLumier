@@ -6,6 +6,7 @@ import { intervaloDoRange } from "./range.ts";
 import { buscarManifesto, PedidoRecusado, relatar } from "./app.ts";
 import { fluxoDoManifesto, tamanhoDoManifesto } from "./montador.ts";
 import {
+  abrirEspaco,
   iniciarMontagem,
   lerDoDisco,
   montagemEmAndamento,
@@ -91,14 +92,23 @@ async function servirDoDisco(
   montagem: Montagem | null,
   doCache: boolean,
 ) {
-  const intervalo = intervaloDoRange(req.headers.range, tamanho);
+  /*
+   * A identidade do arquivo é a chave MAIS a data do conteúdo: é ela que
+   * define os bytes. Um "Retomar" traz If-Range com a identidade de quando
+   * começou; se não bater, o pedaço pedido é de outro arquivo e emendar daria
+   * um ZIP corrompido — então vai o arquivo inteiro (200), como o HTTP manda.
+   */
+  const etag = `"${chave}-${manifesto.dataDoConteudo ?? "sem-data"}"`;
+  const ifRange = req.headers["if-range"];
+  const rangeValido = !ifRange || ifRange === etag;
+  const intervalo = rangeValido ? intervaloDoRange(req.headers.range, tamanho) : null;
   const [inicio, fim] = intervalo ?? [0, tamanho - 1];
   const cabecalhos: Record<string, string> = {
     "Content-Type": "application/zip",
     "Content-Disposition": dispositionSegura(manifesto.nomeDoZip),
     "Content-Length": String(fim - inicio + 1),
     "Accept-Ranges": "bytes",
-    ETag: `"${chave}"`,
+    ETag: etag,
     "Cache-Control": "private, no-store",
   };
   if (intervalo) cabecalhos["Content-Range"] = `bytes ${inicio}-${fim}/${tamanho}`;
@@ -215,6 +225,16 @@ async function atenderZip(req: IncomingMessage, res: ServerResponse, token: stri
   if (comUrls.chaveDeCache !== chave) return atenderZip(req, res, token);
 
   const fluxo = fluxoDoManifesto(comUrls, { renovar: () => buscarManifesto(pedidoId, true) });
+
+  /* 2''. não cabe no disco nem apagando os antigos → entrega em fluxo, sem
+     guardar. É o caso de um ZIP maior que o disco: raro, e o download sai. */
+  const aoApagar = (bytes: number) =>
+    void relatar({ pedidoId, evento: "despejo", bytes, doCache: false, duracaoMs: 0 });
+  if (!montagemEmAndamento(chave) && !(await abrirEspaco(tamanho, aoApagar))) {
+    console.error(`sem espaço para guardar ${chave} (${tamanho} bytes): entregando em fluxo`);
+    return servirEmFluxo(req, res, comUrls);
+  }
+
   const montagem =
     montagemEmAndamento(chave) ??
     iniciarMontagem(chave, tamanho, fluxo, ({ ok, bytes, duracaoMs }) => {

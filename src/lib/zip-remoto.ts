@@ -130,6 +130,12 @@ export interface Manifesto {
    * encontrado — não há invalidação a esquecer.
    */
   chaveDeCache: string | null;
+  /**
+   * A data que vai dentro do ZIP (ISO), a mesma para o mesmo conteúdo: a mais
+   * recente entre as fotos. Com ela, remontar dá os mesmos bytes — ver
+   * `OpcoesDoZip.data` em lib/zip-em-fluxo.ts.
+   */
+  dataDoConteudo?: string;
   arquivos: ArquivoDoManifesto[];
 }
 
@@ -163,7 +169,12 @@ export function chaveDeCache(
 
 /* ──────────────────────────────── eventos ───────────────────────────────── */
 
-export type EventoDeZip = "montado" | "servido" | "abortado";
+/**
+ * `despejo`: um ZIP pronto que o servidor apagou para abrir espaço (migração
+ * 042). `bytes` é o tamanho do que saiu; `pedidoId` é o pedido cuja montagem
+ * precisou do espaço.
+ */
+export type EventoDeZip = "montado" | "servido" | "abortado" | "despejo";
 
 /** O que o servidor relata ao app quando um ZIP termina, é montado ou cai. */
 export interface RelatoDeZip {
@@ -180,7 +191,7 @@ export function relatoValido(x: unknown): x is RelatoDeZip {
   return (
     typeof r.pedidoId === "string" &&
     UUID.test(r.pedidoId) &&
-    (r.evento === "montado" || r.evento === "servido" || r.evento === "abortado") &&
+    (r.evento === "montado" || r.evento === "servido" || r.evento === "abortado" || r.evento === "despejo") &&
     typeof r.bytes === "number" &&
     Number.isFinite(r.bytes) &&
     r.bytes >= 0 &&

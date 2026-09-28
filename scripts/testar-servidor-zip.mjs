@@ -72,6 +72,9 @@ const originais = [
 ];
 const pedidosAoBalde = new Map();
 let derrubarPrimeira = true;
+/* E OUTRA volta com 200 e corpo vazio: foi assim que a produção quebrou em
+   23/09/2026 ("chegou com 0 bytes"). Tem de valer nova tentativa, não ZIP morto. */
+let esvaziarPrimeira = true;
 
 const balde = createServer((req, res) => {
   const i = Number(req.url.slice(1));
@@ -80,6 +83,11 @@ const balde = createServer((req, res) => {
     derrubarPrimeira = false;
     res.writeHead(500);
     return res.end("caiu de propósito");
+  }
+  if (i === 2 && esvaziarPrimeira) {
+    esvaziarPrimeira = false;
+    res.writeHead(200, { "Content-Type": "image/jpeg" });
+    return res.end();
   }
   const o = originais[i];
   res.writeHead(200, { "Content-Type": "image/jpeg", "Content-Length": o.bytes.length });
@@ -115,6 +123,7 @@ const app = createServer((req, res) => {
       tipo: id === PEDIDO_TUDO ? "tudo" : "favoritas",
       nomeDoZip: id === PEDIDO_TUDO ? "Ana & Kaio.zip" : "Ana & Kaio - favoritas.zip",
       chaveDeCache: id === PEDIDO_TUDO ? chaveTudo : null,
+      dataDoConteudo: "2026-09-20T18:30:00.000Z",
       arquivos: arquivosDoManifesto(quais).map((a, k) => ({
         ...a,
         url: comUrls ? `${urlDoBalde}/${quais[k]}` : undefined,
@@ -149,6 +158,9 @@ const filho = spawn(
       ZIP_PORTA: String(PORTA),
       ZIP_CACHE_DIR: cacheDir,
       ZIP_BUSCAS_PARALELAS: "2",
+      /* Teto minúsculo: o ZIP de 25 MB cabe, e é o que prova que o teto não
+         atrapalha o caso normal; ver a etapa do disco cheio. */
+      ZIP_CACHE_MAX_GB: "1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   },
@@ -213,7 +225,12 @@ await etapa("dois cliques ao mesmo tempo: uma montagem, dois ZIPs iguais e compl
   igual(a.corpo.equals(b.corpo), true, "os dois receberam os mesmos bytes");
   if (!a.cabecalhos.get("content-disposition").includes("Ana")) throw new Error("sem nome");
   zipTudo = a.corpo;
-  await ate(() => relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length === 2);
+  /* Os relatos chegam por HTTP, cada um na sua hora: espera os três. */
+  await ate(
+    () =>
+      relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length === 2 &&
+      relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "montado").length >= 1,
+  );
   igual(relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "montado").length, 1, "montado uma vez");
   igual(pedidosAoBalde.get(0), 1, "original 0 buscado uma vez");
   return `${(zipTudo.length / 1024 / 1024).toFixed(1)} MB`;
@@ -221,6 +238,10 @@ await etapa("dois cliques ao mesmo tempo: uma montagem, dois ZIPs iguais e compl
 
 await etapa("a foto que caiu na primeira busca foi tentada de novo", async () => {
   igual(pedidosAoBalde.get(1), 2, "original 1: a que caiu, e a que veio");
+});
+
+await etapa("a foto que veio vazia (200 sem corpo) também foi tentada de novo", async () => {
+  igual(pedidosAoBalde.get(2), 2, "original 2: a vazia, e a inteira");
 });
 
 await etapa("o ZIP abre num descompactador de verdade, byte a byte", async () => {
@@ -255,6 +276,27 @@ await etapa("retomar de onde parou: Range devolve 206 com o pedaço certo", asyn
   igual(status, 206, "status");
   igual(cabecalhos.get("content-range"), `bytes ${de}-${zipTudo.length - 1}/${zipTudo.length}`, "content-range");
   igual(corpo.equals(zipTudo.subarray(de)), true, "os bytes do fim");
+});
+
+await etapa("apagado do cache e montado de novo, o ZIP sai idêntico byte a byte", async () => {
+  /* O rodízio do cache cheio (50 galerias num fim de semana, 24/09/2026):
+     o ZIP sai do disco e é montado outra vez. Os bytes têm de ser os mesmos,
+     senão um "Retomar" emenda dois arquivos diferentes. */
+  rmSync(path.join(cacheDir, `${chaveTudo}.zip`));
+  const { status, corpo } = await baixar(tokenTudo);
+  igual(status, 200, "status");
+  igual(corpo.equals(zipTudo), true, "mesmos bytes da primeira montagem");
+});
+
+await etapa("retomar com a identidade de outro arquivo recebe o ZIP inteiro, não um pedaço", async () => {
+  const { status, corpo, cabecalhos } = await baixar(tokenTudo, {
+    Range: "bytes=200000-",
+    "If-Range": '"outra-versao"',
+  });
+  igual(status, 200, "status inteiro");
+  igual(corpo.length, zipTudo.length, "arquivo inteiro");
+  const certo = await baixar(tokenTudo, { Range: "bytes=200000-", "If-Range": cabecalhos.get("etag") });
+  igual(certo.status, 206, "com a identidade certa, retoma");
 });
 
 await etapa("HEAD dá o tamanho sem corpo", async () => {

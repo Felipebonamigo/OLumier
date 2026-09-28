@@ -681,7 +681,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
      * e trocar de tema é trocar cinco valores, não reescrever componentes.
      */
     <main
-      className="min-h-dvh pb-20"
+      className="min-h-dvh"
       style={{
         ...variaveisDoTema(aparencia),
         ...variaveisDeForma(aparencia),
@@ -754,11 +754,20 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
         Com a capa rolando — o padrão — as duas classes não mudam nada: `z-10`
         sem ninguém disputando é só um número, e o fundo é o mesmo da página.
+
+        ── DE BORDA A BORDA (28/09/2026) ──────────────────────────────────
+
+        O fundo estava na mesma caixa que limita as fotos a 1500 px. Numa tela
+        mais larga — o MacBook de 16" tem 1728 — sobravam 114 px de cada lado
+        sem fundo, e a capa grudada aparecia por ali: na dividida, uma faixa
+        da foto da noiva ao lado da grade. Felipe: "achei um pouco estranho a
+        foto continuar só um pedaço ali". A camada que cobre agora ocupa a
+        largura toda; quem limita as fotos é a caixa de dentro. O rodapé e o
+        respiro do fim (o `pb-20`, que era do <main>) entram nela também —
+        fora dela, eram mais dois lugares por onde a capa aparecia.
       */}
-      <div
-        className="relative z-10 mx-auto max-w-[1500px] px-4 sm:px-6"
-        style={{ background: "var(--g-fundo)" }}
-      >
+      <div className="relative z-10 pb-20" style={{ background: "var(--g-fundo)" }}>
+      <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
         {itens.length === 0 && ehDono ? (
           /*
            * A prévia com a galeria vazia mostrava só "as fotos estão sendo
@@ -779,7 +788,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             </p>
             <GaleriaCliente
               favoritasIniciais={[]}
-              selecaoInicial={{ limite: null, aberta: false, motivo: null }}
+              selecaoInicial={{ limite: null, aberta: false, motivo: null, combinada: false }}
               itens={fotosDeDemonstracao(aparencia.tema)}
               permiteDownload={false}
               galeriaId={galeria.id}
@@ -801,6 +810,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               limite: selecao.limite,
               aberta: selecao.aberta,
               motivo: selecao.motivo,
+              combinada: selecao.combinada,
             }}
             itens={itens}
             permiteDownload={galeria.permite_download}
@@ -844,6 +854,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           entregue com {marca.nome}
         </span>
       </footer>
+      </div>
     </main>
   );
 }

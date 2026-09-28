@@ -11,15 +11,23 @@ import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
  * por isso que ele pode ser chamado assim, solto, no fim de cada ação: nenhuma
  * delas passa a depender de o Atomatiza estar de pé. */
 import { avisarEntrega, removerCanal } from "@/lib/avisos";
+import { cifrarSenha } from "@/lib/senha-da-galeria";
 import {
   gravarRascunho,
   promoverRascunhoSePendente,
   salvarPadraoDoEstudio,
   esquecerPadraoDoEstudio,
-  padraoDoEstudio,
+  aparenciaInicialDaGaleria,
   publicarAparencia,
 } from "@/lib/aparencia-galeria";
-import { presetPorId } from "@/config/aparencia";
+import {
+  apagarEstilo,
+  renomearEstilo,
+  salvarEstilo,
+  tornarEstiloPadrao,
+  type EstiloDoEstudio,
+} from "@/lib/estilos-do-estudio";
+import type { Aparencia } from "@/config/aparencia";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
 import { planoPorId, GB, cicloDe, precoDoCicloCentavos } from "@/config/planos";
@@ -112,8 +120,13 @@ export async function criarGaleriaAction(
    * Sem nenhum dos dois, a coluna fica no `'{}'` de sempre e `lerAparencia`
    * completa com o padrão do código.
    */
-  const preset = presetPorId(String(form.get("preset") ?? ""));
-  const aparenciaInicial = preset?.aparencia ?? (await padraoDoEstudio(tenantId));
+  /* Um estilo salvo do estúdio (até cinco, desde 28/09/2026) entra na mesma
+     fila, entre o pronto e o padrão — ver `aparenciaInicialDaGaleria`. */
+  const aparenciaInicial = await aparenciaInicialDaGaleria(
+    tenantId,
+    String(form.get("preset") ?? ""),
+    String(form.get("estilo") ?? ""),
+  );
   if (aparenciaInicial) {
     await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
       JSON.stringify(aparenciaInicial),
@@ -179,6 +192,23 @@ export async function salvarPublicacaoAction(form: FormData) {
     // Campo vazio tira a senha; com texto, grava o hash.
     valores.push(senha ? gerarHashSenhaGaleria(senha, galeriaId) : null);
     campos.push(`senha_hash = $${valores.length}`);
+
+    /*
+     * ── O LEMBRETE VAI JUNTO, NA MESMA INSTRUÇÃO (24/09/2026) ─────────────
+     *
+     * Juan: "ao colocar a senha, ela some e eu não sei mais qual a senha". O
+     * hash é irreversível de propósito e continua sendo a AUTORIDADE — quem
+     * confere quem entra na galeria é ele. Esta segunda coluna existe só para
+     * a tela do fotógrafo poder mostrar o que ele digitou, e vai cifrada com o
+     * segredo do servidor (ver `lib/senha-da-galeria.ts`).
+     *
+     * Escrever os dois no MESMO `update` não é economia, é correção: se um
+     * gravasse sem o outro, a tela mostraria uma senha que não abre a galeria
+     * — pior que não mostrar nada. Tirar a senha zera os dois pelo mesmo
+     * motivo.
+     */
+    valores.push(senha ? cifrarSenha(senha) : null);
+    campos.push(`senha_cifrada = $${valores.length}`);
   }
 
   if (campos.length === 0) return;
@@ -276,7 +306,9 @@ export async function salvarPadraoDoEstudioAction(form: FormData): Promise<{ ok?
     return { erro: "Não consegui ler a aparência escolhida." };
   }
   await salvarPadraoDoEstudio(tenantId, bruto);
-  return { ok: "Toda galeria nova vai nascer com este design." };
+  /* O recado diz ONDE ele ficou. Salvar e não saber onde procurar depois foi
+     a queixa de 26/09/2026. */
+  return { ok: "Salvo. Está em Estilos como “Meu padrão”, e toda galeria nova vai nascer assim." };
 }
 
 /** Esquece o padrão: a galeria nova volta a nascer com o desenho da casa. */
@@ -284,6 +316,53 @@ export async function esquecerPadraoDoEstudioAction(): Promise<{ ok?: string }> 
   const tenantId = await exigirTenant();
   await esquecerPadraoDoEstudio(tenantId);
   return { ok: "As galerias novas voltam a nascer com o design padrão." };
+}
+
+/*
+ * ── OS ESTILOS DO ESTÚDIO (28/09/2026) ──────────────────────────────────────
+ *
+ * Juan: "Ela pode salvar até 5 padrões próprios e dar nome pra eles. Eu criei
+ * uns 3 que eu gostei, mas só pode salvar um." As regras (limite, nome, dono)
+ * moram em `lib/estilos-do-estudio.ts`; estas são as cascas da tela. Todas
+ * devolvem a lista inteira atualizada, para a tela não ter de adivinhar.
+ */
+type RespostaDosEstilos = { ok?: string; erro?: string; estilos?: EstiloDoEstudio[] };
+
+export async function salvarEstiloAction(form: FormData): Promise<RespostaDosEstilos> {
+  const tenantId = await exigirTenant();
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(String(form.get("aparencia") ?? "{}"));
+  } catch {
+    return { erro: "Não consegui ler a aparência escolhida." };
+  }
+  const r = await salvarEstilo(tenantId, form.get("nome"), bruto);
+  if (!r.ok) return { erro: r.erro };
+  return { ok: "Salvo em Meus estilos.", estilos: r.estilos };
+}
+
+export async function renomearEstiloAction(form: FormData): Promise<RespostaDosEstilos> {
+  const tenantId = await exigirTenant();
+  const r = await renomearEstilo(tenantId, String(form.get("id") ?? ""), form.get("nome"));
+  if (!r.ok) return { erro: r.erro };
+  return { ok: "Nome trocado.", estilos: r.estilos };
+}
+
+export async function apagarEstiloAction(form: FormData): Promise<RespostaDosEstilos> {
+  const tenantId = await exigirTenant();
+  const r = await apagarEstilo(tenantId, String(form.get("id") ?? ""));
+  if (!r.ok) return { erro: r.erro };
+  return { ok: "Estilo apagado. Nenhuma galeria mudou.", estilos: r.estilos };
+}
+
+/** Faz do estilo o padrão das galerias novas. Não mexe em galeria nenhuma. */
+export async function tornarEstiloPadraoAction(
+  form: FormData,
+): Promise<{ ok?: string; erro?: string; padrao?: Aparencia }> {
+  const tenantId = await exigirTenant();
+  const aparencia = await tornarEstiloPadrao(tenantId, String(form.get("id") ?? ""));
+  if (!aparencia) return { erro: "Esse estilo não existe mais." };
+  return { ok: "Pronto: toda galeria nova vai nascer com este estilo.", padrao: aparencia };
 }
 
 export async function publicarAlteracoesAction(form: FormData): Promise<{ erro?: string }> {

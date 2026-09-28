@@ -2,6 +2,7 @@ import "server-only";
 import { consultar, consultarUm } from "./db";
 import { gerarSlug } from "./tenants";
 import { ORDENS_DAS_FOTOS, type OrdemDasFotos } from "@/config/ordens-das-fotos";
+import { compararNomeNatural } from "@/lib/ordem-natural";
 
 export { ORDENS_DAS_FOTOS, type OrdemDasFotos };
 
@@ -230,21 +231,20 @@ export async function renomearGrupoSolto(galeriaId: string, tenantId: string, no
   ]);
 }
 
-/** Compara como o fotógrafo espera: foto_2 antes de foto_10. */
-const colador = new Intl.Collator("pt-BR", { numeric: true, sensitivity: "base" });
-
 /**
  * Reordena as fotos de um capítulo (ou as sem capítulo) por um critério.
  *
  * ── POR QUE A ORDENAÇÃO ACONTECE EM JAVASCRIPT ───────────────────────────
  *
  * Por causa do A→Z. O fotógrafo espera `foto_2` antes de `foto_10`, e é isso
- * que o `Intl.Collator` com `numeric` faz — a MESMA função que ordena os
- * arquivos no envio (`ordenarNaturalPorCaminho`). O Postgres não tem ordenação
- * natural: um `order by nome_original` põe `foto_10` antes de `foto_2`, e
- * chegar perto disso em SQL exigiria uma função de chave que envelheceria
- * separada da do envio. São algumas centenas de linhas por capítulo, já
- * trazidas por `galeria_id`.
+ * que `compararNomeNatural` faz (`lib/ordem-natural.ts`) — a MESMA função que
+ * ordena os arquivos no envio (`ordenarNaturalPorCaminho`), literalmente a
+ * mesma agora, e não só na intenção — ver o comentário daquele módulo sobre
+ * as duas cópias que discordavam sem ninguém perceber. O Postgres não tem
+ * ordenação natural: um `order by nome_original` põe `foto_10` antes de
+ * `foto_2`, e chegar perto disso em SQL exigiria uma função de chave que
+ * envelheceria separada da do envio. São algumas centenas de linhas por
+ * capítulo, já trazidas por `galeria_id`.
  *
  * ── A ESCRITA É UMA SÓ ───────────────────────────────────────────────────
  *
@@ -264,15 +264,56 @@ export async function ordenarFotosDaSecao(
 ): Promise<{ ok: boolean; quantas: number; semData: number }> {
   if (!(await galeriaDoTenant(galeriaId, tenantId))) return { ok: false, quantas: 0, semData: 0 };
 
+  /*
+   * `baixadas` vem junto porque "mais baixadas" precisa dela, e uma segunda
+   * consulta por foto seriam centenas de idas ao banco. O `left join lateral`
+   * conta só as fotos deste capítulo, e não a galeria inteira.
+   *
+   * `acao = 'baixou'` e não `in ('baixou','baixou_tudo')`: o zip da galeria
+   * inteira não é sobre uma foto, e contá-lo daria +1 em todas de uma vez —
+   * "mais baixadas" viraria a ordem de sempre com um número maior em cima.
+   *
+   * ── O `order by` NÃO É ENFEITE: ELE É O DESEMPATE (25/09/2026) ─────────
+   *
+   * Juan: "as fotos não estão ficando em ordem de A-Z. A foto seguinte tem que
+   * estar logo depois da foto anterior."
+   *
+   * Duas fotos com o MESMO nome empatam — e elas existem de verdade nas
+   * galerias dele: a entrega da Júlia tinha `sirius-jugusw-1070.jpg` duas
+   * vezes, que é o que faz o zip precisar do `nomeUnico` e a tela precisar do
+   * `AvisoDeRepetidas`. O `Intl.Collator` devolve 0 para o par, e com
+   * `sensitivity: "base"` ele devolve 0 também para `Foto.JPG` e `foto.jpg`.
+   *
+   * Empate resolvido pelo `sort`, que é estável desde o ES2019: o par sai na
+   * ordem em que ENTROU. Só que a consulta não pedia ordem nenhuma, e sem
+   * `order by` o Postgres não promete nada — ele devolve o que for mais barato
+   * de ler, que muda com um `update`, com um `vacuum` ou com o plano. Ou seja:
+   * clicar "Nome A → Z" duas vezes podia dar dois resultados diferentes, e a
+   * cópia preto-e-branco caía antes da colorida sem nada tê-la mandado para lá.
+   *
+   * Pedindo `ordem` aqui, o empate cai na sequência que a galeria já tinha —
+   * que é a do envio, a que o fotógrafo montou. `criado_em` e `id` fecham a
+   * conta para as linhas que nasceram com a mesma `ordem`.
+   *
+   * Vale para os cinco critérios de uma vez, e não só para o A→Z: em "mais
+   * baixadas" a galeria recém-entregue é um empate de ponta a ponta.
+   */
   const fotos = await consultar<{
     id: string;
     nome_original: string;
     criado_em: Date;
     tirada_em: Date | null;
+    baixadas: number;
   }>(
-    `select id, nome_original, criado_em, tirada_em
-       from medias
-      where galeria_id = $1 and ${secaoId === null ? "secao_id is null" : "secao_id = $2"}`,
+    `select m.id, m.nome_original, m.criado_em, m.tirada_em,
+            coalesce(d.n, 0)::int as baixadas
+       from medias m
+       left join lateral (
+         select count(*) as n from acessos a
+          where a.media_id = m.id and a.acao = 'baixou'
+       ) d on true
+      where m.galeria_id = $1 and ${secaoId === null ? "m.secao_id is null" : "m.secao_id = $2"}
+      order by m.ordem, m.criado_em, m.id`,
     secaoId === null ? [galeriaId] : [galeriaId, secaoId],
   );
   if (fotos.length === 0) return { ok: true, quantas: 0, semData: 0 };
@@ -281,12 +322,19 @@ export async function ordenarFotosDaSecao(
     (criterio === "cronologica" ? (f.tirada_em ?? f.criado_em) : f.criado_em).getTime();
 
   const ordenadas = [...fotos].sort((a, b) => {
-    if (criterio === "nome") return colador.compare(a.nome_original, b.nome_original);
-    if (criterio === "nome-invertido") return colador.compare(b.nome_original, a.nome_original);
+    if (criterio === "nome") return compararNomeNatural(a.nome_original, b.nome_original);
+    if (criterio === "nome-invertido") return compararNomeNatural(b.nome_original, a.nome_original);
+    /* Empate em "mais baixadas" é a regra e não a exceção: numa galeria nova
+       TODAS têm zero. Sem desempate a ordem viria do banco, que não promete
+       nenhuma — a pessoa clicaria "mais baixadas" e veria a galeria embaralhar
+       sem motivo. O nome é o desempate porque é o que ela reconhece. */
+    if (criterio === "mais-baixadas") {
+      return b.baixadas - a.baixadas || compararNomeNatural(a.nome_original, b.nome_original);
+    }
     /* Empate de horário — rajada de câmera grava várias no mesmo segundo — cai
        no nome, que dentro de uma câmera é a sequência do disparo. */
     const dif = quando(a) - quando(b);
-    return dif !== 0 ? dif : colador.compare(a.nome_original, b.nome_original);
+    return dif !== 0 ? dif : compararNomeNatural(a.nome_original, b.nome_original);
   });
 
   await consultar(

@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
-import { galeriaDoPainel } from "@/lib/galeria-painel";
+import { galeriaDoPainel, fotosRepetidas } from "@/lib/galeria-painel";
 import { formatarBytes } from "@/lib/tenants";
 import { listarMedias } from "@/lib/medias";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { listarSecoes } from "@/lib/secoes";
 import { resumoDaGaleria } from "@/lib/favoritas";
+import { downloadsPorFoto } from "@/lib/galerias-publicas";
+import { AvisoDeRepetidas } from "@/components/aviso-de-repetidas";
 import { EnviarArquivos } from "@/components/enviar-arquivos";
 import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
 import { EditorSecoes } from "@/components/editor-secoes";
@@ -37,6 +39,10 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
   const secoes = await listarSecoes(galeria.id);
   /* Quantas pessoas marcaram cada foto — uma consulta agregada, não uma por foto. */
   const favoritas = await resumoDaGaleria(galeria.id);
+  /* Uma consulta agrupada para a galeria inteira, e não uma por foto. */
+  const baixadas = await downloadsPorFoto(galeria.id);
+  /* A mesma pergunta que o Felipe ia fazer no banco, feita pela tela. */
+  const repetidas = await fotosRepetidas(galeria.id);
 
   const exibidas: MediaExibida[] = await Promise.all(
     medias.map(async (m) => ({
@@ -46,6 +52,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       bytes: Number(m.bytes),
       secaoId: m.secao_id,
       favoritas: favoritas.porMedia.get(m.id) ?? 0,
+      baixadas: baixadas.get(m.id) ?? 0,
       url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), 3600),
     })),
   );
@@ -134,6 +141,20 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
            dado que ele não usa. */
         nomesNaGaleria={medias.map((m) => m.nome_original)}
       />
+
+      {/*
+        ── FOTOS REPETIDAS ───────────────────────────────────────────────
+
+        Felipe, 23/09/2026, olhando o zip do casamento da Júlia: lá dentro
+        havia `sirius-jugusw-1070.jpg` e `sirius-jugusw-1070 (2).jpg` com o
+        mesmo tamanho em bytes. Ele pediu a consulta no banco e disse "eu nem
+        sei aonde esta o banco dessa aplicação".
+
+        Ninguém deveria precisar saber. Fica acima da grade porque é sobre o
+        que ESTÁ nela, e some quando não há repetida — aviso permanente vira
+        mobília.
+      */}
+      <AvisoDeRepetidas itens={repetidas} />
 
       <GradeMedias
         medias={exibidas}

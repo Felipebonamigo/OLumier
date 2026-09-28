@@ -52,6 +52,9 @@ export type MenuFavoritas = {
   soFavoritas: boolean;
   alternarFiltro: () => void;
   selecaoAberta: boolean;
+  /** Há escolha combinada (limite ou prazo) ainda aberta. Sem ela, favorita é
+      só favorita e o menu não oferece encerrar nada. */
+  podeEncerrar: boolean;
   limite: number | null;
   cheia: boolean;
   encerrar: () => void;
@@ -289,7 +292,7 @@ export function MenusDaGaleria({
                 : `Ver só as favoritas (${favoritas.quantas})`}
             </ItemDoMenu>
 
-            {favoritas.selecaoAberta && (
+            {favoritas.podeEncerrar && (
               <ItemDoMenu aoTocar={favoritas.encerrar} desligado={favoritas.fechando}>
                 {favoritas.fechando ? "Encerrando…" : "Terminei minha escolha"}
               </ItemDoMenu>

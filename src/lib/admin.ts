@@ -220,6 +220,10 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
     abortados_bytes: string;
     abortados_vps_bytes: string;
     servidos_nao_tudo_n: number;
+    guardaveis_n: number;
+    guardaveis_cache_n: number;
+    despejos_n: number;
+    despejos_bytes: string;
   }>(
     `select
        count(*) filter (where evento = 'montado')::int                              as montados_n,
@@ -233,9 +237,37 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
        count(*) filter (where evento = 'abortado')::int                             as abortados_n,
        coalesce(sum(bytes) filter (where evento = 'abortado'), 0)                   as abortados_bytes,
        coalesce(sum(bytes) filter (where evento = 'abortado' and origem = 'vps'), 0) as abortados_vps_bytes,
-       count(*) filter (where evento = 'servido' and tipo <> 'tudo')::int           as servidos_nao_tudo_n
+       count(*) filter (where evento = 'servido' and tipo <> 'tudo')::int           as servidos_nao_tudo_n,
+       count(*) filter (where evento = 'servido' and origem = 'servidor'
+                          and tipo in ('tudo','capitulo'))::int                    as guardaveis_n,
+       count(*) filter (where evento = 'servido' and origem = 'servidor'
+                          and tipo in ('tudo','capitulo') and do_cache)::int        as guardaveis_cache_n,
+       count(*) filter (where evento = 'despejo')::int                              as despejos_n,
+       coalesce(sum(bytes) filter (where evento = 'despejo'), 0)                    as despejos_bytes
      from entregas_zip
     where criado_em >= date_trunc('month', now())`,
+  );
+  /* O rodízio: a mesma galeria montada de novo, mesmo tamanho, dentro do
+     prazo do cache. Tamanho diferente é conteúdo diferente, não desperdício. */
+  const remontagens = await consultarUm<{ n: number; bytes: string }>(
+    `select count(*)::int as n, coalesce(sum(a.bytes), 0) as bytes
+       from entregas_zip a
+      where a.evento = 'montado' and a.origem = 'servidor'
+        and a.tipo in ('tudo','capitulo')
+        and a.criado_em >= date_trunc('month', now())
+        and exists (
+          select 1 from entregas_zip b
+           where b.evento = 'montado' and b.origem = 'servidor'
+             and b.galeria_id = a.galeria_id and b.bytes = a.bytes
+             and b.criado_em < a.criado_em
+             and b.criado_em > a.criado_em - interval '14 days')`,
+  );
+  const quente = await consultarUm<{ bytes: string }>(
+    `select coalesce(sum(bytes), 0) as bytes from (
+       select distinct galeria_id, bytes from entregas_zip
+        where evento = 'montado' and origem = 'servidor'
+          and tipo in ('tudo','capitulo')
+          and criado_em > now() - interval '14 days') x`,
   );
   const acessos = await consultarUm<{ baixou: number }>(
     `select count(*)::int as baixou from acessos
@@ -248,6 +280,7 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
     montados_n: 0, montados_bytes: "0", servidos_servidor_n: 0, servidos_servidor_bytes: "0",
     do_cache_n: 0, do_cache_bytes: "0", servidos_vps_n: 0, servidos_vps_bytes: "0",
     abortados_n: 0, abortados_bytes: "0", abortados_vps_bytes: "0", servidos_nao_tudo_n: 0,
+    guardaveis_n: 0, guardaveis_cache_n: 0, despejos_n: 0, despejos_bytes: "0",
   };
   return {
     montadosN: z.montados_n,
@@ -265,6 +298,13 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
        (ver registrarEntregaDeZip); saem da conta para não contar duas vezes. */
     avulsosN: Math.max(0, (acessos?.baixou ?? 0) - z.servidos_nao_tudo_n),
     bytesPorMedia: Number(media?.media ?? 0),
+    guardaveisServidosN: z.guardaveis_n,
+    guardaveisDoCacheN: z.guardaveis_cache_n,
+    despejosN: z.despejos_n,
+    despejosBytes: Number(z.despejos_bytes),
+    remontagensN: remontagens?.n ?? 0,
+    remontagensBytes: Number(remontagens?.bytes ?? 0),
+    conjuntoQuenteBytes: Number(quente?.bytes ?? 0),
   };
 }
 

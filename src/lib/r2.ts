@@ -10,9 +10,9 @@ import {
   CompleteMultipartUploadCommand,
   AbortMultipartUploadCommand,
 } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getSignedUrl, S3RequestPresigner } from "@aws-sdk/s3-request-presigner";
 import { dispositionSegura } from "./disposition";
-import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 /**
  * Camada de armazenamento — falada em API S3 de propósito.
@@ -218,17 +218,119 @@ export { dispositionSegura };
  * o link é assinado, curto e só vale para quem já passou pela senha.
  */
 export function urlDeLeitura(chave: string, expiraSeg = 3600, baixarComoNome?: string) {
-  return getSignedUrl(
-    s3(),
-    new GetObjectCommand({
-      Bucket: BUCKET,
-      Key: chave,
-      ...(baixarComoNome
-        ? { ResponseContentDisposition: dispositionSegura(baixarComoNome) }
-        : {}),
-    }),
-    { expiresIn: expiraSeg },
+  return urlDeLeituraAssinadaEm(new Date(), chave, expiraSeg, baixarComoNome);
+}
+
+/*
+ * ── ASSINAR SEM ATRAVESSAR O SDK INTEIRO A CADA FOTO (26/09/2026) ─────────
+ *
+ * "A galeria parece lenta para abrir." Metade do tempo do servidor numa
+ * galeria de 600 fotos era ESTA função: 600 chamadas a `getSignedUrl` levavam
+ * ~200 ms de CPU, contra ~150 ms de todo o resto da página.
+ *
+ * `getSignedUrl` refaz, a cada foto, o que é igual para todas: resolve o
+ * endereço pelas regras de endpoint do S3, clona a pilha de middlewares,
+ * serializa o comando e cria um assinador novo — que por ser novo recalcula a
+ * chave de assinatura do dia (quatro HMACs) em vez de guardá-la. A conta que
+ * de fato muda por foto é um HMAC.
+ *
+ * Aqui o assinador é o MESMO do SDK (`S3RequestPresigner`, a classe que o
+ * próprio `getSignedUrl` usa por dentro), criado uma vez só; o que se monta à
+ * mão é o pedido que ele assina — endereço, caminho e parâmetros —, que é
+ * fixo para um GET. A criptografia não é nossa.
+ *
+ * ── A PROVA DE QUE NADA MUDOU ─────────────────────────────────────────────
+ *
+ * `scripts/testar-assinatura-de-leitura.mjs` assina as mesmas chaves pelos dois
+ * caminhos, no mesmo instante, e exige a URL IDÊNTICA, byte a byte — nos dois
+ * jeitos de endereço (o do R2 em produção e o do MinIO do CI) e com o nome de
+ * download. Se uma atualização do SDK mudar o formato, é ali que aparece, e
+ * não numa galeria sem miniatura.
+ *
+ * A data de assinatura continua sendo a do pedido: a republicação sobrescreve
+ * a miniatura na MESMA chave e conta com a URL nova a cada visita para o
+ * navegador não servir a versão antiga (ver `api/medias/[id]/arquivo`).
+ */
+const ENDERECO = new URL(ENDERECO_DO_ARMAZEM);
+
+let assinador: S3RequestPresigner | null = null;
+
+function assinadorDeLeitura(): S3RequestPresigner {
+  /* O que `getSignedUrl` passa ao montar o dele: a configuração do cliente,
+     com o nome do serviço e a região fixados. A região aqui é a mesma que as
+     regras de endpoint devolvem para este endereço ("auto" no R2). */
+  assinador ??= new S3RequestPresigner({
+    ...s3().config,
+    signingName: "s3",
+    region: async () => OPCOES_DO_CLIENTE.region,
+  });
+  return assinador;
+}
+
+/** A codificação de URI do S3: a de `encodeURIComponent`, mais `!'()*`. */
+function escaparParaUri(texto: string): string {
+  return encodeURIComponent(texto).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
   );
+}
+
+/**
+ * `urlDeLeitura` com a data de assinatura escolhida por quem chama.
+ *
+ * Existe para o teste comparar com o `getSignedUrl` no mesmo instante; o app
+ * chama `urlDeLeitura`, que assina com a data de agora.
+ */
+export async function urlDeLeituraAssinadaEm(
+  quando: Date,
+  chave: string,
+  expiraSeg = 3600,
+  baixarComoNome?: string,
+): Promise<string> {
+  const presigner = assinadorDeLeitura();
+
+  /*
+   * O endereço que as regras de endpoint do SDK montam para este bucket: o
+   * nome do bucket no HOST (`galerias.<conta>.r2.cloudflarestorage.com/chave`)
+   * ou, com `forcePathStyle`, no CAMINHO (`127.0.0.1:9000/galerias/chave`).
+   */
+  const noCaminho = OPCOES_DO_CLIENTE.forcePathStyle;
+  const hostname = noCaminho ? ENDERECO.hostname : `${BUCKET}.${ENDERECO.hostname}`;
+  const porta = ENDERECO.port ? Number(ENDERECO.port) : undefined;
+  const chaveNoCaminho = chave.split("/").map(escaparParaUri).join("/");
+  const path = noCaminho ? `/${BUCKET}/${chaveNoCaminho}` : `/${chaveNoCaminho}`;
+
+  /*
+   * Os parâmetros que o `GetObjectCommand` põe na URL. `x-id` é a marca do
+   * comando e `x-amz-checksum-mode` é o pedido de checksum que o SDK faz por
+   * padrão em todo GetObject; nenhum dos dois muda o que o armazém devolve,
+   * e estão aqui para a URL ser a mesma de antes, e não "uma equivalente".
+   */
+  const query: Record<string, string> = { "x-id": "GetObject" };
+  if (baixarComoNome) query["response-content-disposition"] = dispositionSegura(baixarComoNome);
+
+  const assinado = await presigner.presign(
+    {
+      method: "GET",
+      protocol: ENDERECO.protocol,
+      hostname,
+      port: porta,
+      path,
+      query,
+      headers: { "x-amz-checksum-mode": "ENABLED" },
+    },
+    { expiresIn: expiraSeg, signingDate: quando },
+  );
+
+  /* Montada como o SDK monta (`formatUrl`): parâmetros em ordem alfabética,
+     cada nome e valor escapado. Todos os valores aqui são texto — os nossos e
+     os `X-Amz-*` que o assinador acrescenta. */
+  const parametros = assinado.query ?? {};
+  const busca = Object.keys(parametros)
+    .sort()
+    .map((nome) => `${escaparParaUri(nome)}=${escaparParaUri(String(parametros[nome]))}`)
+    .join("&");
+  return `${ENDERECO.protocol}//${hostname}${porta ? `:${porta}` : ""}${path}?${busca}`;
 }
 
 /** Confirma que o upload chegou e devolve o tamanho real — nunca confie no tamanho que o cliente informou. */

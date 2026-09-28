@@ -133,6 +133,23 @@ export interface EstadoSelecao {
   /** Chegou ao limite. Com a lista cheia ainda dá para DESmarcar. */
   cheia: boolean;
   motivo: MotivoFechada | null;
+  /**
+   * O fotógrafo COMBINOU uma escolha — definiu limite ou prazo.
+   *
+   * ── SEM COMBINADO, AS FAVORITAS SÃO LIVRES (28/09/2026) ────────────────
+   *
+   * Felipe, no celular, numa galeria entregue da Carol: "escolha do quê? não
+   * deveria ter escolha aqui, se for dos favoritos, é ilimitado os
+   * favoritos". A galeria dizia "Escolha encerrada" e os corações tinham
+   * sumido para todo mundo: alguém com o link tocou em "Terminei minha
+   * escolha", e isso trancava a lista da galeria inteira — de todas as
+   * pessoas, numa galeria em que o fotógrafo nunca combinou escolha nenhuma.
+   *
+   * Agora a escolha só existe quando o fotógrafo a combina. Sem limite e sem
+   * prazo, favorita é favorita: ninguém encerra, nada tranca, e o "Terminei"
+   * nem aparece. Com um dos dois, tudo segue como antes.
+   */
+  combinada: boolean;
 }
 
 /**
@@ -155,9 +172,14 @@ export interface EstadoSelecao {
  */
 export interface PessoaDaGaleria {
   id: string;
-  email: string;
+  /** `null` em quem se identificou só pelo nome. Ver migração 040. */
+  email: string | null;
   nome: string | null;
 }
+
+/** Como chamar esta pessoa numa tela. Nunca vazio — o banco garante (040). */
+export const comoChamar = (p: { email: string | null; nome: string | null }): string =>
+  p.nome?.trim() || p.email?.trim() || "não identificado";
 
 /** A pessoa deste e-mail nesta galeria, criando na primeira vez. */
 export async function pessoaPorEmail(
@@ -190,6 +212,43 @@ export async function pessoaPorEmail(
   return linha ?? null;
 }
 
+/**
+ * A pessoa por NOME OU E-MAIL — pelo menos um dos dois.
+ *
+ * Felipe, 23/09/2026, sobre o download: "pedir nome e email opcional, pelo
+ * menos um dos dois para baixar a primeira vez".
+ *
+ * `pessoaPorEmail` acima continua existindo e continua exigindo e-mail, porque
+ * ela serve às FAVORITAS: ali a identidade precisa ser a mesma no celular e no
+ * notebook, e só o e-mail atravessa dois aparelhos. Para saber quem baixou,
+ * "Tia Marta" vale — e exigir e-mail de cada convidado que quer salvar uma foto
+ * é atrito em cima de quem não tem nada a ver com a contabilidade do estúdio.
+ *
+ * Quem dá e-mail cai no mesmo caminho das favoritas, e é de propósito: baixar e
+ * favoritar com o mesmo e-mail é a MESMA pessoa, e o fotógrafo vê uma linha só.
+ */
+export async function pessoaPorNomeOuEmail(
+  galeriaId: string,
+  dados: { email?: string | null; nome?: string | null },
+): Promise<PessoaDaGaleria | null> {
+  const email = String(dados.email ?? "").trim().slice(0, 160);
+  const nome = String(dados.nome ?? "").trim().slice(0, 80);
+
+  if (email) return pessoaPorEmail(galeriaId, email, nome || null);
+  if (!nome) return null;
+
+  /* Só nome: a chave é o índice parcial da migração 040, que existe justamente
+     para "Tia Marta" não abrir uma linha nova a cada download. */
+  return consultarUm<PessoaDaGaleria>(
+    `insert into pessoas_da_galeria (galeria_id, email, nome)
+          values ($1, null, $2)
+     on conflict (galeria_id, lower(btrim(nome))) where email is null
+     do update set nome = excluded.nome
+       returning id, email, nome`,
+    [galeriaId, nome],
+  );
+}
+
 /** Nome e e-mail de quem está identificado, para a tela dizer "você é fulano". */
 export async function dadosDaPessoa(
   galeriaId: string,
@@ -217,8 +276,8 @@ export async function favoritasDaPessoa(
 /** Quem escolheu o quê, para o painel do fotógrafo. */
 export async function resumoPorPessoa(
   galeriaId: string,
-): Promise<{ id: string; email: string; nome: string | null; quantas: number }[]> {
-  return consultar<{ id: string; email: string; nome: string | null; quantas: number }>(
+): Promise<{ id: string; email: string | null; nome: string | null; quantas: number }[]> {
+  return consultar<{ id: string; email: string | null; nome: string | null; quantas: number }>(
     `select p.id, p.email, p.nome, count(f.id)::int as quantas
        from pessoas_da_galeria p
        left join favoritas f on f.pessoa_id = p.id
@@ -260,13 +319,31 @@ export async function estadoSelecao(
   );
 
   if (!linha) {
-    return { total: 0, limite: null, prazo: null, fechadaEm: null, aberta: false, cheia: false, motivo: "fechada" };
+    return {
+      total: 0,
+      limite: null,
+      prazo: null,
+      fechadaEm: null,
+      aberta: false,
+      cheia: false,
+      motivo: "fechada",
+      combinada: false,
+    };
   }
 
   const vencida = linha.prazo !== null && linha.prazo.getTime() <= Date.now();
+  /* Sem limite e sem prazo não há escolha combinada, e nada tranca — nem um
+     "terminei" gravado antes desta regra existir. Ver `combinada`. */
+  const combinada = linha.limite !== null || linha.prazo !== null;
   /* "Fechada" vence "prazo" na mensagem: se o cliente clicou em terminei, é isso
    * que ele lembra de ter feito, e é a explicação que faz sentido para ele. */
-  const motivo: MotivoFechada | null = linha.fechada_em ? "fechada" : vencida ? "prazo" : null;
+  const motivo: MotivoFechada | null = !combinada
+    ? null
+    : linha.fechada_em
+      ? "fechada"
+      : vencida
+        ? "prazo"
+        : null;
 
   return {
     total: linha.total,
@@ -276,6 +353,7 @@ export async function estadoSelecao(
     aberta: motivo === null,
     cheia: linha.limite !== null && linha.total >= linha.limite,
     motivo,
+    combinada,
   };
 }
 
@@ -367,9 +445,14 @@ export async function alternarDaPessoa(
  * clique repetido, ou uma rede que reenviou, mova o "quando" para depois.
  */
 export async function fecharSelecao(galeriaId: string): Promise<boolean> {
+  /* Só fecha escolha COMBINADA (limite ou prazo). Sem isso não há o que
+     encerrar — ver `EstadoSelecao.combinada`. A regra fica no SQL, e não só
+     na rota, para nenhum caminho novo conseguir trancar favoritas livres. */
   const r = await consultar<{ id: string }>(
     `update galerias set selecao_fechada_em = now()
-      where id = $1 and selecao_fechada_em is null returning id`,
+      where id = $1 and selecao_fechada_em is null
+        and (selecao_limite is not null or selecao_prazo is not null)
+      returning id`,
     [galeriaId],
   );
   return r.length > 0;
@@ -410,7 +493,12 @@ export async function definirRegrasSelecao(
       ? Math.floor(regras.limite)
       : null;
   const r = await consultar<{ id: string }>(
-    `update galerias set selecao_limite = $3, selecao_prazo = $4
+    /* Tirar limite E prazo desfaz a escolha combinada — e com ela o
+       "terminei" que estivesse gravado. Sem isto, combinar um número de novo
+       meses depois nasceria trancado por um clique antigo. */
+    `update galerias set selecao_limite = $3, selecao_prazo = $4,
+            selecao_fechada_em = case when $3::int is null and $4::timestamptz is null
+                                      then null else selecao_fechada_em end
       where id = $1 and tenant_id = $2 returning id`,
     [galeriaId, tenantId, limite, regras.prazo],
   );

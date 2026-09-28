@@ -85,12 +85,16 @@ export function EditorGaleria({
       <input type="hidden" name="galeria_id" value={galeriaId} />
       <div className="flex flex-col gap-3">
         <Campo label="Título" name="titulo" defaultValue={titulo} required maxLength={120} />
+        {/* O MESMO NOME DA CRIAÇÃO (28/09/2026). Felipe: "depois que cria a
+            galeria não tem como adicionar o local novamente" — tinha: é este
+            campo, só que a criação o chama de "Local ou descrição" e aqui ele
+            se chamava "Subtítulo". Campo com dois nomes parece dois campos. */}
         <Campo
-          label="Subtítulo"
+          label="Local ou descrição"
           name="subtitulo"
           defaultValue={subtitulo ?? ""}
           maxLength={160}
-          placeholder="opcional"
+          placeholder="Serra Gaúcha"
         />
         <Campo label="Data do evento" name="data_evento" type="date" defaultValue={dataISO ?? ""} />
 

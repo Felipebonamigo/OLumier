@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
-import { resumoAcessos } from "@/lib/galerias-publicas";
+import { resumoAcessos, listarDownloads } from "@/lib/galerias-publicas";
+import { urlDaDerivada, armazemDe } from "@/lib/armazem";
+import { comoChamar } from "@/lib/favoritas";
+import { ListaDeDownloads } from "@/components/lista-de-downloads";
 import { estadoSelecao, listaDaSelecao, resumoPorPessoa } from "@/lib/favoritas";
 import { PainelSelecao } from "@/components/painel-selecao";
 
@@ -31,6 +34,24 @@ export default async function AtividadePage({ params }: { params: Promise<{ id: 
   /* Quem escolheu o quê — desde a migração 033 a lista tem dona, e sem isto o
      fotógrafo veria um total sem saber de quem é cada escolha. */
   const pessoas = await resumoPorPessoa(galeria.id);
+
+  /*
+   * ── A LISTA DE DOWNLOADS, COM UMA ASSINATURA POR FOTO ───────────────────
+   *
+   * Uma URL assinada por LINHA seria uma assinatura por download: a mesma foto
+   * baixada por doze convidados assinaria doze vezes o mesmo objeto. O `Map`
+   * por `media_id` derruba isso para uma por foto distinta, que é o número que
+   * importa — e é o mesmo cuidado que a página de fotos já tem.
+   */
+  const downloads = await listarDownloads(galeria.id);
+  const urlPorMedia = new Map<string, string | null>();
+  for (const d of downloads) {
+    if (!d.media_id || urlPorMedia.has(d.media_id) || !d.chave) continue;
+    urlPorMedia.set(
+      d.media_id,
+      await urlDaDerivada(d.chave_thumb, d.chave, armazemDe(d.armazem), 3600),
+    );
+  }
 
   return (
     <>
@@ -84,8 +105,23 @@ export default async function AtividadePage({ params }: { params: Promise<{ id: 
         fechadaEm={selecao.fechadaEm ? selecao.fechadaEm.toISOString() : null}
         aberta={selecao.aberta}
         motivo={selecao.motivo}
+        combinada={selecao.combinada}
         lista={listaSelecao.map((l) => ({ nome: l.nome, capitulo: l.capitulo }))}
         pessoas={pessoas}
+      />
+
+      <ListaDeDownloads
+        linhas={downloads.map((d) => ({
+          id: d.id,
+          quando: d.quando.toISOString(),
+          tudo: d.acao === "baixou_tudo",
+          /* `comoChamar` é a mesma regra em toda tela: nome, senão e-mail. Desde
+             a migração 040 a pessoa pode ter só um dos dois. */
+          quem: d.email || d.nome ? comoChamar({ email: d.email, nome: d.nome }) : "não identificado",
+          identificado: Boolean(d.email || d.nome),
+          arquivo: d.nome_original,
+          url: d.media_id ? (urlPorMedia.get(d.media_id) ?? null) : null,
+        }))}
       />
     </>
   );

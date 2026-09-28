@@ -257,6 +257,8 @@ export async function registrarAcesso(dados: {
   acao: "abriu" | "baixou" | "baixou_tudo" | "assistiu";
   ip?: string | null;
   userAgent?: string | null;
+  /** Quem fez, quando deu para saber. Ver migração 040 e `listarDownloads`. */
+  pessoaId?: string | null;
 }) {
   /* A MESMA função de `eventos`: é o que permite cruzar as duas tabelas e dizer
      que o acesso e a ação vieram do mesmo lugar. Já foram duas cópias, e as duas
@@ -265,13 +267,94 @@ export async function registrarAcesso(dados: {
 
   try {
     await consultar(
-      `insert into acessos (galeria_id, media_id, acao, ip_hash, user_agent)
-       values ($1, $2, $3, $4, $5)`,
-      [dados.galeriaId, dados.mediaId ?? null, dados.acao, ipHash, dados.userAgent?.slice(0, 300) ?? null],
+      `insert into acessos (galeria_id, media_id, acao, ip_hash, user_agent, pessoa_id)
+       values ($1, $2, $3, $4, $5, $6)`,
+      [
+        dados.galeriaId,
+        dados.mediaId ?? null,
+        dados.acao,
+        ipHash,
+        dados.userAgent?.slice(0, 300) ?? null,
+        dados.pessoaId ?? null,
+      ],
     );
   } catch {
     // Registro é secundário: se falhar, a galeria continua abrindo normalmente.
   }
+}
+
+/**
+ * QUEM BAIXOU O QUÊ, uma linha por download — a tela que o Juan pediu.
+ *
+ * Juan, 23/09/2026, com a foto da tela do Pixieset: "gostaria de saber quem
+ * está baixando. Quais fotos estão sendo baixadas."
+ *
+ * ── `left join` NAS DUAS PONTAS, E ISSO É A PARTE QUE IMPORTA ─────────────
+ *
+ * Em `pessoas_da_galeria` porque download anterior a 23/09/2026 não tem dono, e
+ * porque "baixar tudo" pode acontecer antes de a pessoa se identificar. Em
+ * `medias` porque `acessos.media_id` é `on delete set null`: a foto apagada não
+ * apaga o registro de que alguém a baixou.
+ *
+ * Um `join` comum sumiria com essas linhas, e a tela diria "3 downloads" ao
+ * lado de um contador que diz 41. O fotógrafo confiaria no menor dos dois e
+ * estaria errado.
+ *
+ * O `baixou_tudo` não tem `media_id`: ele é o zip da galeria inteira. A tela
+ * mostra isso como o que é, e não como uma foto sem nome.
+ */
+export async function listarDownloads(
+  galeriaId: string,
+  opcoes: { limite?: number } = {},
+): Promise<
+  {
+    id: string;
+    quando: Date;
+    acao: string;
+    email: string | null;
+    nome: string | null;
+    media_id: string | null;
+    nome_original: string | null;
+    chave_thumb: string | null;
+    chave: string | null;
+    armazem: string | null;
+  }[]
+> {
+  return consultar(
+    `select a.id::text as id, a.criado_em as quando, a.acao,
+            p.email, p.nome,
+            a.media_id::text as media_id, m.nome_original, m.chave_thumb,
+            m.chave, m.armazem
+       from acessos a
+       left join pessoas_da_galeria p on p.id = a.pessoa_id
+       left join medias m on m.id = a.media_id
+      where a.galeria_id = $1 and a.acao in ('baixou','baixou_tudo')
+      order by a.criado_em desc
+      limit $2`,
+    [galeriaId, Math.max(1, Math.min(opcoes.limite ?? 500, 2000))],
+  );
+}
+
+/**
+ * Quantas vezes CADA foto foi baixada.
+ *
+ * É a metade do pedido do Felipe que não aparece na tela de atividade: "e o
+ * numero de downloads de cada foto, fazer tambem uma ordenação por mais
+ * baixadas". Daqui sai o número na foto e o critério de ordenação.
+ *
+ * `baixou_tudo` fica de fora porque não é sobre uma foto: contá-lo daria +1 em
+ * TODAS de uma vez, e aí "mais baixadas" viraria a ordem de sempre com um
+ * número maior em cima.
+ */
+export async function downloadsPorFoto(galeriaId: string): Promise<Map<string, number>> {
+  const linhas = await consultar<{ media_id: string; n: number }>(
+    `select media_id::text as media_id, count(*)::int as n
+       from acessos
+      where galeria_id = $1 and acao = 'baixou' and media_id is not null
+      group by media_id`,
+    [galeriaId],
+  );
+  return new Map(linhas.map((l) => [l.media_id, l.n]));
 }
 
 export async function resumoAcessos(galeriaId: string) {

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { urlDeLeitura } from "@/lib/r2";
+import { padraoDoEstudioLido } from "@/lib/aparencia-galeria";
+import { estilosDoEstudio } from "@/lib/estilos-do-estudio";
 import { CAPITULOS_SUGERIDOS } from "@/lib/secoes";
 import { LogoEstudio } from "@/components/logo-estudio";
 import { AssistenteNovaGaleria } from "./assistente";
@@ -21,7 +23,26 @@ export default async function NovaGaleriaPage() {
   const urlLogo = tenant.logo_chave ? await urlDeLeitura(tenant.logo_chave, 3600) : null;
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
+    /*
+      ── A LARGURA É DO PAINEL; QUEM APERTA É CADA ETAPA ──────────────────
+
+      Felipe, 24/09/2026, nesta tela: "mas continua nao usando todo navegador,
+      isso nao tinha sido arrumado?". Eu tinha alargado a LISTA e a página da
+      galeria em 23/09 e dito "o painel foi para max-w-7xl" — esta tela ficou
+      de fora, e a frase deu a entender que não.
+
+      Aqui não dá para responder com um número só: são três etapas de
+      naturezas diferentes. "Dados" é formulário, e campo de texto de 1200 px é
+      pior que campo de 600 — o olho perde o começo da linha. "Estilo" é uma
+      grade de dez amostras, e ali a largura é o produto: era `sm:grid-cols-3`
+      dentro de 672 px, ou seja, amostras de ~155 px para escolher a CARA da
+      entrega.
+
+      Então a página passa a ter a largura do painel (a mesma da barra de cima,
+      senão o conteúdo fica 128 px mais estreito que o cabeçalho) e cada etapa
+      aperta o que precisa apertar. Ver `assistente.tsx`.
+    */
+    <main className="mx-auto max-w-7xl px-6 py-10">
       <Link href="/painel" className="text-sm text-texto-soft hover:text-texto">
         ← Galerias
       </Link>
@@ -46,6 +67,8 @@ export default async function NovaGaleriaPage() {
       */}
       <AssistenteNovaGaleria
         capitulosSugeridos={CAPITULOS_SUGERIDOS}
+        padraoDoEstudio={await padraoDoEstudioLido(tenantId)}
+        estilosDoEstudio={await estilosDoEstudio(tenantId)}
         slotLogo={
           <section className="rounded-xl border border-linha bg-carbon p-5">
             <LogoEstudio

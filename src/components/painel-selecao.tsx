@@ -33,6 +33,7 @@ export function PainelSelecao({
   fechadaEm,
   aberta,
   motivo,
+  combinada,
   lista,
   pessoas = [],
 }: {
@@ -43,6 +44,9 @@ export function PainelSelecao({
   fechadaEm: string | null;
   aberta: boolean;
   motivo: "fechada" | "prazo" | null;
+  /** Há limite ou prazo. Sem eles as favoritas são livres — ver
+      `EstadoSelecao.combinada` em `lib/favoritas.ts`. */
+  combinada: boolean;
   lista: { nome: string; capitulo: string | null }[];
   /**
    * Quem escolheu, e quantas — migração 033.
@@ -51,7 +55,7 @@ export function PainelSelecao({
    * ninguém se identificava. O bloco some nesse caso, em vez de desenhar um
    * "0 pessoas" que faria o fotógrafo procurar um defeito que não existe.
    */
-  pessoas?: { id: string; email: string; nome: string | null; quantas: number }[];
+  pessoas?: { id: string; email: string | null; nome: string | null; quantas: number }[];
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
@@ -114,11 +118,13 @@ export function PainelSelecao({
             !aberta ? "border-ok/40 bg-ok/10 text-ok" : "border-linha text-texto-faint"
           }`}
         >
-          {motivo === "fechada"
-            ? "escolha encerrada"
-            : motivo === "prazo"
-              ? "prazo vencido"
-              : "escolhendo"}
+          {!combinada
+            ? "favoritas livres"
+            : motivo === "fechada"
+              ? "escolha encerrada"
+              : motivo === "prazo"
+                ? "prazo vencido"
+                : "escolhendo"}
         </span>
       </div>
 
@@ -190,10 +196,12 @@ export function PainelSelecao({
             <li
               key={p.id}
               className="rounded-lg border border-linha px-3 py-1.5 text-xs text-texto-soft"
-              title={p.email}
+              /* Desde a migração 040 a pessoa pode ter só nome: quem baixa se
+                 identifica com um dos dois, e a lista de escolhas é a mesma. */
+              title={p.email ?? undefined}
             >
               <span className="font-medium text-texto">{p.nome || p.email}</span>
-              {p.nome && <span className="ml-1.5 text-texto-faint">{p.email}</span>}
+              {p.nome && p.email && <span className="ml-1.5 text-texto-faint">{p.email}</span>}
               {/* Com limite, a conta de cada uma é contra o limite DELA — que é
                   como o produto aplica, e o que o fotógrafo precisa saber para
                   cobrar o combinado. */}
@@ -276,7 +284,9 @@ export function PainelSelecao({
       */}
       <p className="mt-2 text-xs text-texto-faint">
         Deixe em branco para não limitar. O limite vale <strong>por pessoa</strong> — cada uma
-        escolhe até esse número —, e baixar o limite nunca apaga escolha que já foi feita.
+        escolhe até esse número —, e baixar o limite nunca apaga escolha que já foi feita. Sem
+        número e sem prazo, as favoritas ficam livres: ninguém encerra a lista, nem aparece
+        &ldquo;Terminei minha escolha&rdquo; para o cliente.
       </p>
 
       {erro && <p className="mt-3 text-sm text-erro">{erro}</p>}

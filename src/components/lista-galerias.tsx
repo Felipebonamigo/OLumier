@@ -14,7 +14,7 @@ export interface GaleriaDaLista {
   estudioSlug: string;
   publicada: boolean;
   estado: string;
-  /** De onde a galeria veio, quando não nasceu no painel — migração 041.
+  /** De onde a galeria veio, quando não nasceu no painel — migração 045.
    *  `"atomatiza"` é a criada a partir de um contrato, pela chave de API. */
   origem: string | null;
   /** Dias até o cofre; `null` quando não há prazo. */

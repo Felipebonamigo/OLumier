@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { armazemDe, urlDoOriginal } from "@/lib/armazem";
 import { dispositionSegura } from "@/lib/r2";
+import { pessoaAtual } from "@/lib/favoritas";
 import { hashDeIp } from "@/lib/ip";
 import { prepararEntrega } from "@/lib/entrega-da-galeria";
 import { entradasDoZip } from "@/lib/entradas-do-zip";
@@ -62,13 +63,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
   const userAgent = request.headers.get("user-agent");
 
+  /*
+   * QUEM está baixando — lido aqui em cima porque serve aos DOIS caminhos, e
+   * porque é o único lugar onde dá para ler.
+   *
+   * `pessoaAtual` e NÃO `visitanteAtual`: o segundo devolve o id anônimo do
+   * navegador (modelo anterior à migração 033), que não existe em
+   * `pessoas_da_galeria` — a chave estrangeira recusaria em silêncio e todo
+   * download ficaria anônimo. Pego no navegador, não no teste.
+   *
+   * Pelo servidor de ZIP a leitura tem de acontecer AGORA e ir congelada no
+   * pedido (migração 041): quem confirma a entrega é uma rota interna chamada
+   * de volta pelo servidor, sem cookie e sem sessão.
+   */
+  const pessoaId = await pessoaAtual(id);
+
   /* ── O caminho de produção: o servidor de ZIP ──────────────────────────── */
   if (zipRemotoConfigurado()) {
     const cap = request.nextUrl.searchParams.get("cap");
     const pedido = await criarPedidoDeZip(
       id,
       entrega,
-      { ipHash: ip ? hashDeIp(ip) : null, userAgent },
+      { ipHash: ip ? hashDeIp(ip) : null, userAgent, pessoaId },
       /* `sem-capitulo` é o grupo das soltas: capítulo sem id. */
       entrega.tipo === "capitulo" && cap && cap !== "sem-capitulo" ? cap : null,
     );
@@ -114,6 +130,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     tipo: entrega.tipo,
     ip_hash: ip ? hashDeIp(ip) : null,
     user_agent: userAgent,
+    pessoa_id: pessoaId,
   };
 
   async function* comRegistro() {

@@ -9,6 +9,14 @@ export interface Tenant {
   slug: string;
   nome_estudio: string;
   email: string;
+  /** Quem criou esta conta, quando não foi o formulário de cadastro — migração
+   *  047. Hoje só `"atomatiza"`. Nulo na esmagadora maioria, que se cadastrou
+   *  normalmente: a coluna descreve procedência, não estado. */
+  origem: string | null;
+  /** O id do estúdio no sistema de origem. OPACO — guardado e devolvido, nunca
+   *  interpretado. É ele que torna o provisionamento idempotente, e é por isso
+   *  que um retry não fabrica uma segunda conta. Ver `lib/provisionamento.ts`. */
+  origem_ref: string | null;
   /** Chave do objeto no bucket — não é URL. O link é assinado na hora de exibir. */
   logo_chave: string | null;
   /* A fonte própria do estúdio (migração 026). Nulas para quem nunca enviou —
@@ -57,6 +65,8 @@ export interface Galeria {
   publicada: boolean;
   estado: string;
   senha_hash: string | null;
+  /** A senha em texto, cifrada com o segredo do servidor (migração 042). */
+  senha_cifrada: string | null;
   permite_download: boolean;
   bytes_total: string;
   expira_em: Date | null;
@@ -66,7 +76,7 @@ export interface Galeria {
      O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
   aparencia_rascunho: unknown;
   capa_media_id: string | null;
-  /** De onde a galeria veio, quando não nasceu no painel — ver migração 041. */
+  /** De onde a galeria veio, quando não nasceu no painel — ver migração 045. */
   origem: string | null;
   origem_ref: string | null;
   /* Capa enviada como arquivo (migração 029). Vence capa_media_id, e não é uma
@@ -314,7 +324,7 @@ export async function criarGaleria(dados: {
   subtitulo?: string;
   dataEvento?: string;
   /**
-   * Quem criou de fora, e a partir de quê — ver migração 041. O painel e o
+   * Quem criou de fora, e a partir de quê — ver migração 045. O painel e o
    * plugin do Lightroom não passam nada aqui; hoje só o Atomatiza passa, pela
    * rota `POST /api/galerias`, que também é quem garante a idempotência.
    */
@@ -427,7 +437,7 @@ export async function restaurarGaleria(tenantId: string, galeriaId: string, ip?:
   /*
    * A referência de origem pode ter dona nova. Entre apagar e restaurar, o
    * Atomatiza pode ter recriado a galeria do mesmo contrato — o índice parcial
-   * da migração 041 deixa a lixeira de fora justamente para permitir isso. Se
+   * da migração 045 deixa a lixeira de fora justamente para permitir isso. Se
    * a restauração mantivesse o vínculo, o índice a recusaria e o fotógrafo
    * veria a lixeira "quebrada" no pior momento. A restaurada volta inteira,
    * só que sem a procedência: das duas, a que representa o contrato hoje é a

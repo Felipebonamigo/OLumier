@@ -2,6 +2,7 @@ import { desenhoDoTitulo, temPalavraQueNaoCabe } from "@/lib/titulo-da-capa";
 import {
   FONTES_TITULO,
   alturaLogoPx,
+  fonteDoDetalhe,
   pesoDoTitulo,
   type Aparencia,
 } from "@/config/aparencia";
@@ -52,6 +53,31 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const fonteTitulo = FONTES_TITULO[aparencia.tipografia];
   const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl, capaEscolhida } = dados;
   const legenda = [dataFormatada, subtitulo].filter(Boolean).join(" · ");
+
+  /*
+   * ── AS LETRINHAS DA CAPA GANHARAM DONO (23/09/2026) ─────────────────────
+   *
+   * Juan: "as fontes dessas outras letrinhas não tem como trocar". Felipe, em
+   * seguida: "e a cor também".
+   *
+   * Medido antes de mexer, na capa jornal: o título saía em Cormorant Garamond
+   * (o eixo `tipografia`) e a sobrancelha, a data, a assinatura e o botão saíam
+   * todos em `ui-monospace`. A causa é o `font-mono` escrito nas cinco tags
+   * aqui embaixo — classe na própria tag ganha da fonte herdada do corpo, então
+   * nem o eixo do título nem o do texto alcançavam nada disso.
+   *
+   * `detalhe` é `null` quando o eixo está em `mono`, e aí a classe `font-mono`
+   * continua onde sempre esteve: capa entregue não muda de cara sozinha.
+   */
+  const fonteDetalhe = fonteDoDetalhe(aparencia);
+  const semMono = fonteDetalhe ? "" : "font-mono";
+  const estiloDetalhe = fonteDetalhe ? { fontFamily: fonteDetalhe } : {};
+  /* A cor escolhida vale para as três letrinhas de texto; sem ela, cada uma
+     mantém o tom derivado que sempre teve. Ver `CoresProprias.detalhe`. */
+  const corDetalhe = aparencia.cores?.detalhe;
+  /* O nome do casal pode ter cor própria, separada do texto. Sem ela, herda a
+     cor do texto como sempre herdou. Ver `CoresProprias.titulo`. */
+  const corTitulo = aparencia.cores?.titulo;
 
   /*
    * A logo, quando existe, SUBSTITUI o nome em texto — não acompanha.
@@ -147,9 +173,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         src={logoUrl}
         alt={estudio}
         style={{ maxHeight: `${alturaLogo}px` }}
-        // inline-block em vez de mx-auto: assim o alinhamento vem do pai, e a
-        // capa "dividida" (texto à esquerda no desktop) não fica com a logo
-        // centralizada sozinha no meio da coluna.
+        // inline-block em vez de mx-auto: assim o alinhamento vem do pai (ou
+        // do `self-*` que a capa passa quando a logo é filha de um flex).
         className={`inline-block w-auto object-contain ${className}`}
       />
     ) : (
@@ -172,8 +197,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    */
   const TextoEstudio = ({ className = "" }: { className?: string }) => (
     <p
-      className={`font-mono text-[11px] uppercase tracking-[0.3em] ${className}`}
-      style={{ color: "var(--g-suave)" }}
+      className={`${semMono} text-[11px] uppercase tracking-[0.3em] ${className}`}
+      style={{ ...estiloDetalhe, color: corDetalhe ?? "var(--g-suave)" }}
     >
       {estudio}
     </p>
@@ -255,11 +280,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
        * responde por quem está DENTRO do elemento, então o próprio `h1` não
        * poderia se medir contra si mesmo.
        *
-       * Ela não leva classe nenhuma de propósito. `text-align` é herdado, e a
-       * capa dividida escreve `md:text-left` no pai: repetir `alinharTexto`
-       * aqui venceria essa regra por estar fora de media query e viraria a capa
-       * do avesso no computador — uma capa entregue mudando de cara por causa
-       * de uma `div` de medição.
+       * Ela não leva classe nenhuma de propósito: `text-align` é herdado do
+       * pai de cada capa, e é lá que o eixo de alinhamento é aplicado.
        */
       <div style={{ containerType: "inline-size", width: "100%" }}>
         <h1
@@ -268,6 +290,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
              mínimo e escreve o nome uma letra por linha. Os dois não convivem. */
           className={`${linhas || quebrarPalavra ? "" : "text-balance"} ${alinharBloco}`}
           style={{
+            ...(corTitulo ? { color: corTitulo } : {}),
             fontFamily: fonteTitulo,
             fontWeight: peso,
             lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05,
@@ -313,8 +336,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const Rotulo = () =>
     aparencia.rotulo ? (
       <p
-        className="font-mono text-[10px] uppercase tracking-[0.32em]"
-        style={{ color: "var(--g-tenue)" }}
+        className={`${semMono} text-[10px] uppercase tracking-[0.32em]`}
+        style={{ ...estiloDetalhe, color: corDetalhe ?? "var(--g-tenue)" }}
       >
         {aparencia.rotulo}
       </p>
@@ -323,8 +346,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   const Legenda = () =>
     legenda ? (
       <p
-        className="font-mono text-[11px] uppercase tracking-[0.2em]"
-        style={{ color: "var(--g-suave)" }}
+        className={`${semMono} text-[11px] uppercase tracking-[0.2em]`}
+        style={{ ...estiloDetalhe, color: corDetalhe ?? "var(--g-suave)" }}
       >
         {legenda}
       </p>
@@ -384,13 +407,27 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         <div className="mt-6">
           <Legenda />
         </div>
-        <a
-          href="#fotos"
-          className="mt-10 inline-block rounded-full px-8 py-3 font-mono text-[11px] uppercase tracking-[0.2em] transition hover:opacity-80"
-          style={{ border: "1px solid var(--g-destaque)", color: "var(--g-destaque)" }}
-        >
-          Ver galeria
-        </a>
+        {/*
+          ── A JORNAL NÃO TEM MAIS BOTÃO (24/09/2026) ────────────────────────
+
+          Juan, sobre as capas: "muitas letras, cores diferentes. As letrinhas
+          de um jeito, o 'ver galeria' de outro". E, sobre a mínima: "esse tá
+          lindo, a distribuição das informações tão bonitas — tá sem o 'ver
+          galeria'".
+
+          Ele estava certo, e a conta fecha: das cinco capas, três já viviam sem
+          botão — incluindo a IMERSA, que é a mais imersiva de todas. O botão
+          era o elemento mais pesado da capa e o menos importante.
+
+          E ele não tinha trabalho a fazer aqui: a jornal cresce pelo CONTEÚDO,
+          não pela tela, então a próxima foto sempre aparece logo abaixo. O
+          botão anunciava o que já estava visível, e a barra de ações
+          (Slideshow · Favoritas · Baixar) vem logo em seguida de qualquer
+          jeito.
+
+          Decisão do Felipe em 24/09/2026: "tira o botão da jornal e deixa
+          discreto no convite".
+        */}
 
         {/*
           A FOTO DA JORNAL — a manchete em cima, a imagem embaixo (08/09/2026).
@@ -473,17 +510,66 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
           ) : (
             <Estudio className={aEsquerda ? "self-start" : "self-center"} />
           )}
-          <div className={`flex flex-col gap-5 ${alinharItens} ${alinharTexto}`}>
-            <Legenda />
+          {/*
+            ── A ORDEM DO CONVITE ESTAVA INVERTIDA (23/09/2026) ──────────────
+
+            Juan: "essa distribuição do 'convite' das opções de capa tá com uma
+            estrutura desagradável. Muitas letras, cores diferentes. As
+            letrinhas de um jeito, o 'ver galeria' de outro". E, sobre a capa
+            mínima: "esse tá lindo, a distribuição das informações tão bonitas".
+
+            Ele achou um defeito nosso, não uma questão de gosto: CONVITE era a
+            única das cinco capas que punha a data ANTES da sobrancelha. As
+            outras quatro fazem sobrancelha → nome → data, que é a ordem da capa
+            que ele chamou de linda.
+
+            A sobrancelha é a etiqueta do nome ("ENSAIO PREWEDDING" diz o que é
+            aquele nome); ela pertence colada nele. A data e o local são
+            legenda, e legenda vem depois do que ela legenda. Com a data no
+            topo, a primeira coisa que o olho lia na entrega de um casamento era
+            um número.
+
+            O espaçamento acompanha: `gap-2` entre etiqueta e nome para os dois
+            lerem como um bloco só, e `mt-6` antes da legenda para separar o
+            bloco do que vem depois. Era `gap-5` entre tudo, e espaçamento
+            uniforme não agrupa nada — quatro coisas soltas, que é exatamente o
+            "muitas letras" da queixa.
+          */}
+          <div className={`flex flex-col gap-2 ${alinharItens} ${alinharTexto}`}>
             {/* Peso normal, e não negrito: a serifada de contraste alto (Bodoni,
                 Playfair) vive do traço fino, e o negrito fecha justamente o que
                 faz ela parecer papel de convite. */}
             <Rotulo />
             <Titulo base={TITULO_MEDIO} />
+            <div className="mt-6">
+              <Legenda />
+            </div>
+            {/*
+              ── NO CONVITE ELE FICA, MAS SEM O BLOCO ──────────────────────
+
+              Aqui o botão tem trabalho de verdade, e é a única capa em que
+              tem: a convite multiplica a altura por 1,205 no computador, então
+              na opção "Cheia" ela chega a 94vh e sobra só 6% de tela mostrando
+              que existe mais abaixo. Nas outras sobram 22%.
+
+              O que incomodava não era existir, era o PESO: um retângulo sólido
+              logo abaixo de um nome em serifada fina é a coisa mais escura da
+              capa, e a menos importante. Virou o que ele sempre foi de fato —
+              uma chamada — em texto com um filete embaixo, na mesma família
+              das outras letrinhas (e por isso acompanha o eixo "Letrinhas da
+              capa", como elas).
+
+              `border-bottom` e não `underline`: o filete fica a 6px da linha de
+              base em vez de cortar as descidas do "g" de "galeria".
+            */}
             <a
               href="#fotos"
-              className="mt-2 inline-block px-8 py-3 font-mono text-[11px] uppercase tracking-[0.2em] transition hover:opacity-85"
-              style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+              className={`mt-6 inline-block pb-1.5 ${semMono} text-[11px] uppercase tracking-[0.2em] transition hover:opacity-70`}
+              style={{
+                ...estiloDetalhe,
+                color: "var(--g-destaque)",
+                borderBottom: "1px solid var(--g-destaque)",
+              }}
             >
               Ver galeria
             </a>
@@ -510,10 +596,25 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
+        {/*
+          ── O ALINHAMENTO VALE NO COMPUTADOR TAMBÉM (28/09/2026) ────────────
+
+          Esta coluna tinha `md:text-left` cravado: no computador a dividida
+          era sempre à esquerda, qualquer que fosse o eixo. Só que a CAIXA do
+          título obedece ao eixo (`alinharBloco`), e com "Centralizado" ela ia
+          para o meio com o texto encostado na esquerda dela, enquanto o
+          rótulo e a data ficavam na borda — o título torto em relação ao
+          resto. Felipe, com o print da galeria da Juliana Josende: "na opção
+          centralizada ficou feio, só o título ficou no centro".
+
+          Agora o eixo manda nos três mecanismos, em todas as larguras, como
+          nas outras capas. Quem quer a dividida encostada à esquerda escolhe
+          "À esquerda" — que é o que a opção diz.
+        */}
         <div
-          className={`flex flex-col justify-center px-8 py-16 md:px-14 md:text-left ${alinharTexto}`}
+          className={`flex flex-col justify-center px-8 py-16 md:px-14 ${alinharTexto}`}
         >
-          <Estudio />
+          <Estudio className={aEsquerda ? "self-start" : "self-center"} />
           <div className="mt-6">
             <Rotulo />
             <Titulo base={TITULO_MEDIO} />

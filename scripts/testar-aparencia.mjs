@@ -75,13 +75,16 @@ const FUNDO = Object.fromEntries(
  * declara o número exato de colunas, e é isso que a distingue da `quadrada` e
  * da `editorial`, que usam `auto-fill`.
  */
-const MARCA_GRADE = {
-  colunas: "flex-direction:column",
-  linhas: "flex-basis",
-  quadrada: "aspect-ratio:1 / 1",
-  editorial: "grid-auto-rows",
-  panorama: "grid-template-columns:repeat(",
-};
+/*
+ * 28/09/2026: a "Linhas" também virou fileira justificada (ver
+ * `fileirasPorAltura`), e as três grades de fileira passaram a ter o mesmo
+ * CSS — nenhuma marca de estilo distingue mais uma da outra. Cada grade
+ * agora se declara no HTML (`data-grade`), como a capa já fazia
+ * (`data-capa`): pista indireta confunde uma com a outra em silêncio.
+ */
+const MARCA_GRADE = Object.fromEntries(
+  ["colunas", "linhas", "quadrada", "editorial", "panorama"].map((g) => [g, `data-grade="${g}"`]),
+);
 const FONTE_ESPERADA = {
   serifada: "--font-serif-app",
   moderna: "--font-sans-app",
@@ -104,11 +107,25 @@ for (const [nome, ap] of Object.entries(PRESETS)) {
        pela presenca do botao: duas capas ja tem botao de entrada, e deducao por
        pista indireta confunde uma com a outra em silencio. */
     [`capa ${ap.capa} marcada no html`, normalizado.includes(`data-capa="${ap.capa}"`)],
+    /*
+     * SÓ A CONVITE TEM BOTÃO (24/09/2026).
+     *
+     * Eram duas. Juan, sobre as capas: "muitas letras, cores diferentes — as
+     * letrinhas de um jeito, o 'ver galeria' de outro", e sobre a mínima:
+     * "esse tá lindo, tá sem o 'ver galeria'". Felipe decidiu: "tira o botão
+     * da jornal e deixa discreto no convite".
+     *
+     * A conta é de altura. A convite multiplica a altura por 1,205 no
+     * computador: na opção "Cheia" ela chega a 94vh e sobra 6% de tela
+     * mostrando que existe mais abaixo. A jornal cresce pelo CONTEÚDO, então a
+     * próxima foto sempre aparece — o botão anunciava o que já estava visível.
+     *
+     * Esta lista é a guarda contra ele voltar por distração a uma capa que não
+     * precisa: quatro das cinco têm de sair SEM "Ver galeria".
+     */
     [
       `botao de entrada em ${ap.capa}`,
-      ["jornal", "convite"].includes(ap.capa)
-        ? html.includes("Ver galeria")
-        : !html.includes("Ver galeria"),
+      ap.capa === "convite" ? html.includes("Ver galeria") : !html.includes("Ver galeria"),
     ],
     // O título tem que apontar para a variável do next/font. Já falhou uma vez:
     // usando o token do Tailwind (--font-serif), a variável não existe em tempo

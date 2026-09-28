@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
@@ -34,6 +34,7 @@ import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
 import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-visiveis";
 import { capitulosComOsExtras } from "@/lib/capitulos-da-rolagem";
+import { recortarParaDesenhar, PRIMEIRA_LEVA, LEVA } from "@/lib/grade-por-partes";
 import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
 export interface ItemGaleria {
@@ -184,7 +185,7 @@ export function GaleriaCliente({
    */
   recorte?: boolean;
   /** Quem se identificou por e-mail nesta galeria. Null = ninguém ainda. */
-  eu?: { email: string; nome: string | null } | null;
+  eu?: { email: string | null; nome: string | null } | null;
   /**
    * Ids das fotos já escolhidas NESTA galeria. Desde a migração 019 a lista é
    * uma só, compartilhada: a noiva no celular e o noivo no notebook veem a mesma
@@ -197,6 +198,9 @@ export function GaleriaCliente({
     limite: number | null;
     aberta: boolean;
     motivo: "fechada" | "prazo" | null;
+    /** O fotógrafo combinou limite ou prazo. Sem isso as favoritas são
+        livres e não há "Terminei minha escolha" — ver `EstadoSelecao.combinada`. */
+    combinada: boolean;
   };
 }) {
   /*
@@ -302,6 +306,79 @@ export function GaleriaCliente({
   const [nomeDigitado, setNomeDigitado] = useState("");
   const [identificando, setIdentificando] = useState(false);
 
+  /*
+   * ── QUEM ESTÁ BAIXANDO (23/09/2026) ─────────────────────────────────────
+   *
+   * Juan: "gostaria de saber quem está baixando. Quais fotos estão sendo
+   * baixadas". Felipe, decidindo o preço disso para o convidado: "quando for
+   * baixar pedir nome e email opcional, pelo menos um dos dois para baixar a
+   * primeira vez".
+   *
+   * "A primeira vez" é a parte que faz isto valer a pena: a resposta vira o
+   * mesmo cookie das favoritas, então quem já se identificou para escolher uma
+   * foto não vê nada, e quem se identificou para baixar não vê de novo.
+   *
+   * A porta devolve uma PROMESSA em vez de mandar um callback: as três entradas
+   * de download (`salvarUm`, `iniciarEntrega`, `baixarZip`) já são funções
+   * inteiras e legíveis, e um `if (!(await exigirIdentidade())) return;` na
+   * primeira linha de cada uma diz o que faz sem partir nenhuma em duas.
+   */
+  const [pedindoParaBaixar, setPedindoParaBaixar] = useState(false);
+  const respostaDaPorta = useRef<((seguiu: boolean) => void) | null>(null);
+
+  function exigirIdentidade(): Promise<boolean> {
+    if (eu) return Promise.resolve(true);
+    setPedindoParaBaixar(true);
+    return new Promise<boolean>((resolver) => {
+      respostaDaPorta.current = resolver;
+    });
+  }
+
+  /* Fechar sem dizer quem é CANCELA o download — "pelo menos um dos dois para
+     baixar". A promessa precisa ser resolvida de todo jeito, senão a função que
+     esperava por ela fica pendurada para sempre. */
+  function fecharPorta(seguiu: boolean) {
+    setPedindoParaBaixar(false);
+    respostaDaPorta.current?.(seguiu);
+    respostaDaPorta.current = null;
+  }
+
+  /** Diz quem está baixando. Aceita nome OU e-mail — ver a rota `eu`. */
+  async function identificarParaBaixar() {
+    if (identificando) return;
+    const email = emailDigitado.trim();
+    const nome = nomeDigitado.trim();
+    if (!email && !nome) {
+      setAviso("escreva o seu nome ou o seu e-mail");
+      setTimeout(() => setAviso(null), 3000);
+      return;
+    }
+    setIdentificando(true);
+    try {
+      const r = await fetch(`/api/g/${galeriaId}/eu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, nome, motivo: "baixar" }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setAviso(d?.erro ?? "não consegui guardar. Tente de novo.");
+        setTimeout(() => setAviso(null), 4000);
+        return;
+      }
+      setEu(d.pessoa);
+      setFavoritas(new Set<string>(d.favoritas ?? []));
+      setEmailDigitado("");
+      setNomeDigitado("");
+      fecharPorta(true);
+    } catch {
+      setAviso("não consegui guardar. Confira sua conexão.");
+      setTimeout(() => setAviso(null), 4000);
+    } finally {
+      setIdentificando(false);
+    }
+  }
+
   const [selecao, setSelecao] = useState(selecaoInicial);
   const [fechando, setFechando] = useState(false);
 
@@ -372,7 +449,8 @@ export function GaleriaCliente({
    * O registro na Atividade acontece no SERVIDOR, quando o zip termina de ser
    * entregue — cancelar no meio não conta como entrega.
    */
-  function baixarZip(consulta: string) {
+  async function baixarZip(consulta: string) {
+    if (!(await exigirIdentidade())) return;
     baixarNoComputador(`/api/g/${galeriaId}/zip${consulta}`, "galeria.zip");
   }
 
@@ -708,6 +786,7 @@ export function GaleriaCliente({
   );
 
   async function salvarUm(it: ItemGaleria) {
+    if (!(await exigirIdentidade())) return;
     /*
      * O link do original nasce AGORA, pedido à rota — que recusa quando o
      * download está bloqueado. Antes o servidor decidia isso ao montar a
@@ -785,6 +864,7 @@ export function GaleriaCliente({
    */
   async function iniciarEntrega(pedido: { escopo: string; consulta: string; rotulo: string }) {
     if (entrega || modo === "computador") return;
+    if (!(await exigirIdentidade())) return;
     /* Um AbortController por entrega. O motivo diz o que a pessoa pediu: parar
        (e continuar depois) ou recomeçar do zero. */
     const parada = new AbortController();
@@ -968,6 +1048,60 @@ export function GaleriaCliente({
       : [];
 
   /*
+   * ── A GRADE DESENHA POR PARTES (26/09/2026) ─────────────────────────────
+   *
+   * "A galeria parece lenta para abrir." Era: com 600 fotos, o documento
+   * saía com 600 cards — seis mil nós que o celular montava e hidratava antes
+   * de responder ao primeiro toque, para mostrar uma dúzia. Medido e explicado
+   * em `lib/grade-por-partes.ts`.
+   *
+   * Agora a grade nasce com `PRIMEIRA_LEVA` cards e ganha mais `LEVA` a cada
+   * vez que a rolagem chega perto do fim do que já foi desenhado. As fotos
+   * seguintes já estão em `itens` — nenhuma ida ao servidor, só o React
+   * acrescentando cards. Tudo o que não é desenho (filtro, slideshow,
+   * visualizador, menus, baixar) continua olhando a lista inteira.
+   *
+   * O corte é pelas fotos VISÍVEIS e respeita os filtros: "só as favoritas"
+   * mostra as primeiras favoritas, e não as favoritas que por acaso caíram
+   * nas 60 primeiras posições.
+   *
+   * `startTransition` porque acrescentar 120 cards é trabalho que pode
+   * esperar um toque: a rolagem e o coração respondem primeiro.
+   */
+  const [limiteDoDesenho, setLimiteDoDesenho] = useState(PRIMEIRA_LEVA);
+  const desenho = useMemo(
+    () => recortarParaDesenhar(capitulos, (i) => fotoVisivel(itens[i].id, filtros), limiteDoDesenho),
+    [capitulos, itens, filtros, limiteDoDesenho],
+  );
+  const faltaDesenhar = desenho.falta;
+  const sentinelaDoDesenho = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const alvo = sentinelaDoDesenho.current;
+    if (!alvo || !faltaDesenhar) return;
+    /*
+     * O observador é refeito a cada leva (`limiteDoDesenho` nas dependências),
+     * e isso é o que faz a tela alta funcionar: no monitor grande a leva nova
+     * pode não empurrar a sentinela para fora da margem, e um observador
+     * antigo só avisaria de novo quando ela saísse e voltasse. O novo avisa na
+     * hora, com o estado de agora, e a grade cresce até sair da margem.
+     *
+     * 1200 px de antecedência: a leva entra quando o fim do desenho está a uma
+     * dobra e meia de distância, antes de o dedo chegar lá.
+     */
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) {
+          startTransition(() => setLimiteDoDesenho((n) => n + LEVA));
+        }
+      },
+      { rootMargin: "0px 0px 1200px 0px" },
+    );
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, [faltaDesenhar, limiteDoDesenho]);
+
+  /*
    * ── AS PARTES DE UMA PASTA MAIOR QUE A TELA (16/09/2026) ─────────────────
    *
    * O corte por fatia serve no máximo `FOTOS_POR_TELA` fotos por documento, e
@@ -994,6 +1128,12 @@ export function GaleriaCliente({
    */
   const [buscando, setBuscando] = useState(false);
   const [acabou, setAcabou] = useState(!fatia);
+  /* As fotos chegam agrupadas por capítulo (`listarMediasPublicas`): só o
+     capítulo da última foto que chegou pode ter mais a caminho. Os de antes
+     já vieram inteiros e fecham a última fileira sem esperar a galeria toda. */
+  const capituloAindaChegando = acabou
+    ? null
+    : (capitulos.find((capitulo) => capitulo.indices.at(-1) === itens.length - 1)?.id ?? null);
   const sentinela = useRef<HTMLDivElement | null>(null);
 
   const carregarMais = useCallback(async () => {
@@ -1022,7 +1162,11 @@ export function GaleriaCliente({
 
   useEffect(() => {
     const alvo = sentinela.current;
-    if (!alvo || acabou) return;
+    /* Enquanto falta desenhar, a sentinela da rede nem está na página — e
+       `faltaDesenhar` nas dependências é o que faz este efeito rodar de novo
+       quando ela entra. Sem isso ele olhava uma vez, não achava nada, e a
+       galeria fatiada parava nas primeiras 600 fotos. */
+    if (!alvo || acabou || faltaDesenhar) return;
     /*
      * `rootMargin` de 800 px embaixo: o pedido sai quando o fim está a uma
      * dobra de distância, não quando já chegou. É a diferença entre a galeria
@@ -1036,7 +1180,7 @@ export function GaleriaCliente({
     );
     observador.observe(alvo);
     return () => observador.disconnect();
-  }, [carregarMais, acabou]);
+  }, [carregarMais, acabou, faltaDesenhar]);
 
 
   /*
@@ -1102,7 +1246,12 @@ export function GaleriaCliente({
 
   const fimDaGaleria = (
     <>
-      {fatia && !acabou ? (
+      {/* A rede só é chamada quando tudo o que já chegou foi desenhado: com a
+          sentinela da rede logo abaixo dos primeiros cards, a galeria fatiada
+          pediria a segunda remessa ao servidor tendo 540 fotos na memória. */}
+      {faltaDesenhar ? (
+        <div ref={sentinelaDoDesenho} aria-hidden className="h-px" />
+      ) : fatia && !acabou ? (
         <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
           {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
         </div>
@@ -1110,7 +1259,7 @@ export function GaleriaCliente({
       {/* Só depois que as fotos deste capítulo acabaram: oferecer a saída no
           meio do carregamento é convidar a pessoa a sair antes de ver o que
           ainda está vindo. */}
-      {saidaDoCapitulo && (!fatia || acabou) && (
+      {saidaDoCapitulo && (!fatia || acabou) && !faltaDesenhar && (
         <div className="my-10 text-center">
           <Link
             href={saidaDoCapitulo.para}
@@ -1191,6 +1340,7 @@ export function GaleriaCliente({
                   );
                 },
                 selecaoAberta: selecao.aberta,
+                podeEncerrar: selecao.aberta && selecao.combinada,
                 limite,
                 cheia,
                 encerrar: encerrarSelecao,
@@ -1459,6 +1609,86 @@ export function GaleriaCliente({
         </div>
       )}
 
+      {/*
+        ── A PORTA DO DOWNLOAD ─────────────────────────────────────────────
+
+        Mesma caixa do "quem está escolhendo", outro texto e outra regra: aqui
+        nome OU e-mail basta. A frase diz POR QUE se pede, porque um formulário
+        sem motivo na frente da foto do casamento de alguém parece cobrança.
+      */}
+      {pedindoParaBaixar && (
+        <div
+          onClick={() => fecharPorta(false)}
+          className="fixed inset-0 z-[70] flex items-center justify-center p-4"
+          style={{ background: "rgba(0,0,0,.55)" }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-xl border p-5"
+            style={{ borderColor: "var(--g-linha)", background: "var(--g-superficie)" }}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--g-texto)" }}>
+              Quem está baixando?
+            </p>
+            <p className="mt-1 text-xs leading-snug" style={{ color: "var(--g-suave)" }}>
+              Só desta vez — o fotógrafo acompanha quem recebeu as fotos. Basta o nome
+              ou o e-mail.
+            </p>
+
+            <input
+              type="text"
+              autoComplete="name"
+              autoFocus
+              value={nomeDigitado}
+              onChange={(e) => setNomeDigitado(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && identificarParaBaixar()}
+              placeholder="seu nome"
+              className="mt-3 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "var(--g-linha)",
+                background: "var(--g-fundo)",
+                color: "var(--g-texto)",
+              }}
+            />
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              value={emailDigitado}
+              onChange={(e) => setEmailDigitado(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && identificarParaBaixar()}
+              placeholder="seu@email.com (opcional)"
+              className="mt-2 w-full rounded-lg border px-3 py-2 text-sm outline-none"
+              style={{
+                borderColor: "var(--g-linha)",
+                background: "var(--g-fundo)",
+                color: "var(--g-texto)",
+              }}
+            />
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => fecharPorta(false)}
+                className="rounded-lg border px-3 py-2 text-xs transition hover:opacity-70"
+                style={{ borderColor: "var(--g-linha)", color: "var(--g-suave)" }}
+              >
+                agora não
+              </button>
+              <button
+                type="button"
+                onClick={identificarParaBaixar}
+                disabled={identificando}
+                className="rounded-lg px-4 py-2 text-xs font-semibold transition hover:opacity-85 disabled:opacity-60"
+                style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+              >
+                {identificando ? "guardando…" : "baixar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {buscaPorRosto && (
         <EncontrarMe
           galeriaId={galeriaId}
@@ -1522,7 +1752,7 @@ export function GaleriaCliente({
 
 
       <div id="fotos" className="mt-8 scroll-mt-4">
-        {capitulos.map((capOriginal) => {
+        {desenho.capitulos.map((cap) => {
           /*
            * Com o filtro ligado, o capítulo mostra só o que foi marcado — e some
            * inteiro se nada ali foi. Manter um capítulo vazio com o título na
@@ -1531,10 +1761,15 @@ export function GaleriaCliente({
           /* Os dois filtros somam: "só as favoritas" E "só onde eu apareço"
              podem estar ligados ao mesmo tempo, e o resultado é a interseção.
              A regra mora em `lib/fotos-visiveis.ts` porque o slideshow precisa
-             da mesma resposta — duas cópias dela é como filtros discordam. */
-          const indices = capOriginal.indices.filter((i) => fotoVisivel(itens[i].id, filtros));
-          if (indices.length === 0) return null;
-          const cap = { ...capOriginal, indices };
+             da mesma resposta — duas cópias dela é como filtros discordam.
+             O corte do filtro e o do desenho por partes saem juntos de
+             `recortarParaDesenhar`. */
+          /* Capítulo que a rolagem ainda não alcançou: a seção já existe,
+             vazia e escondida, para o menu de capítulos enxergá-la desde já —
+             ver `recortarParaDesenhar`. */
+          if (cap.indices.length === 0) {
+            return <section key={cap.id} id={`cap-${cap.id}`} hidden />;
+          }
           return (
           <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
             {cap.nome && (
@@ -1567,6 +1802,10 @@ export function GaleriaCliente({
             <GaleriaGrade
               aparencia={aparencia}
               quantidade={cap.indices.length}
+              /* O fim do que está desenhado só é o fim do capítulo quando o
+                 desenho por partes chegou até ele E nenhuma foto dele ainda
+                 vem pela rede. Ver `fileirasDeColunas`. */
+              listaCompleta={cap.inteiro && cap.id !== capituloAindaChegando}
               proporcao={(k) => {
                 const it = itens[cap.indices[k]];
                 return it.largura && it.altura ? it.largura / it.altura : 4 / 5;
