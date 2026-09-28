@@ -183,10 +183,14 @@ try {
     "select id from medias where galeria_id = $1 order by ordem, criado_em",
     [g.id],
   );
-  const ana = await pessoaPorEmail(g.id, "ana@exemplo.com", "Ana");
-  for (const f of fotos.slice(0, 6)) await alternarDaPessoa(g.id, f.id, ana.id);
-  const pedro = await pessoaPorEmail(g.id, "pedro@exemplo.com", "Pedro");
-  for (const f of fotos.slice(2, 5)) await alternarDaPessoa(g.id, f.id, pedro.id);
+  /* Quem escolhe são os noivos da galeria em destaque ("Vanessa & Kalil" →
+     Vanessa e Kalil): no print, a lista de favoritas é do casal da capa. */
+  const [nome1, nome2] = destaque.titulo.split(/\s+(?:&|e)\s+/);
+  const email = (nome) => `${nome.normalize("NFD").replace(/[^a-zA-Z]/g, "").toLowerCase()}@exemplo.com`;
+  const noiva = await pessoaPorEmail(g.id, email(nome1), nome1);
+  for (const f of fotos.slice(0, 6)) await alternarDaPessoa(g.id, f.id, noiva.id);
+  const noivo = await pessoaPorEmail(g.id, email(nome2), nome2);
+  for (const f of fotos.slice(2, 5)) await alternarDaPessoa(g.id, f.id, noivo.id);
 
   await p.goto(`${BASE}/painel/galerias/${g.id}/atividade`, { waitUntil: "networkidle" });
   await p.waitForTimeout(1500);

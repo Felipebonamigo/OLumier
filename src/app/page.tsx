@@ -556,7 +556,7 @@ export default async function Home() {
                 n: "03",
                 verbo: "Entregue",
                 texto: "Compartilhe o link com seu cliente.",
-                detalhe: `seuestudio.${marca.dominio}/ana-e-pedro — com senha e prazo, se você quiser. Ele abre no celular, sem instalar nada.`,
+                detalhe: `seuestudio.${marca.dominio}/${destaque.slug} — com senha e prazo, se você quiser. Ele abre no celular, sem instalar nada.`,
                 tela: { src: "/home/produto/entrega.webp", alt: "Galeria entregue aberta no celular do cliente", l: 780, a: 1400 },
               },
             ].map((passo, i) => (

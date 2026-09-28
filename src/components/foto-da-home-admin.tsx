@@ -136,7 +136,7 @@ export function FotoDaHomeAdmin({
   return (
     <li className="flex flex-col rounded-xl border border-linha bg-carbon p-4">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="font-semibold">{nome}</h2>
+        <h3 className="font-semibold">{nome}</h3>
         <span
           className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] ${
             trocada ? "border-ok/40 bg-ok/10 text-ok" : "border-linha text-texto-faint"

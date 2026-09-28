@@ -107,10 +107,19 @@ export function GaleriaDemo({
   const ap = aparencia ?? identidade.aparencia;
   const vh = OPCOES.alturaCapa.find((o) => o.id === ap.alturaCapa)?.vh ?? 60;
   const capa = fotosDaHome[identidade.capa];
-  /* As oito fotos acabam antes da moldura: a grade de verdade de um casamento
-     tem centenas. Repetidas numa ordem diferente, a moldura se enche e a
-     repetição não fica lado a lado. */
-  const ids = [...identidade.fotos, ...identidade.fotos.slice().reverse()];
+  /* As fotos de exemplo acabam antes da moldura: a grade de verdade de um
+     casamento tem centenas. Repetidas numa ordem diferente, a moldura se enche.
+
+     A segunda volta é a das posições ímpares e depois a das pares — e não a
+     lista ao contrário, como era: ao contrário, a última foto da primeira volta
+     é a primeira da segunda, e as duas saíam lado a lado (com as 14 fotos da
+     Vanessa & Kalil, bem no meio da seleção). Assim a mesma foto fica a pelo
+     menos meia galeria de distância dela mesma. */
+  const segundaVolta = [
+    ...identidade.fotos.filter((_, i) => i % 2 === 1),
+    ...identidade.fotos.filter((_, i) => i % 2 === 0),
+  ];
+  const ids = [...identidade.fotos, ...segundaVolta];
   const fotos = ids.map((id) => fotosDaHome[id]);
 
   const alturaPeloLayout = ap.grade === "linhas" || ap.grade === "editorial";

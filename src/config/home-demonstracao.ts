@@ -17,9 +17,10 @@ import { lerAparencia, type Aparencia } from "@/config/aparencia";
  * exemplo, e o mesmo casal aparecia como "Marina & Caio" numa e "Ana & Pedro"
  * na outra. Felipe: "todas as fotos que mandei são de uma galeria só" — a da
  * Vanessa & Kalil, fotografada pela Carol. Desde então CADA GALERIA TEM AS
- * SUAS FOTOS: a Vanessa & Kalil, as do casamento dela; as outras, as
+ * SUAS FOTOS: a Vanessa & Kalil, as do casamento dela; a Laura & Romulo, as
+ * da galeria do Juan, no lugar da "Ana & Pedro"; as outras duas, as
  * provisórias do começo (Unsplash, licença livre), até chegarem galerias de
- * verdade — a do Juan vem para o lugar da Ana & Pedro.
+ * verdade para elas.
  *
  * ── AS FOTOS MUDAM PELO ADMIN ─────────────────────────────────────────────
  *
@@ -33,8 +34,8 @@ import { lerAparencia, type Aparencia } from "@/config/aparencia";
  *
  * Nenhuma galeria leva nome de estúdio: todas assinam "Seu Estúdio" — a frase
  * que a seção quer que o visitante escute é "isto pode ser o SEU". A Vanessa &
- * Kalil é um casamento de verdade, com o nome, a data e o lugar que o Felipe
- * passou; as outras são inventadas, como sempre foram.
+ * Kalil e a Laura & Romulo são casamentos de verdade, com o nome que o Felipe
+ * passou; as outras duas são inventadas, como sempre foram.
  */
 
 export type Curadoria = "A" | "B" | "C" | "D" | "E";
@@ -64,19 +65,63 @@ export interface FotoDemo {
 /*
  * O ACERVO — cada arquivo uma vez só, e as galerias escolhem dele.
  *
- * Vanessa & Kalil: WebP de 1500 px (2000 no gramado, que é a foto grande do
- * fim), qualidade 76 — acima das provisórias porque a granulação some a 72.
- * Provisórias: 1100 px, qualidade 72. As medidas são as do arquivo: a grade
- * monta as fileiras pela proporção antes de a foto chegar, e
+ * As fotos de verdade moram numa pasta por casamento
+ * (`public/home/demo/<casamento>/`): WebP de 1500 px no lado maior (2000 no
+ * gramado da Vanessa & Kalil, que é a foto grande do fim), qualidade 76 —
+ * acima das provisórias porque a granulação some a 72. As provisórias ficam
+ * soltas em `public/home/demo/`: 1100 px, qualidade 72. As medidas são as do
+ * arquivo: a grade monta as fileiras pela proporção antes de a foto chegar, e
  * `testar-fotos-da-home` confere uma por uma.
  */
+const VK = "/home/demo/vanessa-e-kalil";
+const LR = "/home/demo/laura-e-romulo";
+const vertical = { largura: 1000, altura: 1500 } as const;
+const deitada = { largura: 1500, altura: 1000 } as const;
+
 const ACERVO = {
   // Vanessa & Kalil — 1º de maio de 2026, Porto Alegre. Fotos da Carol.
-  guardaChuva: { src: "/home/demo/guarda-chuva.webp", largura: 1000, altura: 1500, curadoria: "D", descricao: "Noivos caminhando pelo jardim debaixo de um guarda-chuva branco", focoX: 45, focoY: 58 },
-  ternoMarrom: { src: "/home/demo/terno-marrom.webp", largura: 1000, altura: 1500, curadoria: "B", descricao: "Noivos de mãos dadas, terno marrom e vestido tomara que caia", focoX: 50, focoY: 45 },
-  convidadosChuva: { src: "/home/demo/convidados-chuva.webp", largura: 1000, altura: 1500, curadoria: "C", descricao: "Casal de convidados abraçado na cerimônia, debaixo de chuva", focoX: 45, focoY: 38 },
-  noivaMesa: { src: "/home/demo/noiva-mesa-pb.webp", largura: 1000, altura: 1500, curadoria: "C", descricao: "A noiva sorrindo à mesa do jantar, em preto e branco", focoX: 50, focoY: 35 },
-  caminhada: { src: "/home/demo/caminhada-grama.webp", largura: 2000, altura: 1333, curadoria: "B", descricao: "Os noivos caminhando pelo gramado, vistos da cintura para baixo", focoX: 50, focoY: 50 },
+  guardaChuva: { src: `${VK}/guarda-chuva.webp`, ...vertical, curadoria: "D", descricao: "Noivos caminhando pelo jardim debaixo de um guarda-chuva branco", focoX: 45, focoY: 58 },
+  noivaVeu: { src: `${VK}/noiva-veu.webp`, ...vertical, descricao: "A noiva de véu, com o buquê de rosas brancas", focoX: 50, focoY: 30 },
+  noivaNaPorta: { src: `${VK}/noiva-na-porta.webp`, ...vertical, descricao: "A noiva de costas na porta, com as madrinhas esperando lá fora", focoX: 50, focoY: 55 },
+  maosNoAltar: { src: `${VK}/maos-no-altar.webp`, ...vertical, descricao: "As mãos dadas no altar: terno marrom e vestido branco", focoX: 50, focoY: 50 },
+  convidadosChuva: { src: `${VK}/convidados-chuva.webp`, ...vertical, curadoria: "C", descricao: "Casal de convidados abraçado na cerimônia, debaixo de chuva", focoX: 45, focoY: 38 },
+  saida: { src: `${VK}/saida.webp`, ...vertical, descricao: "Os noivos saindo da cerimônia de braços para o alto", focoX: 55, focoY: 40 },
+  ternoMarrom: { src: `${VK}/terno-marrom.webp`, ...vertical, curadoria: "B", descricao: "Noivos de mãos dadas, terno marrom e vestido tomara que caia", focoX: 50, focoY: 45 },
+  noivosTijolos: { src: `${VK}/noivos-tijolos.webp`, ...vertical, descricao: "Os noivos diante da parede de tijolos", focoX: 50, focoY: 45 },
+  noivosCadeira: { src: `${VK}/noivos-cadeira.webp`, ...vertical, descricao: "Os noivos no jardim, em frente à casa de pedra", focoX: 50, focoY: 55 },
+  madrinhas: { src: `${VK}/madrinhas-marrom.webp`, ...vertical, descricao: "As madrinhas de marrom em volta da noiva, no gramado", focoX: 50, focoY: 65 },
+  noivoBrinde: { src: `${VK}/noivo-brinde.webp`, ...vertical, descricao: "O noivo tomando um gole entre os convidados", focoX: 55, focoY: 35 },
+  ramos: { src: `${VK}/ramos.webp`, ...vertical, descricao: "Ramos verdes contra o céu nublado", focoX: 50, focoY: 50 },
+  noivaMesa: { src: `${VK}/noiva-mesa-pb.webp`, ...vertical, curadoria: "C", descricao: "A noiva sorrindo à mesa do jantar, em preto e branco", focoX: 50, focoY: 35 },
+  caminhada: { src: `${VK}/caminhada-grama.webp`, largura: 2000, altura: 1333, curadoria: "B", descricao: "Os noivos caminhando pelo gramado, vistos da cintura para baixo", focoX: 50, focoY: 50 },
+
+  // Laura & Romulo — a galeria do Juan.
+  lrCasaDePedra: { src: `${LR}/09-beijo-casa-pedra.webp`, ...deitada, descricao: "O beijo no gramado, diante da casa de pedra", focoX: 50, focoY: 68 },
+  lrMaosDadas: { src: `${LR}/01-maos-dadas-lago.webp`, ...vertical, descricao: "Os noivos de mãos dadas no campo, com o lago e o morro atrás", focoX: 50, focoY: 60 },
+  lrCaminhadaPb: { src: `${LR}/02-caminhada-pb.webp`, ...vertical, descricao: "Em preto e branco, os noivos caminhando pelo campo", focoX: 50, focoY: 60 },
+  lrBeijoArvore: { src: `${LR}/03-beijo-arvore.webp`, ...vertical, descricao: "O beijo debaixo da árvore grande, o véu na grama", focoX: 45, focoY: 65 },
+  lrAbraco: { src: `${LR}/04-abraco.webp`, ...vertical, descricao: "O casal abraçado, testa com testa", focoX: 50, focoY: 35 },
+  lrGiro: { src: `${LR}/05-giro.webp`, ...vertical, descricao: "A noiva girando pela mão do noivo, no campo", focoX: 50, focoY: 60 },
+  lrSentados: { src: `${LR}/06-sentados-grama.webp`, ...deitada, descricao: "Os noivos sentados na grama, com o morro atrás", focoX: 55, focoY: 70 },
+  lrCorrendo: { src: `${LR}/07-correndo-tremido.webp`, ...vertical, descricao: "Os dois correndo de mãos dadas, tremidos", focoX: 50, focoY: 45 },
+  lrAbracoSol: { src: `${LR}/08-abraco-sol.webp`, ...vertical, descricao: "Abraço contra o sol, a mão dela no rosto dele", focoX: 60, focoY: 25 },
+  lrNoivaCostas: { src: `${LR}/10-noiva-costas.webp`, ...vertical, descricao: "A noiva de costas, olhando por cima do ombro", focoX: 50, focoY: 35 },
+  lrSol: { src: `${LR}/11-sol-estourado.webp`, ...vertical, descricao: "Os noivos no campo, com o sol estourando atrás", focoX: 50, focoY: 55 },
+  lrBuque: { src: `${LR}/12-buque.webp`, ...vertical, descricao: "O buquê sobre o vestido, na grama", focoX: 40, focoY: 55 },
+  lrRetratoNoiva: { src: `${LR}/13-retrato-noiva.webp`, ...vertical, descricao: "Retrato da noiva, a mão no cabelo", focoX: 45, focoY: 45 },
+  lrContraluz: { src: `${LR}/14-contraluz.webp`, ...vertical, descricao: "Contraluz dourado: o beijo na testa, o lago atrás", focoX: 50, focoY: 45 },
+  lrRindo: { src: `${LR}/15-rindo.webp`, ...vertical, descricao: "Os dois rindo para a câmera no sol do fim da tarde", focoX: 55, focoY: 35 },
+  lrArvoreTremida: { src: `${LR}/16-arvore-tremida.webp`, ...vertical, descricao: "A árvore enorme e os noivos pequenos, tremidos", focoX: 50, focoY: 80 },
+  lrBeijoPb: { src: `${LR}/17-beijo-pb.webp`, ...vertical, descricao: "Em preto e branco, o beijo de perto e a aliança na mão", focoX: 50, focoY: 40 },
+  lrCorrendoGrama: { src: `${LR}/18-correndo-grama.webp`, ...vertical, descricao: "Correndo pela grama, de mãos dadas", focoX: 50, focoY: 40 },
+  lrNuvens: { src: `${LR}/19-nuvens.webp`, ...deitada, descricao: "Nuvens alaranjadas no céu do fim da tarde", focoX: 50, focoY: 50 },
+  lrArvoreEnorme: { src: `${LR}/20-arvore-enorme.webp`, ...vertical, descricao: "Os noivos ao pé da árvore enorme", focoX: 45, focoY: 85 },
+  lrCaminhoDaCasa: { src: `${LR}/21-caminho-da-casa.webp`, ...vertical, descricao: "Os noivos caminhando para a casa de pedra, ela olhando para trás", focoX: 55, focoY: 75 },
+  lrMuro: { src: `${LR}/22-muro-de-pedra.webp`, ...vertical, descricao: "Os noivos sentados no muro de pedra, o véu espalhado", focoX: 50, focoY: 60 },
+  lrRetratoMuro: { src: `${LR}/23-retrato-muro.webp`, ...vertical, descricao: "Retrato dos dois no muro de pedra, olhando para a câmera", focoX: 50, focoY: 35 },
+  lrBeijoDeLado: { src: `${LR}/24-beijo-de-lado-pb.webp`, ...vertical, descricao: "Em preto e branco, o beijo visto de lado", focoX: 50, focoY: 50 },
+  lrPorteira: { src: `${LR}/25-porteira.webp`, ...vertical, descricao: "O noivo segurando a cauda do vestido na porteira", focoX: 55, focoY: 70 },
+
   // Provisórias (Unsplash, licença livre).
   cadeiras: { src: "/home/demo/cerimonia-arco.webp", largura: 1100, altura: 734, curadoria: "D", descricao: "Duas cadeiras de cerimônia no gramado", focoX: 50, focoY: 50 },
   baloes: { src: "/home/demo/festa-mesa.webp", largura: 1100, altura: 734, curadoria: "A", descricao: "Casal soltando balões vermelhos com os convidados", focoX: 50, focoY: 50 },
@@ -96,9 +141,54 @@ export type IdGaleria = (typeof GALERIAS_DA_HOME)[number];
  * (lugar 1), e a grade mostra todas.
  */
 const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
-  delicada: [ACERVO.guardaChuva, ACERVO.ternoMarrom, ACERVO.convidadosChuva, ACERVO.noivaMesa, ACERVO.caminhada],
+  /* Na ordem do dia: a noiva pronta, a entrada, a cerimônia, a saída, os
+     retratos, a festa. */
+  delicada: [
+    ACERVO.guardaChuva,
+    ACERVO.noivaVeu,
+    ACERVO.noivaNaPorta,
+    ACERVO.maosNoAltar,
+    ACERVO.convidadosChuva,
+    ACERVO.saida,
+    ACERVO.ternoMarrom,
+    ACERVO.noivosTijolos,
+    ACERVO.noivosCadeira,
+    ACERVO.madrinhas,
+    ACERVO.noivoBrinde,
+    ACERVO.ramos,
+    ACERVO.noivaMesa,
+    ACERVO.caminhada,
+  ],
   editorial: [ACERVO.praia, ACERVO.maos, ACERVO.alianca, ACERVO.palmeira, ACERVO.contraluz, ACERVO.cadeiras, ACERVO.confete, ACERVO.baloes],
-  classica: [ACERVO.contraluz, ACERVO.palmeira, ACERVO.alianca, ACERVO.cadeiras, ACERVO.praia, ACERVO.confete, ACERVO.maos, ACERVO.baloes],
+  /* A capa (a casa de pedra, deitada — a capa jornal é larga) e depois as
+     outras na ordem em que o Juan mandou. */
+  classica: [
+    ACERVO.lrCasaDePedra,
+    ACERVO.lrMaosDadas,
+    ACERVO.lrCaminhadaPb,
+    ACERVO.lrBeijoArvore,
+    ACERVO.lrAbraco,
+    ACERVO.lrGiro,
+    ACERVO.lrSentados,
+    ACERVO.lrCorrendo,
+    ACERVO.lrAbracoSol,
+    ACERVO.lrNoivaCostas,
+    ACERVO.lrSol,
+    ACERVO.lrBuque,
+    ACERVO.lrRetratoNoiva,
+    ACERVO.lrContraluz,
+    ACERVO.lrRindo,
+    ACERVO.lrArvoreTremida,
+    ACERVO.lrBeijoPb,
+    ACERVO.lrCorrendoGrama,
+    ACERVO.lrNuvens,
+    ACERVO.lrArvoreEnorme,
+    ACERVO.lrCaminhoDaCasa,
+    ACERVO.lrMuro,
+    ACERVO.lrRetratoMuro,
+    ACERVO.lrBeijoDeLado,
+    ACERVO.lrPorteira,
+  ],
   noite: [ACERVO.maos, ACERVO.contraluz, ACERVO.palmeira, ACERVO.cadeiras, ACERVO.confete, ACERVO.alianca, ACERVO.praia, ACERVO.baloes],
 };
 
@@ -137,9 +227,10 @@ export interface Identidade {
   titulo: string;
   /** O fim do endereço na barra do navegador desenhado em volta da galeria. */
   slug: string;
+  /** Vazia quando ainda não sabemos: a capa some com a legenda, não inventa. */
   data: string;
   /** A mesma data, para o banco — o script dos prints cria a galeria com ela. */
-  dataEvento: string;
+  dataEvento: string | null;
   local: string;
   capa: IdFoto;
   fotos: IdFoto[];
@@ -232,16 +323,20 @@ export const IDENTIDADES: Identidade[] = [
      * em cima, o nome grande numa serifada forte e a foto grande logo
      * abaixo —, e a grade "Colunas", a que ele usa nas entregas.
      *
-     * O lugar é da galeria do Juan, que ele vai mandar: até lá, as fotos são
-     * as provisórias.
+     * ── LAURA & ROMULO (28/09/2026) ────────────────────────────────────────
+     *
+     * A galeria do Juan, no lugar da "Ana & Pedro" inventada — as 25 fotos
+     * que o Felipe mandou. Sem data e sem lugar: ainda não vieram, e a capa
+     * de um casamento de verdade não leva data inventada. Com os dois vazios
+     * a legenda da capa simplesmente não aparece (`GaleriaCapa`).
      */
     id: "classica",
     rotulo: "Natural e contemporânea",
-    titulo: "Ana & Pedro",
-    slug: "ana-e-pedro",
-    data: "21 de março de 2026",
-    dataEvento: "2026-03-21",
-    local: "Serra Gaúcha",
+    titulo: "Laura & Romulo",
+    slug: "laura-e-romulo",
+    data: "",
+    dataEvento: null,
+    local: "",
     capa: "classica-1",
     fotos: fotosDaGrade("classica"),
     aparencia: lerAparencia({
