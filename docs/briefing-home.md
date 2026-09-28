@@ -110,9 +110,12 @@ galerias.
 
 - Headline: **Uma galeria. Várias identidades.**
 - Texto: *Sua fotografia não precisa caber na estética de uma plataforma. A
-  plataforma pode acompanhar a sua.*
-- Complemento: *Personalize a experiência para que a entrega continue falando a
-  mesma língua do seu trabalho e da sua marca.*
+  plataforma deve acompanhar a sua.*
+- Complemento: *Personalize a experiência para que cada entrega continue
+  carregando o DNA da sua marca.*
+- *(Texto revisado em 28/09/2026, enviado pelo Felipe. Era "A plataforma pode
+  acompanhar a sua" e "…continue falando a mesma língua do seu trabalho e da
+  sua marca".)*
 
 Fortemente visual: 3 ou 4 galerias lado a lado como exemplos reais — parte da
 capa **e** o grid interno, para ficar evidente que são galerias completas.

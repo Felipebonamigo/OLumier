@@ -433,12 +433,12 @@ export default function Home() {
             </div>
             <div className="space-y-3">
               <p className={TEXTO_SECAO}>
-                Sua fotografia não precisa caber na estética de uma plataforma. A plataforma pode
-                acompanhar a sua.
+                Sua fotografia não precisa caber na estética de uma plataforma.
+                <br />A plataforma deve acompanhar a sua.
               </p>
               <p className="text-[var(--h-tinta-2)]">
-                Personalize a experiência para que a entrega continue falando a mesma língua do seu
-                trabalho e da sua marca.
+                Personalize a experiência para que cada entrega continue carregando o DNA da sua
+                marca.
               </p>
             </div>
           </Revelar>
