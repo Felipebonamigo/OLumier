@@ -46,6 +46,7 @@ export function GradeMedias({
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [definindoCapa, setDefinindoCapa] = useState<string | null>(null);
   const [apagandoTudo, setApagandoTudo] = useState(false);
+  const [apagandoSelecao, setApagandoSelecao] = useState(false);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
   /* Aberta por padrão: quem acabou de subir quer VER o que subiu. Recolher é
    * para depois, quando a grade vira obstáculo entre a pessoa e o resto da
@@ -105,6 +106,32 @@ export function GradeMedias({
       alert("Não foi possível apagar agora. Tente de novo.");
     } finally {
       setApagandoTudo(false);
+    }
+  }
+
+  async function apagarSelecionadas() {
+    const quantas = selecao.size;
+    if (quantas === 0) return;
+    if (!confirm(`Apagar ${quantas} ${quantas === 1 ? "foto" : "fotos"}? Não dá para desfazer.`)) {
+      return;
+    }
+    setApagandoSelecao(true);
+    try {
+      /* A MESMA rota do "apagar todas", com a lista — uma transação só, um
+         gatilho de uso só. Trinta chamadas à rota de uma foto seriam trinta
+         transações e trinta recontagens do espaço da galeria. */
+      const r = await fetch(`/api/galerias/${galeriaId}/medias`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selecao] }),
+      });
+      if (!r.ok) throw new Error();
+      setSelecao(new Set());
+      router.refresh();
+    } catch {
+      alert("Não foi possível apagar agora. Tente de novo.");
+    } finally {
+      setApagandoSelecao(false);
     }
   }
 
@@ -261,6 +288,28 @@ export function GradeMedias({
               ))}
               <option value="__nenhum">— sem capítulo —</option>
             </select>
+
+            {/*
+              APAGAR AS MARCADAS (28/09/2026).
+
+              Juan: "Marquei algumas que eu quero excluir. Mas não tem botão de
+              excluir. Só apagar todas. Ou apagar individualmente." A frase acima
+              desta barra já prometia "mover para um capítulo, ou remover" — e a
+              barra só movia. Quem marcava trinta fotos escolhia entre apagar a
+              galeria inteira e trinta confirmações.
+
+              Confirmação simples, e não a digitação da contagem que "apagar
+              todas" exige: ali o clique errado custa o casamento inteiro, aqui
+              custa o que está marcado na tela, à vista de quem marcou.
+            */}
+            <button
+              type="button"
+              disabled={ocupado || apagandoSelecao}
+              onClick={apagarSelecionadas}
+              className="rounded-md border border-erro/40 px-2.5 py-1.5 text-xs text-erro transition hover:bg-erro/10 disabled:opacity-40"
+            >
+              {apagandoSelecao ? "apagando…" : `apagar selecionadas (${selecao.size})`}
+            </button>
           </span>
         </div>
       )}
