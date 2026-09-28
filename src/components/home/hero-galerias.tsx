@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { marca } from "@/config/marca";
-import type { Identidade } from "@/config/home-demonstracao";
+import type { FotosDaHome, Identidade } from "@/config/home-demonstracao";
 import { GaleriaDemo } from "./galeria-demo";
 import { usePedeMenosMovimento } from "./usa-celular";
 
@@ -28,7 +28,13 @@ const LUGAR = [
   "z-10 opacity-0 md:opacity-100 md:left-0 md:top-0 md:h-[80%] md:w-[48%]",
 ];
 
-export function HeroGalerias({ identidades }: { identidades: Identidade[] }) {
+export function HeroGalerias({
+  identidades,
+  fotos,
+}: {
+  identidades: Identidade[];
+  fotos: FotosDaHome;
+}) {
   const [frente, setFrente] = useState(0);
   const [parado, setParado] = useState(false);
   const menosMovimento = usePedeMenosMovimento();
@@ -65,7 +71,12 @@ export function HeroGalerias({ identidades }: { identidades: Identidade[] }) {
                   seuestudio.{marca.dominio}/{ident.slug}
                 </span>
               </div>
-              <GaleriaDemo identidade={ident} className="min-h-0 flex-1" carregarAgora={i === 0} />
+              <GaleriaDemo
+                identidade={ident}
+                fotos={fotos}
+                className="min-h-0 flex-1"
+                carregarAgora={i === 0}
+              />
             </figure>
           );
         })}

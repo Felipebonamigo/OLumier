@@ -10,7 +10,13 @@ import { OPCOES, PRESETS } from "@/config/aparencia";
 import { ESPACOS, formatarGb, formatarReais } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 import { DOMINIO_PROPRIO_LIBERADO, VIDEO_LIBERADO } from "@/config/lancamentos";
-import { IDENTIDADES, identidadePorId, type Identidade } from "@/config/home-demonstracao";
+import {
+  IDENTIDADES,
+  LUGAR_DO_COFRE,
+  identidadePorId,
+  type Identidade,
+} from "@/config/home-demonstracao";
+import { fotosDaHome } from "@/lib/fotos-da-home";
 import { fonteTexto, fonteTitulo } from "@/components/home/fontes";
 import { GaleriaDemo } from "@/components/home/galeria-demo";
 import { HeroGalerias } from "@/components/home/hero-galerias";
@@ -352,7 +358,20 @@ function TelaDoPainel({
   );
 }
 
-export default function Home() {
+/*
+ * ESTÁTICA, REGENERADA QUANDO A FOTO MUDA (28/09/2026).
+ *
+ * As fotos passaram a vir do banco — o admin troca em `/painel/admin/home` —,
+ * e ler o banco a cada visita faria a página mais importante da plataforma
+ * esperar uma consulta. A página continua pré-desenhada: a troca de foto chama
+ * `revalidatePath("/")` (ver `api/admin/home/foto`), e a próxima visita já sai
+ * com a foto nova. A hora abaixo é só a rede de segurança, caso a regeneração
+ * pedida falhe.
+ */
+export const revalidate = 3600;
+
+export default async function Home() {
+  const fotos = await fotosDaHome();
   const [viva, editorial, classica, noite] = IDENTIDADES;
   const baseDaTroca = identidadePorId("viva") ?? viva;
 
@@ -419,7 +438,7 @@ export default function Home() {
             </div>
             <p className="mt-4 text-sm text-[var(--h-tinta-3)]">14 dias grátis · sem cartão</p>
           </div>
-          <HeroGalerias identidades={[viva, editorial, classica]} />
+          <HeroGalerias identidades={[viva, editorial, classica]} fotos={fotos} />
         </div>
       </section>
 
@@ -452,6 +471,7 @@ export default function Home() {
             <figure key={ident.id} className="w-[84%] shrink-0 snap-start sm:w-[58%] lg:w-[42%]">
               <GaleriaDemo
                 identidade={ident}
+                fotos={fotos}
                 className="aspect-[4/5] w-full rounded-xl ring-1 ring-black/10"
               />
               <figcaption className="mt-4">
@@ -489,7 +509,7 @@ export default function Home() {
               Troque a capa, a fonte e as cores: é a galeria de verdade, redesenhada na hora.
             </p>
           </Revelar>
-          <TrocaIdentidade base={baseDaTroca} />
+          <TrocaIdentidade base={baseDaTroca} fotos={fotos} />
         </div>
       </section>
 
@@ -649,7 +669,7 @@ export default function Home() {
             </p>
           </Revelar>
           <div>
-            <SelecaoDemo identidade={classica} />
+            <SelecaoDemo identidade={classica} fotos={fotos} />
             {/* O painel entra por cima do canto da grade: é a mesma escolha,
                 vista do lado do fotógrafo. */}
             {/* Abaixo de 640 px o print do painel vira um borrão de letra miúda:
@@ -739,7 +759,7 @@ export default function Home() {
             </p>
           </Revelar>
           <div className="mt-14">
-            <CofreDemo />
+            <CofreDemo foto={fotos[LUGAR_DO_COFRE]} />
           </div>
           <p className="mx-auto mt-10 max-w-[52ch] text-center text-[var(--h-tinta-2)]">
             Quando precisar novamente, restaure a galeria e continue de onde parou.
@@ -787,12 +807,13 @@ export default function Home() {
       {/* ── 11 · respiro ────────────────────────────────────────────────── */}
       <section className="relative isolate">
         <img
-          src="/home/festa-mesa.jpg"
-          alt="Casal soltando balões vermelhos com os convidados"
+          src={fotos.respiro.src}
+          alt={fotos.respiro.descricao}
           loading="lazy"
-          width={1200}
-          height={801}
+          width={fotos.respiro.largura}
+          height={fotos.respiro.altura}
           className="h-[78svh] min-h-[420px] w-full object-cover"
+          style={{ objectPosition: `${fotos.respiro.focoX}% ${fotos.respiro.focoY}%` }}
         />
         <div
           className="absolute inset-0 bg-[linear-gradient(to_top,rgba(0,0,0,0.55),transparent_45%)]"
@@ -932,6 +953,7 @@ export default function Home() {
               <GaleriaDemo
                 key={ident.id}
                 identidade={ident}
+                fotos={fotos}
                 className="aspect-[4/5] w-[70%] shrink-0 snap-start rounded-xl ring-1 ring-black/10 md:w-auto"
               />
             ))}

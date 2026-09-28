@@ -12,7 +12,7 @@ import {
   variaveisDoTema,
   type Aparencia,
 } from "@/config/aparencia";
-import { FOTOS, type Identidade } from "@/config/home-demonstracao";
+import type { FotosDaHome, Identidade } from "@/config/home-demonstracao";
 import { useEhCelular } from "./usa-celular";
 
 /**
@@ -55,6 +55,7 @@ const GLIFO_SOBRE_FOTO =
 
 export function GaleriaDemo({
   identidade,
+  fotos: fotosDaHome,
   aparencia,
   className = "",
   carregarAgora = false,
@@ -64,6 +65,12 @@ export function GaleriaDemo({
   ultimaMarcada,
 }: {
   identidade: Identidade;
+  /**
+   * As fotos de cada lugar — o padrão com as trocas do admin por cima, lidas
+   * no servidor por `fotosDaHome()`. Chegam por parâmetro, e não por import,
+   * porque mudam sem publicar código.
+   */
+  fotos: FotosDaHome;
   /** Troca a aparência da identidade — é o que a seção "Sua marca" usa. */
   aparencia?: Aparencia;
   /** Classe da MOLDURA: é ela que decide largura e altura na home. */
@@ -99,12 +106,12 @@ export function GaleriaDemo({
 
   const ap = aparencia ?? identidade.aparencia;
   const vh = OPCOES.alturaCapa.find((o) => o.id === ap.alturaCapa)?.vh ?? 60;
-  const capa = FOTOS[identidade.capa];
-  /* As oito fotos provisórias acabam antes da moldura: a grade de verdade de
-     um casamento tem centenas. Repetidas numa ordem diferente, a moldura se
-     enche e a repetição não fica lado a lado. Sai quando chegar a curadoria. */
+  const capa = fotosDaHome[identidade.capa];
+  /* As oito fotos acabam antes da moldura: a grade de verdade de um casamento
+     tem centenas. Repetidas numa ordem diferente, a moldura se enche e a
+     repetição não fica lado a lado. */
   const ids = [...identidade.fotos, ...identidade.fotos.slice().reverse()];
-  const fotos = ids.map((id) => FOTOS[id]);
+  const fotos = ids.map((id) => fotosDaHome[id]);
 
   const alturaPeloLayout = ap.grade === "linhas" || ap.grade === "editorial";
   const cobre = alturaPeloLayout || ap.grade === "quadrada";
@@ -147,8 +154,8 @@ export function GaleriaDemo({
                 estudio: "Seu Estúdio",
                 logoUrl: null,
                 urlImagem: capa.src,
-                focoX: 50,
-                focoY: 50,
+                focoX: capa.focoX,
+                focoY: capa.focoY,
                 capaEscolhida: true,
               }}
             />
@@ -168,7 +175,7 @@ export function GaleriaDemo({
                   <div key={k} style={estilo} className={`relative ${classe}`}>
                     <span className="block h-full w-full overflow-hidden rounded-[var(--g-canto,6px)]">
                       <img
-                        src={f.src}
+                        src={f.miniatura ?? f.src}
                         alt=""
                         width={f.largura}
                         height={f.altura}

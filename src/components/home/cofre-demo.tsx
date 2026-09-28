@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FOTOS } from "@/config/home-demonstracao";
+import type { FotoDemo } from "@/config/home-demonstracao";
 import { usePedeMenosMovimento } from "./usa-celular";
 
 /**
@@ -30,7 +30,8 @@ const ESTADOS = [
   { rotulo: "Restaurada", detalhe: "Um clique e ela volta, no mesmo endereço.", cor: "#1f7a4d" },
 ] as const;
 
-export function CofreDemo() {
+/** `foto`: a do lugar `LUGAR_DO_COFRE`, já com a troca do admin se houver. */
+export function CofreDemo({ foto }: { foto: FotoDemo }) {
   const [atual, setAtual] = useState(0);
   const menosMovimento = usePedeMenosMovimento();
 
@@ -41,7 +42,6 @@ export function CofreDemo() {
   }, [menosMovimento]);
 
   const estado = ESTADOS[atual];
-  const foto = FOTOS.contraluz;
 
   return (
     <div>
@@ -49,7 +49,7 @@ export function CofreDemo() {
       <div className="mx-auto flex max-w-sm items-center gap-4 rounded-2xl bg-white p-3 shadow-[0_20px_50px_-25px_rgba(20,20,20,0.45)] ring-1 ring-black/5">
         {/* eslint-disable-next-line @next/next/no-img-element -- foto estática de /public */}
         <img
-          src={foto.src}
+          src={foto.miniatura ?? foto.src}
           alt=""
           width={foto.largura}
           height={foto.altura}

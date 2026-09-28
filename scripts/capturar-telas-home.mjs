@@ -24,7 +24,7 @@
 import pg from "pg";
 import sharp from "sharp";
 import { createRequire } from "node:module";
-import { copyFileSync, mkdirSync, mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
@@ -34,7 +34,7 @@ import { cookieDeSessao } from "./sessao-de-teste.mjs";
 exigirBancoDeTeste();
 
 const { chromium } = createRequire(import.meta.url)("playwright");
-const { IDENTIDADES } = await import("../src/config/home-demonstracao.ts");
+const { IDENTIDADES, FOTOS_PADRAO } = await import("../src/config/home-demonstracao.ts");
 const { CHAVE_TEMA } = await import("../src/config/tema.ts");
 const { pessoaPorEmail, alternarDaPessoa } = await import("../src/lib/favoritas.ts");
 
@@ -43,25 +43,25 @@ const RAIZ = path.resolve(import.meta.dirname, "..");
 const DESTINO = path.join(RAIZ, "public/home/produto");
 mkdirSync(DESTINO, { recursive: true });
 
-/* As fotos sobem com nome de câmera, e não com o nome descritivo que têm em
-   `public/home`: a fila de envio mostra o nome, e é assim que ela se parece
-   num casamento de verdade. */
-const ORIGINAIS = [
-  "noivos-beijo.jpg",
-  "maos-alianca.jpg",
-  "noiva-retrato.jpg",
-  "cerimonia-arco.jpg",
-  "vestido.jpg",
-  "hero-casamento.jpg",
-  "madrinhas.jpg",
-  "festa-mesa.jpg",
-];
+/* As fotos são as PADRÃO da home (`FOTOS_PADRAO`), na ordem da galeria
+   "Natural e clássica" — a capa primeiro. Assim o print do painel mostra as
+   mesmas fotos da página em volta dele, e trocar um padrão no config muda os
+   prints na próxima rodada, sem esta lista precisar ser lembrada.
+
+   Sobem com nome de câmera, e não com o nome descritivo que têm em
+   `public/home/demo`: a fila de envio mostra o nome, e é assim que ela se
+   parece num casamento de verdade. E sobem em JPEG, que é o que sai da
+   câmera — a derivada WebP do site vira JPEG aqui. */
+const classicaDaHome = IDENTIDADES.find((i) => i.id === "classica");
+const ORDEM = [classicaDaHome.capa, ...classicaDaHome.fotos.filter((f) => f !== classicaDaHome.capa)];
 const pasta = mkdtempSync(path.join(tmpdir(), "ana-pedro-"));
-const arquivos = ORIGINAIS.map((nome, i) => {
-  const alvo = path.join(pasta, `ANA_PEDRO_${String(142 + i * 7).padStart(4, "0")}.jpg`);
-  copyFileSync(path.join(RAIZ, "public/home", nome), alvo);
-  return alvo;
-});
+const arquivos = await Promise.all(
+  ORDEM.map(async (lugar, i) => {
+    const alvo = path.join(pasta, `ANA_PEDRO_${String(142 + i * 7).padStart(4, "0")}.jpg`);
+    await sharp(path.join(RAIZ, "public", FOTOS_PADRAO[lugar].src)).jpeg({ quality: 90 }).toFile(alvo);
+    return alvo;
+  }),
+);
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();

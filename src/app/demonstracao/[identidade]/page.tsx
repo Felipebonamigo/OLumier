@@ -4,7 +4,8 @@ import { marca } from "@/config/marca";
 import { GaleriaCapa } from "@/components/galeria-capa";
 import { GaleriaCliente, type ItemGaleria } from "@/components/galeria-cliente";
 import { FONTES_TEXTO, variaveisDeForma, variaveisDoTema } from "@/config/aparencia";
-import { FOTOS, identidadePorId } from "@/config/home-demonstracao";
+import { identidadePorId } from "@/config/home-demonstracao";
+import { fotosDaHome } from "@/lib/fotos-da-home";
 
 /**
  * A GALERIA DO CLIENTE, COM FOTOS DE DEMONSTRAÇÃO — para o celular da home.
@@ -49,14 +50,17 @@ export default async function DemonstracaoPage({
   if (!identidade) notFound();
 
   const ap = identidade.aparencia;
-  const capa = FOTOS[identidade.capa];
+  /* As mesmas fotos da home, com as trocas do admin — o celular mostra a
+     galeria que a página em volta dele está anunciando. */
+  const fotos = await fotosDaHome();
+  const capa = fotos[identidade.capa];
   const itens: ItemGaleria[] = identidade.fotos.map((chave, i) => {
-    const f = FOTOS[chave];
+    const f = fotos[chave];
     return {
       id: `demo:${chave}`,
       nome: `${String(i + 1).padStart(3, "0")}.jpg`,
       tipo: "foto",
-      url: f.src,
+      url: f.miniatura ?? f.src,
       urlGrande: f.src,
       temPoster: true,
       bytes: 0,
@@ -87,8 +91,8 @@ export default async function DemonstracaoPage({
           estudio: "Seu Estúdio",
           logoUrl: null,
           urlImagem: capa.src,
-          focoX: 50,
-          focoY: 50,
+          focoX: capa.focoX,
+          focoY: capa.focoY,
           capaEscolhida: true,
         }}
       />

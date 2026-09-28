@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Identidade } from "@/config/home-demonstracao";
+import type { FotosDaHome, Identidade } from "@/config/home-demonstracao";
 import { GaleriaDemo } from "./galeria-demo";
 import { usePedeMenosMovimento } from "./usa-celular";
 
@@ -22,7 +22,7 @@ const INICIAIS = [0, 3];
 const SEQUENCIA = [5, 1, 6, 2];
 const JA_ESCOLHIDAS = 9; // as que estariam fora da tela, para o contador ler como álbum
 
-export function SelecaoDemo({ identidade }: { identidade: Identidade }) {
+export function SelecaoDemo({ identidade, fotos }: { identidade: Identidade; fotos: FotosDaHome }) {
   const [marcadas, setMarcadas] = useState<number[]>(INICIAIS);
   const menosMovimento = usePedeMenosMovimento();
 
@@ -43,6 +43,7 @@ export function SelecaoDemo({ identidade }: { identidade: Identidade }) {
     <div className="relative">
       <GaleriaDemo
         identidade={identidade}
+        fotos={fotos}
         semCapa
         favoritas={marcadas}
         ultimaMarcada={ultima}

@@ -7,6 +7,7 @@ import {
   TROCA_CAPAS,
   TROCA_CORES,
   TROCA_FONTES,
+  type FotosDaHome,
   type Identidade,
 } from "@/config/home-demonstracao";
 import { GaleriaDemo } from "./galeria-demo";
@@ -24,7 +25,7 @@ import { GaleriaDemo } from "./galeria-demo";
  * (galeria.seuestudio.com.br) não aparece enquanto `DOMINIO_PROPRIO_LIBERADO`
  * estiver desligado — ver `config/lancamentos.ts`.
  */
-export function TrocaIdentidade({ base }: { base: Identidade }) {
+export function TrocaIdentidade({ base, fotos }: { base: Identidade; fotos: FotosDaHome }) {
   const [capa, setCapa] = useState<string>(base.aparencia.capa);
   const [fonte, setFonte] = useState<string>(base.aparencia.tipografia);
   const [cor, setCor] = useState<string>(TROCA_CORES[0].id);
@@ -54,6 +55,7 @@ export function TrocaIdentidade({ base }: { base: Identidade }) {
         </div>
         <GaleriaDemo
           identidade={base}
+          fotos={fotos}
           aparencia={aparencia}
           className="aspect-[390/600] w-full md:aspect-[16/10]"
         />

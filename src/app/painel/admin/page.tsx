@@ -128,6 +128,13 @@ export default async function AdminPage() {
       <p className="mt-1 text-sm text-texto-soft">
         A plataforma inteira. Só leitura — nada nesta página altera nada.
       </p>
+      {/* A vitrine da plataforma muda numa tela à parte, que é a única do
+          admin com botão que altera alguma coisa. */}
+      <p className="mt-2 text-sm">
+        <Link href="/painel/admin/home" className="text-acento underline underline-offset-4">
+          Fotos da página inicial →
+        </Link>
+      </p>
 
       {/* ── 1. DINHEIRO ───────────────────────────────────────────────── */}
       <Bloco
