@@ -1,6 +1,7 @@
 import "server-only";
 import { consultar, consultarUm } from "@/lib/db";
-import { lerAparencia, type Aparencia } from "@/config/aparencia";
+import { lerAparencia, presetPorId, type Aparencia } from "@/config/aparencia";
+import { aparenciaDoEstilo } from "@/lib/estilos-do-estudio";
 
 /**
  * Rascunho e publicação da aparência — as duas escritas, num lugar só.
@@ -183,4 +184,31 @@ export async function padraoDoEstudio(tenantId: string): Promise<unknown | null>
 export async function padraoDoEstudioLido(tenantId: string): Promise<Aparencia | null> {
   const bruto = await padraoDoEstudio(tenantId);
   return bruto ? lerAparencia(bruto) : null;
+}
+
+/**
+ * A aparência com que uma galeria NOVA nasce, pelo que a pessoa escolheu na
+ * criação.
+ *
+ * A ordem é a de quem decidiu mais perto desta galeria: um estilo pronto ou um
+ * estilo salvo apontado na etapa de estilo (uma decisão tomada AGORA, sobre
+ * esta entrega) vence o padrão do estúdio, que é a decisão de sempre e serve a
+ * quem passou direto. Sem nenhum dos três, null — e a coluna fica no `'{}'`
+ * de sempre, que `lerAparencia` completa com o padrão do código.
+ *
+ * Estilo que não é deste estúdio (ou foi apagado entre abrir a tela e criar)
+ * é ignorado em silêncio: a galeria nasce no padrão, e não deixa de nascer.
+ */
+export async function aparenciaInicialDaGaleria(
+  tenantId: string,
+  presetId: string,
+  estiloId: string,
+): Promise<unknown | null> {
+  const preset = presetPorId(presetId);
+  if (preset) return preset.aparencia;
+  if (estiloId) {
+    const doEstilo = await aparenciaDoEstilo(tenantId, estiloId);
+    if (doEstilo) return doEstilo;
+  }
+  return padraoDoEstudio(tenantId);
 }

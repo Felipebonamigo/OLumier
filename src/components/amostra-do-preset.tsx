@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { FONTES_TITULO, TEMAS, type Aparencia } from "@/config/aparencia";
 
 /**
@@ -332,7 +333,11 @@ export function AmostraDoPreset({
         const soma = proporcoes.reduce((t, x) => t + x, 0);
         return (
           <span style={{ display: "flex", gap: vao, flex: `${1 / soma} 1 0`, minHeight: 0 }}>
-            {proporcoes.map((x, k) => foto(cores[k], { flex: `${x} 1 0` }))}
+            {/* Chave no Fragment: `foto` devolve o elemento sem uma, e a lista
+                avisava no console de todo cartão de estilo "Colunas". */}
+            {proporcoes.map((x, k) => (
+              <Fragment key={k}>{foto(cores[k], { flex: `${x} 1 0` })}</Fragment>
+            ))}
           </span>
         );
       };

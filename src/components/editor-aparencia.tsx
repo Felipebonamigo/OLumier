@@ -21,7 +21,12 @@ import {
   salvarRascunhoAparenciaAction,
   salvarPadraoDoEstudioAction,
   esquecerPadraoDoEstudioAction,
+  salvarEstiloAction,
+  renomearEstiloAction,
+  apagarEstiloAction,
+  tornarEstiloPadraoAction,
 } from "@/app/painel/actions";
+import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
@@ -401,6 +406,7 @@ export function EditorAparencia({
   publicado,
   temFontePropria,
   padraoDoEstudio = null,
+  estilosDoEstudio = [],
   slotCapa,
 }: {
   galeriaId: string;
@@ -420,6 +426,9 @@ export function EditorAparencia({
   /** O design que o estúdio salvou como padrão, ou null se nunca salvou. Ver
       `padraoDoEstudio` em lib/aparencia-galeria.ts. */
   padraoDoEstudio?: Aparencia | null;
+  /** Os até cinco estilos salvos do estúdio, com nome (28/09/2026). Ver
+      `lib/estilos-do-estudio.ts`. */
+  estilosDoEstudio?: EstiloDoEstudio[];
 }) {
   /* Qual grupo do ajuste fino está aberto. Só desenho: não entra no rascunho
      nem na publicação — trocar de grupo não é mexer na galeria. */
@@ -527,6 +536,37 @@ export function EditorAparencia({
   });
   const noPadrao = padrao.aparencia !== null && mesmaAparencia(ap, padrao.aparencia);
 
+  /*
+   * ── MEUS ESTILOS: ATÉ CINCO, COM NOME (28/09/2026) ─────────────────────
+   *
+   * Juan: "Ela pode salvar até 5 padrões próprios e dar nome pra eles. Eu
+   * criei uns 3 que eu gostei, mas só pode salvar um." O padrão continua
+   * sendo UM — o design com que a galeria nova nasce —, e os estilos são as
+   * combinações que o fotógrafo quer ter à mão. Qualquer um vira o padrão com
+   * um clique. A lista na tela é sempre a que o servidor devolveu.
+   */
+  const [estilos, setEstilos] = useState<EstiloDoEstudio[]>(estilosDoEstudio);
+  const [nomeNovo, setNomeNovo] = useState("");
+  const [renomeando, setRenomeando] = useState<{ id: string; nome: string } | null>(null);
+  const [recadoEstilos, setRecadoEstilos] = useState("");
+  const estiloNoAr = estilos.find((e) => mesmaAparencia(ap, e.aparencia));
+  const cheio = estilos.length >= 5;
+
+  function comEstilos(
+    acao: (f: FormData) => Promise<{ ok?: string; erro?: string; estilos?: EstiloDoEstudio[] }>,
+    campos: Record<string, string>,
+    depois?: () => void,
+  ) {
+    iniciar(async () => {
+      const f = new FormData();
+      for (const [k, v] of Object.entries(campos)) f.set(k, v);
+      const r = await acao(f);
+      if (r.estilos) setEstilos(r.estilos);
+      setRecadoEstilos(r.erro ?? r.ok ?? "");
+      if (!r.erro) depois?.();
+    });
+  }
+
   const presetAtivo = presetEquivalente(ap);
   const sujo = JSON.stringify(ap) !== JSON.stringify(salvo);
 
@@ -630,7 +670,9 @@ export function EditorAparencia({
               ? "alterações não publicadas"
               : noPadrao
                 ? "no ar: meu padrão"
-                : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
+                : estiloNoAr
+                  ? `no ar: ${estiloNoAr.nome}`
+                  : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
         </span>
       </div>
 
@@ -707,7 +749,15 @@ export function EditorAparencia({
                   }`}
                 >
                   <AmostraDoPreset aparencia={padrao.aparencia} className="mb-2 h-20 w-full" />
-                  <span className="block text-sm font-medium">Meu padrão</span>
+                  {/* Quando o padrão é um dos estilos salvos, o cartão diz qual —
+                      senão parecem dois estilos iguais sem explicação. */}
+                  <span className="block truncate text-sm font-medium">
+                    Meu padrão
+                    {(() => {
+                      const igual = estilos.find((e) => padrao.aparencia && mesmaAparencia(e.aparencia, padrao.aparencia));
+                      return igual ? <span className="font-normal text-texto-faint"> · {igual.nome}</span> : null;
+                    })()}
+                  </span>
                   <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">
                     O design que você salvou. Toda galeria nova já nasce assim.
                   </span>
@@ -722,6 +772,94 @@ export function EditorAparencia({
                   </span>
                 </div>
               )}
+              {estilos.map((e) => {
+                const ativo = mesmaAparencia(ap, e.aparencia);
+                const ehPadrao = padrao.aparencia !== null && mesmaAparencia(e.aparencia, padrao.aparencia);
+                const editando = renomeando?.id === e.id;
+                return (
+                  /* Um `div`, e não um botão, em volta: renomear e apagar são
+                     botões, e botão dentro de botão é HTML inválido. */
+                  <div
+                    key={e.id}
+                    className={`rounded-lg border p-3 transition ${
+                      ativo ? "border-acento bg-acento/5" : "border-linha hover:border-acento"
+                    }`}
+                  >
+                    <button type="button" onClick={() => mudar(e.aparencia)} className="block w-full text-left">
+                      <AmostraDoPreset aparencia={e.aparencia} className="mb-2 h-20 w-full" />
+                    </button>
+                    {editando ? (
+                      <form
+                        onSubmit={(ev) => {
+                          ev.preventDefault();
+                          comEstilos(renomearEstiloAction, { id: e.id, nome: renomeando.nome }, () =>
+                            setRenomeando(null),
+                          );
+                        }}
+                        className="flex items-center gap-1"
+                      >
+                        <input
+                          autoFocus
+                          value={renomeando.nome}
+                          maxLength={40}
+                          onChange={(ev) => setRenomeando({ id: e.id, nome: ev.target.value })}
+                          aria-label="Novo nome do estilo"
+                          className="min-w-0 flex-1 rounded border border-linha bg-transparent px-2 py-1 text-sm"
+                        />
+                        <button type="submit" disabled={salvando} className="text-[11px] text-acento">
+                          ok
+                        </button>
+                      </form>
+                    ) : (
+                      <button type="button" onClick={() => mudar(e.aparencia)} className="block w-full text-left">
+                        <span className="block truncate text-sm font-medium">{e.nome}</span>
+                      </button>
+                    )}
+                    <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-texto-faint">
+                      {ehPadrao ? (
+                        <span>padrão das galerias novas</span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={salvando}
+                          onClick={() =>
+                            iniciar(async () => {
+                              const f = new FormData();
+                              f.set("id", e.id);
+                              const r = await tornarEstiloPadraoAction(f);
+                              if (r.padrao) setPadrao({ aparencia: r.padrao, recado: "" });
+                              setRecadoEstilos(r.erro ?? r.ok ?? "");
+                            })
+                          }
+                          className="underline-offset-4 hover:text-texto hover:underline"
+                        >
+                          tornar padrão
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        disabled={salvando}
+                        onClick={() => setRenomeando(editando ? null : { id: e.id, nome: e.nome })}
+                        className="underline-offset-4 hover:text-texto hover:underline"
+                      >
+                        renomear
+                      </button>
+                      <button
+                        type="button"
+                        disabled={salvando}
+                        onClick={() => {
+                          if (confirm(`Apagar o estilo “${e.nome}”? Nenhuma galeria muda.`)) {
+                            comEstilos(apagarEstiloAction, { id: e.id });
+                          }
+                        }}
+                        className="underline-offset-4 hover:text-alerta hover:underline"
+                      >
+                        apagar
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
               {PRESETS.map((p) => {
                 const ativo = presetAtivo === p.id;
                 return (
@@ -937,7 +1075,50 @@ export function EditorAparencia({
         aparência é lido como "aplicar", e aplicar em entregas já feitas seria
         reescrever o trabalho de alguém a partir de um clique.
       */}
-      <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-4">
+      {/*
+        MEUS ESTILOS (28/09/2026) — no mesmo lugar e pela mesma razão do
+        padrão logo abaixo: a pessoa acabou de montar a combinação e está
+        olhando para ela. Salvar não mexe em galeria nenhuma, nem nesta.
+      */}
+      <form
+        onSubmit={(ev) => {
+          ev.preventDefault();
+          comEstilos(salvarEstiloAction, { nome: nomeNovo, aparencia: JSON.stringify(ap) }, () => setNomeNovo(""));
+        }}
+        className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-4"
+      >
+        <div className="min-w-0">
+          <span className="block text-xs font-medium text-texto-soft">
+            Meus estilos <span className="font-normal text-texto-faint">· {estilos.length} de 5</span>
+          </span>
+          <p className="mt-0.5 max-w-[60ch] text-[11px] leading-snug text-texto-faint" role="status" aria-live="polite">
+            {recadoEstilos ||
+              (cheio
+                ? "Você já tem 5 estilos salvos. Apague um em Estilos para guardar outro."
+                : "Guarde esta combinação com um nome — ela aparece em Estilos e na criação de toda galeria nova. Nenhuma galeria muda.")}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <input
+            value={nomeNovo}
+            onChange={(ev) => setNomeNovo(ev.target.value)}
+            maxLength={40}
+            placeholder="Nome do estilo"
+            aria-label="Nome do estilo"
+            disabled={cheio}
+            className="w-40 rounded-lg border border-linha bg-transparent px-3 py-2 text-xs disabled:opacity-40"
+          />
+          <button
+            type="submit"
+            disabled={salvando || cheio || !nomeNovo.trim()}
+            className="rounded-lg border border-linha-forte px-4 py-2 text-xs transition hover:bg-carbon-2 disabled:opacity-40"
+          >
+            Salvar estilo
+          </button>
+        </div>
+      </form>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-linha pt-4">
         <div className="min-w-0">
           <span className="block text-xs font-medium text-texto-soft">Padrão do estúdio</span>
           <p className="mt-0.5 max-w-[60ch] text-[11px] leading-snug text-texto-faint">

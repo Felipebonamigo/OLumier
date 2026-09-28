@@ -10,7 +10,8 @@ import {
   BOTAO_PRIMARIO,
   BOTAO_SECUNDARIO,
 } from "@/components/form-ui";
-import { PRESETS, type Aparencia } from "@/config/aparencia";
+import { PRESETS, mesmaAparencia, type Aparencia } from "@/config/aparencia";
+import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
 /**
@@ -53,12 +54,15 @@ function Botao({ ultima }: { ultima: boolean }) {
 export function AssistenteNovaGaleria({
   capitulosSugeridos,
   padraoDoEstudio = null,
+  estilosDoEstudio = [],
   slotLogo,
 }: {
   /** Vem do servidor: `lib/secoes.ts` é server-only e não pode ser importado aqui. */
   capitulosSugeridos: readonly string[];
   /** O design que o estúdio salvou como padrão, ou null se nunca salvou. */
   padraoDoEstudio?: Aparencia | null;
+  /** Os até cinco estilos salvos do estúdio, com nome (28/09/2026). */
+  estilosDoEstudio?: EstiloDoEstudio[];
   /** A logo do estúdio, montada no servidor — aparece junto do estilo. */
   slotLogo?: ReactNode;
 }) {
@@ -66,6 +70,10 @@ export function AssistenteNovaGaleria({
   const [etapa, setEtapa] = useState(0);
   const [titulo, setTitulo] = useState("");
   const [preset, setPreset] = useState<string>("");
+  /* Um estilo salvo do estúdio, pelo id. Escolher um apaga o preset e
+     vice-versa: a galeria nasce com UMA decisão — ver
+     `aparenciaInicialDaGaleria`. */
+  const [estilo, setEstilo] = useState<string>("");
   const [capitulos, setCapitulos] = useState<string[]>([]);
 
   const semNome = titulo.trim().length === 0;
@@ -146,6 +154,7 @@ export function AssistenteNovaGaleria({
           </p>
         )}
         <input type="hidden" name="preset" value={preset} />
+        <input type="hidden" name="estilo" value={estilo} />
         {/* Mais colunas conforme a tela, porque aqui a largura VIRA amostra:
             com três colunas dentro de 672 px cada "Ana & Pedro" saía com ~155
             px, e escolher a cara da entrega por uma miniatura desse tamanho é
@@ -155,26 +164,61 @@ export function AssistenteNovaGaleria({
           {padraoDoEstudio && (
             <button
               type="button"
-              onClick={() => setPreset("")}
-              aria-pressed={preset === ""}
+              onClick={() => {
+                setPreset("");
+                setEstilo("");
+              }}
+              aria-pressed={preset === "" && estilo === ""}
               className={`rounded-xl border p-3 text-left transition ${
-                preset === "" ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+                preset === "" && estilo === "" ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
               }`}
             >
               <AmostraDoPreset aparencia={padraoDoEstudio} className="mb-2 h-28 w-full" />
-              <span className="block text-sm font-medium">Meu padrão</span>
+              <span className="block truncate text-sm font-medium">
+                Meu padrão
+                {(() => {
+                  const igual = estilosDoEstudio.find((e) => mesmaAparencia(e.aparencia, padraoDoEstudio));
+                  return igual ? <span className="font-normal text-texto-faint"> · {igual.nome}</span> : null;
+                })()}
+              </span>
               <span className="mt-0.5 block text-xs text-texto-faint">
                 O design que você salvou.
               </span>
             </button>
           )}
+          {/* Os estilos salvos do estúdio (até cinco) vêm logo depois do
+              padrão: são dele, e são o que ele procura antes dos nossos. */}
+          {estilosDoEstudio.map((e) => {
+            const escolhido = estilo === e.id;
+            return (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => {
+                  setEstilo(escolhido ? "" : e.id);
+                  setPreset("");
+                }}
+                aria-pressed={escolhido}
+                className={`rounded-xl border p-3 text-left transition ${
+                  escolhido ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+                }`}
+              >
+                <AmostraDoPreset aparencia={e.aparencia} className="mb-2 h-28 w-full" />
+                <span className="block truncate text-sm font-medium">{e.nome}</span>
+                <span className="mt-0.5 block text-xs text-texto-faint">Um estilo seu.</span>
+              </button>
+            );
+          })}
           {PRESETS.map((p) => {
             const escolhido = preset === p.id;
             return (
               <button
                 key={p.id}
                 type="button"
-                onClick={() => setPreset(escolhido ? "" : p.id)}
+                onClick={() => {
+                  setPreset(escolhido ? "" : p.id);
+                  setEstilo("");
+                }}
                 aria-pressed={escolhido}
                 className={`rounded-xl border p-3 text-left transition ${
                   escolhido ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"

@@ -5,6 +5,7 @@ import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { EditorAparencia } from "@/components/editor-aparencia";
 import { padraoDoEstudioLido } from "@/lib/aparencia-galeria";
+import { estilosDoEstudio } from "@/lib/estilos-do-estudio";
 import { CapaGaleriaEditor } from "@/components/capa-galeria-editor";
 import { lerAparencia } from "@/config/aparencia";
 import { consultarUm } from "@/lib/db";
@@ -109,6 +110,7 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       /* O desenho inteiro, e não só "existe um": a tela mostra o padrão como o
          primeiro cartão de Estilos e deixa aplicá-lo nesta galeria. */
       padraoDoEstudio={await padraoDoEstudioLido(galeria.tenant_id)}
+      estilosDoEstudio={await estilosDoEstudio(galeria.tenant_id)}
     />
   );
 }
