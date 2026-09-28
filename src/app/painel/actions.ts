@@ -24,9 +24,11 @@ import {
   type EstiloDoEstudio,
 } from "@/lib/estilos-do-estudio";
 import type { Aparencia } from "@/config/aparencia";
+import { descricaoDaAssinatura, precoDoCicloComComboCentavos, descontoDaGaleriaCentavos } from "@/config/combo";
+import { faixaDoAtomatiza } from "@/lib/combo";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
-import { planoPorId, GB, cicloDe, precoDoCicloCentavos } from "@/config/planos";
+import { planoPorId, GB, cicloDe } from "@/config/planos";
 import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
 import {
@@ -665,10 +667,20 @@ export async function criarAssinaturaAction(
     const minimo = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
     const vencimento = fimTrial > minimo ? fimTrial : minimo;
 
+    /*
+     * O COMBO COM O ATOMATIZA (28/09/2026). Quem já assina o Atomatiza com o
+     * mesmo CPF/CNPJ entra aqui com a metade do desconto da Galeria — a outra
+     * metade o Atomatiza aplica na assinatura de lá, quando esta for paga. Sem
+     * resposta do Asaas, a assinatura nasce no preço cheio e a conferência do
+     * primeiro pagamento acerta: nunca travar a assinatura por causa do
+     * desconto. Ver `lib/combo.ts`.
+     */
+    const faixa = await faixaDoAtomatiza(doc).catch(() => null);
+
     /* O preço da fatura é o do CICLO: no anual são dez mensalidades cobradas de
      * uma vez. A grade continua guardando só o mensal — o anual é derivado,
      * nunca uma segunda tabela para dessincronizar. */
-    const precoDoCiclo = precoDoCicloCentavos(plano.precoCentavos, ciclo);
+    const precoDoCiclo = precoDoCicloComComboCentavos(plano, ciclo, faixa);
 
     const assinatura = await criarAssinatura({
       clienteAsaasId: cliente.id,
@@ -676,7 +688,7 @@ export async function criarAssinaturaAction(
       planoId: plano.id,
       precoCentavos: precoDoCiclo,
       ciclo,
-      descricao: `${marca.nome} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}`,
+      descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa),
       primeiroVencimento: vencimento,
       forma: formaDaAssinatura(escolhaDaForma),
     });
@@ -688,9 +700,9 @@ export async function criarAssinaturaAction(
     await consultar(
       `update tenants
           set asaas_cliente_id = $1, asaas_assinatura_id = $2, ciclo_cobranca = $3,
-              assinatura_criada_em = now(), atualizado_em = now()
-        where id = $4`,
-      [cliente.id, assinatura.id, ciclo, tenantId],
+              combo_atomatiza = $4, assinatura_criada_em = now(), atualizado_em = now()
+        where id = $5`,
+      [cliente.id, assinatura.id, ciclo, descontoDaGaleriaCentavos(plano, faixa) > 0 ? faixa : null, tenantId],
     );
 
     revalidatePath("/painel/conta");
@@ -741,6 +753,7 @@ export async function trocarPlanoAction(
 
   // A assinatura primeiro: se o Asaas recusar, o plano no banco não muda e o
   // estúdio não fica com espaço que ninguém está cobrando.
+  let faixaDoCombo: Awaited<ReturnType<typeof faixaDoAtomatiza>> = null;
   if (asaasConfigurado() && tenant.asaas_assinatura_id) {
     try {
       /* Trocar de PLANO mantém o ciclo — quem paga por ano continua pagando por
@@ -749,12 +762,16 @@ export async function trocarPlanoAction(
        * recriar. Enquanto essa segunda operação não existir, o ciclo atual é o
        * que vale, e é ele que entra no split. */
       const ciclo = cicloDe(tenant.ciclo_cobranca);
+      /* O plano novo sai com o combo, se houver: trocar de tamanho muda a linha
+       * da tabela, e o desconto dos dois lados muda junto. A parte do Atomatiza
+       * se acerta na próxima conferência de lá. */
+      faixaDoCombo = tenant.cpf_cnpj ? await faixaDoAtomatiza(tenant.cpf_cnpj).catch(() => null) : null;
       await atualizarAssinatura({
         assinaturaId: tenant.asaas_assinatura_id,
         planoId: plano.id,
-        precoCentavos: precoDoCicloCentavos(plano.precoCentavos, ciclo),
+        precoCentavos: precoDoCicloComComboCentavos(plano, ciclo, faixaDoCombo),
         ciclo,
-        descricao: `${marca.nome} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}`,
+        descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixaDoCombo),
       });
     } catch (e) {
       return { erro: e instanceof Error ? e.message : "não consegui atualizar a assinatura" };
@@ -763,9 +780,14 @@ export async function trocarPlanoAction(
 
   await consultar(
     `update tenants
-        set plano_id = $1, quota_bytes = $2, atualizado_em = now()
-      where id = $3`,
-    [plano.id, novaQuota.toString(), tenantId],
+        set plano_id = $1, quota_bytes = $2, combo_atomatiza = $3, atualizado_em = now()
+      where id = $4`,
+    [
+      plano.id,
+      novaQuota.toString(),
+      descontoDaGaleriaCentavos(plano, faixaDoCombo) > 0 ? faixaDoCombo : null,
+      tenantId,
+    ],
   );
 
   /*
@@ -827,7 +849,7 @@ export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: 
 
   await consultar(
     `update tenants
-        set status = 'cancelado', asaas_assinatura_id = null, atualizado_em = now()
+        set status = 'cancelado', asaas_assinatura_id = null, combo_atomatiza = null, atualizado_em = now()
       where id = $1`,
     [tenantId],
   );

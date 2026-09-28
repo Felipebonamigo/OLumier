@@ -36,6 +36,11 @@ export interface Tenant {
    */
   ciclo_cobranca: string;
   /**
+   * A faixa do Atomatiza que a última conferência do combo encontrou, ou null.
+   * Só para a tela: quem decide o preço é o Asaas. Ver `lib/combo.ts`.
+   */
+  combo_atomatiza: string | null;
+  /**
    * Até quando o dinheiro JÁ RECEBIDO cobre o serviço — null se nada foi pago.
    *
    * Só o ramo `cancelado` de `situacaoDoTenant` consulta: cancelar para a

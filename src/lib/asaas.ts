@@ -53,6 +53,20 @@ export const asaasConfigurado = () => Boolean(process.env.ASAAS_API_KEY);
 
 export const asaasEmProducao = () => process.env.ASAAS_AMBIENTE === "producao";
 
+/**
+ * Um id do Asaas como UM segmento do caminho, nunca mais que isso.
+ *
+ * Desde o combo (28/09/2026) ids chegam de fora — o `customer` de um evento do
+ * webhook — e vão para o caminho de uma chamada com a chave da conta. O `fetch`
+ * resolve `..` como um navegador; sem esta guarda, um id forjado trocaria "este
+ * cliente" por outra rota da conta inteira. Mesmo remédio do Atomatiza
+ * (`segmento`, no `asaas.ts` de lá).
+ */
+function segmento(id: string): string {
+  if (!id || id === "." || id === "..") throw new Error("Asaas: identificador inválido");
+  return encodeURIComponent(id);
+}
+
 async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
   const chave = process.env.ASAAS_API_KEY;
   if (!chave) throw new Error("ASAAS_API_KEY não configurada");
@@ -148,6 +162,10 @@ export interface AssinaturaAsaas {
   status: string;
   nextDueDate: string;
   value: number;
+  /** O cliente do Asaas dono da assinatura. */
+  customer?: string;
+  description?: string | null;
+  externalReference?: string | null;
   /** O Asaas devolve a assinatura apagada com este campo — ver `criarAssinatura`. */
   deleted?: boolean;
   /**
@@ -264,6 +282,13 @@ export async function atualizarAssinatura(dados: {
   /** O ciclo da assinatura que já existe — trocar de ciclo NÃO passa por aqui. */
   ciclo: Ciclo;
   descricao: string;
+  /**
+   * A cobrança já emitida e não paga acompanha o valor novo? Sim por padrão
+   * (troca de plano). O combo desliga quando o preço SOBE: quem cancelou a
+   * outra plataforma volta ao preço cheio no ciclo seguinte, não numa fatura
+   * que ele já recebeu com outro valor.
+   */
+  atualizarPendentes?: boolean;
 }): Promise<AssinaturaAsaas> {
   /* Mesmo motivo de `criarAssinatura`: sem o ciclo, uma troca de plano dentro do
    * anual recalcularia o split com reserva de um mês e mandaria embora o
@@ -275,10 +300,67 @@ export async function atualizarAssinatura(dados: {
     body: JSON.stringify({
       value: dados.precoCentavos / 100,
       description: dados.descricao,
-      updatePendingPayments: true,
+      updatePendingPayments: dados.atualizarPendentes ?? true,
       split: fatias.map((f) => montarFatiaAsaas(f)),
     }),
   });
+}
+
+// --- combo com o Atomatiza (28/09/2026) ------------------------------------
+//
+// A conta do Asaas é a mesma dos dois produtos, e é por ela que um enxerga a
+// assinatura do outro: o mesmo CPF/CNPJ, um cliente de cada lado. Ver
+// `lib/combo.ts`.
+
+export interface ClienteDoDocumento {
+  id: string;
+  cpfCnpj?: string | null;
+  externalReference?: string | null;
+  deleted?: boolean;
+}
+
+/** Os clientes da conta com este CPF/CNPJ — o nosso e o do Atomatiza. */
+export async function clientesDoDocumento(documento: string): Promise<ClienteDoDocumento[]> {
+  const r = await chamar<{ data?: ClienteDoDocumento[] }>(
+    `/customers?cpfCnpj=${encodeURIComponent(documento)}&limit=100`,
+  );
+  return (r.data ?? []).filter((c) => !c.deleted);
+}
+
+export async function buscarCliente(clienteId: string): Promise<ClienteDoDocumento> {
+  return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`);
+}
+
+export async function assinaturasDoCliente(clienteId: string): Promise<AssinaturaAsaas[]> {
+  const r = await chamar<{ data?: AssinaturaAsaas[] }>(
+    `/subscriptions?customer=${encodeURIComponent(clienteId)}&limit=100`,
+  );
+  return r.data ?? [];
+}
+
+/** A assinatura tem cobrança vencida e não paga? */
+export async function temCobrancaVencida(assinaturaId: string): Promise<boolean> {
+  const r = await chamar<{ data?: unknown[] }>(
+    `/subscriptions/${segmento(assinaturaId)}/payments?status=OVERDUE&limit=1`,
+  );
+  return (r.data?.length ?? 0) > 0;
+}
+
+/** Os estados de cobrança em que o dinheiro entrou (cartão, Pix/boleto, em mãos). */
+const PAGAS = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]);
+
+/**
+ * A assinatura já foi paga alguma vez?
+ *
+ * Uma chamada sem filtro de estado, e não três (uma por estado pago): as
+ * primeiras cem cobranças bastam — assinatura que não pagou nenhuma em cem
+ * ciclos já teria sido cancelada muito antes.
+ */
+export async function temCobrancaPaga(assinaturaId: string): Promise<boolean> {
+  const r = await chamar<{ data?: { status?: string }[] }>(
+    `/subscriptions/${segmento(assinaturaId)}/payments?limit=100`,
+  );
+  return (r.data ?? []).some((c) => PAGAS.has(c.status ?? ""));
 }
 
 export async function cancelarAssinatura(assinaturaId: string) {

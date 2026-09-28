@@ -5,6 +5,7 @@ import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais } from "@/config/planos";
+import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza } from "@/config/combo";
 import {
   asaasConfigurado,
   asaasEmProducao,
@@ -114,6 +115,11 @@ export default async function ContaPage() {
   const { ok: splitOk, avisos: avisosSplit } = conferirConfiguracao();
 
   const situacao = SITUACOES[tenant.status] ?? { texto: tenant.status, cor: "text-texto-soft" };
+
+  /* O combo que a última conferência encontrou. É o que a assinatura cobra —
+   * a coluna só é gravada junto com o valor no Asaas (ver `lib/combo.ts`). */
+  const faixaDoCombo = ehFaixaAtomatiza(tenant.combo_atomatiza) ? tenant.combo_atomatiza : null;
+  const descontoDoCombo = plano ? descontoDaGaleriaCentavos(plano, faixaDoCombo) : 0;
   const situacaoEnvio = situacaoDoTenant(tenant, asaasConfigurado());
 
   return (
@@ -133,8 +139,15 @@ export default async function ContaPage() {
         <p className="mt-2 text-sm text-texto-soft">
           {plano ? (
             <>
-              {plano.nome} — <strong className="text-texto">{formatarReais(plano.precoCentavos)}</strong>
+              {plano.nome} —{" "}
+              <strong className="text-texto">{formatarReais(plano.precoCentavos - descontoDoCombo)}</strong>
               /mês
+              {descontoDoCombo > 0 && faixaDoCombo && (
+                <span className="mt-1 block text-xs text-ok">
+                  Combo com o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]}: {formatarReais(descontoDoCombo)} a
+                  menos por mês, enquanto as duas assinaturas estiverem em dia.
+                </span>
+              )}
             </>
           ) : (
             tenant.plano_id

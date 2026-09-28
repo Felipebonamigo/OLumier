@@ -252,6 +252,59 @@ clientes reais pagando. Duas proteções já estão no código:
 
 Ao configurar o webhook do Olumier, **não altere nem remova** o do Atomatiza.
 
+## O combo com o Atomatiza (28/09/2026)
+
+Quem assina a Galeria Átomo **e** o Atomatiza com o mesmo CPF/CNPJ paga menos
+pelos dois. Decisão do Felipe: o desconto é dividido **meio a meio** entre as
+plataformas, cada uma baixa a **sua** assinatura na **sua** metade, e divide com
+os sócios pela própria regra — aqui o split já sai do preço que a assinatura
+cobra, então nada muda nele. Quem já tem um e assina o outro paga o mesmo combo.
+
+| Galeria | + Solo | + Equipe | + Estúdio |
+|---|---|---|---|
+| 250 GB (R$ 49,99) | −R$ 9,99 → **R$ 40,00** | −R$ 9,99 → **R$ 40,00** | −R$ 19,99 → **R$ 30,00** |
+| 500 GB (R$ 79,99) | −R$ 9,99 → **R$ 70,00** | −R$ 14,99 → **R$ 65,00** | −R$ 24,99 → **R$ 55,00** |
+| 1 TB+ (R$ 119,99…) | −R$ 14,99 | −R$ 14,99 | −R$ 24,99 |
+
+A outra metade (R$ 10, 15, 20 ou 25) sai do Atomatiza, que fecha em ,90. Acima
+de 1 TB vale a linha de 1 TB. No anual, o desconto é de dez mensalidades, como o
+próprio preço. Planos antigos (ids nomeados e de três peças) não entram: o
+preço deles é de outra época.
+
+**Como um enxerga o outro.** A conta do Asaas é a mesma, então não há chamada
+de um sistema para o outro nem segredo novo: cada lado procura, pelo CPF/CNPJ,
+a assinatura do outro (`externalReference` com `atz:sub:` lá, `olumier:`
+aqui) e lê o plano na **descrição** dela — "Atomatiza — plano equipe" lá,
+"Galeria Átomo — Foto · 500 GB" aqui. As descrições e a tabela são **contrato
+entre os dois repositórios**: mudou aqui, mude lá (`src/config/combo.ts` aqui,
+`src/lib/combo.ts` lá).
+
+**Quando vale.** A assinatura do outro lado tem de estar viva, **já paga ao
+menos uma vez** e **sem cobrança vencida**. O combo começa quando as duas estão
+pagas e dura enquanto as duas estão em dia.
+
+**Quando é conferido** (`recalcularCombo`, em `src/lib/combo.ts`):
+
+- ao criar a assinatura e ao trocar de plano, aqui;
+- a cada evento do Atomatiza que chega no nosso webhook (a conta é a mesma, e
+  ele já chegava — era só ignorado); a conferência roda **depois** da resposta,
+  com `after()`, para não segurar a fila sequencial da conta;
+- a cada pagamento nosso — a rede de segurança para um aviso perdido.
+
+**O que a conferência não faz:** mexer em valor que não é um dos que este
+sistema grava (mudado à mão no Asaas — ela avisa no log e deixa); mexer na
+fatura já emitida quando o preço **sobe** (quem cancelou o Atomatiza volta ao
+cheio no ciclo seguinte; quando o preço baixa, a fatura aberta baixa junto); e
+devolver erro ao Asaas por causa do combo.
+
+A coluna `tenants.combo_atomatiza` (migração 045) guarda só o que a última
+conferência achou, para a tela de Conta. A verdade é o Asaas. Cada troca de
+valor fica no registro de eventos como `assinatura.combo`.
+
+```bash
+node --env-file=.env.local --conditions=react-server --experimental-strip-types --import ./scripts/registrar-ts.mjs scripts/testar-combo.mjs
+```
+
 ## Como conferir depois de ligar
 
 ```bash

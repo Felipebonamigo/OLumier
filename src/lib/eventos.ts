@@ -52,6 +52,10 @@ export const ACOES = {
    * resposta, e a foto do lugar anterior é apagada do bucket na troca. */
   HOME_FOTO_TROCADA: "home.foto.trocada",
   HOME_FOTO_RESTAURADA: "home.foto.restaurada",
+  /* O preço da assinatura mudou por causa do combo com o Atomatiza (entrou,
+   * saiu ou trocou de faixa). É dinheiro mudando sem o estúdio apertar nada —
+   * "por que a minha mensalidade mudou?" precisa de resposta com data. */
+  COMBO_RECALCULADO: "assinatura.combo",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque
