@@ -36,13 +36,13 @@ export function AvisoEmailPendente({ email, whatsapp }: { email: string; whatsap
 
   return (
     <div className="border-b border-acento/30 bg-acento/5">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2 px-6 py-3 text-sm">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-3 text-sm sm:flex-row sm:items-center sm:gap-4">
         <p className="min-w-0 flex-1 leading-relaxed text-texto-soft">
           <strong className="text-texto">Confirme seu e-mail para enviar fotos.</strong> Mandamos um
           link para <span className="break-all text-texto">{email}</span>. E-mail errado? Fale com a
-          gente pelo WhatsApp {whatsapp}.
+          gente pelo WhatsApp <span className="whitespace-nowrap">{whatsapp}</span>.
         </p>
-        <form action={action} className="flex items-center gap-3">
+        <form action={action} className="flex flex-wrap items-center gap-3">
           {estado.enviado && (
             <span role="status" className="text-xs text-texto-soft">
               Link enviado.

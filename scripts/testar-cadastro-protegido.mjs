@@ -54,7 +54,7 @@ process.env.RESEND_API_KEY = "re_so_da_suite_local";
 process.env.EMAIL_REMETENTE = "avisos@teste.local";
 process.env.ALERTA_EMAIL_DESTINO = "alerta@teste.local";
 
-const { soDigitos, formatarDocumento } = await import("../src/lib/documento.ts");
+const { formatarDocumento } = await import("../src/lib/documento.ts");
 const { criarTenant } = await import("../src/lib/tenants.ts");
 const { PLANO_INICIAL } = await import("../src/config/planos.ts");
 const { hashDeIp } = await import("../src/lib/ip.ts");
