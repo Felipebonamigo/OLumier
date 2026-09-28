@@ -160,13 +160,26 @@ const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
     ACERVO.caminhada,
   ],
   editorial: [ACERVO.praia, ACERVO.maos, ACERVO.alianca, ACERVO.palmeira, ACERVO.contraluz, ACERVO.cadeiras, ACERVO.confete, ACERVO.baloes],
-  /* A capa (a casa de pedra, deitada — a capa jornal é larga) e depois as
-     outras na ordem em que o Juan mandou. */
+  /*
+   * A CAPA É A QUE O JUAN MARCOU (28/09/2026).
+   *
+   * Aqui vinha primeiro a casa de pedra, escolhida por ser DEITADA — a capa
+   * "jornal" é larga, e uma foto em pé pede mais recorte. Só que ele tinha
+   * marcado outra: "uma das fotos eu sinalizei com o nome 'capa'", o beijo
+   * debaixo da árvore grande, com o véu espalhado na grama.
+   *
+   * O formato é razão nossa; a escolha é dele. Numa página cujo argumento é
+   * "a marca do fotógrafo fica na frente", exibir a galeria dele com a capa
+   * que NÓS preferimos contradiz o que a própria página afirma. O recorte se
+   * resolve com o ponto focal (45/65, o casal no terço de baixo).
+   *
+   * Depois dela, as outras na ordem em que ele mandou.
+   */
   classica: [
+    ACERVO.lrBeijoArvore,
     ACERVO.lrCasaDePedra,
     ACERVO.lrMaosDadas,
     ACERVO.lrCaminhadaPb,
-    ACERVO.lrBeijoArvore,
     ACERVO.lrAbraco,
     ACERVO.lrGiro,
     ACERVO.lrSentados,
