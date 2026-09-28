@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { definirCapaAction, moverMediasAction } from "@/app/painel/actions";
+import { definirCapaAction, moverMediasAction, moverFotoAction } from "@/app/painel/actions";
 import { depoisDoClique } from "@/lib/trecho-selecionado";
 
 export interface MediaExibida {
@@ -153,6 +153,56 @@ export function GradeMedias({
     } finally {
       setApagandoTudo(false);
     }
+  }
+
+  /*
+   * A ORDEM ENQUANTO O DEDO ANDA — igual à da lista de capítulos.
+   *
+   * `null` quer dizer "quem manda é a lista do servidor", e é o que faz a tela
+   * voltar sozinha ao certo depois do `router.refresh()`. Zerar antes da volta
+   * do servidor faria o ladrilho piscar no lugar antigo.
+   */
+  const [ordemLocal, setOrdemLocal] = useState<string[] | null>(null);
+  const [arrastando, setArrastando] = useState<string | null>(null);
+
+  function aoCruzar(alvoId: string) {
+    if (!arrastando || arrastando === alvoId) return;
+    const atual = (ordemLocal ?? medias.map((m) => m.id)).slice();
+    const de = atual.indexOf(arrastando);
+    const para = atual.indexOf(alvoId);
+    if (de < 0 || para < 0) return;
+    atual.splice(para, 0, ...atual.splice(de, 1));
+    setOrdemLocal(atual);
+  }
+
+  function aoSoltar() {
+    const arrastada = arrastando;
+    setArrastando(null);
+    if (!arrastada || !ordemLocal) return;
+    const original = medias.map((m) => m.id);
+    if (ordemLocal.join() === original.join()) return setOrdemLocal(null);
+
+    /*
+     * Vai o PAR, e não a lista inteira: numa galeria de 4.577 fotos a lista
+     * seriam 169 KB de formulário e 4.577 linhas reescritas para mover uma. O
+     * servidor refaz o mesmo `splice` e mexe só no trecho entre as duas.
+     *
+     * O alvo é quem ESTAVA na posição onde ela caiu, lido da ordem original —
+     * é a informação que o servidor precisa para chegar ao mesmo resultado.
+     */
+    const destino = ordemLocal.indexOf(arrastada);
+    const alvo = original[destino];
+    if (!alvo || alvo === arrastada) return setOrdemLocal(null);
+
+    iniciar(async () => {
+      const f = new FormData();
+      f.set("galeria_id", galeriaId);
+      f.set("arrastado", arrastada);
+      f.set("alvo", alvo);
+      await moverFotoAction(f);
+      router.refresh();
+      setOrdemLocal(null);
+    });
   }
 
   async function apagarSelecionadas() {
@@ -401,13 +451,53 @@ export function GradeMedias({
       */}
       {aberta && (
       <ul className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10">
-        {medias.map((m) => {
+        {(ordemLocal
+          ? (ordemLocal.map((id) => medias.find((m) => m.id === id)).filter(Boolean) as typeof medias)
+          : medias
+        ).map((m) => {
           const selecionada = selecao.has(m.id);
           const capitulo = nomeSecao(m.secaoId);
           return (
             <li
               key={m.id}
-              className="group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto]"
+              /*
+                ARRASTAR PARA REORDENAR (28/09/2026).
+
+                Felipe: "quero adicionar as fotos analógicas que fiz no 'local'
+                certo, na ordem cronológica e não consigo arrastar". A ordem era
+                decidida no ENVIO e ponto — quem revela um filme depois não tinha
+                onde encaixá-lo.
+
+                Mesmo idioma da lista de capítulos: a ordem local manda enquanto
+                o dedo anda, o servidor recebe só o par (arrastada, alvo) e a
+                lista do servidor volta a mandar quando o `router.refresh()`
+                chega. E a conta do servidor usa o MESMO `splice` daqui — se as
+                duas discordassem, o ladrilho pularia de lugar ao recarregar.
+
+                `draggable` não existe no toque, e é por isso que o "mover para"
+                do menu continua: no celular ele é o único caminho.
+              */
+              draggable={!ocupado && !apagandoSelecao}
+              onDragStart={(e) => {
+                setArrastando(m.id);
+                setOrdemLocal(medias.map((x) => x.id));
+                /* Sem `setData` o Firefox não inicia o arrasto. */
+                e.dataTransfer.setData("text/plain", m.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                aoCruzar(m.id);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                aoSoltar();
+              }}
+              onDragEnd={aoSoltar}
+              className={`group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto] ${
+                arrastando === m.id ? "opacity-40" : ""
+              }`}
             >
               {/*
                 A MOLDURA ACENDE SOB O PONTEIRO (pedido do Juan em 05/09/2026).

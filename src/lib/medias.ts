@@ -1,5 +1,5 @@
 import "server-only";
-import { consultar, consultarUm } from "./db";
+import { consultar, consultarUm, emTransacao } from "./db";
 
 export interface Media {
   id: string;
@@ -365,6 +365,86 @@ export async function republicarMedia(
  * O filtro por tenant está no próprio DELETE, e não numa consulta antes: entre
  * conferir e apagar cabe uma troca de dono, e o banco não deixa essa fresta.
  */
+/**
+ * MOVE UMA FOTO PARA ANTES DE OUTRA — o arrastar da aba Fotos.
+ *
+ * ── DE ONDE VEIO (28/09/2026) ─────────────────────────────────────────────
+ *
+ * Felipe: "quero adicionar as fotos analógicas que fiz no 'local' certo, na
+ * ordem cronológica e não consigo arrastar".
+ *
+ * A ordem da galeria é a narrativa do casamento — este arquivo já brigou três
+ * vezes por ela (a migração 038 e o lote de 23/09). Só que ela era decidida no
+ * ENVIO e ponto: quem revela um filme depois, ou recebe a foto do segundo
+ * fotógrafo na semana seguinte, não tinha como encaixá-la no meio.
+ *
+ * ── A CONTA, E POR QUE ELA É BOUNDED ──────────────────────────────────────
+ *
+ * Não se renumera a galeria inteira: numa de 4.577 fotos seriam 4.577 linhas
+ * reescritas para mover uma. Só o TRECHO entre a origem e o destino muda de
+ * casa, e ele é a distância que o dedo percorreu — normalmente algumas fotos.
+ *
+ * Descendo (a foto vai para uma posição maior), quem está no caminho sobe uma
+ * casa; subindo, desce uma casa. Os dois sentidos NÃO são simétricos, e trocar
+ * os sinais dá uma lista que parece certa com três fotos e embaralha com
+ * trezentas — `testar-arrastar-fotos.mjs` confere a sequência inteira.
+ *
+ * NÃO MEXE NO CAPÍTULO de propósito: arrastar é sobre posição. Trocar de
+ * capítulo é o "mover para", que já existe e diz o que faz.
+ */
+export async function moverMediaNaOrdem(
+  galeriaId: string,
+  tenantId: string,
+  arrastadoId: string,
+  alvoId: string,
+): Promise<boolean> {
+  if (arrastadoId === alvoId) return false;
+
+  /* As duas na MESMA galeria e do MESMO estúdio, numa consulta só: os ids vêm
+     do navegador, e é este `where` que impede arrastar foto que não é de quem
+     pede — ou para dentro de uma galeria que não é dele. */
+  const pontas = await consultar<{ id: string; ordem: number }>(
+    `select id, ordem from medias
+      where galeria_id = $1 and tenant_id = $2 and id = any($3::uuid[])`,
+    [galeriaId, tenantId, [arrastadoId, alvoId]],
+  );
+  if (pontas.length !== 2) return false;
+
+  const de = pontas.find((p) => p.id === arrastadoId)!.ordem;
+  const para = pontas.find((p) => p.id === alvoId)!.ordem;
+  if (de === para) return false;
+
+  await emTransacao(async (consultarNaTransacao) => {
+    if (de < para) {
+      /* Descendo: o trecho (de, para] sobe uma casa e a arrastada assume o
+         lugar de quem era o alvo. */
+      await consultarNaTransacao(
+        `update medias set ordem = ordem - 1
+          where galeria_id = $1 and tenant_id = $2 and ordem > $3 and ordem <= $4`,
+        [galeriaId, tenantId, de, para],
+      );
+      await consultarNaTransacao("update medias set ordem = $2 where id = $1", [
+        arrastadoId,
+        para,
+      ]);
+    } else {
+      /* Subindo: o trecho [para, de) desce uma casa e a arrastada ocupa o
+         começo dele — que é o "antes desta" que o dedo pediu. */
+      await consultarNaTransacao(
+        `update medias set ordem = ordem + 1
+          where galeria_id = $1 and tenant_id = $2 and ordem >= $3 and ordem < $4`,
+        [galeriaId, tenantId, para, de],
+      );
+      await consultarNaTransacao("update medias set ordem = $2 where id = $1", [
+        arrastadoId,
+        para,
+      ]);
+    }
+  });
+
+  return true;
+}
+
 export async function apagarTodasAsMedias(
   galeriaId: string,
   tenantId: string,

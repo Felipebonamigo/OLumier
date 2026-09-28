@@ -1448,6 +1448,26 @@ export async function moverSoltasAction(form: FormData) {
 }
 
 /**
+ * Arrastar uma foto para outra posição na aba Fotos.
+ *
+ * Pedido de 28/09/2026: encaixar as analógicas reveladas depois no lugar
+ * cronológico certo, sem reenviar a galeria inteira na ordem nova. A conta mora
+ * em `moverMediaNaOrdem`, e ela mexe só na POSIÇÃO — trocar de capítulo
+ * continua sendo o "mover para".
+ */
+export async function moverFotoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const arrastado = String(form.get("arrastado") ?? "");
+  const alvo = String(form.get("alvo") ?? "");
+  if (!galeriaId || !arrastado || !alvo) return;
+
+  const { moverMediaNaOrdem } = await import("@/lib/medias");
+  await moverMediaNaOrdem(galeriaId, tenantId, arrastado, alvo);
+  revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
  * O caminho de volta: as fotos do capítulo voltam a ser "sem capítulo".
  *
  * Par do `moverSoltasAction` acima, pedido em 28/09/2026. O capítulo continua
