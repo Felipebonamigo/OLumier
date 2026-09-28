@@ -181,7 +181,7 @@ function Fileiras({
   const alturaBase = Math.round(largura * 1.25);
 
   return (
-    <div ref={ref} style={{ display: "flex", flexDirection: "column", gap }}>
+    <div ref={ref} data-grade={modo} style={{ display: "flex", flexDirection: "column", gap }}>
       {fileiras.map((indices, f) => {
         const soma = indices.reduce((t, i) => t + proporcoes[i], 0);
         const util = larguraMedida - gap * (indices.length - 1);
@@ -275,6 +275,7 @@ export function GaleriaGrade({
   if (aparencia.grade === "quadrada") {
     return (
       <div
+        data-grade="quadrada"
         style={{
           display: "grid",
           gap,
@@ -290,6 +291,7 @@ export function GaleriaGrade({
   // respiro sem o fotógrafo precisar escolher nada.
   return (
     <div
+      data-grade="editorial"
       style={{
         display: "grid",
         gap,

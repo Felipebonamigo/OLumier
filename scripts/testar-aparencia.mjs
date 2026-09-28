@@ -75,13 +75,16 @@ const FUNDO = Object.fromEntries(
  * declara o número exato de colunas, e é isso que a distingue da `quadrada` e
  * da `editorial`, que usam `auto-fill`.
  */
-const MARCA_GRADE = {
-  colunas: "flex-direction:column",
-  linhas: "flex-basis",
-  quadrada: "aspect-ratio:1 / 1",
-  editorial: "grid-auto-rows",
-  panorama: "grid-template-columns:repeat(",
-};
+/*
+ * 28/09/2026: a "Linhas" também virou fileira justificada (ver
+ * `fileirasPorAltura`), e as três grades de fileira passaram a ter o mesmo
+ * CSS — nenhuma marca de estilo distingue mais uma da outra. Cada grade
+ * agora se declara no HTML (`data-grade`), como a capa já fazia
+ * (`data-capa`): pista indireta confunde uma com a outra em silêncio.
+ */
+const MARCA_GRADE = Object.fromEntries(
+  ["colunas", "linhas", "quadrada", "editorial", "panorama"].map((g) => [g, `data-grade="${g}"`]),
+);
 const FONTE_ESPERADA = {
   serifada: "--font-serif-app",
   moderna: "--font-sans-app",

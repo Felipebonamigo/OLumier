@@ -96,10 +96,10 @@ export default async function DemonstracaoPage({
           capaEscolhida: true,
         }}
       />
-      <div
-        className="relative z-10 mx-auto max-w-[1500px] px-4 sm:px-6"
-        style={{ background: "var(--g-fundo)" }}
-      >
+      {/* A camada que cobre a capa ocupa a largura toda; a caixa de dentro
+          limita as fotos — ver `g/[estudio]/[galeria]/page.tsx`. */}
+      <div className="relative z-10" style={{ background: "var(--g-fundo)" }}>
+      <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
         <GaleriaCliente
           itens={itens}
           permiteDownload={false}
@@ -121,6 +121,7 @@ export default async function DemonstracaoPage({
           favoritasIniciais={[itens[0].id, itens[3].id]}
           selecaoInicial={{ limite: null, aberta: false, motivo: null, combinada: false }}
         />
+      </div>
       </div>
       <footer className="mt-16 text-center">
         <span

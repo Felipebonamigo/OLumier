@@ -173,9 +173,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         src={logoUrl}
         alt={estudio}
         style={{ maxHeight: `${alturaLogo}px` }}
-        // inline-block em vez de mx-auto: assim o alinhamento vem do pai, e a
-        // capa "dividida" (texto à esquerda no desktop) não fica com a logo
-        // centralizada sozinha no meio da coluna.
+        // inline-block em vez de mx-auto: assim o alinhamento vem do pai (ou
+        // do `self-*` que a capa passa quando a logo é filha de um flex).
         className={`inline-block w-auto object-contain ${className}`}
       />
     ) : (
@@ -281,11 +280,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
        * responde por quem está DENTRO do elemento, então o próprio `h1` não
        * poderia se medir contra si mesmo.
        *
-       * Ela não leva classe nenhuma de propósito. `text-align` é herdado, e a
-       * capa dividida escreve `md:text-left` no pai: repetir `alinharTexto`
-       * aqui venceria essa regra por estar fora de media query e viraria a capa
-       * do avesso no computador — uma capa entregue mudando de cara por causa
-       * de uma `div` de medição.
+       * Ela não leva classe nenhuma de propósito: `text-align` é herdado do
+       * pai de cada capa, e é lá que o eixo de alinhamento é aplicado.
        */
       <div style={{ containerType: "inline-size", width: "100%" }}>
         <h1
@@ -600,10 +596,25 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
+        {/*
+          ── O ALINHAMENTO VALE NO COMPUTADOR TAMBÉM (28/09/2026) ────────────
+
+          Esta coluna tinha `md:text-left` cravado: no computador a dividida
+          era sempre à esquerda, qualquer que fosse o eixo. Só que a CAIXA do
+          título obedece ao eixo (`alinharBloco`), e com "Centralizado" ela ia
+          para o meio com o texto encostado na esquerda dela, enquanto o
+          rótulo e a data ficavam na borda — o título torto em relação ao
+          resto. Felipe, com o print da galeria da Juliana Josende: "na opção
+          centralizada ficou feio, só o título ficou no centro".
+
+          Agora o eixo manda nos três mecanismos, em todas as larguras, como
+          nas outras capas. Quem quer a dividida encostada à esquerda escolhe
+          "À esquerda" — que é o que a opção diz.
+        */}
         <div
-          className={`flex flex-col justify-center px-8 py-16 md:px-14 md:text-left ${alinharTexto}`}
+          className={`flex flex-col justify-center px-8 py-16 md:px-14 ${alinharTexto}`}
         >
-          <Estudio />
+          <Estudio className={aEsquerda ? "self-start" : "self-center"} />
           <div className="mt-6">
             <Rotulo />
             <Titulo base={TITULO_MEDIO} />

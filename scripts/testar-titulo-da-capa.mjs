@@ -467,10 +467,32 @@ await etapa("a galeria se declara por cima da capa fixa", async () => {
   const pagina = await (
     await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })
   ).text();
-  if (!/class="relative z-10 mx-auto/.test(pagina)) {
-    throw new Error("a camada da galeria perdeu o z-10");
-  }
-  return "z-10 sobre a capa";
+  const camada = pagina.match(/<div class="relative z-10[^"]*"[^>]*>/)?.[0];
+  if (!camada) throw new Error("a camada da galeria perdeu o z-10");
+  if (!/background:var\(--g-fundo\)/.test(camada)) throw new Error(`a camada não tem fundo: ${camada}`);
+  /* 28/09/2026: o fundo morava na caixa de 1500 px das fotos, e numa tela
+     mais larga a capa grudada aparecia pelas laterais — "a foto continuar só
+     um pedaço ali". Quem cobre a capa ocupa a largura toda. */
+  if (/max-w-/.test(camada)) throw new Error(`a camada que cobre a capa tem largura máxima: ${camada}`);
+  return "z-10 sobre a capa, de borda a borda";
+});
+
+await etapa('na dividida, "Centralizado" centraliza a coluna inteira — também no computador', async () => {
+  /* 28/09/2026, print da galeria da Juliana Josende: a coluna de texto tinha
+     `md:text-left` cravado, a caixa do título obedecia ao eixo, e com
+     "Centralizado" só o título ia para o meio. */
+  const coluna = async (alinhamento) => {
+    await tituloCom({ capa: "dividida", alinhamento });
+    const pagina = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+    const capa = pagina.match(/<header[^>]*data-capa="dividida"[^]*?<\/header>/)?.[0];
+    if (!capa) throw new Error("a bancada não desenhou a capa dividida (sem foto de capa?)");
+    return capa.match(/<div class="flex flex-col[^"]*"/)?.[0] ?? "";
+  };
+  const centro = await coluna("centro");
+  if (!/\btext-center\b/.test(centro) || /md:text-left/.test(centro)) throw new Error(`centralizada: ${centro}`);
+  const esquerda = await coluna("esquerda");
+  if (!/\btext-left\b/.test(esquerda)) throw new Error(`à esquerda: ${esquerda}`);
+  return "centro e esquerda valem nas duas larguras";
 });
 
 await etapa("o padrão continua sendo a capa que sobe junto", async () => {
