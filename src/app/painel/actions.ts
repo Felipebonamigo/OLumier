@@ -1322,6 +1322,23 @@ export async function moverSoltasAction(form: FormData) {
 }
 
 /**
+ * O caminho de volta: as fotos do capítulo voltam a ser "sem capítulo".
+ *
+ * Par do `moverSoltasAction` acima, pedido em 28/09/2026. O capítulo continua
+ * existindo — esvaziar não é apagar, e quem vai reorganizar quer o nome de pé.
+ */
+export async function esvaziarSecaoAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const secaoId = String(form.get("secao_id") ?? "");
+  if (!galeriaId || !secaoId) return;
+
+  const { esvaziarSecao } = await import("@/lib/secoes");
+  await esvaziarSecao(galeriaId, secaoId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
  * Troca o endereço da galeria. O anterior deixa de abrir.
  *
  * A regra inteira mora em `lib/endereco-galeria.ts`, inclusive o que acontece

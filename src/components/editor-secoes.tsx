@@ -10,6 +10,7 @@ import {
   moverSecaoAction,
   reordenarSecoesAction,
   moverSoltasAction,
+  esvaziarSecaoAction,
   ordenarFotosDaSecaoAction,
 } from "@/app/painel/actions";
 import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
@@ -290,6 +291,38 @@ export function EditorSecoes({
                           </option>
                         ))}
                       </select>
+                    )}
+                    {/*
+                      O CAMINHO DE VOLTA (28/09/2026).
+
+                      "Outras fotos" tem "mover todas para…" desde 04/09; o
+                      capítulo não tinha como devolver. Quem mandou a pasta
+                      errada no envio só desfazia foto a foto — ou APAGAVA o
+                      capítulo, que é um botão vermelho com aviso de que não dá
+                      para desfazer, para uma intenção que era só reorganizar.
+
+                      Esvaziar não apaga o capítulo: ele fica ali, vazio, que é
+                      justamente o estado de quem vai remontar a divisão.
+                    */}
+                    {s.total > 0 && (
+                      <button
+                        type="button"
+                        disabled={ocupado}
+                        onClick={() => {
+                          const quantas = `${s.total} ${s.total === 1 ? "foto" : "fotos"}`;
+                          if (
+                            confirm(
+                              `Tirar as ${quantas} de “${s.nome}”?\n\n` +
+                                `Elas voltam para "Outras fotos". O capítulo continua, vazio.`,
+                            )
+                          ) {
+                            executar(esvaziarSecaoAction, { secao_id: s.id });
+                          }
+                        }}
+                        className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"
+                      >
+                        tirar as fotos
+                      </button>
                     )}
                     <button
                       type="button"

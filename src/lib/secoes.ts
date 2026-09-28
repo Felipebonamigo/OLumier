@@ -441,6 +441,47 @@ export async function moverMediasParaSecao(
  * Devolve quantas moveu. Zero quando o capítulo não é válido para esta
  * galeria: quem chama trata como "não fiz nada", que é a verdade.
  */
+/**
+ * DEVOLVE AS FOTOS DE UM CAPÍTULO PARA "SEM CAPÍTULO" — o caminho de volta.
+ *
+ * ── DE ONDE VEIO (28/09/2026) ─────────────────────────────────────────────
+ *
+ * A ida existia desde 04/09: o grupo "Outras fotos" tem "mover todas para…". A
+ * volta, não. Quem criou um capítulo errado, ou mandou a pasta inteira para o
+ * lugar errado no envio, tinha duas saídas: desfazer foto a foto, ou APAGAR o
+ * capítulo — um botão vermelho, com aviso de que não dá para desfazer, para uma
+ * operação que só queria desarrumar as fotos de novo.
+ *
+ * ESVAZIAR NÃO É APAGAR: o capítulo continua existindo, vazio. É justamente o
+ * estado de quem vai reorganizar e quer o nome de pé enquanto move as fotos.
+ *
+ * O `tenant_id` no WHERE do UPDATE, e não só na conferência do capítulo: é ele
+ * que garante que o id vindo do navegador não alcance a galeria de ninguém —
+ * mesma régua de `moverSoltasParaSecao`, logo abaixo.
+ */
+export async function esvaziarSecao(
+  galeriaId: string,
+  secaoId: string,
+  tenantId: string,
+): Promise<number> {
+  const alvo = await consultarUm<{ id: string }>(
+    `select s.id
+       from secoes s
+       join galerias g on g.id = s.galeria_id
+      where s.id = $1 and s.galeria_id = $2 and g.tenant_id = $3`,
+    [secaoId, galeriaId, tenantId],
+  );
+  if (!alvo) return 0;
+
+  const soltas = await consultar<{ id: string }>(
+    `update medias set secao_id = null
+      where galeria_id = $1 and tenant_id = $2 and secao_id = $3
+      returning id`,
+    [galeriaId, tenantId, secaoId],
+  );
+  return soltas.length;
+}
+
 export async function moverSoltasParaSecao(
   galeriaId: string,
   secaoId: string,
