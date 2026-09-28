@@ -372,7 +372,11 @@ etapa("o deploy instala todo script que um serviço chama", () => {
  * mudar de forma, este teste falha a acha-la em vez de passar em silêncio.
  */
 function avisarDoBackup(resend, segredos) {
-  const fonte = ler("ops/fotonio-backup.sh");
+  /* Normaliza o fim de linha antes de recortar: no Windows o git entrega o
+     roteiro com CRLF, e o marcador de fim procurado logo abaixo é "\n}\n" —
+     com `\r` no meio ele nunca aparece, e o teste acusava "não achei o fim de
+     avisar()" numa função intacta. Só na máquina do Felipe. */
+  const fonte = ler("ops/fotonio-backup.sh").replace(/\r\n/g, "\n");
   const inicio = fonte.indexOf("avisar() {");
   if (inicio < 0) throw new Error("não achei avisar() em ops/fotonio-backup.sh");
   const fim = fonte.indexOf("\n}\n", inicio);
