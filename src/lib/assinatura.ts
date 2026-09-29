@@ -28,6 +28,7 @@
  */
 
 import { CARENCIA_POS_TRIAL_DIAS } from "@/config/trial";
+import { dataDoAsaas } from "@/config/troca-de-plano";
 
 export type MotivoBloqueio = "trial_vencido" | "inadimplente" | "cancelado";
 
@@ -220,6 +221,66 @@ export function fimDoPeriodoPago(ciclo: string | null | undefined, pagoEm: Date)
   return fim;
 }
 
+/** As datas da cobrança que o Asaas manda no corpo do webhook ("2026-09-29"). */
+export interface DatasDaCobranca {
+  confirmedDate?: string | null;
+  clientPaymentDate?: string | null;
+  paymentDate?: string | null;
+}
+
+/**
+ * O `pago_ate` depois de um aviso de pagamento — ou `null` quando o aviso é
+ * repetição de uma cobrança já contada e não deve mudar NADA no estúdio.
+ *
+ * No cartão o Asaas avisa duas vezes, com um mês entre os avisos:
+ * PAYMENT_CONFIRMED na aprovação e PAYMENT_RECEIVED 32 dias depois, quando o
+ * dinheiro cai (boleto: dias depois; Pix: só o RECEIVED). Até 29/09/2026 cada
+ * aviso contava o período a partir do momento em que chegava, e o segundo:
+ *
+ *   · empurrava `pago_ate` quase um mês — a mais para quem cancelou;
+ *   · marcava `ativo` de novo quem tinha cancelado, e `ativo` envia sem olhar
+ *     `pago_ate`: acesso para sempre, sem assinatura nenhuma. Idem para quem
+ *     estava inadimplente com a mensalidade seguinte.
+ *
+ * Duas regras fecham isso sem guardar id de cobrança:
+ *
+ * 1. O período conta do DIA DA CONFIRMAÇÃO que vem no corpo, igual nos dois
+ *    avisos — não do momento do aviso. Começo do dia em Brasília, como o resto
+ *    das datas do Asaas (`dataDoAsaas`). Sem data válida no corpo, vale o
+ *    momento do aviso. Faltando só no primeiro, a regra 2 segue de pé (o
+ *    momento dele nunca é anterior ao dia da confirmação); faltando no
+ *    segundo, ele volta a contar do momento dele. O exemplo da documentação do
+ *    Asaas (conferido em 29/09/2026) traz `confirmedDate` no RECEIVED do cartão.
+ *
+ * 2. O RECEIVED só vale se comprar tempo novo. Isso só acontece quando não houve
+ *    CONFIRMED antes: Pix, recebimento em dinheiro, ou um CONFIRMED perdido.
+ *    O CONFIRMED sempre vale (é o pagamento acontecendo), mas nunca encolhe o
+ *    período — um anual rodando continua pago se entrar uma mensalidade.
+ *
+ * Limite conhecido: quem paga, cancela e reassina pagando no Pix NO MESMO DIA
+ * fica `cancelado` até a mensalidade seguinte, porque o Pix novo compra o mesmo
+ * fim do anterior e é lido como repetição. A saída, se um dia acontecer, é
+ * guardar o `payment.id` já contado em vez de inferir pela data.
+ */
+export function pagoAteDepoisDoAviso(
+  evento: string,
+  cobranca: DatasDaCobranca | null | undefined,
+  ciclo: string | null | undefined,
+  pagoAteAtual: Date | string | null | undefined,
+  agora: Date,
+): Date | null {
+  const confirmadaEm =
+    dataDoAsaas(cobranca?.confirmedDate) ??
+    dataDoAsaas(cobranca?.clientPaymentDate) ??
+    dataDoAsaas(cobranca?.paymentDate) ??
+    agora;
+  const fim = fimDoPeriodoPago(ciclo, confirmadaEm);
+  const atual = comoData(pagoAteAtual);
+
+  if (!atual || fim.getTime() > atual.getTime()) return fim;
+  return evento === "PAYMENT_CONFIRMED" ? atual : null;
+}
+
 /**
  * O que cada evento do Asaas faz com a conta.
  *
@@ -237,9 +298,9 @@ export function fimDoPeriodoPago(ciclo: string | null | undefined, pagoEm: Date)
 export type EfeitoDoEvento = "pagou" | "atrasou" | "cancelou" | "estornou";
 
 const EFEITOS: Record<string, EfeitoDoEvento> = {
-  // O Asaas manda os dois para a MESMA cobrança. Por isso o período conta a
-  // partir do momento do evento em vez de somar ao que já havia: dois avisos
-  // do mesmo pagamento não podem valer dois meses.
+  // O Asaas manda os dois para a MESMA cobrança — no cartão, com 32 dias entre
+  // eles. Quanto cada aviso compra, e quando o segundo não muda nada, é
+  // `pagoAteDepoisDoAviso`: dois avisos do mesmo pagamento valem UM período.
   PAYMENT_CONFIRMED: "pagou",
   PAYMENT_RECEIVED: "pagou",
 

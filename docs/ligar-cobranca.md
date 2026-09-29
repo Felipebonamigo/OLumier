@@ -439,24 +439,39 @@ entrou cobre o serviço". Quem escreve nela:
 
 | Evento | `status` | `pago_ate` |
 |---|---|---|
-| `PAYMENT_CONFIRMED` / `PAYMENT_RECEIVED` | `ativo` | agora + 1 mês (ou + **12** se anual) |
+| `PAYMENT_CONFIRMED` / `PAYMENT_RECEIVED` | `ativo` | dia da confirmação + 1 mês (ou + **12** se anual) |
+| `PAYMENT_RECEIVED` de cobrança já contada | **intocado** | **intocado** |
 | `PAYMENT_OVERDUE` | `inadimplente` | intocado |
 | `PAYMENT_DELETED` / `SUBSCRIPTION_DELETED` | `cancelado` | **intocado** — o dinheiro ficou conosco |
 | `PAYMENT_REFUNDED` / `PAYMENT_CHARGEBACK_REQUESTED` | `cancelado` | **null** — o dinheiro voltou |
 | cancelamento pelo painel | `cancelado` | **intocado** |
 
-Três detalhes que não são óbvios:
+Quatro detalhes que não são óbvios:
 
 - **O anual compra 12 meses, não 10.** O desconto está no preço (paga 10, leva
   12). Se o período seguisse a fatura, todo estúdio anual ficaria dois meses
   descoberto por ano — e descobriria justamente ao cancelar.
-- **O período conta a partir de agora, não soma.** O Asaas manda
-  `PAYMENT_CONFIRMED` *e* `PAYMENT_RECEIVED` para a mesma cobrança; somar daria
-  dois meses por um pagamento.
+- **O período conta do dia da confirmação, não soma e não conta do aviso.** O
+  Asaas manda `PAYMENT_CONFIRMED` *e* `PAYMENT_RECEIVED` para a mesma cobrança;
+  somar daria dois meses por um pagamento. E no **cartão** os dois chegam com
+  **32 dias** de distância (confirmado na aprovação, recebido quando o dinheiro
+  cai — boleto: dias; Pix: só o recebido). Até 29/09/2026 o período contava do
+  momento do aviso, e o recebido tardio dava quase um mês a mais — e marcava
+  `ativo` de novo quem tinha cancelado, com envio liberado para sempre e sem
+  assinatura. Agora a conta sai de `payment.confirmedDate`, igual nos dois
+  avisos (começo do dia em Brasília; sem data no corpo, o momento do aviso).
+- **O recebido só vale se comprar tempo novo.** Se o fim que ele daria não passa
+  do `pago_ate` atual, é repetição de cobrança já contada e o estúdio fica
+  intocado — nem status. O confirmado sempre vale, mas nunca encolhe o período.
+  Limite conhecido: pagar, cancelar e reassinar pagando no Pix **no mesmo dia**
+  deixa o estúdio `cancelado` até a mensalidade seguinte (o Pix novo dá o mesmo
+  fim e parece repetição). Se acontecer, a saída é guardar o `payment.id` já
+  contado. Regra em `pagoAteDepoisDoAviso`.
 - **Inadimplência não olha `pago_ate`.** É outra régua, e ainda não foi
   decidida: a cobrança em aberto é a do período seguinte.
 
-Regra em `src/lib/assinatura.ts` (`fimDoPeriodoPago`, `efeitoDoEvento`), coluna
+Regra em `src/lib/assinatura.ts` (`fimDoPeriodoPago`, `pagoAteDepoisDoAviso`,
+`efeitoDoEvento`), coluna
 na migração `021-periodo-pago.sql`, prova em:
 
 ```bash
