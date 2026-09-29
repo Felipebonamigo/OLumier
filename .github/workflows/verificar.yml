@@ -12,13 +12,16 @@
 # assinam URL de upload e conferem que o objeto saiu do bucket. Um dublê de
 # armazenamento provaria que o dublê funciona.
 #
-# O Postgres vem como serviço; o armazém é um MinIO (fala S3, igual ao R2) que
-# o app alcança por `R2_ENDPOINT` — a variável existe para isso e para o dia da
-# troca de fornecedor, que `src/lib/r2.ts` já anunciava.
+# O Postgres vem como serviço; o armazém é um servidor S3 sobre arquivo, do npm
+# (`scripts/armazem-de-teste.mjs`), que o app alcança por `R2_ENDPOINT` — a
+# variável existe para isso e para o dia da troca de fornecedor, que
+# `src/lib/r2.ts` já anunciava. Era um MinIO até 29/09/2026, quando o MinIO
+# fechou o acesso público em todos os registradores; o passo que sobe o armazém
+# conta a história inteira.
 #
-# Sem o MinIO, o `healthz` reprova por falta de armazém e o corredor pula as 32
-# suítes de HTTP — inclusive as treze que passam por rota de arquivo. Metade da
-# suíte viraria enfeite. Foi medido antes de este arquivo existir.
+# Sem armazém, o `healthz` reprova e o corredor pula as 32 suítes de HTTP —
+# inclusive as treze que passam por rota de arquivo. Metade da suíte viraria
+# enfeite. Foi medido antes de este arquivo existir.
 
 name: Verificar
 
@@ -67,8 +70,11 @@ jobs:
       # que os dois lados usem o mesmo. Nada aqui fala com o Asaas.
       ASAAS_WEBHOOK_TOKEN: token-de-webhook-so-do-ci-0123456789abcdef
       R2_ENDPOINT: http://127.0.0.1:9000
-      R2_ACCESS_KEY_ID: minioadmin
-      R2_SECRET_ACCESS_KEY: minioadmin
+      # As chaves do `s3rver`. São de mentira como as de cima, e o armazém é
+      # local: não há o que proteger, e o valor precisa casar com o que ele
+      # espera. Ver `scripts/armazem-de-teste.mjs`.
+      R2_ACCESS_KEY_ID: S3RVER
+      R2_SECRET_ACCESS_KEY: S3RVER
       R2_BUCKET: galerias
       # O bucket vai no CAMINHO, não no subdomínio.
       #
@@ -76,7 +82,7 @@ jobs:
       # de ligar sozinho junto com o endereço e passou a ter chave própria, para
       # um fornecedor futuro poder usar endereço próprio e continuar no estilo
       # virtual. A troca é boa e cobra esta linha: R2 e B2 atendem em
-      # `bucket.host`, e o MinIO local não tem DNS curinga para isso — sem ela o
+      # `bucket.host`, e armazém local não tem DNS curinga para isso — sem ela o
       # cliente S3 procura `galerias.127.0.0.1`, não acha ninguém, e TODA rota de
       # arquivo cai com erro de DNS, que não diz nada sobre bucket nenhum.
       #
@@ -107,92 +113,57 @@ jobs:
       - name: Vulnerabilidade nas dependências
         run: npm audit --audit-level=high
 
-      # ── DE ONDE VEM O MINIO (23/09/2026) ────────────────────────────────
+      # ── O ARMAZÉM NÃO VEM MAIS DE FORA ────────────────────────────────────
       #
-      # Era `docker run ... minio/minio`, do Docker Hub, e funcionou até agosto.
-      # Parou: o runner recebe
+      # Era um MinIO, e em um mês o fornecedor fechou as TRÊS portas que havia:
       #
-      #     pull access denied for minio/minio, repository does not exist
-      #     or may require 'docker login'
+      #   · Docker Hub (`minio/minio`) — `pull access denied ... may require
+      #     'docker login'`;
+      #   · `quay.io/minio/minio` — `unauthorized: access to the requested
+      #     resource is not authorized`, em qualquer tag, pinada ou móvel;
+      #   · o binário de `dl.min.io` — **410 Gone**.
       #
-      # Não é limite de taxa — limite devolve 429. Conferido contra o registro:
-      # o token anônimo de pull é emitido normalmente e o manifest responde
-      # 401. A MinIO fechou as imagens do Docker Hub para quem não autentica.
+      # Não foi tag que sumiu: foi o acesso público que acabou. Duas rodadas
+      # foram gastas descobrindo isso, e a segunda só descobriu porque o passo
+      # passou a imprimir o erro de cada tentativa em vez de engoli-lo.
       #
-      # Autenticar exigiria guardar credencial de terceiro num segredo do
-      # repositório, para subir um servidor de mentira — custo e superfície que
-      # uma bancada de teste não justifica.
+      # Agora o armazém vem do npm, que o CI já usa para existir (`npm ci`):
+      # zero ponto de falha novo, porque sem npm não há CI de qualquer jeito.
+      # Ver o cabeçalho de `scripts/armazem-de-teste.mjs`.
       #
-      # DUAS FONTES, e a segunda não é excesso de zelo: as duas primeiras são
-      # de FORA, e o portão inteiro para quando a de fora muda de política, que
-      # é exatamente o que acabou de acontecer. A primeira é o quay.io, o
-      # registro oficial alternativo da própria MinIO; a segunda é o binário
-      # que eles publicam em dl.min.io, que não passa por registro nenhum. Se
-      # as duas falharem, o passo morre alto — nunca segue sem armazém, porque
-      # aí treze suítes de arquivo passariam a pular em silêncio.
-      # ── DE ONDE VEM O MINIO, E POR QUE ISTO JÁ CUSTOU TRÊS RODADAS ────────
+      # E NÃO É UM DUBLÊ, que seria trocar a cobertura pela conveniência: o
+      # `s3rver` implementa o protocolo S3 sobre o sistema de arquivos, e o app
+      # fala com ele pelo `R2_ENDPOINT` com o mesmo `@aws-sdk/client-s3` de
+      # produção — sem uma linha de desvio no código. Mudou QUEM atende, não O
+      # QUE é exercitado: as suítes continuam assinando URL de upload, subindo
+      # arquivo pela rede, lendo de volta e apagando 1200 chaves em lote.
       #
-      # O armazém é a única peça do CI que vem de fora do npm, e o fornecedor
-      # dela mudou de ideia três vezes em um mês:
-      #
-      #   1. Docker Hub (`minio/minio`) — fechado: o manifesto passou a
-      #      responder 401 mesmo com token anônimo emitido;
-      #   2. `quay.io/minio/minio:latest` — a tag `latest` deixou de existir;
-      #   3. o binário de `dl.min.io` — responde **410 Gone**, que é a maneira
-      #      de dizer "não volta".
-      #
-      # Por isso agora é uma LISTA de candidatos, cada um com a tag PINADA (foi
-      # uma tag móvel que sumiu, não a imagem), e o erro de cada tentativa vai
-      # para o log. Da última vez o `2>/dev/null` engoliu o motivo e a rodada
-      # só disse "quay.io indisponível" — diagnóstico nenhum, uma rodada a
-      # menos. Falhar é aceitável; falhar sem dizer por quê, não.
-      - name: Subir o armazém (MinIO, que fala S3 como o R2)
+      # Medido nesta forma, com banco e servidor no ar: 129 passaram, 0
+      # falharam, 2 não se aplicam (as de CORS, que dependem da política do
+      # bucket no painel do fornecedor e o deploy.sh confere no VPS).
+      - name: Subir o armazém (S3 sobre arquivo, do npm)
         run: |
           set -euo pipefail
+          node scripts/armazem-de-teste.mjs --porta 9000 --bucket "$R2_BUCKET" \
+            > /tmp/armazem.log 2>&1 &
 
-          CANDIDATOS="
-            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-            quay.io/minio/minio:latest
-            docker.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-            docker.io/minio/minio:latest
-          "
-
-          imagem=""
-          for c in $CANDIDATOS; do
-            echo "--- tentando $c"
-            if docker pull -q "$c"; then imagem="$c"; break; fi
-          done
-
-          if [ -z "$imagem" ]; then
-            echo "::error::nenhuma fonte do MinIO respondeu — as tentativas e os erros estão acima."
-            echo "::error::se todas as imagens sumiram de vez, troque o armazém do CI (qualquer servidor S3 serve: o app fala com ele por R2_ENDPOINT)."
-            exit 1
-          fi
-          echo "armazém: $imagem"
-
-          docker run -d --name minio -p 9000:9000 \
-            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-            "$imagem" server /data
-
-          # Espera responder antes de criar o bucket: o `docker run` volta na
-          # hora e o servidor leva alguns segundos.
           pronto=""
           for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null; then
+            # Prova com uma IDA E VOLTA de verdade — grava, lê, apaga —, e com o
+            # mesmo cliente S3 do app. "A porta aceita conexão" não prova que o
+            # armazém responde S3, e sonda que mede a coisa errada é como um CI
+            # passa a cobrir menos sem ninguém notar.
+            if node scripts/armazem-de-teste.mjs --conferir; then
               pronto="sim"; break
             fi
             sleep 2
           done
           if [ -z "$pronto" ]; then
-            echo "::error::o armazém não respondeu em 60s (imagem: $imagem)"
-            docker logs minio 2>&1 | tail -40 || true
+            echo "::error::o armazém não respondeu S3 em 60s"
+            cat /tmp/armazem.log || true
             exit 1
           fi
-          # A AWS CLI já vem no runner. Endereço explícito e caminho no path:
-          # MinIO local não tem DNS curinga para `bucket.host`.
-          AWS_ACCESS_KEY_ID=minioadmin AWS_SECRET_ACCESS_KEY=minioadmin \
-            aws --endpoint-url http://127.0.0.1:9000 --region us-east-1 \
-                s3 mb s3://galerias
+          echo "armazém pronto: $R2_ENDPOINT (bucket $R2_BUCKET)"
 
       # As suítes recebem o ambiente por `--env-file=.env.local` (é o que o
       # `testar-tudo.mjs` passa a cada filho), então o arquivo precisa existir.
@@ -247,7 +218,7 @@ jobs:
 
       # `--exigir-tudo` transforma "pulado" em REPROVAÇÃO.
       #
-      # É a diferença entre um CI que cobre e um que enfeita: se o MinIO não
+      # É a diferença entre um CI que cobre e um que enfeita: se o armazém não
       # subir, ou o servidor cair, as suítes seriam puladas em silêncio e a
       # execução ficaria verde cobrindo um terço. Aqui isso é vermelho, e
       # vermelho é o que faz alguém olhar.

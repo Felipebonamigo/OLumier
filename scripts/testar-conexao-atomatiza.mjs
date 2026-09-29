@@ -242,7 +242,16 @@ await etapa("e o trial abandonado também — a perna mais sutil da régua", asy
   let g = await (await chamar(`/api/galerias/${galeria.id}`, { chave: deLeitura })).json();
   igual(g.publicada, true, "a galeria não mudou");
   igual(g.estado, "online", "nem o estado");
-  igual(g.noAr, false, "trial abandonado derruba o noAr");
+  /* A régua ganhou uma condição em 29/09/2026: com a COBRANÇA DESLIGADA no
+   * servidor, teste vencido não derruba galeria nenhuma — não há porta para
+   * pagar (`galeriasNoAr`, decisão 1 de `lib/assinatura.ts`). O que este passo
+   * prende continua sendo o mesmo: que a rota CONSULTA a régua em vez de
+   * devolver a coluna `publicada` crua. Só o valor certo depende do ambiente.
+   *
+   * Aqui a pergunta atravessa HTTP, e quem responde é o servidor — mas os dois
+   * processos leem o mesmo `.env.local`, então concordam sobre a cobrança. */
+  const { asaasConfigurado } = await import("../src/lib/asaas.ts");
+  igual(g.noAr, !asaasConfigurado(), "trial abandonado com a régua de hoje");
 
   // Dentro da carência ainda está no ar: a régua falha para o lado de MOSTRAR.
   await db.query(
@@ -428,7 +437,7 @@ await etapa("o aviso NÃO leva endereço, título nem nada do casal", async () =
   return "só id, referência, estado e contagem";
 });
 
-await etapa("o trial abandonado também chega como fora do ar", async () => {
+await etapa("o trial abandonado chega pela régua da cobrança, não por uma cópia dela", async () => {
   /* O mesmo cuidado do noAr da rota: um aviso dizendo "no ar" sobre uma
    * galeria que não abre é pior que aviso nenhum — o outro lado vai escrever
    * isso na tela de quem vende. */
