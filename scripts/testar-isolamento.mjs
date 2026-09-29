@@ -44,14 +44,27 @@ const AQUI = dirname(fileURLToPath(import.meta.url));
 /**
  * O padrão proibido.
  *
- * Qualquer `order by ... limit 1` sobre galerias/tenants dentro de um teste é
+ * Qualquer `order by ... limit N` sobre galerias/tenants dentro de um teste é
  * escolha de fixture global — não importa como esteja escrito. Quem precisa de
  * galeria pede à `fixture-de-teste.mjs`, que cria a sua.
  *
  * Fica deliberadamente largo: é melhor recusar um SELECT inocente (e o autor
  * move duas linhas) do que deixar passar um que colide de madrugada.
+ *
+ * ── POR QUE `\d+` E NÃO `1` ───────────────────────────────────────────────
+ * Porque foi `1` até 29/08/2026, e o defeito voltou uma linha adiante. Três
+ * testes — api-galerias, chave-api e dominio-proprio — pediam DOIS estúdios:
+ *
+ *     select ... from tenants order by criado_em limit 2
+ *
+ * O varredor passou por eles sem ver. Custou uma bancada compartilhada nos três
+ * (o dominio-proprio chegava a APAGAR o domínio próprio dos dois estúdios que
+ * encontrasse) e a primeira execução do CI deste repositório, que terminou
+ * 59 · 3 com os três desistindo em banco novo: "preciso de dois estúdios no
+ * banco de teste". Guarda que casa com o número exato do dia guarda o exemplo,
+ * não a regra.
  */
-const ORDENA_PELO_MAIS_ANTIGO = /order\s+by\s+[\w.]*criado_em[^;`'"]*\blimit\s+1/gi;
+const ORDENA_PELO_MAIS_ANTIGO = /order\s+by\s+[\w.]*criado_em[^;`'"]*\blimit\s+\d+/gi;
 
 /**
  * A janela em volta do acerto, para julgar o SELECT inteiro e não a linha.
@@ -121,7 +134,8 @@ await etapa("nenhum teste escolhe fixture global", () => {
     throw new Error(
       `${culpados.length} teste(s) pegam a linha mais antiga do banco em vez de criar a sua:\n` +
         culpados.map((c) => `      ${c}`).join("\n") +
-        `\n    Troque por galeriaDaRodada() / estudioDaRodada() de fixture-de-teste.mjs.`,
+        `\n    Troque por galeriaDaRodada() / estudioDaRodada() / segundoEstudioDaRodada()` +
+        `\n    de fixture-de-teste.mjs.`,
     );
   }
   return `${arquivos.length} arquivo(s) conferidos`;

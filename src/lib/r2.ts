@@ -74,8 +74,17 @@ export const OPCOES_DO_CLIENTE = {
   forcePathStyle: process.env.ARMAZEM_CAMINHO_NO_ENDERECO === "1",
 };
 
-/** true quando as credenciais estão configuradas — telas mostram aviso amigável se não. */
-export const armazenamentoConfigurado = Boolean(conta && accessKeyId && secretAccessKey);
+/** true quando as credenciais estão configuradas — telas mostram aviso amigável se não.
+ *
+ *  `R2_ENDPOINT` conta como conta configurada, e não é detalhe: quando o armazém
+ *  é imposto por endereço — o MinIO do CI —, NÃO existe `R2_ACCOUNT_ID`, porque
+ *  não há conta da Cloudflare envolvida. Exigindo só `conta`, o `healthz`
+ *  reprovaria por falta de armazém e o corredor pularia as 32 suítes de HTTP,
+ *  inclusive as treze que passam por rota de arquivo. Metade do portão viraria
+ *  enfeite, em silêncio — que é o pior jeito de um CI falhar. */
+export const armazenamentoConfigurado = Boolean(
+  (conta || process.env.R2_ENDPOINT) && accessKeyId && secretAccessKey,
+);
 
 let cliente: S3Client | null = null;
 

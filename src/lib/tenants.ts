@@ -41,6 +41,11 @@ export interface Tenant {
    */
   combo_atomatiza: string | null;
   /**
+   * A última vez que o Atomatiza perguntou por este estúdio e achou conta aqui.
+   * Liga o seletor de plataforma no painel. Ver `lib/ponte-atomatiza.ts`.
+   */
+  atomatiza_visto_em: Date | null;
+  /**
    * O maior plano já pago no período corrente — a base da diferença quando o
    * estúdio aumenta o plano. Nulo = vale o plano atual. Ver
    * `config/troca-de-plano.ts` e a migração 046.
@@ -90,6 +95,9 @@ export interface Galeria {
      O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
   aparencia_rascunho: unknown;
   capa_media_id: string | null;
+  /** De onde a galeria veio, quando não nasceu no painel — ver migração 047. */
+  origem: string | null;
+  origem_ref: string | null;
   /* Capa enviada como arquivo (migração 029). Vence capa_media_id, e não é uma
      linha em `medias`: não aparece na galeria nem conta como entrega. */
   capa_chave: string | null;
@@ -352,6 +360,12 @@ export async function criarGaleria(dados: {
   titulo: string;
   subtitulo?: string;
   dataEvento?: string;
+  /**
+   * Quem criou de fora, e a partir de quê — ver migração 045. O painel e o
+   * plugin do Lightroom não passam nada aqui; hoje só o Atomatiza passa, pela
+   * rota `POST /api/galerias`, que também é quem garante a idempotência.
+   */
+  origem?: { de: string; ref: string };
 }) {
   const base = gerarSlug(dados.titulo) || "galeria";
   let slug = base;
@@ -365,10 +379,18 @@ export async function criarGaleria(dados: {
   }
 
   return consultarUm<Galeria>(
-    `insert into galerias (tenant_id, slug, titulo, subtitulo, data_evento)
-     values ($1, $2, $3, $4, $5)
+    `insert into galerias (tenant_id, slug, titulo, subtitulo, data_evento, origem, origem_ref)
+     values ($1, $2, $3, $4, $5, $6, $7)
      returning *`,
-    [dados.tenantId, slug, dados.titulo, dados.subtitulo || null, dados.dataEvento || null],
+    [
+      dados.tenantId,
+      slug,
+      dados.titulo,
+      dados.subtitulo || null,
+      dados.dataEvento || null,
+      dados.origem?.de ?? null,
+      dados.origem?.ref ?? null,
+    ],
   );
 }
 
@@ -449,10 +471,31 @@ export async function restaurarGaleria(tenantId: string, galeriaId: string, ip?:
     [galeriaId, tenantId],
   );
 
+  /*
+   * A referência de origem pode ter dona nova. Entre apagar e restaurar, o
+   * Atomatiza pode ter recriado a galeria do mesmo contrato — o índice parcial
+   * da migração 045 deixa a lixeira de fora justamente para permitir isso. Se
+   * a restauração mantivesse o vínculo, o índice a recusaria e o fotógrafo
+   * veria a lixeira "quebrada" no pior momento. A restaurada volta inteira,
+   * só que sem a procedência: das duas, a que representa o contrato hoje é a
+   * recriada.
+   */
   await consultar(
-    `update galerias
-        set estado = 'online', apagada_em = null, atualizado_em = now()
-      where id = $1 and tenant_id = $2 and estado = 'lixeira'`,
+    `update galerias g
+        set estado = 'online', apagada_em = null, atualizado_em = now(),
+            origem = case when exists (
+                select 1 from galerias o
+                 where o.tenant_id = g.tenant_id and o.id <> g.id
+                   and o.origem = g.origem and o.origem_ref = g.origem_ref
+                   and o.estado <> 'lixeira'
+              ) then null else g.origem end,
+            origem_ref = case when exists (
+                select 1 from galerias o
+                 where o.tenant_id = g.tenant_id and o.id <> g.id
+                   and o.origem = g.origem and o.origem_ref = g.origem_ref
+                   and o.estado <> 'lixeira'
+              ) then null else g.origem_ref end
+      where g.id = $1 and g.tenant_id = $2 and g.estado = 'lixeira'`,
     [galeriaId, tenantId],
   );
 

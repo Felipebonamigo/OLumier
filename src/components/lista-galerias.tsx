@@ -14,6 +14,9 @@ export interface GaleriaDaLista {
   estudioSlug: string;
   publicada: boolean;
   estado: string;
+  /** De onde a galeria veio, quando não nasceu no painel — migração 047.
+   *  `"atomatiza"` é a criada a partir de um contrato, pela chave de API. */
+  origem: string | null;
   /** Dias até o cofre; `null` quando não há prazo. */
   diasAteCofre: number | null;
   dataFormatada: string | null;
@@ -314,7 +317,23 @@ export function ListaGalerias({
                 mesma linha alinhem a régua de baixo mesmo com títulos de
                 alturas diferentes. */}
             <div className="mt-auto flex flex-wrap items-center justify-between gap-2 px-5 pb-4 pt-3">
-              <Etiqueta galeria={g} />
+              <span className="flex flex-wrap items-center gap-2">
+                <Etiqueta galeria={g} />
+                {/* Procedência, não estado — por isso fica ao LADO da
+                  * `Etiqueta` e não dentro dela: aquela diz em que pé a entrega
+                  * está (rascunho, no ar, no cofre), esta diz de onde a galeria
+                  * veio. Só aparece quando veio de fora, e para quem usa os
+                  * dois produtos é o que explica uma galeria que ele não lembra
+                  * de ter criado. */}
+                {g.origem === "atomatiza" && (
+                  <span
+                    title="Criada pelo Atomatiza, a partir de um contrato"
+                    className="rounded-full border border-linha px-2 py-0.5 text-[11px] text-texto-faint"
+                  >
+                    do contrato
+                  </span>
+                )}
+              </span>
               <span className="text-xs tabular-nums text-texto-soft">
                 {g.arquivos} {g.arquivos === 1 ? "arquivo" : "arquivos"}
                 <span className="text-texto-faint"> · {g.tamanho}</span>

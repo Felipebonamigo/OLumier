@@ -166,6 +166,103 @@ graça porque já está no corpo; estas nascem vazias, e uma rota nova que esque
 
 O ganho de escrevê-las: elas servem ao painel também, e encolhem `actions.ts`.
 
+### Adição de 28/08/2026 — a conexão com o Atomatiza
+
+O primeiro consumidor de verdade da chave não foi o plugin do Lightroom: foi o
+**Atomatiza**, o outro produto da casa (contratos, agenda, cobrança). O contrato nasce
+lá; a entrega mora aqui. O fotógrafo cola a chave lá, e o contrato ganha um botão
+"criar a galeria desta venda".
+
+Três coisas entraram para isso, todas dentro do desenho que já existia:
+
+| Rota | Para quê | Escopo |
+|---|---|---|
+| `GET /api/conta` | o aperto de mão: a quem esta chave pertence (`tenantId`, `slug`, `nomeEstudio`, `dominio`, `escopo`) — é o que o outro lado mostra na tela antes de gravar a conexão, e o `escopo` deixa recusar chave de leitura na hora | `leitura` |
+| `GET /api/galerias/:id` | como está a entrega: estado, contagem, endereço canônico e o `noAr` **calculado** (a régua da página pública, nunca a coluna `publicada` crua) | `leitura` |
+| `POST /api/galerias` + `referenciaExterna` | criar a galeria de um contrato, com **idempotência**: a mesma referência devolve a mesma galeria (200), nunca uma `ana-pedro-2` | `envio` |
+
+A procedência fica em `galerias.origem`/`origem_ref` (migração 045), com índice único
+parcial por `(tenant, origem, origem_ref)` que deixa a lixeira de fora — apagar a
+galeria errada não pode trancar o contrato até a purga. A referência é **opaca**:
+guardamos e devolvemos, nunca interpretamos. Nenhum dado do contrato (valor, cliente,
+telefone) atravessa; senha de galeria não entra em URL nem em resposta.
+
+O `GET /api/conta` não fere o "conta exige cookie" desta página: ele não expõe nada
+que dê poder — nem e-mail, nem plano, nem cobrança. Só a identidade que a tela de
+conexão do outro lado precisa confirmar, e o `tenantId`, que é a âncora estável do
+pareamento (o slug pode mudar — migração 025; o id não).
+
+Prova em `scripts/testar-conexao-atomatiza.mjs`.
+
+### Camada 4 — o canal de avisos (a galeria falando primeiro)
+
+As três rotas acima são de PUXAR: o outro lado pergunta, a gente responde. Fica
+um buraco, e ele é o do dia a dia — o fotógrafo publica a galeria aqui e o
+contrato lá continua dizendo "fora do ar" até alguém lembrar de clicar em
+conferir.
+
+| Rota | Para quê | Escopo |
+|---|---|---|
+| `POST /api/avisos` | registra PARA ONDE avisar e com que segredo | `envio` |
+| `GET /api/avisos` | o estado do canal (endereço e última tentativa) — o segredo nunca volta | `leitura` |
+| `DELETE /api/avisos` | desfaz o canal | `envio` |
+
+**Quem inventa o segredo é quem RECEBE**, e registra aqui — o desenho do
+webhook do Asaas. Assim o outro lado gira o segredo quando quiser sem pedir
+nada a ninguém. Ele fica cifrado (`src/lib/cripto.ts`, `AVISOS_ENC_KEY`, próprio
+deste canal — nunca o `SESSION_SECRET`).
+
+**E o dono do estúdio vê o canal na tela**, em `Painel → Conta → Avisos de
+entrega`: para onde está avisando, desde quando, o último aviso e a última
+falha — e um botão para desligar. Só aparece para quem tem canal.
+
+A tela **não cria** canal, e a ausência do botão é a arquitetura aparecendo:
+criar exigiria inventar um segredo aqui e mostrá-lo para alguém copiar, ou
+seja, fazer o segredo passar por dentro de um HTML. Desligar, sim — é a conta
+deste estúdio mandando coisa para fora, e cortar não pode depender de o outro
+sistema estar de pé. Mesma assimetria de "revogar chave".
+
+O que a tela mostra vem de `estadoDoCanal()`, que existe separada de
+`canalDoEstudio()` por um motivo só: aquela decifra o segredo porque vai
+assinar com ele; esta serve uma página, e o `select` dela nem pede a coluna do
+segredo. `testar-tela-avisos.mjs` procura o segredo — em claro e cifrado — no
+HTML da página, e foi conferido que ele reprova com o vazamento plantado.
+
+`POST` exige escopo **envio**, e não leitura: registrar um canal é dizer para
+onde os eventos deste estúdio saem. "Quem lê" e "quem redireciona" não podem ser
+o mesmo poder. O endereço precisa ser **https** — é o nosso servidor fazendo
+requisição para um endereço que outra pessoa escolheu, e em `http` o segredo
+viajaria em claro.
+
+**O que sai no aviso** (`src/lib/avisos.ts`), e o que não sai:
+
+```json
+{ "evento": "entrega.mudou", "ocorridoEm": "…", "galeriaId": "…",
+  "referenciaExterna": "…", "noAr": true, "totalMedias": 230 }
+```
+
+Sem título, sem endereço, sem nada do casal. Em especial **sem a URL**: quem
+recebe já a tem, do pareamento — aceitar endereço por aviso deixaria um aviso
+forjado apontar o casal para outro lugar, e é justamente esse o dado que vai
+parar num grupo de WhatsApp.
+
+Quatro regras sustentam o canal, e cada uma tem passo em
+`scripts/testar-conexao-atomatiza.mjs`:
+
+1. **Avisar nunca derruba o que o disparou.** Mesmo `catch` vazio de
+   `registrarEvento`, e pelo mesmo motivo: o outro sistema fora do ar não pode
+   impedir o fotógrafo de publicar aqui.
+2. **O `noAr` é calculado**, pela mesma régua da página pública — trial
+   abandonado incluído. Aviso dizendo "no ar" sobre galeria que não abre é pior
+   que aviso nenhum: o outro lado escreve isso na tela de quem vende.
+3. **`ocorridoEm` vai junto**, e é por ele que o outro lado ordena. Rede
+   reordena; sem a hora do fato, o último a chegar venceria.
+4. **A assinatura é HMAC-SHA256 sobre o corpo cru**, com o `tenant_id` em claro
+   no cabeçalho dizendo qual segredo usar.
+
+Só galeria com procedência gera aviso: a criada no painel não representa
+registro nenhum lá.
+
 ### Limite de uso — NÃO construído, e de propósito
 
 O desenho pedia reaproveitar `src/lib/tentativas.ts` com este argumento: *"sem freio,

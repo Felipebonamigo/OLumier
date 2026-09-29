@@ -18,8 +18,14 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = process.env;
 
+/* `R2_ACCOUNT_ID` só existe para MONTAR o endereço do R2. Quem já tem o
+ * endereço pronto (`R2_ENDPOINT` — o armazém do CI, ou um local) não precisa
+ * dela, e exigi-la aqui era o que mantinha esta suíte fora de qualquer máquina
+ * sem as chaves de produção. */
+const ENDERECO = process.env.R2_ENDPOINT;
+
 const faltando = Object.entries({
-  R2_ACCOUNT_ID,
+  ...(ENDERECO ? {} : { R2_ACCOUNT_ID }),
   R2_ACCESS_KEY_ID,
   R2_SECRET_ACCESS_KEY,
   R2_BUCKET,
@@ -32,7 +38,11 @@ if (faltando.length) {
   process.exit(1);
 }
 
-console.log(`conta ...${R2_ACCOUNT_ID.slice(-6)} · bucket "${R2_BUCKET}"`);
+console.log(
+  ENDERECO
+    ? `armazém em ${ENDERECO} · bucket "${R2_BUCKET}"`
+    : `conta ...${R2_ACCOUNT_ID.slice(-6)} · bucket "${R2_BUCKET}"`,
+);
 
 
 /* O endereço do armazém vem do `lib/r2.ts`: eram cinco cópias desta conta,
