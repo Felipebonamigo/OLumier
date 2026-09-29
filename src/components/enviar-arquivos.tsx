@@ -222,7 +222,28 @@ export function EnviarArquivos({
           id="escolher-arquivos"
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
+          /*
+            ── LISTA FECHADA VIRA UM ARQUIVO POR VEZ NO IPHONE (29/09/2026) ──
+
+            Juan: "pelo celular, não estão conseguindo subir vários vídeos de
+            uma vez. Tem que ir um a um."
+
+            Aqui havia os nove mimes exatos. No iPhone, a lista fechada é o
+            caminho conhecido para o seletor de fotos entregar um arquivo por
+            vez; `image/*` e `video/*` são as formas que ele entende para abrir
+            a biblioteca inteira com seleção múltipla.
+
+            ⚠ Não confirmado num iPhone de verdade — não há um aqui. A
+            confirmação é do Juan, no aparelho dele.
+
+            Afrouxar aqui não afrouxa nada: quem decide o que ENTRA continua
+            sendo o servidor, que devolve 415 para o que não estiver em
+            `TIPOS_ACEITOS` (nove tipos exatos, presos por
+            `testar-poster-de-video.mjs`). O `accept` só muda o que o seletor
+            OFERECE — e oferecer a mais, com recusa clara depois, é melhor do
+            que oferecer de menos e não deixar escolher nada.
+          */
+          accept="image/*,video/*"
           className="hidden"
           onChange={(e) => {
             conferirEEnviar([...(e.target.files ?? [])].map(comCaminhoDoInput));

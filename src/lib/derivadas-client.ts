@@ -10,6 +10,7 @@
  */
 
 import type { RostoMedido } from "./rostos-client";
+import { reconhecerArquivo } from "./tipos-de-arquivo";
 
 export const TAMANHO_THUMB = 640; // grade — igual ao que o Pixieset usa
 export const TAMANHO_PREVIEW = 2048; // lightbox — nítido em tela cheia, fração do original
@@ -223,7 +224,28 @@ export async function gerarDerivadas(
    * avulso daria um resultado que o convidado não consegue interpretar —
    * aparecer no segundo 1 não é aparecer no filme.
    */
-  if (arquivo.type.startsWith("video/")) {
+  /*
+   * ── QUEM DECIDE O TIPO É `reconhecerArquivo`, E NÃO `File.type` (29/09/2026)
+   *
+   * Aqui estava `arquivo.type.startsWith("video/")`, e o `arquivo.type` vem
+   * VAZIO com frequência: é o que o Windows dá para todo `.heic` (foi o que
+   * derrubou 33 dos 74 envios da Carol, algumas horas antes) e o que muito
+   * `.mov` compartilhado de outro aplicativo traz.
+   *
+   * Com o tipo vazio, o vídeo escapava do ramo dele, caía no
+   * `if (!arquivo.type.startsWith("image/")) return null` logo abaixo e subia
+   * SEM MINIATURA NENHUMA. Juan, com o print da galeria no iPhone: "os vídeos
+   * não têm uma visualização, uma capa. Eles ficam assim" — dois retângulos
+   * vazios com um botão de play no meio.
+   *
+   * O servidor já caía na extensão desde aquele dia. Faltava o navegador usar
+   * a mesma regra, que agora mora em `lib/tipos-de-arquivo.ts` justamente para
+   * os dois lados lerem dela.
+   */
+  const reconhecido = reconhecerArquivo(arquivo.name, arquivo.type);
+  if (!reconhecido) return null;
+
+  if (reconhecido.tipo === "video") {
     const bitmap = await quadroDoVideo(arquivo);
     if (!bitmap) return null;
     try {
@@ -240,7 +262,6 @@ export async function gerarDerivadas(
     }
   }
 
-  if (!arquivo.type.startsWith("image/")) return null;
   try {
     // from-image respeita a orientação EXIF — foto de celular não vira deitada.
     const bitmap = await createImageBitmap(arquivo, { imageOrientation: "from-image" });
