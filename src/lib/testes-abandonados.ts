@@ -199,7 +199,7 @@ export async function enviarAvisoDeLimpeza(
 
   const assunto = final
     ? `Último aviso: os arquivos do seu teste serão apagados em ${quando}`
-    : `Os arquivos do seu teste no ${marca.nome} serão apagados em ${quando}`;
+    : `Os arquivos do seu teste na ${marca.nome} serão apagados em ${quando}`;
 
   const linhas = [
     final

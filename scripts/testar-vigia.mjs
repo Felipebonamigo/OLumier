@@ -10,7 +10,7 @@
  * carregavam três defeitos que só apareceriam no pior dia possível:
  *
  * 1. O vigia mirava `fotonio.com.br` — a PRIMEIRA marca, de antes do Olumier e
- *    do Galeria Átomo, e um domínio que nem está em `DOMINIOS_ATENDIDOS`. Ou
+ *    da Galeria Átomo, e um domínio que nem está em `DOMINIOS_ATENDIDOS`. Ou
  *    ele não alcançava nada e caía no ramo que REINICIA O SERVIÇO a cada 5
  *    minutos, ou alcançava outra coisa e uma queda de verdade passava batido.
  *

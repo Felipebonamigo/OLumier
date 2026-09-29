@@ -382,7 +382,7 @@ export async function proximaCobranca(assinaturaId: string) {
   return r.data?.[0] ?? null;
 }
 
-/** true se o evento do webhook pertence ao Galeria Átomo (a conta é dividida com o Atomatiza). */
+/** true se o evento do webhook pertence à Galeria Átomo (a conta é dividida com o Atomatiza). */
 export function eventoEhNosso(referenciaExterna: string | null | undefined): boolean {
   return Boolean(referenciaExterna?.startsWith(PREFIXO));
 }

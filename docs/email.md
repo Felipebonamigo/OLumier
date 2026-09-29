@@ -48,13 +48,13 @@ endereço saiu de vista, o que para o sangramento — mas não cria a caixa.
 
 **Enviar.** O `src/lib/email.ts` fica desligado de propósito enquanto não houver
 `RESEND_API_KEY` e `EMAIL_REMETENTE`, e o remetente **precisa** ser de domínio
-verificado: mandar "redefina sua senha do Galeria Átomo" de outro domínio é
+verificado: mandar "redefina sua senha da Galeria Átomo" de outro domínio é
 exatamente o que um golpe faria. Com ele desligado, a recuperação de senha é
 manual — a pessoa chama no WhatsApp e alguém redefine na mão. Funciona com três
 estúdios; com trinta, é você acordando de madrugada.
 
 **Avisar.** Os avisos de queda e de backup saem de `contato@atomatiza.com.br`
-porque é o único domínio verificado. Funciona, mas um aviso do Galeria Átomo
+porque é o único domínio verificado. Funciona, mas um aviso da Galeria Átomo
 chegando de outro produto é o tipo de coisa que a pessoa marca como spam.
 
 ## O conserto — uma sentada no painel de DNS

@@ -5,7 +5,7 @@ import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 
 export const metadata: Metadata = {
   title: "Termos de Uso",
-  description: `Regras de uso do ${marca.nome}.`,
+  description: `Regras de uso da ${marca.nome}.`,
 };
 
 /* A data é do TEXTO, não do arquivo: mexeu na regra, muda aqui. Termo que diz
@@ -20,13 +20,13 @@ export default function TermosPage() {
       <p className="mt-1 text-xs text-texto-faint">Atualizados em {ATUALIZADO_EM}</p>
 
       <p>
-        Estes termos valem entre você (o <strong>fotógrafo</strong> que contrata) e o {marca.nome},
+        Estes termos valem entre você (o <strong>fotógrafo</strong> que contrata) e a {marca.nome},
         operado por Felipe Carboni Bonamigo. Ao criar uma conta, você concorda com eles.
       </p>
 
       <h2>O que o serviço faz — e o que ele não é</h2>
       <p>
-        O {marca.nome} hospeda e entrega galerias de fotos e vídeos para os seus clientes, com a sua
+        A {marca.nome} hospeda e entrega galerias de fotos e vídeos para os seus clientes, com a sua
         marca, em um endereço próprio do seu estúdio. Inclui armazenamento das galerias no ar,
         espaço de cofre para o que sai do ar, e download sem limite de vezes para quem recebe o
         link.
@@ -187,13 +187,13 @@ export default function TermosPage() {
         manutenção, falha de fornecedor ou problema de rede podem causar indisponibilidade.
       </p>
       <p>
-        <strong>Guarde suas cópias originais.</strong> O {marca.nome} é um serviço de entrega e de
+        <strong>Guarde suas cópias originais.</strong> A {marca.nome} é um serviço de entrega e de
         cofre, não substitui o seu backup — e nenhum serviço deveria ser sua única cópia.
       </p>
 
       <h2>Pelo que não nos responsabilizamos</h2>
       <p>
-        O {marca.nome} é a plataforma que guarda e entrega os arquivos. O que está dentro deles é
+        A {marca.nome} é a plataforma que guarda e entrega os arquivos. O que está dentro deles é
         seu, e a responsabilidade por ele também. <strong>Não nos responsabilizamos</strong> por:
       </p>
       <ul>

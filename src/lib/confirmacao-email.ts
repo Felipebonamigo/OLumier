@@ -153,7 +153,7 @@ export async function enviarConfirmacao(tenant: {
 
   const corpo = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#a4adbd">
-      A conta de <strong style="color:#eef1f6">${escapar(tenant.nome_estudio)}</strong> no
+      A conta de <strong style="color:#eef1f6">${escapar(tenant.nome_estudio)}</strong> na
       ${marca.nome} está criada. Falta confirmar que este e-mail é seu — é ele que
       recebe os avisos da conta, e o envio de fotos começa depois deste clique.
     </p>
@@ -168,10 +168,10 @@ export async function enviarConfirmacao(tenant: {
 
   return enviarEmail({
     para: tenant.email,
-    assunto: `Confirme seu e-mail no ${marca.nome}`,
+    assunto: `Confirme seu e-mail na ${marca.nome}`,
     html: moldura("Confirme seu e-mail", corpo),
     texto: [
-      `A conta de ${tenant.nome_estudio} no ${marca.nome} está criada.`,
+      `A conta de ${tenant.nome_estudio} na ${marca.nome} está criada.`,
       "Falta confirmar que este e-mail é seu. Abra o link abaixo:",
       link,
       "",

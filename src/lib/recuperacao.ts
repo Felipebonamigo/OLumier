@@ -161,7 +161,7 @@ export async function enviarEmailDeRecuperacao(
   const corpo = `
     <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#a4adbd">
       Alguém pediu para redefinir a senha de <strong style="color:#eef1f6">${nomeEstudio}</strong>
-      no ${marca.nome}. Se foi você, use o botão abaixo.
+      na ${marca.nome}. Se foi você, use o botão abaixo.
     </p>
     <p style="margin:0 0 24px">
       <a href="${link}" style="display:inline-block;background:#d9a441;color:#07080b;text-decoration:none;font-weight:600;font-size:15px;padding:12px 24px;border-radius:8px">
@@ -178,10 +178,10 @@ export async function enviarEmailDeRecuperacao(
 
   return enviarEmail({
     para,
-    assunto: `Redefinir a senha do ${marca.nome}`,
+    assunto: `Redefinir a senha da ${marca.nome}`,
     html: moldura("Redefinir sua senha", corpo),
     texto: [
-      `Alguém pediu para redefinir a senha de ${nomeEstudio} no ${marca.nome}.`,
+      `Alguém pediu para redefinir a senha de ${nomeEstudio} na ${marca.nome}.`,
       "",
       "Se foi você, abra o link abaixo:",
       link,
