@@ -66,6 +66,14 @@ export interface LinhaAdmin {
    * autenticada. Ver a linha de `ultimo_acesso`, que é do CLIENTE.
    */
   ultima_alteracao: Date | null;
+  /**
+   * A última vez que o FOTÓGRAFO entrou — qualquer requisição autenticada.
+   *
+   * Nulo não quer dizer conta abandonada: a coluna nasceu em 29/09/2026 (ver a
+   * migração 047), e toda conta anterior começa sem marca. A tela diz isso em
+   * vez de desenhar um travessão, que pareceria ausência.
+   */
+  ultimo_acesso_estudio: Date | null;
 }
 
 /**
@@ -131,7 +139,8 @@ export async function panoramaDosEstudios(): Promise<LinhaAdmin[]> {
         t.atualizado_em,
         (select max(g.atualizado_em) from galerias g where g.tenant_id = t.id),
         (select max(m.criado_em) from medias m where m.tenant_id = t.id and m.pronto)
-      ) as ultima_alteracao
+      ) as ultima_alteracao,
+      t.ultimo_acesso_em as ultimo_acesso_estudio
     from tenants t
     order by t.criado_em desc
   `);

@@ -76,6 +76,7 @@ const linha = (over = {}) => ({
   favoritas: 0,
   ultimo_acesso: null,
   ultima_alteracao: null,
+  ultimo_acesso_estudio: null,
   ...over,
 });
 
@@ -176,6 +177,19 @@ etapa("último acesso e última alteração são o MAIS RECENTE, não a soma", (
   igual(t.ultimoAcesso?.toISOString().slice(0, 10), "2026-09-28", "último acesso");
   igual(t.ultimaAlteracao?.toISOString().slice(0, 10), "2026-09-20", "última alteração");
   return "28/09 e 20/09";
+});
+
+etapa("o acesso do ESTÚDIO é somado como as outras datas", () => {
+  /* Coluna nova (migração 047). Ela chega nula em toda conta anterior a
+     29/09/2026, então o caso "uns têm, outros não" é o comum, não a exceção. */
+  const t = totaisDosEstudios([
+    linha({ id: "a", ultimo_acesso_estudio: dia("2026-09-15") }),
+    linha({ id: "b", ultimo_acesso_estudio: null }),
+    linha({ id: "c", ultimo_acesso_estudio: dia("2026-09-29") }),
+  ]);
+  igual(t.ultimoAcessoEstudio?.toISOString().slice(0, 10), "2026-09-29", "acesso do estúdio");
+  igual(totaisDosEstudios([linha({ id: "z" })]).ultimoAcessoEstudio, null, "ninguém entrou");
+  return "29/09, e nulo quando ninguém entrou";
 });
 
 etapa("linha sem data nenhuma não vira 1970", () => {

@@ -312,6 +312,7 @@ export interface EstudioParaTotal extends EstudioParaMetrica {
   acessos_30d: number;
   ultimo_acesso: Date | string | null;
   ultima_alteracao: Date | string | null;
+  ultimo_acesso_estudio: Date | string | null;
 }
 
 export interface TotaisDosEstudios {
@@ -333,6 +334,8 @@ export interface TotaisDosEstudios {
   /** O MAIS RECENTE, não a soma — e nulo quando ninguém nunca abriu. */
   ultimoAcesso: Date | null;
   ultimaAlteracao: Date | null;
+  /** A última vez que ALGUM fotógrafo entrou — ver a migração 047. */
+  ultimoAcessoEstudio: Date | null;
 }
 
 /**
@@ -397,5 +400,6 @@ export function totaisDosEstudios(estudios: EstudioParaTotal[]): TotaisDosEstudi
     acessos30d: soma((e) => e.acessos_30d),
     ultimoAcesso: maisRecente((e) => e.ultimo_acesso),
     ultimaAlteracao: maisRecente((e) => e.ultima_alteracao),
+    ultimoAcessoEstudio: maisRecente((e) => e.ultimo_acesso_estudio),
   };
 }

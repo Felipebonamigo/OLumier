@@ -550,8 +550,22 @@ export default async function AdminPage() {
                       respondem a pergunta que a tabela existe para responder —
                       esta conta está viva dos dois lados?
                     */
-                    "Último acesso",
-                    "Última alteração",
+                    /*
+                      ── AS DATAS AGRUPADAS POR QUEM AGIU (29/09/2026) ──────
+
+                      Eram duas colunas com nome de MOMENTO ("Último acesso",
+                      "Última alteração"), e o carimbo do fotógrafo (migração
+                      047) pediria uma terceira — três colunas de data seguidas,
+                      todas dizendo "29 de set.", sem dizer de quem.
+
+                      Agora o cabeçalho diz QUEM: o cliente de um lado, o
+                      estúdio do outro. Cada um leva a sua segunda linha — os
+                      acessos de 30 dias com o cliente, a última alteração com o
+                      estúdio, que é quem altera. A tabela não cresceu e as três
+                      perguntas continuam respondidas.
+                    */
+                    "Cliente abriu",
+                    "Estúdio entrou",
                     "Entrou",
                   ].map((h) => (
                     <th
@@ -669,11 +683,23 @@ export default async function AdminPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs tabular-nums">
-                        {e.ultima_alteracao ? (
-                          data(e.ultima_alteracao)
+                        {e.ultimo_acesso_estudio ? (
+                          data(e.ultimo_acesso_estudio)
                         ) : (
-                          <span className="text-texto-faint">—</span>
+                          /*
+                            Nulo NÃO é conta abandonada: a coluna nasceu em
+                            29/09/2026 e toda conta anterior começa sem marca.
+                            Um travessão aqui leria como ausência, e a primeira
+                            leitura da tabela acusaria a plataforma inteira de
+                            estar parada.
+                          */
+                          <span className="text-texto-faint">sem registro</span>
                         )}
+                        <span className="block text-[11px] text-texto-faint">
+                          {e.ultima_alteracao
+                            ? `alterou ${data(e.ultima_alteracao)}`
+                            : "nunca alterou"}
+                        </span>
                         <span className="block text-[11px] text-texto-faint">
                           {e.ultimo_envio ? `enviou ${data(e.ultimo_envio)}` : "nunca enviou"}
                         </span>
@@ -742,11 +768,16 @@ export default async function AdminPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {totais.ultimaAlteracao ? (
-                      data(totais.ultimaAlteracao)
+                    {totais.ultimoAcessoEstudio ? (
+                      data(totais.ultimoAcessoEstudio)
                     ) : (
-                      <span className="font-normal text-texto-faint">—</span>
+                      <span className="font-normal text-texto-faint">sem registro</span>
                     )}
+                    <span className="block text-[11px] font-normal text-texto-faint">
+                      {totais.ultimaAlteracao
+                        ? `alterou ${data(totais.ultimaAlteracao)}`
+                        : "nunca alterou"}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-texto-faint">—</td>
                 </tr>
