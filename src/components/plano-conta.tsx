@@ -2,9 +2,34 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { planoPorId, type Plano } from "@/config/planos";
+import { formatarReais, planoPorId, type Plano } from "@/config/planos";
 import { MontadorPlano } from "@/components/montador-plano";
-import { trocarPlanoAction, cancelarAssinaturaAction } from "@/app/painel/actions";
+import { trocarPlanoAction, cancelarAssinaturaAction, cotarTrocaDePlanoAction } from "@/app/painel/actions";
+
+type Cotacao = Exclude<Awaited<ReturnType<typeof cotarTrocaDePlanoAction>>, { erro: string }>;
+
+/**
+ * O texto da confirmação — o que vai acontecer com o dinheiro, antes do clique.
+ *
+ * Subir cobra só a diferença proporcional ao que falta do período já pago
+ * (`config/troca-de-plano.ts`); a tela diz o valor, até quando e onde ele sai.
+ * Descer não devolve nada, e diz isso também.
+ */
+function textoDaConfirmacao(p: Plano, c: Cotacao): string {
+  const depois = `Depois, ${formatarReais(c.precoNovoCentavos)} por ${c.anual ? "ano" : "mês"}.`;
+  const ate = c.ate ? new Date(c.ate).toLocaleDateString("pt-BR") : null;
+  if (c.tipo === "descida") {
+    return `Descer para ${p.nome}?\n\nO que já foi pago não volta, e o preço menor vale a partir da próxima fatura.\n${depois}`;
+  }
+  if (c.cobrar && ate) {
+    const onde = c.cartao ? `cobrada agora no ${c.cartao}` : "numa fatura com Pix, boleto ou cartão";
+    return `Mudar para ${p.nome}?\n\nVocê paga só a diferença até ${ate}: ${formatarReais(c.diferencaCentavos)}, ${onde}.\n${depois}`;
+  }
+  if (c.diferencaCentavos > 0 && ate) {
+    return `Mudar para ${p.nome}?\n\nA diferença até ${ate} é de ${formatarReais(c.diferencaCentavos)} e fica por nossa conta.\n${depois}`;
+  }
+  return `Mudar para ${p.nome}?\n\nNada é cobrado agora. ${depois}`;
+}
 
 /**
  * Trocar de plano e cancelar.
@@ -24,6 +49,7 @@ export function PlanoConta({
   const [aberto, setAberto] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [urlDaDiferenca, setUrlDaDiferenca] = useState<string | null>(null);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
   const atual = planoPorId(planoAtual);
@@ -32,10 +58,18 @@ export function PlanoConta({
     iniciar(async () => {
       setErro(null);
       setOk(null);
-      const r = await trocarPlanoAction(p.id);
+      setUrlDaDiferenca(null);
+      const c = await cotarTrocaDePlanoAction(p.id);
+      if ("erro" in c) {
+        setErro(c.erro);
+        return;
+      }
+      if (!confirm(textoDaConfirmacao(p, c))) return;
+      const r = await trocarPlanoAction(p.id, c.diferencaCentavos);
       if (r?.erro) setErro(r.erro);
       else {
         setOk(r?.ok ?? null);
+        setUrlDaDiferenca(r?.urlDaDiferenca ?? null);
         setAberto(false);
         router.refresh();
       }
@@ -139,6 +173,16 @@ export function PlanoConta({
       {ok && (
         <p role="status" className="mt-3 rounded-lg border border-ok/40 bg-ok/10 px-3 py-2 text-xs text-ok">
           {ok}
+          {urlDaDiferenca && (
+            <a
+              href={urlDaDiferenca}
+              target="_blank"
+              rel="noreferrer"
+              className="ml-1 font-medium underline underline-offset-4"
+            >
+              Pagar a diferença ↗
+            </a>
+          )}
         </p>
       )}
     </div>

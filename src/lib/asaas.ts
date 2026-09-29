@@ -176,6 +176,9 @@ export interface AssinaturaAsaas {
   creditCard?: {
     creditCardNumber?: string | null;
     creditCardBrand?: string | null;
+    /** O cartão salvo, reusável numa cobrança avulsa (a diferença da troca de
+     *  plano) sem ninguém digitar o número de novo. Nunca é o número. */
+    creditCardToken?: string | null;
   } | null;
 }
 
@@ -384,7 +387,96 @@ export function eventoEhNosso(referenciaExterna: string | null | undefined): boo
   return Boolean(referenciaExterna?.startsWith(PREFIXO));
 }
 
-/** Extrai o id do estúdio de uma referência nossa. */
+/**
+ * Extrai o id do estúdio de uma referência nossa.
+ *
+ * A mensalidade leva `olumier:<estúdio>`; a cobrança da diferença de uma troca
+ * de plano leva `olumier:<estúdio>:diferenca:<quando>` (ver
+ * `referenciaDaDiferenca`). O id é sempre o segundo pedaço — um uuid não tem
+ * dois-pontos.
+ */
 export function tenantDaReferencia(referenciaExterna: string): string {
-  return referenciaExterna.slice(PREFIXO.length);
+  return referenciaExterna.slice(PREFIXO.length).split(":")[0];
+}
+
+/**
+ * De que é a cobrança: a mensalidade da assinatura, ou a diferença de uma
+ * troca de plano. O webhook trata as duas de jeitos diferentes — a diferença
+ * NÃO renova o período pago; se renovasse, pagar R$ 20 de diferença daria um
+ * mês (ou um ano, no anual) inteiro de serviço a partir daquele dia.
+ */
+export function tipoDaReferencia(referenciaExterna: string): "assinatura" | "diferenca" {
+  return referenciaExterna.slice(PREFIXO.length).split(":")[1] === "diferenca" ? "diferenca" : "assinatura";
+}
+
+export const referenciaDaDiferenca = (tenantId: string, quando: Date = new Date()) =>
+  `${PREFIXO}${tenantId}:diferenca:${quando.getTime()}`;
+
+// --- a diferença da troca de plano (28/09/2026) -----------------------------
+//
+// Ver `config/troca-de-plano.ts` para a regra e `lib/troca-de-plano.ts` para o
+// fluxo.
+
+export interface CobrancaAsaas {
+  id: string;
+  status: string;
+  value: number;
+  dueDate: string;
+  invoiceUrl?: string | null;
+  externalReference?: string | null;
+  description?: string | null;
+}
+
+/** As faturas da assinatura ainda não pagas — a vencer e vencidas. */
+export async function cobrancasEmAberto(assinaturaId: string): Promise<CobrancaAsaas[]> {
+  const id = segmento(assinaturaId);
+  const [pendentes, vencidas] = await Promise.all([
+    chamar<{ data?: CobrancaAsaas[] }>(`/subscriptions/${id}/payments?status=PENDING&limit=100`),
+    chamar<{ data?: CobrancaAsaas[] }>(`/subscriptions/${id}/payments?status=OVERDUE&limit=100`),
+  ]);
+  return [...(pendentes.data ?? []), ...(vencidas.data ?? [])];
+}
+
+/**
+ * Uma cobrança avulsa — a diferença da troca de plano.
+ *
+ * Com `cartao`, é capturada na hora no cartão que a assinatura já guardou
+ * (`creditCardToken`), com o IP de quem clicou — o Asaas exige o IP do
+ * pagador, nunca o do servidor. Sem cartão, vira fatura com Pix, boleto e
+ * cartão lado a lado, como a mensalidade de quem paga na mão.
+ *
+ * O split viaja na cobrança, como na assinatura: os sócios recebem a parte
+ * deles da diferença no mesmo pagamento.
+ */
+export async function criarCobrancaAvulsa(dados: {
+  clienteAsaasId: string;
+  centavos: number;
+  vencimento: string;
+  descricao: string;
+  referencia: string;
+  fatias: FatiaSocio[];
+  cartao?: { token: string; ip: string } | null;
+}): Promise<CobrancaAsaas> {
+  return chamar<CobrancaAsaas>("/payments", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: dados.clienteAsaasId,
+      billingType: dados.cartao ? "CREDIT_CARD" : "UNDEFINED",
+      value: dados.centavos / 100,
+      dueDate: dados.vencimento,
+      description: dados.descricao,
+      externalReference: dados.referencia,
+      ...(dados.cartao ? { creditCardToken: dados.cartao.token, remoteIp: dados.cartao.ip } : {}),
+      split: dados.fatias.length ? dados.fatias.map((f) => montarFatiaAsaas(f)) : undefined,
+    }),
+  });
+}
+
+/** A fatura de diferença que ainda espera pagamento, se houver — para a Conta. */
+export async function diferencaEmAberto(clienteAsaasId: string): Promise<CobrancaAsaas | null> {
+  const r = await chamar<{ data?: CobrancaAsaas[] }>(
+    `/payments?customer=${encodeURIComponent(clienteAsaasId)}&status=PENDING&limit=100`,
+  );
+  return (r.data ?? []).find((c) => c.externalReference?.startsWith(PREFIXO) &&
+    tipoDaReferencia(c.externalReference) === "diferenca") ?? null;
 }

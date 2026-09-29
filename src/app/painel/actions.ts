@@ -26,16 +26,16 @@ import {
 import type { Aparencia } from "@/config/aparencia";
 import { descricaoDaAssinatura, precoDoCicloComComboCentavos, descontoDaGaleriaCentavos } from "@/config/combo";
 import { faixaDoAtomatiza } from "@/lib/combo";
+import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
-import { planoPorId, GB, cicloDe } from "@/config/planos";
+import { planoPorId, cicloDe } from "@/config/planos";
 import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
 import {
   asaasConfigurado,
   garantirCliente,
   criarAssinatura,
-  atualizarAssinatura,
   cancelarAssinatura,
 } from "@/lib/asaas";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
@@ -47,7 +47,6 @@ import { lerSite, normalizarInstagram, normalizarWhatsapp } from "@/lib/site-est
 import { MINIMO_SENHA, trocarSenha } from "@/lib/senha";
 import { podeTentar, registrarErro, limparTentativas, emPalavras } from "@/lib/tentativas";
 import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
-import { usoDoEstudio } from "@/lib/medias";
 import { registrarEvento, ACOES } from "@/lib/eventos";
 import { ipDaRequisicao } from "@/lib/origem";
 import {
@@ -734,96 +733,56 @@ export async function criarAssinaturaAction(
  */
 export async function trocarPlanoAction(
   novoPlanoId: string,
-): Promise<{ erro?: string; ok?: string } | void> {
+  cotadoCentavos?: number | null,
+): Promise<{ erro?: string; ok?: string; urlDaDiferenca?: string | null } | void> {
   const tenantId = await exigirTenant();
 
-  const plano = planoPorId(novoPlanoId);
-  if (!plano) return { erro: "Plano inválido." };
-
-  const tenant = await buscarTenantPorId(tenantId);
-  if (!tenant) return { erro: "Conta não encontrada." };
-  if (tenant.plano_id === plano.id) return { erro: "Você já está neste plano." };
-
-  /*
-   * Uma quota só: o que está no ar e o que está arquivado somam. Antes eram
-   * duas checagens, e a do cofre recusava a descida com "apague algo do cofre"
-   * — pedir para o fotógrafo apagar entrega é exatamente o que este produto
-   * promete que nunca é preciso fazer.
-   */
-  const novaQuota = BigInt(plano.quotaGb) * BigInt(GB);
-  const uso = await usoDoEstudio(tenantId);
-  const usoTotal = uso.noAr + uso.noCofre;
-
-  if (usoTotal > novaQuota) {
-    const excesso = Number(usoTotal - novaQuota) / 1024 ** 3;
-    return {
-      erro: `Seu estúdio ocupa ${excesso.toFixed(1)} GB a mais do que o ${plano.nome} permite. Apague algo antes de descer de plano.`,
-    };
-  }
-
-  // A assinatura primeiro: se o Asaas recusar, o plano no banco não muda e o
-  // estúdio não fica com espaço que ninguém está cobrando.
-  let faixaDoCombo: Awaited<ReturnType<typeof faixaDoAtomatiza>> = null;
-  if (asaasConfigurado() && tenant.asaas_assinatura_id) {
-    try {
-      /* Trocar de PLANO mantém o ciclo — quem paga por ano continua pagando por
-       * ano, com o valor da faixa nova. Trocar de CICLO é outra operação, e o
-       * Asaas não muda ciclo de assinatura no lugar: teria de cancelar e
-       * recriar. Enquanto essa segunda operação não existir, o ciclo atual é o
-       * que vale, e é ele que entra no split. */
-      const ciclo = cicloDe(tenant.ciclo_cobranca);
-      /* O plano novo sai com o combo, se houver: trocar de tamanho muda a linha
-       * da tabela, e o desconto dos dois lados muda junto. A parte do Atomatiza
-       * se acerta na próxima conferência de lá. */
-      faixaDoCombo = tenant.cpf_cnpj ? await faixaDoAtomatiza(tenant.cpf_cnpj).catch(() => null) : null;
-      await atualizarAssinatura({
-        assinaturaId: tenant.asaas_assinatura_id,
-        planoId: plano.id,
-        precoCentavos: precoDoCicloComComboCentavos(plano, ciclo, faixaDoCombo),
-        ciclo,
-        descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixaDoCombo),
-      });
-    } catch (e) {
-      return { erro: e instanceof Error ? e.message : "não consegui atualizar a assinatura" };
-    }
-  }
-
-  await consultar(
-    `update tenants
-        set plano_id = $1, quota_bytes = $2, combo_atomatiza = $3, atualizado_em = now()
-      where id = $4`,
-    [
-      plano.id,
-      novaQuota.toString(),
-      descontoDaGaleriaCentavos(plano, faixaDoCombo) > 0 ? faixaDoCombo : null,
-      tenantId,
-    ],
-  );
-
-  /*
-   * Guarda o plano ANTIGO e o novo. É a pergunta de uma cobrança contestada
-   * ("por que fui cobrado a mais em março?") e ela não tem resposta olhando o
-   * banco depois: lá só existe o plano atual.
-   */
-  await registrarEvento({
-    tenantId,
-    estudio: tenant.nome_estudio,
-    ator: "estudio",
-    acao: ACOES.PLANO_TROCADO,
-    alvoTipo: "conta",
-    alvoId: tenantId,
-    detalhe: {
-      de: tenant.plano_id,
-      para: plano.id,
-      nome: plano.nome,
-      precoCentavos: plano.precoCentavos,
-    },
-    ip: await ipDaRequisicao(),
-  });
+  /* O fluxo inteiro — a diferença proporcional, o cartão salvo ou a fatura, e
+   * a volta atrás se o Asaas recusar — mora em `lib/troca-de-plano.ts`, onde
+   * dá para testar sem sessão. Ver `config/troca-de-plano.ts` para a regra. */
+  const r = await trocarPlano(tenantId, novoPlanoId, { ip: await ipDaRequisicao(), cotadoCentavos });
+  if ("erro" in r) return { erro: r.erro };
 
   revalidatePath("/painel/conta");
   revalidatePath("/painel");
-  return { ok: `Agora você está no ${plano.nome}.` };
+  return { ok: r.ok, urlDaDiferenca: r.diferenca && !r.diferenca.noCartao ? r.diferenca.url : null };
+}
+
+/**
+ * Quanto a troca vai custar, antes do clique. A tela mostra isto na
+ * confirmação — ninguém descobre a cobrança da diferença depois.
+ */
+export async function cotarTrocaDePlanoAction(novoPlanoId: string): Promise<
+  | { erro: string }
+  | {
+      tipo: "subida" | "descida";
+      diferencaCentavos: number;
+      cobrar: boolean;
+      ate: string | null;
+      precoNovoCentavos: number;
+      anual: boolean;
+      cartao: string | null;
+    }
+> {
+  const tenantId = await exigirTenant();
+  const plano = planoPorId(novoPlanoId);
+  if (!plano) return { erro: "Plano inválido." };
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { erro: "Conta não encontrada." };
+  try {
+    const c = await cotarTroca(tenant, plano);
+    return {
+      tipo: c.cotacao.tipo,
+      diferencaCentavos: c.cotacao.diferencaCentavos,
+      cobrar: c.cotacao.cobrar,
+      ate: c.cotacao.ate?.toISOString() ?? null,
+      precoNovoCentavos: c.precoNovoCentavos,
+      anual: c.ciclo === "anual",
+      cartao: c.cartao,
+    };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "não consegui consultar a assinatura" };
+  }
 }
 
 /**

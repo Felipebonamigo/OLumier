@@ -1,10 +1,11 @@
 import { NextResponse, after, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { consultar, consultarUm } from "@/lib/db";
-import { eventoEhNosso, tenantDaReferencia } from "@/lib/asaas";
+import { eventoEhNosso, tenantDaReferencia, tipoDaReferencia } from "@/lib/asaas";
 import { efeitoDoEvento, fimDoPeriodoPago } from "@/lib/assinatura";
 import { PREFIXO_ATOMATIZA } from "@/config/combo";
 import { recalcularCombo, recalcularComboDoCliente } from "@/lib/combo";
+import { aplicarEventoDaDiferenca } from "@/lib/troca-de-plano";
 
 /**
  * Webhook do Asaas: é assim que sabemos que o cliente pagou (ou deixou de pagar).
@@ -103,6 +104,22 @@ export async function POST(request: NextRequest) {
 
   const efeito = efeitoDoEvento(evento);
 
+  /*
+   * A DIFERENÇA DE UMA TROCA DE PLANO não é mensalidade: não renova o período
+   * pago. Sem este desvio, pagar R$ 20 de diferença cairia no "pagou" abaixo e
+   * daria um mês — ou um ano, no anual — de serviço a partir de hoje. Ver
+   * `aplicarEventoDaDiferenca`.
+   */
+  if (tipoDaReferencia(referencia!) === "diferenca") {
+    await aplicarEventoDaDiferenca(tenantId, efeito, {
+      evento,
+      cobranca: corpo.payment?.id ?? null,
+      valor: corpo.payment?.value ?? null,
+    });
+    console.log(`[asaas] ${evento} (diferença de plano) → estúdio ${tenantId}`);
+    return NextResponse.json({ ok: true, diferenca: true });
+  }
+
   if (efeito === "pagou") {
     /*
      * O período pago é contado a PARTIR DE AGORA, não somado ao que já havia.
@@ -118,7 +135,10 @@ export async function POST(request: NextRequest) {
     await consultar(
       `update tenants
           set status = 'ativo', trial_ate = null,
-              ultimo_pagamento_em = now(), pago_ate = $2, atualizado_em = now()
+              ultimo_pagamento_em = now(), pago_ate = $2,
+              -- o plano pago neste período: a base da diferença se o estúdio
+              -- aumentar no meio dele (config/troca-de-plano.ts)
+              plano_do_periodo = plano_id, atualizado_em = now()
         where id = $1`,
       [tenantId, fimDoPeriodoPago(tenant.ciclo_cobranca, new Date())],
     );

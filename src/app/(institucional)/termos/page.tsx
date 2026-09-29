@@ -109,6 +109,11 @@ export default function TermosPage() {
           e-mail antes, o último com 7 dias de antecedência. A conta continua existindo.
         </li>
         <li>Depois, a assinatura é mensal, cobrada pelo Asaas (Pix, boleto ou cartão).</li>
+        <li>
+          Aumentou o plano no meio do período: o espaço novo vale na hora, e você paga só a
+          diferença entre os dois planos, proporcional aos dias que faltam do período já pago.
+          Diminuiu: o que já foi pago não volta, e o preço menor vale a partir da próxima fatura.
+        </li>
         <li>Preços podem mudar, com aviso de pelo menos 30 dias por e-mail.</li>
         <li>Cancelou, vale até o fim do período já pago.</li>
       </ul>

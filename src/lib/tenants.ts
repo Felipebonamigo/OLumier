@@ -41,6 +41,12 @@ export interface Tenant {
    */
   combo_atomatiza: string | null;
   /**
+   * O maior plano já pago no período corrente — a base da diferença quando o
+   * estúdio aumenta o plano. Nulo = vale o plano atual. Ver
+   * `config/troca-de-plano.ts` e a migração 046.
+   */
+  plano_do_periodo: string | null;
+  /**
    * Até quando o dinheiro JÁ RECEBIDO cobre o serviço — null se nada foi pago.
    *
    * Só o ramo `cancelado` de `situacaoDoTenant` consulta: cancelar para a

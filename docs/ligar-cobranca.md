@@ -305,6 +305,49 @@ valor fica no registro de eventos como `assinatura.combo`.
 node --env-file=.env.local --conditions=react-server --experimental-strip-types --import ./scripts/registrar-ts.mjs scripts/testar-combo.mjs
 ```
 
+## Trocar de plano no meio do período (28/09/2026)
+
+Felipe: "se o usuário quiser aumentar o pacote da galeria, não cobre
+novamente, apenas a diferença". Até aqui a troca só mudava o valor da
+assinatura: o período já pago seguia sem cobrança nenhuma, e no anual isso era
+até um ano de espaço maior pelo preço do menor.
+
+| Troca | O que acontece |
+|---|---|
+| Subiu, com período pago | Espaço novo na hora. Cobra **só a diferença**, proporcional ao que falta do período. Da próxima fatura em diante, o preço novo. |
+| Subiu, sem nada pago (teste, fatura em aberto) | Nenhuma cobrança à parte: a fatura que vai vencer já sai com o preço novo. |
+| Diferença abaixo de R$ 5,00 | Não é cobrada (é o mínimo do Asaas). Fica registrada como absorvida. |
+| Desceu | Nada volta; o preço menor vale da próxima fatura. |
+| Desceu e subiu de novo no mesmo período | Não cobra outra vez: a base é o maior plano já pago no período (`tenants.plano_do_periodo`, migração 046). |
+
+Exemplo: 250 GB → 500 GB com 20 de 30 dias pela frente = (R$ 79,99 − R$ 49,99)
+× 20/30 = **R$ 20,00**. No anual, a fração é do ano. Com o combo, os dois
+preços entram com o combo — a diferença é só a dos planos.
+
+**Onde a diferença é cobrada.** No cartão que a assinatura já guardou
+(`creditCardToken`, com o IP de quem clicou, como o Asaas exige). Sem cartão,
+ou se ele recusar, vira fatura com Pix, boleto e cartão, vencendo em 3 dias, e
+aparece na Conta até ser paga. Se nem a fatura puder ser criada, a assinatura
+volta ao valor antigo e nada muda. A tela mostra o valor antes do clique, e o
+servidor recusa se ele tiver mudado desde então.
+
+**O split da diferença** reserva só o custo do espaço A MAIS pelos meses que
+faltam (`lucroDaDiferencaCentavos`, em `config/socios.ts`) e divide o resto
+pela regra de sempre.
+
+**No webhook**, a diferença tem referência própria
+(`olumier:<estúdio>:diferenca:<quando>`) e **não renova o período pago** — se
+renovasse, pagar R$ 20 de diferença daria um mês, ou um ano no anual, a partir
+daquele dia. Vencida sem pagar, a conta fica em atraso como numa mensalidade;
+paga, volta a ativa.
+
+Regra em `src/config/troca-de-plano.ts`, fluxo em `src/lib/troca-de-plano.ts`,
+prova em:
+
+```bash
+node --env-file=.env.local --conditions=react-server --experimental-strip-types --import ./scripts/registrar-ts.mjs scripts/testar-troca-de-plano.mjs
+```
+
 ## Como conferir depois de ligar
 
 ```bash

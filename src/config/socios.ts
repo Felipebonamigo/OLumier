@@ -283,6 +283,55 @@ export function montarFatias(
    * adianta nada se quem monta o split chamar sem contar: o cálculo fica certo
    * num lugar e errado no outro, e as duas funções parecem corretas isoladas.
    * `testar-planos.mjs` junta as duas de propósito. */
+  return fatiasDoLucro(precoCentavos, lucroCentavos(planoId, precoCentavos, ciclo));
+}
+
+/**
+ * Quanto sobra de lucro numa cobrança de DIFERENÇA — a troca para um plano
+ * maior no meio de um período já pago (ver `config/troca-de-plano.ts`).
+ *
+ * A reserva do período inteiro já saiu da mensalidade que foi paga; o que esta
+ * cobrança acrescenta de custo é só o espaço A MAIS, pelos meses que faltam.
+ * Reservar o plano novo inteiro, como `lucroCentavos` faria, engoliria a
+ * diferença toda e os sócios não receberiam nada dela; não reservar nada
+ * mandaria embora o dinheiro do disco que o estúdio acabou de ganhar.
+ *
+ * Plano irreconhecível cai no mesmo chute conservador de `lucroCentavos`.
+ */
+export function lucroDaDiferencaCentavos(
+  planoAntigoId: string,
+  planoNovoId: string,
+  precoCentavos: number,
+  mesesRestantes: number,
+): number {
+  const antigo = planoPorId(planoAntigoId);
+  const novo = planoPorId(planoNovoId);
+  if (!antigo || !novo) return Math.max(0, precoCentavos - Math.round(precoCentavos * 0.35));
+  const aMaisPorMes = Math.max(
+    0,
+    custoArmazenamentoCentavos({ segmento: novo.segmento, espacoGb: novo.quotaGb }) -
+      custoArmazenamentoCentavos({ segmento: antigo.segmento, espacoGb: antigo.quotaGb }),
+  );
+  const reserva =
+    Math.round(aMaisPorMes * FOLGA_ESPACO * Math.max(0, mesesRestantes)) + taxaCobrancaCentavos(precoCentavos);
+  return Math.max(0, precoCentavos - reserva);
+}
+
+/** O split de uma cobrança de diferença: a mesma regra, sobre o lucro dela. */
+export function montarFatiasDaDiferenca(
+  planoAntigoId: string,
+  planoNovoId: string,
+  precoCentavos: number,
+  mesesRestantes: number,
+): FatiaSocio[] {
+  return fatiasDoLucro(
+    precoCentavos,
+    lucroDaDiferencaCentavos(planoAntigoId, planoNovoId, precoCentavos, mesesRestantes),
+  );
+}
+
+/** A divisão entre sócios de uma cobrança, dado o lucro que ela deixa. */
+function fatiasDoLucro(precoCentavos: number, lucro: number): FatiaSocio[] {
   const fatias: FatiaSocio[] = [];
   const liquido = Math.max(0, precoCentavos - taxaCobrancaCentavos(precoCentavos));
   if (liquido === 0) return fatias;
@@ -305,8 +354,6 @@ export function montarFatias(
    * O ciclo não entra no percentual: 25% de uma cobrança anual já são 25% do
    * ano. Ele entra na RAZÃO, porque o lucro do anual é outro.
    */
-  const lucro = lucroCentavos(planoId, precoCentavos, ciclo);
-
   /*
    * A RAZÃO — o que sobra para dividir, depois de guardada a reserva.
    *
