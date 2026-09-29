@@ -496,3 +496,34 @@ export async function apagarTodasAsMedias(
 
   return apagadas;
 }
+
+/**
+ * Grava a miniatura de uma mídia — a capa de vídeo escolhida à mão.
+ *
+ * Só VÍDEO, e a trava está no próprio `where`: a capa de uma foto é a própria
+ * foto, e um dia alguém chamaria isto com o id de uma sem perceber. Amarrar
+ * `tipo` na consulta faz o banco recusar, em vez de depender de quem chama
+ * lembrar — o mesmo argumento de `reordenarSecoes`, que amarra tenant e galeria
+ * no `where` em vez de conferir antes.
+ *
+ * `largura` e `altura` são opcionais porque são um detalhe da grade (reservar o
+ * espaço certo antes de a imagem chegar), e a capa vale sem eles.
+ */
+export async function definirMiniatura(
+  mediaId: string,
+  tenantId: string,
+  chaveThumb: string,
+  largura?: number,
+  altura?: number,
+): Promise<boolean> {
+  const linhas = await consultar<{ id: string }>(
+    `update medias
+        set chave_thumb = $3,
+            largura = coalesce($4, largura),
+            altura = coalesce($5, altura)
+      where id = $1 and tenant_id = $2 and tipo = 'video'
+      returning id`,
+    [mediaId, tenantId, chaveThumb, largura ?? null, altura ?? null],
+  );
+  return linhas.length > 0;
+}

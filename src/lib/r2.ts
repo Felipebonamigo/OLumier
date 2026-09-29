@@ -494,3 +494,28 @@ export async function abortarEnvioEmPartes(chave: string, uploadId: string) {
     new AbortMultipartUploadCommand({ Bucket: BUCKET, Key: chave, UploadId: uploadId }),
   );
 }
+
+/**
+ * A CHAVE DA MINIATURA, DEDUZIDA DA CHAVE DO ORIGINAL.
+ *
+ * `montarChaves` cria as três juntas no momento do envio, e é ela quem manda.
+ * Esta existe para o caso em que a miniatura nasce DEPOIS: a capa de um vídeo
+ * escolhida à mão na aba Vídeo, meses depois de o filme ter subido.
+ *
+ * ── POR QUE DEDUZIR, E NÃO DEIXAR O NAVEGADOR MANDAR A CHAVE ─────────────
+ *
+ * Porque uma chave vinda do cliente é texto escolhido por quem envia, e teria
+ * de ser validada contra o estúdio e a galeria — é o que `chaveDaGaleria` faz
+ * na capa da galeria, e é uma conferência a mais para esquecer. Deduzindo do
+ * ORIGINAL, que já está na linha da mídia, não há nada a forjar: o servidor
+ * calcula, o navegador só recebe a URL assinada.
+ *
+ * O formato é sempre `webp` porque quem gera é o `canvas` do navegador. Se um
+ * dia a miniatura puder chegar em AVIF ou JPEG, esta função passa a receber o
+ * formato, como `montarChaves` já recebe — e as duas continuam lendo de
+ * `FORMATOS_DERIVADA`, que é o que impede a extensão e o mime de divergirem.
+ */
+export function chaveDerivadaDoOriginal(chaveOriginal: string, sufixo = "_thumb"): string {
+  const semExtensao = chaveOriginal.replace(/\.[a-z0-9]{1,10}$/i, "");
+  return `${semExtensao}${sufixo}.${FORMATOS_DERIVADA.webp.ext}`;
+}

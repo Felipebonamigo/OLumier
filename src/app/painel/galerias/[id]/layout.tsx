@@ -228,7 +228,7 @@ export default async function GaleriaLayout({
       <ProvedorDeEnvio galeriaId={galeria.id}>
         <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
           <div className="lg:sticky lg:top-6 lg:w-56 lg:shrink-0">
-            <MenuGaleria galeriaId={galeria.id} />
+            <MenuGaleria galeriaId={galeria.id} temVideo={Boolean(galeria.tem_video)} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-8">{children}</div>
         </div>

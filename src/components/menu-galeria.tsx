@@ -44,6 +44,24 @@ const ABAS = [
     caminho: "M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1",
   },
   {
+    /*
+      ── A ABA QUE SÓ EXISTE QUANDO HÁ VÍDEO (29/09/2026) ──────────────────
+
+      Juan: "podemos adicionar algum sistema de 'vídeo' na aba de menu da
+      galeria, QUE SÓ APARECE QUANDO TEM ALGUM VÍDEO na galeria".
+
+      A condição é dele, e é boa: a esmagadora maioria das galerias é só foto, e
+      uma aba permanente para vídeo seria mobília em todas elas. Quem manda um
+      filme, manda; quem não manda, nunca vê a aba.
+    */
+    id: "video",
+    nome: "Vídeo",
+    desc: "A capa de cada filme",
+    /* Retângulo com o triângulo de play — o mesmo desenho do selo do vídeo. */
+    caminho: "M3 6.5h18v11H3zM10 9.5l5 2.5-5 2.5z",
+    soComVideo: true,
+  },
+  {
     id: "atividade",
     nome: "Atividade",
     desc: "Quem abriu, quem escolheu",
@@ -51,7 +69,14 @@ const ABAS = [
   },
 ] as const;
 
-export function MenuGaleria({ galeriaId }: { galeriaId: string }) {
+export function MenuGaleria({
+  galeriaId,
+  temVideo = false,
+}: {
+  galeriaId: string;
+  /** Há filme nesta galeria? Sem isso a aba Vídeo não aparece. */
+  temVideo?: boolean;
+}) {
   const caminhoAtual = usePathname();
 
   return (
@@ -64,7 +89,8 @@ export function MenuGaleria({ galeriaId }: { galeriaId: string }) {
         galeria do cliente já usa para os capítulos.
       */}
       <ul className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-2 lg:mx-0 lg:flex-col lg:overflow-visible lg:px-0 lg:pb-0">
-        {ABAS.map((aba) => {
+        {/* A aba de vídeo some da lista quando não há filme — ver `soComVideo`. */}
+        {ABAS.filter((aba) => !("soComVideo" in aba) || temVideo).map((aba) => {
           const href = `/painel/galerias/${galeriaId}/${aba.id}`;
           /* `endsWith` e não igualdade: o Design tem sub-rotas (capa,
              tipografia, cor, grade) e a entrada precisa continuar marcada
