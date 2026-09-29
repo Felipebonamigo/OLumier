@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
@@ -175,7 +176,7 @@ export default async function ContaPage() {
           <div className="mt-4 rounded-lg border border-alerta/40 bg-alerta/10 px-4 py-3">
             <p className="text-xs text-texto-soft">
               Diferença da troca de plano · {formatarReais(Math.round(diferencaAberta.value * 100))} · vence em{" "}
-              {new Date(`${diferencaAberta.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}
+              {new Date(`${diferencaAberta.dueDate}T12:00:00`).toLocaleDateString("pt-BR", { timeZone: FUSO })}
             </p>
             {diferencaAberta.invoiceUrl && (
               <a
@@ -194,7 +195,7 @@ export default async function ContaPage() {
           <div className="mt-4 rounded-lg border border-linha bg-void px-4 py-3">
             <p className="text-xs text-texto-soft">
               Próxima cobrança em{" "}
-              {new Date(cobranca.dueDate).toLocaleDateString("pt-BR")} ·{" "}
+              {new Date(cobranca.dueDate).toLocaleDateString("pt-BR", { timeZone: FUSO })} ·{" "}
               {formatarReais(Math.round(cobranca.value * 100))}
             </p>
             {/* A promessa só aparece quando dá para mostrar EM QUAL cartão —

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
@@ -82,7 +83,7 @@ export default async function AtividadePage({ params }: { params: Promise<{ id: 
       {acessos?.ultimo && (
         <p className="mt-3 text-xs text-texto-faint">
           Última visita em{" "}
-          {new Date(acessos.ultimo).toLocaleDateString("pt-BR", {
+          {new Date(acessos.ultimo).toLocaleDateString("pt-BR", { timeZone: FUSO,
             day: "2-digit",
             month: "long",
             year: "numeric",

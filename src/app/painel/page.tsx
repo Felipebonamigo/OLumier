@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import Link from "next/link";
 import { sessaoAtual } from "@/lib/auth";
 import { listarGalerias, listarLixeira, formatarBytes, PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
@@ -12,7 +13,7 @@ export const metadata: Metadata = { title: "Galerias" };
 export const dynamic = "force-dynamic";
 
 const formatarData = (d: Date | null) =>
-  d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : null;
+  d ? new Date(d).toLocaleDateString("pt-BR", { timeZone: FUSO, day: "2-digit", month: "short", year: "numeric" }) : null;
 
 export default async function PainelPage({
   searchParams,

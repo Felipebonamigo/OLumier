@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { FUSO } from "@/config/fuso";
 import { useRouter } from "next/navigation";
 import { salvarRegrasSelecaoAction, reabrirSelecaoAction } from "@/app/painel/actions";
 
@@ -89,7 +90,7 @@ export function PainelSelecao({
   };
 
   const dataBonita = (iso: string | null) =>
-    iso ? new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" }) : "";
+    iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: FUSO, day: "2-digit", month: "long" }) : "";
 
   return (
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">

@@ -120,19 +120,10 @@ export function Barra({ fracao, tom = "acento" }: { fracao: number; tom?: "acent
   );
 }
 
-const DATA = { day: "2-digit", month: "short", year: "numeric" } as const;
-
-/** Data curta, ou travessão. Uma função só, para o painel inteiro falar igual. */
-export function data(d: Date | string | null | undefined): string {
-  return d ? new Date(d).toLocaleDateString("pt-BR", DATA) : "—";
-}
-
-/** Data com hora — para o log de auditoria, onde a hora é o que se procura. */
-export function dataHora(d: Date | string | null | undefined): string {
-  return d
-    ? new Date(d).toLocaleString("pt-BR", { ...DATA, hour: "2-digit", minute: "2-digit" })
-    : "—";
-}
+/* As duas saíram para `lib/data-na-tela.ts`, que é `.ts` e por isso pode ser
+   conferida por teste puro — e que passou a dizer o FUSO. Reexportadas aqui
+   para nenhuma tela precisar mudar de importação. */
+export { data, dataHora } from "@/lib/data-na-tela";
 
 export const porcento = (f: number) =>
   `${(Number.isFinite(f) ? f * 100 : 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;

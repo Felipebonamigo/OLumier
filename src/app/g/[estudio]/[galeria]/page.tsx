@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { marca } from "@/config/marca";
@@ -97,7 +98,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
    * aparece por cima do título, e era mais um lugar dizendo a marca errada.
    */
   const dataEvento = g.data_evento
-    ? new Date(g.data_evento).toLocaleDateString("pt-BR", {
+    ? new Date(g.data_evento).toLocaleDateString("pt-BR", { timeZone: FUSO,
         day: "2-digit",
         month: "long",
         year: "numeric",
@@ -459,7 +460,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const bytesDaGaleria = todasAsMedias.reduce((soma, m) => soma + Number(m.bytes), 0);
 
   const dataEvento = galeria.data_evento
-    ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", {
+    ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", { timeZone: FUSO,
         day: "2-digit",
         month: "long",
         year: "numeric",

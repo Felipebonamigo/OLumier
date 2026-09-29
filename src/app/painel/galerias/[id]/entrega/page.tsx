@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { contarMediasProntas, galeriaDoPainel } from "@/lib/galeria-painel";
@@ -80,7 +81,7 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
         ativa={galeria.rostos_ativos}
         ligadaEm={
           galeria.rostos_ligados_em
-            ? new Date(galeria.rostos_ligados_em).toLocaleDateString("pt-BR", {
+            ? new Date(galeria.rostos_ligados_em).toLocaleDateString("pt-BR", { timeZone: FUSO,
                 day: "2-digit",
                 month: "2-digit",
                 year: "numeric",

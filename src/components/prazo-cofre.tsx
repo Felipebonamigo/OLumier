@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { FUSO } from "@/config/fuso";
 import { useRouter } from "next/navigation";
 import { PRAZOS } from "@/config/prazos";
 import { definirPrazoAction, arquivarAgoraAction, reativarAction } from "@/app/painel/actions";
@@ -77,7 +78,7 @@ export function PrazoCofre({
         <p className="mt-1 max-w-[58ch] text-xs text-texto-faint">
           O link está fora do ar, mas <strong className="text-texto-soft">nada foi apagado</strong>
           {arquivadaEm
-            ? ` — guardada desde ${new Date(arquivadaEm).toLocaleDateString("pt-BR")}.`
+            ? ` — guardada desde ${new Date(arquivadaEm).toLocaleDateString("pt-BR", { timeZone: FUSO })}.`
             : "."}{" "}
           Reative quando um cliente pedir; volta no ar na hora, com o mesmo link.
         </p>

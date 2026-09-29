@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { FUSO } from "@/config/fuso";
 import { useRouter } from "next/navigation";
 import { formatarReais, planoPorId, type Plano } from "@/config/planos";
 import { MontadorPlano } from "@/components/montador-plano";
@@ -17,7 +18,7 @@ type Cotacao = Exclude<Awaited<ReturnType<typeof cotarTrocaDePlanoAction>>, { er
  */
 function textoDaConfirmacao(p: Plano, c: Cotacao): string {
   const depois = `Depois, ${formatarReais(c.precoNovoCentavos)} por ${c.anual ? "ano" : "mês"}.`;
-  const ate = c.ate ? new Date(c.ate).toLocaleDateString("pt-BR") : null;
+  const ate = c.ate ? new Date(c.ate).toLocaleDateString("pt-BR", { timeZone: FUSO }) : null;
   if (c.tipo === "descida") {
     return `Descer para ${p.nome}?\n\nO que já foi pago não volta, e o preço menor vale a partir da próxima fatura.\n${depois}`;
   }
