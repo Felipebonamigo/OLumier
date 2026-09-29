@@ -35,7 +35,40 @@ export function Lixeira({ itens, prazoDias }: { itens: Item[]; prazoDias: number
   const [enviando, iniciar] = useTransition();
   const router = useRouter();
 
-  if (itens.length === 0) return null;
+  /*
+   * ── VAZIA, ELA APARECE E SE EXPLICA (29/09/2026) ────────────────────────
+   *
+   * Aqui havia `return null`, com a razão escrita na página: "uma seção vazia
+   * permanente ensinaria o fotógrafo a ignorar aquele canto da tela — e é
+   * justamente onde ele vai precisar olhar no dia em que apagar a galeria
+   * errada".
+   *
+   * O custo apareceu nesse mesmo dia. Uma storymaker apagou quatro FOTOS, foi
+   * procurar a lixeira e não achou nem a palavra; concluiu que estava quebrado.
+   * Felipe: "mas tem q permitir o usuário ver a lixeira, por que ela não está
+   * vendo a lixeira?".
+   *
+   * A confusão dela não era só a seção sumida: era não saber que foto apagada
+   * NÃO vem para cá. `apagarMedia` some com o arquivo na hora, de propósito, e
+   * isso não estava dito em lugar nenhum — muito menos onde ela foi procurar.
+   *
+   * Então a seção fica, e vazia ela responde as duas perguntas: o que guarda, e
+   * o que não guarda. O medo do comentário antigo continua endereçado — vazia
+   * ela é uma linha de texto, sem borda e sem cartão, e não a mobília que se
+   * aprende a ignorar.
+   */
+  if (itens.length === 0) {
+    return (
+      <section className="mt-12">
+        <h2 className="text-sm font-semibold text-texto-soft">Lixeira</h2>
+        <p className="mt-1 max-w-prose text-xs text-texto-faint">
+          Vazia. Galeria apagada fica aqui por {prazoDias} dias e dá para restaurar inteira —
+          nada sai do armazenamento antes disso. Foto apagada de dentro de uma galeria não
+          passa por aqui: ela some na hora.
+        </p>
+      </section>
+    );
+  }
 
   return (
     <section className="mt-12 rounded-xl border border-linha bg-carbon/40 p-5">
