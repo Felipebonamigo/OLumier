@@ -41,6 +41,11 @@ export interface Tenant {
    */
   combo_atomatiza: string | null;
   /**
+   * A última vez que o Atomatiza perguntou por este estúdio e achou conta aqui.
+   * Liga o seletor de plataforma no painel. Ver `lib/ponte-atomatiza.ts`.
+   */
+  atomatiza_visto_em: Date | null;
+  /**
    * O maior plano já pago no período corrente — a base da diferença quando o
    * estúdio aumenta o plano. Nulo = vale o plano atual. Ver
    * `config/troca-de-plano.ts` e a migração 046.
