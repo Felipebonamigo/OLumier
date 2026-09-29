@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 /* A data é do TEXTO, não do arquivo: mexeu na regra, muda aqui. Termo que diz
  * ter sido atualizado em agosto e fala de coisa decidida depois é desonesto — e
  * é o tipo de detalhe que ninguém confere e todo mundo repara. */
-const ATUALIZADO_EM = "28 de setembro de 2026";
+const ATUALIZADO_EM = "29 de setembro de 2026";
 
 export default function TermosPage() {
   return (
@@ -27,9 +27,9 @@ export default function TermosPage() {
       <h2>O que o serviço faz — e o que ele não é</h2>
       <p>
         A {marca.nome} hospeda e entrega galerias de fotos e vídeos para os seus clientes, com a sua
-        marca, em um endereço próprio do seu estúdio. Inclui armazenamento das galerias no ar,
-        espaço de cofre para o que sai do ar, e download sem limite de vezes para quem recebe o
-        link.
+        marca, em um endereço próprio do seu estúdio. Inclui o espaço contratado, que guarda tanto
+        as galerias no ar quanto as que saíram do ar e foram para o cofre, e download sem limite de
+        vezes para quem recebe o link.
       </p>
       {/*
         ISTO VEM NA PRIMEIRA SEÇÃO, e não no fim, de propósito.
@@ -83,18 +83,31 @@ export default function TermosPage() {
         encerramento da conta e comunicação às autoridades.
       </p>
 
+      {/*
+        UM ESPAÇO SÓ desde 25/08/2026, quando o cofre deixou de ser peça do
+        plano (ver `config/planos.ts`). Até 29/09 esta seção ainda descrevia
+        dois limites, um no ar e outro no cofre, e uma exceção para galeria
+        vencida que passava do cofre — regra que o código já não tinha.
+        Arquivar e reativar não recusam (`lib/cofre.ts`); o portão é o upload,
+        que soma no ar, cofre e lixeira (`lib/medias.ts`, `lib/tenants.ts`).
+      */}
       <h2>Espaço contratado</h2>
       <p>
-        Cada plano tem dois limites separados: o espaço das <strong>galerias no ar</strong> e o
-        espaço do <strong>cofre</strong>. Mandar uma galeria para o cofre libera espaço no ar.
-        Quando um limite se esgota, você libera espaço ou muda de plano.
+        Cada plano tem <strong>um espaço só</strong>, e ele soma tudo o que a sua conta guarda: as
+        galerias no ar, as que estão no cofre e as que estão na lixeira. Não há limite de
+        quantidade de galerias; o limite é o espaço.
       </p>
       <p>
-        Uma exceção que vale explicar: quando uma galeria vence o prazo que você definiu, ela vai
-        para o cofre <em>mesmo que isso ultrapasse o espaço de cofre contratado</em>. Preferimos
-        cumprir o prazo que você combinou com seu cliente a segurar a galeria no ar contra a sua
-        vontade. Você é avisado quando isso acontece e fica combinado que o excedente será
-        regularizado.
+        Mandar uma galeria para o cofre tira o link do ar para o seu cliente, mas não libera
+        espaço: os arquivos continuam guardados. Pelo mesmo motivo, reativar não ocupa nada a mais.
+        Arquivar e reativar funcionam sempre, com o espaço cheio ou não, e a galeria que vence o
+        prazo que você definiu vai para o cofre do mesmo jeito.
+      </p>
+      <p>
+        Quando o espaço se esgota, param só os envios novos. Nada sai do ar e nada é apagado por
+        isso. Para voltar a enviar, você muda de plano ou libera espaço apagando galerias que não
+        precisa mais guardar. Galeria apagada fica {PRAZO_LIXEIRA_DIAS} dias na lixeira e continua
+        contando no espaço durante esse prazo; se precisar do espaço antes, esvazie a lixeira.
       </p>
 
       <h2>Pagamento</h2>
@@ -108,7 +121,10 @@ export default function TermosPage() {
           enviados durante o teste são apagados 60 dias depois do fim dele — com dois avisos por
           e-mail antes, o último com 7 dias de antecedência. A conta continua existindo.
         </li>
-        <li>Depois, a assinatura é mensal, cobrada pelo Asaas (Pix, boleto ou cartão).</li>
+        <li>
+          Depois, a assinatura é mensal ou anual, cobrada pelo Asaas (Pix, boleto ou cartão). No
+          anual você paga 10 meses e usa 12.
+        </li>
         <li>
           Aumentou o plano no meio do período: o espaço novo vale na hora, e você paga só a
           diferença entre os dois planos, proporcional aos dias que faltam do período já pago.

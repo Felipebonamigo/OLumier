@@ -10,6 +10,8 @@ import {
   eventosRecentes,
 } from "@/lib/admin";
 import { resumoDeTrafego } from "@/lib/metricas-entrega";
+import { listarCustos } from "@/lib/custos-da-sociedade";
+import { custoFixoDaGaleriaCentavos } from "@/lib/custos-da-sociedade-regras";
 import { zipRemotoConfigurado } from "@/lib/zip-remoto";
 import {
   resumoDaPlataforma,
@@ -90,7 +92,7 @@ const SECOES = [
 export default async function AdminPage() {
   await exigirAdmin();
 
-  const [estudios, meses, entrega, somasDeZip, eventos] = await Promise.all([
+  const [estudios, meses, entrega, somasDeZip, eventos, custos] = await Promise.all([
     panoramaDosEstudios(),
     crescimentoMensal(12),
     entregaRecente(30),
@@ -103,10 +105,17 @@ export default async function AdminPage() {
      * filtro por ação, estúdio e período.
      */
     eventosRecentes(8),
+    /* O custo fixo sai da lista do caixa dos sócios (migração 047), a mesma
+       que eles editam lá. Sem a tabela, vale o de `config/custos-fixos.ts`. */
+    listarCustos().catch(() => null),
   ]);
 
   const agora = new Date();
-  const r = resumoDaPlataforma(estudios, agora);
+  const r = resumoDaPlataforma(
+    estudios,
+    agora,
+    custos && custos.length > 0 ? custoFixoDaGaleriaCentavos(custos) : undefined,
+  );
   const trafego = resumoDeTrafego(somasDeZip, {
     bytesGuardados: r.bytesGuardados,
     custoDoGuardadoCentavos: r.custoMensalCentavos,
@@ -166,7 +175,10 @@ export default async function AdminPage() {
       </p>
       {/* A vitrine da plataforma muda numa tela à parte, que é a única do
           admin com botão que altera alguma coisa. */}
-      <p className="mt-2 text-sm">
+      <p className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+        <Link href="/painel/admin/caixa" className="text-acento underline underline-offset-4">
+          Caixa dos sócios →
+        </Link>
         <Link href="/painel/admin/home" className="text-acento underline underline-offset-4">
           Fotos da página inicial →
         </Link>
@@ -223,7 +235,7 @@ export default async function AdminPage() {
           <Cartao
             rotulo="Custo fixo"
             valor={formatarReais(r.custoFixoCentavos)}
-            nota="DAS, VPS, domínio — não muda com cliente"
+            nota="da lista do caixa dos sócios — não muda com cliente"
           />
           <Cartao
             rotulo="Resultado/mês"

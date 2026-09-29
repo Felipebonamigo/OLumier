@@ -242,11 +242,14 @@ export interface ResumoDaPlataforma {
 export function resumoDaPlataforma(
   estudios: EstudioParaMetrica[],
   agora: Date = new Date(),
+  /** O custo fixo da lista que os sócios mantêm no caixa (migração 047). Sem
+   *  ela, vale o de `config/custos-fixos.ts`. */
+  custoFixoCentavos?: number,
 ): ResumoDaPlataforma {
   const porStatus = contagemPorStatus(estudios);
   const receita = receitaMensalCentavos(estudios);
   const custo = custoDoGuardadoCentavos(estudios);
-  const custoFixo = custoFixoMensalCentavos();
+  const custoFixo = custoFixoCentavos ?? custoFixoMensalCentavos();
   const guardado = bytesGuardados(estudios);
   const quota = quotaVendidaBytes(estudios);
 

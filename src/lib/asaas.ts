@@ -2,6 +2,7 @@ import "server-only";
 import { montarFatias, type FatiaSocio } from "@/config/socios";
 import type { Ciclo } from "@/config/planos";
 import type { FormaAssinatura } from "@/config/forma-assinatura";
+import type { PagamentoDoAsaas } from "./caixa-dos-socios";
 
 /**
  * Traduz uma fatia para o formato do split do Asaas.
@@ -479,4 +480,41 @@ export async function diferencaEmAberto(clienteAsaasId: string): Promise<Cobranc
   );
   return (r.data ?? []).find((c) => c.externalReference?.startsWith(PREFIXO) &&
     tipoDaReferencia(c.externalReference) === "diferenca") ?? null;
+}
+
+// --- o caixa dos sócios (29/09/2026) ----------------------------------------
+//
+// Leitura só: os pagamentos da conta inteira, dos DOIS produtos. Ver
+// `lib/caixa-dos-socios.ts` para o que se faz com eles.
+
+/** Páginas de 100 (o máximo do Asaas). Trinta páginas são 3.000 pagamentos num mês. */
+const PAGINAS_DO_CAIXA = 30;
+
+async function listarTodos(filtros: Record<string, string>): Promise<{
+  pagamentos: PagamentoDoAsaas[];
+  incompleto: boolean;
+}> {
+  const pagamentos: PagamentoDoAsaas[] = [];
+  for (let pagina = 0; pagina < PAGINAS_DO_CAIXA; pagina++) {
+    const q = new URLSearchParams({ ...filtros, limit: "100", offset: String(pagina * 100) });
+    const r = await chamar<{ data?: PagamentoDoAsaas[]; hasMore?: boolean }>(`/payments?${q}`);
+    pagamentos.push(...(r.data ?? []));
+    if (!r.hasMore) return { pagamentos, incompleto: false };
+  }
+  return { pagamentos, incompleto: true };
+}
+
+/**
+ * O que CAIU na conta entre duas datas (`paymentDate`, "AAAA-MM-DD").
+ *
+ * Pix e boleto caem no dia em que o cliente paga; cartão, quando o Asaas
+ * libera. O que foi pago no cartão e ainda não caiu está em `pagamentosAReceber`.
+ */
+export function pagamentosRecebidos(de: string, ate: string) {
+  return listarTodos({ "paymentDate[ge]": de, "paymentDate[le]": ate });
+}
+
+/** Cartão aprovado, esperando o Asaas liberar. */
+export function pagamentosAReceber() {
+  return listarTodos({ status: "CONFIRMED" });
 }

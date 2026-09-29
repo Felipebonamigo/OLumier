@@ -308,6 +308,35 @@ Para quem não é admin a resposta é **404**, não "acesso negado": mensagem de
 negado confirma que a página existe. O título da aba também passa pelo portão,
 senão o 404 vinha com "Administração · Olumier" escrito nele.
 
+### O caixa dos sócios
+
+`/painel/admin/caixa` junta a Galeria Átomo e o Atomatiza (29/09/2026): os
+mesmos três sócios nos dois produtos, com a porcentagem de cada um mudando de
+um para o outro. Mês a mês, a página mostra:
+
+- **o que entrou** — lido do Asaas, que é uma conta só para os dois. Cada
+  pagamento é do produto que o `externalReference` diz (`olumier:` Galeria,
+  `atz:` Atomatiza); o que não tem nenhum dos dois fica em "Sem produto". O
+  valor é o pago de verdade, já com o desconto do pacote;
+- **para onde foi** — o que o split mandou para a carteira de cada sócio, em
+  reais e em porcentagem do líquido de cada produto, e o que ficou na conta
+  principal. Os nomes vêm das `ASAAS_CARTEIRA_*` da Galeria; carteira que ela
+  não conhece aparece como "Carteira …" com o final do código;
+- **os custos** — a lista da tabela `custos_da_sociedade` (migração 047), que
+  os sócios editam na própria página. O que é dos dois (DAS, VPS) conta uma
+  vez. O armazenamento da Galeria é calculado do que está guardado;
+- **o resultado** — líquido do mês menos os custos de hoje.
+
+É a segunda exceção à regra de só leitura, pelo mesmo motivo da tela das fotos
+da página inicial: muda só a LISTA de custos — nenhum dinheiro, conta ou
+cobrança —, e cada mudança vai para a auditoria (`sociedade.custo`). O "Custo
+fixo" do `/painel/admin` passou a ler a mesma lista (o que é só da Galeria mais
+o que é dos dois, inteiro).
+
+Fora da conta, e dito na própria página: a comissão do Atomatiza sobre
+cobranças de fornecedores (cai como repasse de cobranças de outras contas) e
+estornos. Teste: `scripts/testar-caixa-dos-socios.mjs`.
+
 ### As favoritas do cliente
 
 O casal marca as fotos do álbum na própria galeria; o fotógrafo vê os corações
