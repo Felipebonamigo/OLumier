@@ -294,9 +294,20 @@ for (const nome of suites) {
     console.log(`  ✗ ${nome}`);
     // Só as linhas de falha: despejar a saída inteira de 15 suítes esconderia
     // justamente o que interessa.
-    for (const linha of saida.split("\n").filter((l) => l.includes("✗"))) {
+    const linhas = saida.split("\n").filter((l) => l.includes("✗"));
+    /* MAS: suíte que morre ANTES de imprimir um ✗ — exceção não capturada,
+     * promessa rejeitada, processo derrubado — não tem linha nenhuma para
+     * mostrar, e o relatório saía só com o nome. Foi exatamente o que
+     * aconteceu com o `testar-servidor-zip` na primeira rodada do CI: reprovou
+     * sem dizer por quê, e descobrir custou três leituras do log de 1000
+     * linhas. Sem ✗, vale o rabo da saída — que é onde o erro cai. */
+    const paraMostrar = linhas.length
+      ? linhas
+      : saida.trimEnd().split("\n").slice(-12);
+    for (const linha of paraMostrar) {
       console.log(`      ${linha.trim()}`);
     }
+    if (!linhas.length) console.log("      (sem linha de ✗ — a suíte morreu antes de relatar)");
   }
 }
 
