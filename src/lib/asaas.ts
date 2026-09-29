@@ -119,6 +119,51 @@ async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> 
   return dados as T;
 }
 
+/*
+ * ── A CARTEIRA DA PRÓPRIA CONTA NÃO VAI NO SPLIT (29/09/2026) ────────────
+ *
+ * Uma cliente de verdade tentou assinar e leu, em vermelho, embaixo do
+ * botão: "Asaas: Não é permitido split para sua própria carteira." A conta
+ * que cobra é a mesma do Atomatiza, e uma das `ASAAS_CARTEIRA_*` aponta para
+ * a carteira DELA. O Asaas recusa a cobrança inteira por causa dessa linha, e
+ * nenhuma assinatura nascia.
+ *
+ * A linha não faz falta: o que não vai no split fica na conta que cobrou, que
+ * é exatamente onde essa fatia ia parar. Então a carteira da conta é
+ * perguntada ao próprio Asaas (`GET /wallets`) e tirada do split nas três
+ * chamadas que o mandam — em vez de depender de alguém lembrar de apagar a
+ * variável certa no servidor.
+ *
+ * Se a pergunta falhar, o split vai como antes: melhor tentar e o Asaas dizer
+ * o motivo do que travar toda cobrança por uma consulta auxiliar.
+ */
+const carteiraDaConta = new Map<string, string>();
+
+async function carteiraPropria(): Promise<string | null> {
+  const conta = `${base()}|${process.env.ASAAS_API_KEY ?? ""}`;
+  const guardada = carteiraDaConta.get(conta);
+  if (guardada) return guardada;
+  try {
+    const r = await chamar<{ data?: { id?: string }[] }>("/wallets");
+    const id = r.data?.[0]?.id?.trim().toLowerCase() || null;
+    if (id) carteiraDaConta.set(conta, id);
+    return id;
+  } catch {
+    return null;
+  }
+}
+
+/** As fatias sem a da própria conta. Pura, para o teste cobrir sem rede. */
+export function semACarteiraDaConta(fatias: FatiaSocio[], propria: string | null): FatiaSocio[] {
+  if (!propria) return fatias;
+  return fatias.filter((f) => f.carteira.trim().toLowerCase() !== propria);
+}
+
+/** O split como vai ao Asaas. */
+async function splitDoAsaas(fatias: FatiaSocio[]) {
+  return semACarteiraDaConta(fatias, await carteiraPropria()).map((f) => montarFatiaAsaas(f));
+}
+
 // --- cliente ----------------------------------------------------------------
 
 export interface ClienteAsaas {
@@ -262,7 +307,7 @@ export async function criarAssinatura(dados: {
       cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
       description: dados.descricao,
       externalReference: referencia,
-      split: fatias.map((f) => montarFatiaAsaas(f)),
+      split: await splitDoAsaas(fatias),
     }),
   });
 }
@@ -305,7 +350,7 @@ export async function atualizarAssinatura(dados: {
       value: dados.precoCentavos / 100,
       description: dados.descricao,
       updatePendingPayments: dados.atualizarPendentes ?? true,
-      split: fatias.map((f) => montarFatiaAsaas(f)),
+      split: await splitDoAsaas(fatias),
     }),
   });
 }
@@ -458,6 +503,7 @@ export async function criarCobrancaAvulsa(dados: {
   fatias: FatiaSocio[];
   cartao?: { token: string; ip: string } | null;
 }): Promise<CobrancaAsaas> {
+  const split = await splitDoAsaas(dados.fatias);
   return chamar<CobrancaAsaas>("/payments", {
     method: "POST",
     body: JSON.stringify({
@@ -468,7 +514,7 @@ export async function criarCobrancaAvulsa(dados: {
       description: dados.descricao,
       externalReference: dados.referencia,
       ...(dados.cartao ? { creditCardToken: dados.cartao.token, remoteIp: dados.cartao.ip } : {}),
-      split: dados.fatias.length ? dados.fatias.map((f) => montarFatiaAsaas(f)) : undefined,
+      split: split.length ? split : undefined,
     }),
   });
 }

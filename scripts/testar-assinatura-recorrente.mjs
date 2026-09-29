@@ -42,11 +42,26 @@ process.env.ASAAS_CARTEIRA_CAROL = "22222222-2222-2222-2222-222222222222";
 process.env.ASAAS_CARTEIRA_SIRIUS = "33333333-3333-3333-3333-333333333333";
 
 const pedidos = [];
+/* A carteira da conta que cobra. Nula até as etapas do fim: com ela preenchida
+   o servidor passa a responder `/wallets` e a recusar split para ela, como o
+   Asaas de verdade recusou em 29/09/2026. */
+let carteiraDaConta = null;
 const servidor = createServer((req, res) => {
   let corpo = "";
   req.on("data", (p) => (corpo += p));
   req.on("end", () => {
     pedidos.push({ metodo: req.method, caminho: req.url, corpo });
+    if (carteiraDaConta && req.method === "GET" && req.url.startsWith("/wallets")) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ object: "list", data: [{ object: "wallet", id: carteiraDaConta }] }));
+    }
+    const split = corpo ? (JSON.parse(corpo).split ?? []) : [];
+    if (carteiraDaConta && split.some((f) => f.walletId === carteiraDaConta)) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(
+        JSON.stringify({ errors: [{ code: "invalid_split", description: "Não é permitido split para sua própria carteira." }] }),
+      );
+    }
     res.writeHead(200, { "Content-Type": "application/json" });
     /* A busca por assinatura viva devolve vazio, senão `criarAssinatura` acha
        uma e volta sem fazer o POST — que é o que queremos inspecionar. */
@@ -60,7 +75,10 @@ const servidor = createServer((req, res) => {
 await new Promise((ok) => servidor.listen(0, "127.0.0.1", ok));
 process.env.ASAAS_API = `http://127.0.0.1:${servidor.address().port}`;
 
-const { criarAssinatura, atualizarAssinatura } = await import("../src/lib/asaas.ts");
+const { criarAssinatura, atualizarAssinatura, criarCobrancaAvulsa, semACarteiraDaConta } = await import(
+  "../src/lib/asaas.ts"
+);
+const { montarFatias } = await import("../src/config/socios.ts");
 const { formaDaAssinatura, ESCOLHA_CARTAO } = await import("../src/config/forma-assinatura.ts");
 const { cicloDe, MESES_PAGOS_NO_ANO } = await import("../src/config/planos.ts");
 const { rotuloDoCartao } = await import("../src/lib/cartao-salvo.ts");
@@ -293,6 +311,72 @@ await etapa("com cartão salvo, mostra bandeira e os quatro dígitos", () => {
     throw new Error(`sem bandeira veio "${semBandeira}"`);
   }
   return `${r} · sem bandeira: ${semBandeira}`;
+});
+
+console.log("\na carteira da própria conta (29/09/2026)");
+
+/*
+ * "Asaas: Não é permitido split para sua própria carteira." — uma cliente
+ * de verdade, embaixo do "Ativar assinatura". A conta que cobra é a mesma do
+ * Atomatiza, e uma das carteiras dos sócios é a dela. O servidor de mentira
+ * recusa como o de verdade; as etapas provam que as três chamadas que mandam
+ * split tiram essa linha, e só ela.
+ */
+const FELIPE = process.env.ASAAS_CARTEIRA_FELIPE;
+
+await etapa("a regra: sai só a fatia da carteira da conta", () => {
+  const fatias = montarFatias("g:foto:1000", 13999, "mensal");
+  const sem = semACarteiraDaConta(fatias, FELIPE);
+  if (sem.length !== fatias.length - 1) throw new Error(`${fatias.length} → ${sem.length} fatias`);
+  if (sem.some((f) => f.carteira === FELIPE)) throw new Error("a carteira da conta ficou");
+  if (semACarteiraDaConta(fatias, null).length !== fatias.length) {
+    throw new Error("sem saber a carteira da conta, tirou alguma fatia");
+  }
+  return `${fatias.length} → ${sem.length} fatias`;
+});
+
+carteiraDaConta = FELIPE;
+
+await etapa("a assinatura nasce, sem a carteira da conta no split", async () => {
+  await assinar("UNDEFINED");
+  const corpo = corpoDoPost();
+  const carteiras = corpo.split.map((f) => f.walletId);
+  if (carteiras.includes(FELIPE)) throw new Error("a carteira da conta foi no split");
+  for (const outra of [process.env.ASAAS_CARTEIRA_CAROL, process.env.ASAAS_CARTEIRA_SIRIUS]) {
+    if (!carteiras.includes(outra)) throw new Error(`a carteira ${outra.slice(0, 8)} sumiu junto`);
+  }
+  return `${carteiras.length} fatias, nenhuma da conta`;
+});
+
+await etapa("a troca de plano também não manda a carteira da conta", async () => {
+  await atualizarAssinatura({
+    assinaturaId: "sub_1",
+    planoId: "g:foto:1000",
+    precoCentavos: 13999,
+    ciclo: "mensal",
+    descricao: "Teste",
+  });
+  const p = pedidos.find((x) => x.metodo === "PUT");
+  if (!p) throw new Error("nenhum PUT");
+  if (JSON.parse(p.corpo).split.some((f) => f.walletId === FELIPE)) throw new Error("foi no split");
+  return "PUT sem ela";
+});
+
+await etapa("nem a cobrança da diferença", async () => {
+  await criarCobrancaAvulsa({
+    clienteAsaasId: "cus_1",
+    centavos: 13999,
+    vencimento: "2026-10-01",
+    descricao: "Diferença",
+    referencia: "olumier:x:diferenca",
+    fatias: montarFatias("g:foto:1000", 13999, "mensal"),
+  });
+  const corpo = corpoDoPost("/payments");
+  /* Sem split nenhum a etapa não provaria nada: o valor é o de um plano
+     inteiro justamente para ter lucro a dividir. */
+  if (!corpo.split?.length) throw new Error("a cobrança saiu sem split — a etapa não mediu nada");
+  if (corpo.split.some((f) => f.walletId === FELIPE)) throw new Error("foi no split");
+  return `POST /payments com ${corpo.split.length} fatias, nenhuma da conta`;
 });
 
 servidor.close();
