@@ -3,6 +3,13 @@
 Este arquivo existe porque a mesma falta de DNS trava **três** coisas ao mesmo
 tempo, e as três parecem problemas separados quando aparecem.
 
+> **Atualização (29/09/2026) — o envio está LIGADO.** O domínio
+> `galeriaatomo.com.br` está verificado no Resend, a chave `galeria-atomo-producao`
+> está no servidor, e o "esqueci minha senha" chegou de
+> `nao-responda@galeriaatomo.com.br` em 28/09. A tabela "O estado de hoje"
+> abaixo é de 17/09 e ficou para trás. Com a cobrança ligada no mesmo dia
+> (`docs/ligar-cobranca.md`), as duas travas descritas a seguir estão valendo.
+>
 > **Atualização (28/09/2026) — agora são cinco.** Duas das travas contra a
 > conta de teste repetida (migração 045) só funcionam com o envio ligado, e
 > ficam **dormindo** até lá — de propósito, para ninguém ser travado por uma

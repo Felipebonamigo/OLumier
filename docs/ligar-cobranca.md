@@ -1,18 +1,49 @@
 # Ligar a cobrança — passo a passo
 
-> ⚠️ **Correção de 29/09/2026.** A frase abaixo ("ligada em produção desde
-> 01/09") não vale hoje: a tela de Conta em produção mostra "A cobrança ainda
-> não foi ligada nesta instalação", que só aparece sem `ASAAS_API_KEY` no
-> `.env.production` (`/opt/fotonio-shared/.env.production`). As carteiras e o
-> webhook seguem como descritos; falta a chave. Para ligar, com a mesma conta do
-> Atomatiza: marcar como `cortesia` as contas que não pagam (senão travam na
-> hora), copiar `ASAAS_API_KEY` e `ASAAS_AMBIENTE` de `/opt/atomatiza-secrets.env`
-> e reiniciar o `fotonio`. Com a cobrança desligada, desde 29/09 nenhuma galeria
-> sai do ar por teste vencido (`galeriasNoAr`).
+> ✅ **Ligada de verdade em 29/09/2026** (pelo Felipe, no servidor). O que este
+> documento afirmava desde 01/09 não era verdade: faltava `ASAAS_API_KEY` no
+> `.env.production`, e a Conta dizia "A cobrança ainda não foi ligada nesta
+> instalação". As carteiras e o webhook estavam como descritos abaixo.
+>
+> **Como foi ligada — e a armadilha do `$`:**
+>
+> 1. Antes, as contas que não pagam viraram `cortesia` (Felipe; Carol, Sirius e
+>    Tedesco já eram). Sem isso, teste vencido trava no instante em que a
+>    cobrança liga.
+> 2. A chave é a MESMA do Atomatiza (decisão registrada), copiada de
+>    `/opt/atomatiza-secrets.env` para `/opt/fotonio-shared/.env.production`,
+>    com `ASAAS_AMBIENTE=producao`. Cópia do arquivo anterior:
+>    `/opt/fotonio-shared/.env.production.antes-da-cobranca`.
+> 3. **Todo `$` da chave vai escapado como `\$`.** A chave de produção do Asaas
+>    começa com `$aact_…`, e o Next, ao ler o `.env.production`, trata
+>    `$palavra` como variável e a troca por vazio — mesmo entre aspas simples.
+>    Copiada crua, a chave chega ao app vazia ou quebrada, e a Conta continua
+>    dizendo "não foi ligada". Foi o que aconteceu na primeira tentativa. No
+>    Atomatiza não acontece porque lá os segredos entram pelo systemd.
+>
+>    ```
+>    sed -i '/^ASAAS_API_KEY=/d; /^ASAAS_AMBIENTE=/d' /opt/fotonio-shared/.env.production
+>    grep '^ASAAS_API_KEY=' /opt/atomatiza-secrets.env | sed 's/\$/\\$/g' >> /opt/fotonio-shared/.env.production
+>    echo 'ASAAS_AMBIENTE=producao' >> /opt/fotonio-shared/.env.production
+>    systemctl restart fotonio
+>    ```
+>
+>    Efeito colateral conhecido: os scripts do servidor, que carregam o mesmo
+>    arquivo com `node --env-file`, leem a chave COM a barra (`\$aact…`). Hoje
+>    eles só conferem se a chave existe (`asaasConfigurado`), então funcionam;
+>    um script novo que chame a API do Asaas por esse caminho precisa tirar a
+>    barra antes.
+>
+> Com a cobrança ligada: teste vencido não envia mais (`situacaoDoTenant`), a
+> galeria dele sai do ar 15 dias depois (`galeriasNoAr`), e a limpeza de testes
+> abandonados passa a avisar e, aos 60 dias, apagar (`lib/testes-abandonados.ts`).
+> Desligada, desde 29/09 nenhuma galeria sai do ar por teste vencido.
 
-*A cobrança está **ligada em produção** desde 01/09/2026, com split para as três
-carteiras. Nenhum cliente pagante existe ainda, então nada foi cobrado nem
-distribuído até agora. Este documento descreve como está e por quê.*
+*A cobrança está **ligada em produção** desde 29/09/2026 (ver acima — o
+"01/09" que estava aqui valia para as carteiras e o webhook, não para a chave),
+com split para as três carteiras. Nenhum cliente pagante existe ainda, então
+nada foi cobrado nem distribuído até agora. Este documento descreve como está e
+por quê.*
 
 > ⚠️ **Correção de 20/08/2026.** Este documento dizia "pronto e testado" e estava
 > errado, de um jeito que só apareceria no pior momento: o `scripts/testar-cobranca.mjs`
