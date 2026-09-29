@@ -655,6 +655,20 @@ export const raioDoCantoPx = (c: CantoFoto): number =>
   OPCOES.canto.find((o) => o.id === c)?.px ?? OPCOES.canto[1].px;
 
 /**
+ * Raio dos BOTÕES e das fichas, em pixels — a outra metade do mesmo eixo.
+ *
+ * Só `reto` devolve 0; os outros três devolvem a cápsula de sempre. Ver o
+ * comentário de `OPCOES.canto`, onde está escrito por que a tabela é assim.
+ *
+ * O padrão vem pelo NOME e não pela posição, como em `alturaLogoPx`: lista que
+ * cresce não pode carregar um índice cravado.
+ */
+export const raioDaPilulaPx = (c: CantoFoto): number =>
+  OPCOES.canto.find((o) => o.id === c)?.pilula ??
+  OPCOES.canto.find((o) => o.id === APARENCIA_PADRAO.canto)?.pilula ??
+  999;
+
+/**
  * Altura máxima da logo na capa, em pixels.
  *
  * Máxima, e não fixa: a largura acompanha (`w-auto`) e o `object-contain` cabe a
@@ -780,11 +794,41 @@ export const OPCOES = {
     { id: "media", nome: "Média", desc: "Metade da tela", vh: 60 },
     { id: "cheia", nome: "Cheia", desc: "Quase a tela inteira", vh: 78 },
   ],
+  /*
+   * ── `pilula`: O CANTO TAMBÉM GOVERNA OS BOTÕES (29/09/2026) ─────────────
+   *
+   * Juan, com um print da galeria no celular: "tem como adicionar alguma opção
+   * no design de fazer os acabamentos retos? (se serão circulares, quadrados,
+   * ou outros formatos)". Na imagem, as miniaturas saíam com o canto quase reto
+   * — escolha dele, pelo eixo abaixo — e a ficha "MAKING OF" e o botão
+   * "Encontrar as minhas fotos" eram cápsulas inteiras. Foto quadrada ao lado
+   * de botão redondo, na mesma tela.
+   *
+   * ── POR QUE AQUI, E NÃO NUM EIXO NOVO ─────────────────────────────────
+   *
+   * Um eixo "acabamento" à parte seria o décimo oitavo controle da tela de
+   * Design, e o Juan já reclamou que ali tem coisa demais parecida. Pior: com
+   * dois controles, o padrão de fábrica continuaria sendo a mistura do print, e
+   * só sumiria se a pessoa achasse os dois e os fizesse concordar. A forma da
+   * galeria é uma decisão só.
+   *
+   * ── POR QUE SÓ `reto` MEXE NA PÍLULA ──────────────────────────────────
+   *
+   * Porque a objeção séria ao reuso é galeria entregue mudando de cara. Em
+   * 29/09/2026, das 510 galerias do banco, ZERO tinham `canto` gravado: todas
+   * caem em `suave` por `lerAparencia`. Mantendo a cápsula em `suave`,
+   * `redondo` e `muito`, nenhuma delas muda um pixel — e quem quer o conjunto
+   * reto marca uma opção, não duas. `testar-acabamento-reto.mjs` prende os
+   * quatro números.
+   *
+   * 999px e não 9999px: qualquer valor acima de metade do lado maior já é
+   * cápsula, e três dígitos cabem na leitura de quem depura o HTML.
+   */
   canto: [
-    { id: "reto", nome: "Reto", desc: "Canto vivo, ar de impresso", px: 0 },
-    { id: "suave", nome: "Suave", desc: "Só tira a ponta", px: 6 },
-    { id: "redondo", nome: "Redondo", desc: "Arredondado de verdade", px: 14 },
-    { id: "muito", nome: "Bem redondo", desc: "Cantos macios, ar de aplicativo", px: 24 },
+    { id: "reto", nome: "Reto", desc: "Canto vivo nas fotos e nos botões, ar de impresso", px: 0, pilula: 0 },
+    { id: "suave", nome: "Suave", desc: "Só tira a ponta", px: 6, pilula: 999 },
+    { id: "redondo", nome: "Redondo", desc: "Arredondado de verdade", px: 14, pilula: 999 },
+    { id: "muito", nome: "Bem redondo", desc: "Cantos macios, ar de aplicativo", px: 24, pilula: 999 },
   ],
   cartao: [
     { id: "sobreposto", nome: "Com o nome", desc: "A capa com o título e o estúdio por cima" },
@@ -1139,6 +1183,9 @@ export function variaveisDeForma(a: Aparencia): Record<string, string> {
   return {
     "--g-capa-h": `${alturaCapaVh(a.alturaCapa)}vh`,
     "--g-canto": `${raioDoCantoPx(a.canto)}px`,
+    /* O acabamento dos botões e das fichas. Sai do MESMO eixo do canto das
+       fotos, de propósito — ver `OPCOES.canto`. */
+    "--g-pilula": `${raioDaPilulaPx(a.canto)}px`,
   };
 }
 

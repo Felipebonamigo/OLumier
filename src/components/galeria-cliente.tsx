@@ -1263,7 +1263,7 @@ export function GaleriaCliente({
         <div className="my-10 text-center">
           <Link
             href={saidaDoCapitulo.para}
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm transition"
+            className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
             style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
           >
             {saidaDoCapitulo.texto}
@@ -1970,7 +1970,7 @@ export function GaleriaCliente({
                     topo. `testar-urls-sob-demanda.mjs` confere que esse caminho
                     existe — sem ele, tirar o botão deixaria o celular sem saída.
                   */
-                  className="grid h-9 w-9 place-items-center rounded-full opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
+                  className="grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
                   style={{ color: "#fff", filter: GLIFO_SOBRE_FOTO }}
                 >
                   <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
@@ -2017,7 +2017,7 @@ export function GaleriaCliente({
                 /* O posicionamento saiu daqui para o <span> que agrupa os dois
                    botões — senão o de baixar e o coração se sobreporiam no
                    mesmo canto. */
-                className={`grid h-9 w-9 place-items-center rounded-full transition max-[900px]:h-11 max-[900px]:w-11
+                className={`grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] transition max-[900px]:h-11 max-[900px]:w-11
                   ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}
                   ${!selecao.aberta && !ehFavorita ? "hidden" : ""}`}
                 /*
@@ -2250,7 +2250,7 @@ export function GaleriaCliente({
                   anterior();
                 }}
                 aria-label="Anterior"
-                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-[var(--g-pilula,9999px)] border transition"
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
                   borderColor: "var(--g-linha)",
@@ -2266,7 +2266,7 @@ export function GaleriaCliente({
                   proximo();
                 }}
                 aria-label="Próxima"
-                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-[var(--g-pilula,9999px)] border transition"
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
                   borderColor: "var(--g-linha)",
@@ -2339,12 +2339,12 @@ function PainelDaEntrega({
       </div>
 
       <div
-        className="h-1.5 w-full overflow-hidden rounded-full"
+        className="h-1.5 w-full overflow-hidden rounded-[var(--g-pilula,9999px)]"
         style={{ background: "var(--g-linha)" }}
         aria-hidden="true"
       >
         <div
-          className="h-full rounded-full transition-[width] duration-300"
+          className="h-full rounded-[var(--g-pilula,9999px)] transition-[width] duration-300"
           style={{ width: `${Math.round(fracao * 100)}%`, background: "var(--g-destaque)" }}
         />
       </div>
@@ -2359,7 +2359,7 @@ function PainelDaEntrega({
         <button
           type="button"
           onClick={suaVez.seguir}
-          className="w-full rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85"
+          className="w-full rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm font-semibold transition hover:opacity-85"
           style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
         >
           Salvar {p.preparadas} {p.preparadas === 1 ? "foto" : "fotos"} no celular

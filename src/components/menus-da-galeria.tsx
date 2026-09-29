@@ -38,7 +38,7 @@ import { tamanhoLegivel, toquesPrevistos } from "@/lib/salvar-client";
  */
 
 const GATILHO =
-  "flex cursor-pointer list-none items-center gap-1.5 rounded-full px-4 py-2 text-sm " +
+  "flex cursor-pointer list-none items-center gap-1.5 rounded-[var(--g-pilula,9999px)] px-4 py-2 text-sm " +
   "transition hover:opacity-75 [&::-webkit-details-marker]:hidden";
 
 const PAINEL =
@@ -483,7 +483,7 @@ export function MenusDaGaleria({
                   href={enderecoNaGaleria(enderecoBase, busca.toString(), { cap: c.apelido })}
                   aria-current={ativo ? "page" : undefined}
                   data-ativo={ativo ? "sim" : undefined}
-                  className="inline-block rounded-full px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
+                  className="inline-block rounded-[var(--g-pilula,9999px)] px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.14em] transition hover:opacity-70"
                   /*
                    * ── A MARCAÇÃO DE SELECIONADO, EM TRÊS SINAIS ──────────────
                    *

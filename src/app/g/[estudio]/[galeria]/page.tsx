@@ -843,7 +843,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
       <footer className="mt-20 text-center">
         <span
-          className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em]"
+          className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em]"
           style={{ border: "1px solid var(--g-linha)", color: "var(--g-tenue)" }}
         >
           <span
