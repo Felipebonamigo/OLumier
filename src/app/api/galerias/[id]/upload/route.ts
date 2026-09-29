@@ -7,7 +7,7 @@ import { situacaoDoTenant } from "@/lib/assinatura";
 import { asaasConfigurado } from "@/lib/asaas";
 import { precisaConfirmarEmail, RECADO_EMAIL_PENDENTE } from "@/lib/confirmacao-email";
 import {
-  TIPOS_ACEITOS,
+  reconhecerArquivo,
   LIMITE_POR_ARQUIVO,
   LIMITE_PUT_UNICO,
   TAMANHO_PARTE,
@@ -101,18 +101,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   const nome = String(corpo.nome ?? "").trim();
-  const mime = String(corpo.mime ?? "");
+  let mime = String(corpo.mime ?? "");
   const bytes = Number(corpo.bytes ?? 0);
 
   if (!nome) return NextResponse.json({ erro: "Arquivo sem nome." }, { status: 400 });
 
-  const tipo = TIPOS_ACEITOS[mime];
-  if (!tipo) {
+  /* Mime vazio é o Windows sem a extensão de HEIC, não arquivo inválido — a
+     extensão resolve. Ver `reconhecerArquivo`. */
+  const reconhecido = reconhecerArquivo(nome, mime);
+  if (!reconhecido) {
     return NextResponse.json(
       { erro: `“${nome}”: tipo não aceito. Envie fotos (JPG, PNG, WEBP, HEIC) ou vídeos (MP4, MOV, WEBM).` },
       { status: 415 },
     );
   }
+  const { tipo } = reconhecido;
+  /* A partir daqui vale o mime RESOLVIDO: é ele que assina a URL de envio e é
+     ele que o navegador tem de mandar no cabeçalho, senão o armazém recusa a
+     assinatura. A rota devolve esse valor para o cliente usar. */
+  mime = reconhecido.mime;
 
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return NextResponse.json({ erro: `“${nome}”: tamanho inválido.` }, { status: 400 });
@@ -266,9 +273,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       tamanhoParte: TAMANHO_PARTE,
       urlThumb,
       urlPreview,
+      /* O mime RESOLVIDO — ver `reconhecerArquivo`. A URL é assinada com ele, e
+         o navegador tem de mandar o mesmo no cabeçalho: quando o Windows não
+         rotula o HEIC, quem sabe o tipo é o servidor, não o navegador. */
+      mime,
     });
   }
 
   const url = await urlDeEnvioDoOriginal(chaves.original, mime, armazem);
-  return NextResponse.json({ mediaId: media!.id, emPartes: false, url, urlThumb, urlPreview });
+  return NextResponse.json({ mediaId: media!.id, emPartes: false, url, urlThumb, urlPreview, mime });
 }

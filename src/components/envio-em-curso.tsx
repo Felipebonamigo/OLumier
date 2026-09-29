@@ -110,11 +110,24 @@ export function useEnvio(): Envio {
  * arquivo grande, barra de progresso não é enfeite: sem ela o usuário acha que
  * travou e recarrega a página no meio.
  */
-function enviarComProgresso(url: string, arquivo: Blob, aoProgredir: (pct: number) => void) {
+function enviarComProgresso(
+  url: string,
+  arquivo: Blob,
+  aoProgredir: (pct: number) => void,
+  /*
+   * O TIPO QUE O SERVIDOR DECIDIU, quando ele decidiu.
+   *
+   * A URL é assinada COM o content-type: se o servidor assinar `image/heic` e
+   * daqui sair o cabeçalho vazio, o armazém recusa a assinatura. E vazio é
+   * exatamente o que o Windows dá para um HEIC — ver `reconhecerArquivo`.
+   * Sem o parâmetro vale o do arquivo, que é o caso de sempre.
+   */
+  mime?: string,
+) {
   return new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
-    xhr.setRequestHeader("Content-Type", arquivo.type);
+    xhr.setRequestHeader("Content-Type", mime || arquivo.type);
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) aoProgredir(Math.round((e.loaded / e.total) * 100));
     });
@@ -278,7 +291,13 @@ export function ProvedorDeEnvio({
        * SEGUNDA linha em `medias`. A primeira ficava pendente para sempre,
        * segurando espaço da quota por um arquivo que nunca existiu.
        */
-      type Preparo = { mediaId: string; urlThumb?: string; urlPreview?: string } & (
+      type Preparo = {
+        mediaId: string;
+        urlThumb?: string;
+        urlPreview?: string;
+        /* O tipo que o servidor decidiu — ver `reconhecerArquivo`. */
+        mime?: string;
+      } & (
         | { emPartes: true; tamanhoParte: number }
         | { emPartes: false; url: string }
       );
@@ -384,8 +403,11 @@ export function ProvedorDeEnvio({
                 atualizar(tarefa.item.id, { progresso: pct }),
               );
             } else {
-              await enviarComProgresso(dados.url, tarefa.arquivo, (pct) =>
-                atualizar(tarefa.item.id, { progresso: pct }),
+              await enviarComProgresso(
+                dados.url,
+                tarefa.arquivo,
+                (pct) => atualizar(tarefa.item.id, { progresso: pct }),
+                dados.mime,
               );
             }
             await derivadasSubindo;

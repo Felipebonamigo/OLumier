@@ -68,6 +68,65 @@ await etapa("recusa tipo de arquivo não aceito", async () => {
   return "HTTP 415";
 });
 
+/*
+ * ── O NAVEGADOR QUE NÃO SABE O QUE É UM HEIC (29/09/2026) ─────────────────
+ *
+ * A Carol tentou subir uma galeria nova e recebeu "0 de 74 — 33 com erro", e
+ * subindo. Nada no servidor: a recusa é 415, resposta esperada, não exceção.
+ *
+ * A causa é o Windows. `File.type` sai do registro do sistema, e o Windows não
+ * traz mime para `.heic`/`.heif` sem a extensão da Microsoft instalada — o
+ * navegador manda string VAZIA. O servidor lia só o mime, não achava no mapa e
+ * recusava TODOS os arquivos, com uma mensagem que culpa o arquivo ("tipo não
+ * aceito") por uma lacuna do sistema operacional. E a zona de envio anuncia
+ * HEIC na própria tela.
+ *
+ * O nome do arquivo é a única pista que sempre chega. Ele não vale MAIS que o
+ * mime — vale QUANDO o mime não diz nada. A ordem importa: mime conhecido
+ * manda, porque é o único dos dois que o navegador conferiu.
+ */
+await etapa("HEIC sem mime (Windows) é aceito pela extensão", async () => {
+  for (const nome of ["IMG_4471.HEIC", "familia.heif", "foto.heic"]) {
+    const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ nome, mime: "", bytes: 2_500_000 }),
+    });
+    if (r.status === 415) {
+      const { erro } = await r.json();
+      throw new Error(`${nome} recusado: ${erro}`);
+    }
+    if (!r.ok) throw new Error(`${nome}: HTTP ${r.status}`);
+  }
+  return "3 aceitos";
+});
+
+await etapa("extensão desconhecida continua recusada, mesmo sem mime", async () => {
+  /* A saída pela extensão não pode virar porta dos fundos: sem mime E sem
+     extensão conhecida, a recusa é a mesma de sempre. */
+  for (const nome of ["virus.exe", "backup.zip", "sem-extensao"]) {
+    const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ nome, mime: "", bytes: 100 }),
+    });
+    if (r.status !== 415) throw new Error(`${nome} passou com ${r.status}`);
+  }
+  return "3 recusados";
+});
+
+await etapa("mime conhecido continua mandando na decisão", async () => {
+  /* Extensão mentindo (um JPEG chamado .png) segue o MIME, que é o que o
+     navegador de fato conferiu. */
+  const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie },
+    body: JSON.stringify({ nome: "retrato.png", mime: "image/jpeg", bytes: 1000 }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return "mime vence a extensão";
+});
+
 await etapa("recusa quem não está autenticado", async () => {
   const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
     method: "POST",
