@@ -124,17 +124,33 @@ if (forma["--g-capa-h"] === "78vh" && forma["--g-canto"] === "6px") {
  * antigo. Verificar `PRESETS` inteiro voltaria a proibir o que já foi decidido
  * que é permitido.
  */
-const PRESETS_DO_PAR_ANTIGO = [
-  "atomo",
-  "revista",
-  "atelie",
-  "essencial",
-  "convite",
-  "caligrafia",
-  "moda",
-  "cerimonia",
-  "papel",
-];
+/*
+ * ── A LISTA ENCOLHEU PARA UM, E O MOTIVO FOI MEDIDO (29/09/2026) ──────────
+ *
+ * Ela nasceu com nove nomes para impedir que refinar um preset desmarcasse o
+ * cartão de galerias antigas. O raciocínio continua certo; o que faltava era o
+ * NÚMERO de quem ele protegia.
+ *
+ * Rodando `presetEquivalente` sobre as 512 galerias do banco naquele dia:
+ *
+ *     (personalizado)  510
+ *     atomo              2
+ *
+ * Nenhuma galeria casava com Revista, Ateliê, Essencial, Convite, Caligrafia,
+ * Moda, Cerimônia ou Papel. Congelar esses oito não guardava ninguém — só
+ * proibia o conserto que o Juan tinha pedido ("tem várias super iguais, não dá
+ * pra perceber a diferença"), porque a forma é um dos seis eixos que a
+ * miniatura desenha, e portanto um dos poucos jeitos de separar dois cartões.
+ *
+ * O Átomo fica, e agora com a razão em números: ele é o único com galerias
+ * casadas. Quem for mexer nele desmarca duas — e que seja uma decisão, não um
+ * efeito colateral.
+ *
+ * Preset novo entra nesta lista só se alguém decidir que ele deve seguir o par
+ * antigo. `testar-estilos-distintos.mjs` cuida do outro lado: que os dez
+ * continuem diferentes entre si onde a pessoa escolhe.
+ */
+const PRESETS_DO_PAR_ANTIGO = ["atomo"];
 const presetsDivergentes = PRESETS.filter(
   (p) =>
     PRESETS_DO_PAR_ANTIGO.includes(p.id) &&

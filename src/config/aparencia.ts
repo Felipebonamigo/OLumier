@@ -903,6 +903,20 @@ export interface Preset {
  * já tiver escolha própria gravada —, dá para dar a cada preset o canto que
  * combina com ele (Moda com `reto`, Papel com `redondo`) sem esse efeito.
  *
+ * ── ESSE DIA CHEGOU, E FOI CONTADO (29/09/2026) ─────────────────────────
+ *
+ * Só o Átomo continua com o par antigo. A previsão acima se cumpriu ao pé da
+ * letra — Moda ficou com `reto`, Papel com `redondo` —, e o gatilho não foi
+ * palpite: rodando `presetEquivalente` sobre as 512 galerias do banco, 510 já
+ * apareciam como "personalizado" e as 2 que casavam com algum preset casavam
+ * com o ÁTOMO. Refinar os outros oito desmarcou zero galerias.
+ *
+ * Foi o que destravou o pedido do Juan de 29/09 ("refinar os estilos prontos",
+ * "tem várias super iguais"): a forma é um dos seis eixos que a miniatura
+ * desenha, e congelá-la em nove presets tirava justamente o que separava um
+ * cartão do outro. `testar-estilos-distintos.mjs` passou a exigir que dois
+ * estilos difiram em pelo menos DOIS desses seis.
+ *
  * O "Marfim" (16/09/2026) já escolhe o seu, e isso não desmarca ninguém: ele
  * NASCEU com essa combinação. O efeito descrito acima só existe ao MUDAR um
  * preset que galerias antigas já casam.
@@ -920,14 +934,14 @@ export const PRESETS: Preset[] = [
   {
     id: "revista",
     nome: "Revista",
-    desc: "Fundo claro, tipografia grande, fotos em fileiras.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Banca de jornal: fundo claro, letra grande e tudo de canto vivo.",
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
-    desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Terrosa, manuscrita e de cantos macios. Clima de ateliê.",
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     /*
@@ -968,8 +982,8 @@ export const PRESETS: Preset[] = [
   {
     id: "essencial",
     nome: "Essencial",
-    desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho e de canto vivo.",
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     /*
@@ -1008,26 +1022,26 @@ export const PRESETS: Preset[] = [
      * banco (ver o comentário do preset Átomo), então renomear é seguro. */
     id: "caligrafia",
     nome: "Caligrafia",
-    desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Caligrafia sobre creme, foto em arco e cantos bem macios. Clima de papel timbrado.",
+    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "moda",
     nome: "Moda",
-    desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Contraste alto, destaques grandes e canto vivo, como editorial de moda.",
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
-    desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Maiúsculas romanas sobre fundo escuro, com a foto grande e limpa.",
+    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "papel",
     nome: "Papel",
-    desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Branco, ar déco, muito espaço e cantos arredondados. As fotos respiram.",
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
 ];
 
