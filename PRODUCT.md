@@ -170,7 +170,11 @@ originou, a marca e o símbolo, e a documentação de operação em `docs/`.
    baixar, favoritar, compartilhar — precisa funcionar sem cadastro, sem senha e
    sem aplicativo.
 2. **Nada é apagado sem alguém pedir e nomear.** Vencimento manda para o cofre;
-   não destrói. Quem apaga é o dono do arquivo.
+   não destrói. Quem apaga é o dono do arquivo. **Uma exceção, com data:** os
+   arquivos do teste grátis que termina sem assinatura são apagados 60 dias
+   depois do fim do teste, com dois avisos por e-mail antes (decisão do Felipe,
+   28/09/2026 — `src/lib/testes-abandonados.ts`). Sem e-mail ligado, não há
+   aviso, e sem aviso nada é apagado.
 3. **A marca da tela é a do estúdio.** Quando a nossa aparece na frente da dele,
    o produto errou.
 4. **Prometer menos do que se cumpre.** Restauração ensaiada em vez de "backup

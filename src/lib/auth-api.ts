@@ -4,6 +4,7 @@ import { conferirChave, type Escopo } from "./chaves-api";
 import { buscarTenantPorId } from "./tenants";
 import { situacaoDoTenant } from "./assinatura";
 import { asaasConfigurado } from "./asaas";
+import { precisaConfirmarEmail, RECADO_EMAIL_PENDENTE } from "./confirmacao-email";
 
 /**
  * Quem está falando com esta rota — navegador ou programa.
@@ -106,6 +107,10 @@ export async function tenantQuePodeEnviar(
      * mostrando um 402 mudo ao fotógrafo, que é pior que a frase genérica. */
     return { erro: situacao.recado ?? "Assinatura inativa. Confira o plano na sua conta.", status: 402 };
   }
+
+  /* O e-mail da conta ainda não foi confirmado — só vale com o envio de e-mail
+   * ligado. Mesma regra da rota de envio; ver lib/confirmacao-email.ts. */
+  if (precisaConfirmarEmail(tenant)) return { erro: RECADO_EMAIL_PENDENTE, status: 403 };
 
   return { tenantId };
 }

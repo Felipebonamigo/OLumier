@@ -146,7 +146,7 @@ export const marca = {
    * expectativa errada sobre isso é a única que custa um casamento inteiro.
    */
   entregaNaoBackup:
-    "O " +
+    "A " +
     NOME +
     " é uma ferramenta de entrega, não de backup: o arquivo aqui é a cópia que o seu cliente " +
     "recebe. Guarde os seus originais onde você já guarda — nenhum serviço deveria ser a sua " +

@@ -97,7 +97,9 @@ const FAQ: { pergunta: string; resposta: React.ReactNode }[] = [
     resposta: (
       <>
         Não. São <strong>14 dias grátis e sem cartão</strong>. Dá para subir uma entrega de verdade
-        e ver o seu cliente abrindo o link antes de decidir qualquer coisa.
+        e ver o seu cliente abrindo o link antes de decidir qualquer coisa. O cadastro pede o CPF
+        ou CNPJ, porque o teste é um por pessoa. Se não assinar, nada é cobrado: os arquivos do
+        teste são apagados 60 dias depois do fim dele, com dois avisos por e-mail antes.
       </>
     ),
   },

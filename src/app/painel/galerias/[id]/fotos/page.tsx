@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel, fotosRepetidas } from "@/lib/galeria-painel";
 import { formatarBytes } from "@/lib/tenants";
+import { buscarTenantPorId } from "@/lib/tenants";
+import { precisaConfirmarEmail } from "@/lib/confirmacao-email";
 import { listarMedias } from "@/lib/medias";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { listarSecoes } from "@/lib/secoes";
@@ -33,6 +35,11 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
   const tenantId = await sessaoAtual();
   if (!tenantId) redirect("/entrar");
   const galeria = await galeriaDoPainel(id, tenantId);
+  /* A MESMA pergunta que o aviso do topo do painel faz (`painel/layout.tsx`).
+     Duas regras diferentes para a mesma coisa é como a tela passa a dizer uma
+     coisa em cima e outra embaixo. */
+  const tenant = await buscarTenantPorId(tenantId);
+  const emailPendente = tenant ? precisaConfirmarEmail(tenant) : false;
   if (!galeria) notFound();
 
   const medias = await listarMedias(galeria.id);
@@ -132,6 +139,33 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
         grupoSolto={galeria.grupo_solto}
       />
 
+      {/*
+        ── NÃO OFERECER O QUE VAI SER RECUSADO (29/09/2026) ─────────────────
+
+        A Carol arrastou 74 fotos e recebeu "0 de 74 — 33 com erro", com o
+        motivo escondido numa lista que só aparece expandindo a barra de envio.
+        A trava do servidor estava certa (o e-mail da conta nova dela nunca foi
+        confirmado); o que estava errado era a tela convidar para uma pasta de
+        casamento inteira e só então dizer não, 74 vezes.
+
+        Felipe: "não permita que eles tentem publicar as imagens sem ter
+        confirmado o e-mail".
+
+        A trava do servidor FICA — é ela que protege, e quem chama a rota direto
+        não passa por tela nenhuma. Isto aqui é para a pessoa saber ANTES de
+        arrastar, e com o caminho da saída à mão: o aviso do topo do painel tem
+        o botão de pedir outro link.
+      */}
+      {emailPendente ? (
+        <section className="mt-8 rounded-xl border border-alerta/40 bg-carbon-2 px-5 py-6">
+          <h2 className="text-base font-medium">Confirme seu e-mail para enviar fotos</h2>
+          <p className="mt-1.5 max-w-prose text-sm text-texto-soft">
+            O link foi para <strong className="font-normal text-texto">{tenant?.email}</strong>. Se
+            não chegou, veja o lixo eletrônico — ou peça outro no aviso do topo desta página. Assim
+            que confirmar, a área de envio aparece aqui.
+          </p>
+        </section>
+      ) : (
       <EnviarArquivos
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
         rostosAtivos={galeria.rostos_ativos}
@@ -141,6 +175,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
            dado que ele não usa. */
         nomesNaGaleria={medias.map((m) => m.nome_original)}
       />
+      )}
 
       {/*
         ── FOTOS REPETIDAS ───────────────────────────────────────────────

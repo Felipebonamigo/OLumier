@@ -9,6 +9,9 @@ import { SeletorTema } from "@/components/seletor-tema";
 import { ehAdmin } from "@/config/admin";
 import { SECAO_SITE_NO_AR } from "@/config/site-do-estudio";
 import { sairAction } from "../(auth)/actions";
+import { precisaConfirmarEmail } from "@/lib/confirmacao-email";
+import { AvisoEmailPendente } from "@/components/aviso-email-pendente";
+import { marca } from "@/config/marca";
 
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
   /*
@@ -134,6 +137,10 @@ export default async function PainelLayout({ children }: { children: React.React
           )}
         </div>
       </header>
+
+      {precisaConfirmarEmail(tenant) && (
+        <AvisoEmailPendente email={tenant.email} whatsapp={marca.whatsappVisivel} />
+      )}
 
       {children}
     </div>

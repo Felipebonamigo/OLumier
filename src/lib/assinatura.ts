@@ -19,7 +19,8 @@
  *
  *    A única exceção é o trial abandonado, e ela mora em `galeriasNoAr`, não
  *    aqui: quem testou 14 dias e sumiu ocuparia disco para sempre. O casal
- *    ainda ganha 15 dias de janela, e nada é apagado.
+ *    ainda ganha 15 dias de janela. Os ARQUIVOS só saem aos 60 dias, depois de
+ *    dois avisos por e-mail — ver `lib/testes-abandonados.ts` (28/09/2026).
  *
  * 3. Cancelar para a RENOVAÇÃO, não o acesso. Ver `pago_ate` mais abaixo.
  *
@@ -48,7 +49,8 @@ export interface Situacao {
 const RECADOS: Record<MotivoBloqueio, string> = {
   trial_vencido:
     "Seu teste grátis terminou. Ative a assinatura em Conta para voltar a enviar arquivos. " +
-    "As galerias já publicadas ficam no ar por mais 15 dias — depois disso saem do ar, mas nada é apagado e assinar devolve tudo.",
+    "As galerias já publicadas ficam no ar por mais 15 dias — depois disso saem do ar, e os arquivos continuam guardados. " +
+    "Sem assinatura, eles são apagados 60 dias depois do fim do teste, sempre com dois avisos por e-mail antes. Assinar até lá devolve tudo.",
   inadimplente:
     "Há uma cobrança em aberto. Assim que o pagamento for confirmado, o envio volta automaticamente — as galerias já publicadas continuam no ar.",
   cancelado:
@@ -155,7 +157,7 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
  * `cancelado` e `inadimplente` ficam de fora porque os recados desses dois
  * estados prometem, por escrito, que as galerias publicadas continuam no ar.
  *
- * Nada é apagado: a galeria deixa de abrir e volta no dia em que o pagamento
+ * Nada é apagado AQUI: a galeria deixa de abrir e volta no dia em que o pagamento
  * confirmar, porque a regra é lida na hora e não gravada em lugar nenhum.
  *
  * Falha para o lado de MOSTRAR: sem data, com status desconhecido ou com
@@ -163,10 +165,28 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
  * casal por um estado que ninguém previu é pior do que servir um trial vencido
  * por mais um tempo.
  */
-export function galeriasNoAr(tenant: {
-  status: string;
-  trial_ate: Date | string | null;
-}): boolean {
+export function galeriasNoAr(
+  tenant: {
+    status: string;
+    trial_ate: Date | string | null;
+  },
+  /*
+   * A cobrança está ligada? OBRIGATÓRIO, sem valor padrão, de propósito: é o
+   * que obriga cada chamador a responder.
+   *
+   * Até 29/09/2026 esta regra não perguntava. Com a cobrança desligada no
+   * servidor, o teste que vencia continuava valendo como "não pagou" — e a
+   * galeria saía do ar para o cliente do fotógrafo 15 dias depois, sem que
+   * existisse jeito nenhum de pagar para ela voltar. A tela de Conta dizia
+   * "enquanto isso, o uso segue liberado", e a entrega do casal sumia.
+   *
+   * É a decisão 1 do cabeçalho deste arquivo, que `situacaoDoTenant` sempre
+   * seguiu e esta regra não: sem porta para pagar, ninguém é punido por não
+   * passar por ela.
+   */
+  cobrancaLigada: boolean,
+): boolean {
+  if (!cobrancaLigada) return true;
   if (tenant.status !== "trial") return true;
 
   const fim = comoData(tenant.trial_ate);

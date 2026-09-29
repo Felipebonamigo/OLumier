@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { asaasConfigurado } from "@/lib/asaas";
 import { tenantDaRequisicao } from "@/lib/auth-api";
 import { consultarUm } from "@/lib/db";
 import { galeriasNoAr } from "@/lib/assinatura";
@@ -74,7 +75,14 @@ export async function GET(
     galeria.publicada &&
     galeria.estado === "online" &&
     !vencida &&
-    galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate });
+    /* O MESMO `cobrancaLigada` da página pública, e não `true` fixo: quem
+     * pergunta aqui vai dizer ao casal "as fotos estão prontas". Responder
+     * diferente do que a página faria criaria a pior divergência possível —
+     * o contrato lá dizendo "no ar" e o link abrindo fechado. */
+    galeriasNoAr(
+      { status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate },
+      asaasConfigurado(),
+    );
 
   return NextResponse.json({
     id: galeria.id,

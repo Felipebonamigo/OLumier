@@ -1,5 +1,5 @@
 import "server-only";
-import { consultar, consultarUm } from "./db";
+import { consultar, consultarUm, emTransacao } from "./db";
 
 export interface Media {
   id: string;
@@ -47,6 +47,62 @@ export const TIPOS_ACEITOS: Record<string, "foto" | "video"> = {
   "video/quicktime": "video",
   "video/webm": "video",
 };
+
+/**
+ * O MIME QUE A EXTENSÃO DENUNCIA, quando o navegador não sabe dizer.
+ *
+ * ── DE ONDE VEIO (29/09/2026) ─────────────────────────────────────────────
+ *
+ * A Carol tentou subir uma galeria nova e recebeu "0 de 74 — 33 com erro", e
+ * subindo. Nada no servidor: a recusa era 415, resposta esperada, não exceção.
+ *
+ * A causa é o Windows. `File.type` sai do registro do sistema, e o Windows não
+ * traz mime para `.heic`/`.heif` sem a extensão da Microsoft instalada — o
+ * navegador manda string VAZIA. O servidor lia só o mime, não achava no mapa e
+ * recusava TODOS os arquivos, com uma mensagem que culpa o arquivo ("tipo não
+ * aceito") por uma lacuna do sistema operacional. E a zona de envio anuncia
+ * HEIC na própria tela: o produto prometia o que recusava.
+ *
+ * O nome do arquivo é a única pista que sempre chega. Ele não vale MAIS que o
+ * mime — vale QUANDO o mime não diz nada.
+ */
+const MIME_POR_EXTENSAO: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  avif: "image/avif",
+  heic: "image/heic",
+  heif: "image/heif",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
+};
+
+/**
+ * O que este arquivo é, e com que mime ele deve subir.
+ *
+ * A ORDEM É A REGRA: mime conhecido manda, porque é o único dos dois que o
+ * navegador de fato conferiu; a extensão só entra quando ele não reconheceu
+ * nada. Sem mime E sem extensão conhecida, a recusa é a de sempre — a saída
+ * pela extensão não pode virar porta dos fundos.
+ *
+ * Devolve TAMBÉM o mime resolvido porque a URL de envio é assinada com ele: se
+ * o servidor assinar com `image/heic` e o navegador mandar o cabeçalho vazio, o
+ * armazém recusa a assinatura. Os dois lados têm de dizer a mesma coisa.
+ */
+export function reconhecerArquivo(
+  nome: string,
+  mime: string,
+): { tipo: "foto" | "video"; mime: string } | null {
+  const doMime = TIPOS_ACEITOS[mime];
+  if (doMime) return { tipo: doMime, mime };
+
+  const extensao = nome.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  const daExtensao = extensao ? MIME_POR_EXTENSAO[extensao] : undefined;
+  if (!daExtensao) return null;
+  return { tipo: TIPOS_ACEITOS[daExtensao], mime: daExtensao };
+}
 
 /**
  * Acima deste tamanho, o envio vai em partes. O R2 aceita até 5 GiB num PUT
@@ -365,17 +421,125 @@ export async function republicarMedia(
  * O filtro por tenant está no próprio DELETE, e não numa consulta antes: entre
  * conferir e apagar cabe uma troca de dono, e o banco não deixa essa fresta.
  */
-export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
+/**
+ * MOVE UMA FOTO PARA ANTES DE OUTRA — o arrastar da aba Fotos.
+ *
+ * ── DE ONDE VEIO (28/09/2026) ─────────────────────────────────────────────
+ *
+ * Felipe: "quero adicionar as fotos analógicas que fiz no 'local' certo, na
+ * ordem cronológica e não consigo arrastar".
+ *
+ * A ordem da galeria é a narrativa do casamento — este arquivo já brigou três
+ * vezes por ela (a migração 038 e o lote de 23/09). Só que ela era decidida no
+ * ENVIO e ponto: quem revela um filme depois, ou recebe a foto do segundo
+ * fotógrafo na semana seguinte, não tinha como encaixá-la no meio.
+ *
+ * ── A CONTA, E POR QUE ELA É BOUNDED ──────────────────────────────────────
+ *
+ * Não se renumera a galeria inteira: numa de 4.577 fotos seriam 4.577 linhas
+ * reescritas para mover uma. Só o TRECHO entre a origem e o destino muda de
+ * casa, e ele é a distância que o dedo percorreu — normalmente algumas fotos.
+ *
+ * Descendo (a foto vai para uma posição maior), quem está no caminho sobe uma
+ * casa; subindo, desce uma casa. Os dois sentidos NÃO são simétricos, e trocar
+ * os sinais dá uma lista que parece certa com três fotos e embaralha com
+ * trezentas — `testar-arrastar-fotos.mjs` confere a sequência inteira.
+ *
+ * NÃO MEXE NO CAPÍTULO de propósito: arrastar é sobre posição. Trocar de
+ * capítulo é o "mover para", que já existe e diz o que faz.
+ */
+export async function moverMediaNaOrdem(
+  galeriaId: string,
+  tenantId: string,
+  arrastadoId: string,
+  alvoId: string,
+): Promise<boolean> {
+  if (arrastadoId === alvoId) return false;
+
+  /* As duas na MESMA galeria e do MESMO estúdio, numa consulta só: os ids vêm
+     do navegador, e é este `where` que impede arrastar foto que não é de quem
+     pede — ou para dentro de uma galeria que não é dele. */
+  const pontas = await consultar<{ id: string; ordem: number }>(
+    `select id, ordem from medias
+      where galeria_id = $1 and tenant_id = $2 and id = any($3::uuid[])`,
+    [galeriaId, tenantId, [arrastadoId, alvoId]],
+  );
+  if (pontas.length !== 2) return false;
+
+  const de = pontas.find((p) => p.id === arrastadoId)!.ordem;
+  const para = pontas.find((p) => p.id === alvoId)!.ordem;
+  if (de === para) return false;
+
+  await emTransacao(async (consultarNaTransacao) => {
+    if (de < para) {
+      /* Descendo: o trecho (de, para] sobe uma casa e a arrastada assume o
+         lugar de quem era o alvo. */
+      await consultarNaTransacao(
+        `update medias set ordem = ordem - 1
+          where galeria_id = $1 and tenant_id = $2 and ordem > $3 and ordem <= $4`,
+        [galeriaId, tenantId, de, para],
+      );
+      await consultarNaTransacao("update medias set ordem = $2 where id = $1", [
+        arrastadoId,
+        para,
+      ]);
+    } else {
+      /* Subindo: o trecho [para, de) desce uma casa e a arrastada ocupa o
+         começo dele — que é o "antes desta" que o dedo pediu. */
+      await consultarNaTransacao(
+        `update medias set ordem = ordem + 1
+          where galeria_id = $1 and tenant_id = $2 and ordem >= $3 and ordem < $4`,
+        [galeriaId, tenantId, para, de],
+      );
+      await consultarNaTransacao("update medias set ordem = $2 where id = $1", [
+        arrastadoId,
+        para,
+      ]);
+    }
+  });
+
+  return true;
+}
+
+export async function apagarTodasAsMedias(
+  galeriaId: string,
+  tenantId: string,
+  /**
+   * AS ESCOLHIDAS, ou todas (28/09/2026).
+   *
+   * Juan: "Marquei algumas que eu quero excluir. Mas não tem botão de excluir.
+   * Só apagar todas. Ou apagar individualmente." A barra de seleção já prometia
+   * o contrário por escrito, e oferecia apenas o mover.
+   *
+   * `undefined` é "todas", que é o que esta função sempre fez. Uma LISTA apaga
+   * só aquelas — e lista VAZIA apaga nada, que é diferente de não ter lista:
+   * quem pediu para apagar zero fotos pediu para apagar zero fotos, e cair no
+   * caminho de "todas" aqui seria apagar um casamento inteiro por causa de um
+   * array vazio.
+   */
+  ids?: string[],
+) {
   const galeria = await consultarUm<{ id: string; titulo: string }>(
     "select id, titulo from galerias where id = $1 and tenant_id = $2",
     [galeriaId, tenantId],
   );
   if (!galeria) return null;
+  if (ids?.length === 0) return [];
 
-  const apagadas = await consultar<Media>(
-    "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
-    [galeriaId, tenantId],
-  );
+  /* O `galeria_id` e o `tenant_id` ficam no WHERE mesmo com a lista de ids: a
+     lista vem do navegador, e é o filtro que impede um id de outra galeria —
+     ou de outro estúdio — apagar o que não é dele. */
+  const apagadas = ids
+    ? await consultar<Media>(
+        `delete from medias
+          where galeria_id = $1 and tenant_id = $2 and id = any($3::uuid[])
+          returning *`,
+        [galeriaId, tenantId, ids],
+      )
+    : await consultar<Media>(
+        "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
+        [galeriaId, tenantId],
+      );
 
   if (apagadas.length > 0) {
     const { registrarEvento, ACOES } = await import("./eventos");
@@ -389,7 +553,7 @@ export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
         galeria: galeria.titulo,
         quantas: String(apagadas.length),
         bytes: String(apagadas.reduce((s, m) => s + Number(m.bytes), 0)),
-        motivo: "todas de uma vez",
+        motivo: ids ? "as selecionadas" : "todas de uma vez",
       },
     });
   }

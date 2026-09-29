@@ -238,7 +238,19 @@ try {
     }
   });
 
-  await etapa("estúdio com trial abandonado não entrega lista nem zip", async () => {
+  /*
+   * O trial abandonado só derruba a entrega com a COBRANÇA LIGADA (29/09/2026,
+   * `galeriasNoAr`): sem porta para pagar, ninguém perde a galeria do cliente.
+   * O servidor da bancada lê o mesmo `.env.local` que este processo, então a
+   * expectativa sai da mesma variável que ele usa — com a chave, bloqueia;
+   * sem ela (o normal aqui), entrega.
+   */
+  const cobrancaLigada = Boolean(process.env.ASAAS_API_KEY);
+  await etapa(
+    cobrancaLigada
+      ? "estúdio com trial abandonado não entrega lista nem zip"
+      : "sem cobrança ligada, trial abandonado continua entregando lista e zip",
+    async () => {
     const { rows: [antes] } = await db.query("select status, trial_ate from tenants where id = $1", [g.tenant_id]);
     await db.query(
       "update tenants set status = 'trial', trial_ate = now() - interval '400 days' where id = $1",
@@ -248,7 +260,13 @@ try {
       const { status } = await pedir(g.id);
       const zip = await fetch(`${BASE}/api/g/${g.id}/zip`, { cache: "no-store" });
       await zip.body?.cancel();
-      if (status === 200 || zip.status === 200) throw new Error(`lista ${status}, zip ${zip.status}`);
+      const entregou = status === 200 && zip.status === 200;
+      if (cobrancaLigada && (status === 200 || zip.status === 200)) {
+        throw new Error(`lista ${status}, zip ${zip.status}`);
+      }
+      if (!cobrancaLigada && !entregou) {
+        throw new Error(`sem como pagar, a entrega caiu: lista ${status}, zip ${zip.status}`);
+      }
       return `lista ${status} · zip ${zip.status}`;
     } finally {
       await db.query("update tenants set status = $2, trial_ate = $3 where id = $1", [
@@ -257,7 +275,8 @@ try {
         antes.trial_ate,
       ]);
     }
-  });
+  },
+  );
 
   console.log("\nAs fotos que a busca por rosto achou\n");
 

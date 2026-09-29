@@ -139,7 +139,7 @@ try {
     const vencidas = await galeriasVencidasNaLixeira();
     const alvo = vencidas.find((v) => v.id === galeriaId);
     if (!alvo) throw new Error("a galeria não entrou na limpeza");
-    await destruirGaleria(alvo.id, alvo.chaves);
+    await destruirGaleria(alvo.id);
 
     const { rows: existe } = await db.query("select 1 from galerias where id = $1", [galeriaId]);
     igual(existe.length, 0, "a galeria deveria ter sido destruída");

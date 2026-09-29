@@ -3,7 +3,7 @@
  *
  * Puro de propósito: nada aqui toca banco, sessão ou bucket, então dá para
  * testar cada regra sem subir servidor. (Não confundir com `src/config/marca.ts`,
- * que é a marca do Galeria Átomo; esta aqui é a marca de cada fotógrafo.)
+ * que é a marca da Galeria Átomo; esta aqui é a marca de cada fotógrafo.)
  */
 import { TEMAS } from "@/config/aparencia";
 

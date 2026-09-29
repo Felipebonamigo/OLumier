@@ -1,4 +1,5 @@
 import "server-only";
+import { asaasConfigurado } from "@/lib/asaas";
 import { createHmac } from "node:crypto";
 import { consultar, consultarUm } from "./db";
 import { cifrar, decifrar, temCripto } from "./cripto";
@@ -184,7 +185,12 @@ export async function avisarEntrega(galeriaId: string): Promise<void> {
       referenciaExterna: g.origem_ref,
       noAr:
         g.publicada && g.estado === "online" && !vencida &&
-        galeriasNoAr({ status: g.estudio_status, trial_ate: g.estudio_trial_ate }),
+        // Mesma régua da página pública (ver o comentário em
+        // `api/galerias/[id]`): o aviso não pode afirmar o que o link nega.
+        galeriasNoAr(
+          { status: g.estudio_status, trial_ate: g.estudio_trial_ate },
+          asaasConfigurado(),
+        ),
       totalMedias: g.total_medias,
     };
 

@@ -42,6 +42,11 @@ export const ACOES = {
   ASSINATURA_CANCELADA: "assinatura.cancelada",
   SENHA_TROCADA: "senha.trocada",
   CONTA_CRIADA: "conta.criada",
+  /* O teste abandonado (migração 045): os dois avisos e a limpeza. É o único
+   * lugar em que o SISTEMA apaga arquivo sem o fotógrafo ter pedido, e numa
+   * disputa a pergunta vai ser "fui avisado? quando?". */
+  AVISO_LIMPEZA_ENVIADO: "conta.aviso_limpeza",
+  ARQUIVOS_DO_TESTE_APAGADOS: "conta.arquivos_apagados",
   /* Galeria criada por um programa, não por um clique no painel — hoje, o
    * Atomatiza criando a galeria de um contrato pela chave de API. Entra na
    * lista porque é ACESSO: a pergunta de disputa é "quem criou isto?", e a
@@ -58,6 +63,14 @@ export const ACOES = {
    * resposta, e a foto do lugar anterior é apagada do bucket na troca. */
   HOME_FOTO_TROCADA: "home.foto.trocada",
   HOME_FOTO_RESTAURADA: "home.foto.restaurada",
+  /* O preço da assinatura mudou por causa do combo com o Atomatiza (entrou,
+   * saiu ou trocou de faixa). É dinheiro mudando sem o estúdio apertar nada —
+   * "por que a minha mensalidade mudou?" precisa de resposta com data. */
+  COMBO_RECALCULADO: "assinatura.combo",
+  /* Um aviso do Asaas sobre a cobrança da DIFERENÇA de uma troca de plano
+   * (paga, vencida, cancelada, estornada). Ela não mexe no período pago —
+   * então, sem este registro, não sobraria rastro dela aqui. */
+  DIFERENCA_DA_TROCA: "assinatura.diferenca",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque

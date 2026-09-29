@@ -178,6 +178,31 @@ try {
     }
   });
 
+  /*
+   * A CAPA QUE O FOTÓGRAFO ESCOLHEU (28/09/2026).
+   *
+   * Juan, mandando as fotos do casamento dele para a home: "uma das fotos eu
+   * sinalizei com o nome 'capa'" — o beijo debaixo da árvore grande, com o véu
+   * espalhado na grama. Na primeira montagem a capa saiu sendo outra (o beijo
+   * diante da casa de pedra), escolhida por ser deitada, que é o formato que a
+   * capa "jornal" pede.
+   *
+   * O formato é razão nossa; a escolha é dele. Numa página cujo argumento é
+   * "a marca do fotógrafo fica na frente", mostrar a galeria dele com a capa
+   * que NÓS preferimos é justamente o contrário do que a página afirma.
+   */
+  await etapa("a capa da galeria do Juan é a que ele marcou", () => {
+    const classica = IDENTIDADES.find((i) => i.id === "classica");
+    if (!classica) throw new Error("a identidade do Juan sumiu da home");
+    const capa = FOTOS_PADRAO[classica.capa];
+    if (!capa) throw new Error(`o lugar ${classica.capa} não tem foto padrão`);
+    const arquivo = capa.src.split("/").pop();
+    if (!capa.src.includes("beijo-arvore")) {
+      throw new Error(`a capa é ${arquivo} — ele marcou o beijo debaixo da árvore`);
+    }
+    return arquivo;
+  });
+
   await etapa("o admin sabe dizer onde cada foto aparece", () => {
     if (!ondeAparece("delicada-1").some((o) => o.includes('capa da galeria "Vanessa & Kalil"'))) {
       throw new Error("delicada-1 é a capa da Vanessa & Kalil");

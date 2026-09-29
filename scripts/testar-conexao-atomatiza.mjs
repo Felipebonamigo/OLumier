@@ -440,9 +440,20 @@ await etapa("o trial abandonado também chega como fora do ar", async () => {
   recebidos.length = 0;
   await avisarEntrega(galeriaAviso.id);
   const aviso = JSON.parse(recebidos[0].corpo);
-  igual(aviso.noAr, false, "noAr com trial abandonado");
+  /* A régua mudou em 29/09/2026 e o aviso segue ela, não uma cópia dela: com a
+   * COBRANÇA DESLIGADA no servidor, teste vencido não derruba galeria nenhuma
+   * — não há porta para pagar, e ninguém é punido por não passar por uma porta
+   * que não existe (`galeriasNoAr`, decisão 1 de `lib/assinatura.ts`). Nesse
+   * ambiente o honesto é o aviso dizer `true`, porque o link abre mesmo.
+   * Com `ASAAS_API_KEY` no ambiente, este passo exige o `false` de verdade. */
+  const { asaasConfigurado } = await import("../src/lib/asaas.ts");
+  const esperado = asaasConfigurado() ? false : true;
+  igual(aviso.noAr, esperado, "noAr com trial abandonado");
   await db.query("update tenants set status = $2, trial_ate = $3 where id = $1",
     [estudio.id, antes.status, antes.trial_ate]);
+  return asaasConfigurado()
+    ? "fora do ar, como a página pública diria"
+    : "no ar — sem cobrança ligada, o teste vencido não derruba nada (e o link abre)";
 });
 
 await etapa("galeria sem procedência não gera aviso nenhum", async () => {

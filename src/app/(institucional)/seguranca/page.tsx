@@ -5,7 +5,7 @@ import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 
 export const metadata: Metadata = {
   title: "Segurança e backup",
-  description: `Como o ${marca.nome} guarda as fotos e os filmes que você entrega: armazenamento profissional, trava contra exclusão e lixeira de ${PRAZO_LIXEIRA_DIAS} dias.`,
+  description: `Como a ${marca.nome} guarda as fotos e os filmes que você entrega: armazenamento profissional, trava contra exclusão e lixeira de ${PRAZO_LIXEIRA_DIAS} dias.`,
 };
 
 const ATUALIZADO_EM = "25 de agosto de 2026";
@@ -137,7 +137,7 @@ export default function SegurancaPage() {
 
       <h2>O que nós não fazemos — e você deveria</h2>
       <p>
-        Nenhum serviço deveria ser a sua única cópia, e o {marca.nome} não é exceção.{" "}
+        Nenhum serviço deveria ser a sua única cópia, e a {marca.nome} não é exceção.{" "}
         <strong>Guarde os originais.</strong> O que está aqui é a entrega ao seu cliente e o arquivo
         do que já foi entregue — não o backup do seu computador, dos seus RAW nem do seu cartão.
       </p>

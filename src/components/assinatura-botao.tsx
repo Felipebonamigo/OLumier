@@ -165,6 +165,11 @@ export function AssinaturaBotao({
             );
           })}
         </div>
+        {/* O combo não muda estes números na tela: ele depende de uma assinatura
+            que só o Asaas conhece, e é conferido na hora de criar esta. */}
+        <p className="mt-2 text-xs text-texto-faint">
+          Já assina o Atomatiza com este CPF ou CNPJ? O desconto do combo entra sozinho na cobrança.
+        </p>
       </fieldset>
 
       <fieldset className="mt-4">

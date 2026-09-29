@@ -4,6 +4,7 @@
  *
  *   ... scripts/limpar-lixeira.mjs              → mostra o que venceu (não apaga)
  *   ... scripts/limpar-lixeira.mjs --aplicar    → apaga
+ *   ... --aplicar --liberar-teto                  → à mão, depois de um alerta de teto
  *
  * Roda pelo temporizador do servidor, de madrugada. É o único lugar do sistema
  * que apaga arquivo de galeria de verdade — apagar no painel só move para a
@@ -14,11 +15,24 @@
  * 27/08/2026 (ver `scripts/testar-sem-espelho.mjs`), então esta limpeza apaga a
  * única cópia existente. O prazo da lixeira é o que separa o engano do
  * definitivo — e é a última rede que sobrou.
+ *
+ * ── E O TESTE ABANDONADO (28/09/2026) ─────────────────────────────────────
+ *
+ * Depois da lixeira, a mesma rodada cuida dos testes grátis vencidos há mais
+ * de um mês: avisa por e-mail, avisa de novo, e aos 60 dias apaga os arquivos
+ * (`src/lib/testes-abandonados.ts`). Mora AQUI, e não num temporizador próprio,
+ * porque o deploy publica os scripts mas não instala unidade nova do systemd —
+ * um `.timer` novo ficaria no repositório sem nunca rodar. Esta unidade já
+ * está instalada e já roda todo dia.
  */
 import pg from "pg";
 import { galeriasVencidasNaLixeira, destruirGaleria, PRAZO_LIXEIRA_DIAS } from "../src/lib/tenants.ts";
+import { rodarLimpezaDeTestes, TETO_POR_RODADA } from "../src/lib/testes-abandonados.ts";
 
 const APLICAR = process.argv.includes("--aplicar");
+/* Só à mão, depois de conferir a lista do alerta — ver "o teto" em
+   src/lib/testes-abandonados.ts. O temporizador nunca passa isto. */
+const LIBERAR_TETO = process.argv.includes("--liberar-teto");
 
 if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL não definida");
@@ -46,24 +60,50 @@ try {
   const vencidas = await galeriasVencidasNaLixeira();
   if (vencidas.length === 0) {
     console.log("✓ nada a destruir");
-    process.exit(0);
+  } else {
+    for (const g of vencidas) {
+      console.log(`  ${g.titulo} — ${g.chaves.length} arquivo(s)`);
+    }
+
+    if (!APLICAR) {
+      console.log(`\nNada foi apagado. Para apagar: --aplicar`);
+    } else {
+      let destruidas = 0;
+      for (const g of vencidas) {
+        await destruirGaleria(g.id);
+        destruidas++;
+      }
+      console.log(`\n✓ ${destruidas} galeria(s) destruída(s) depois de ${PRAZO_LIXEIRA_DIAS} dias`);
+    }
   }
 
-  for (const g of vencidas) {
-    console.log(`  ${g.titulo} — ${g.chaves.length} arquivo(s)`);
+  /* ── o teste abandonado ─────────────────────────────────────────────────
+     Em bloco próprio: uma falha aqui não pode desfazer a limpeza da lixeira
+     acima, nem o contrário. */
+  console.log("\ntestes abandonados");
+  try {
+    const r = await rodarLimpezaDeTestes({ aplicar: APLICAR, liberarTeto: LIBERAR_TETO });
+    if (!r.ligada) {
+      console.log("  desligada — precisa do e-mail E da cobrança ligados; nada foi avisado nem apagado");
+    } else {
+      for (const l of r.linhas) console.log(`  ${l}`);
+      console.log(
+        `  ${APLICAR ? "✓" : "(simulação)"} avisos: ${r.avisos} · avisos finais: ${r.avisosFinais} · ` +
+          `contas limpas: ${r.apagadas}` +
+          (r.falhasDeEnvio ? ` · e-mails que não saíram: ${r.falhasDeEnvio} (tentam amanhã)` : "") +
+          (r.travadasPeloTeto
+            ? ` · PARADA PELO TETO (${r.travadasPeloTeto} > ${TETO_POR_RODADA}): nada apagado, alerta enviado`
+            : ""),
+      );
+      if (r.travadasPeloTeto) process.exitCode = 1;
+    }
+  } catch (e) {
+    console.error("  ✗ a limpeza dos testes falhou:", e);
+    process.exitCode = 1;
   }
-
-  if (!APLICAR) {
-    console.log(`\nNada foi apagado. Para apagar: --aplicar`);
-    process.exit(0);
-  }
-
-  let destruidas = 0;
-  for (const g of vencidas) {
-    await destruirGaleria(g.id, g.chaves);
-    destruidas++;
-  }
-  console.log(`\n✓ ${destruidas} galeria(s) destruída(s) depois de ${PRAZO_LIXEIRA_DIAS} dias`);
 } finally {
   await db.end();
+  /* O pool de `src/lib/db.ts`, usado pelas funções do app acima. Sem fechar, o
+     processo espera o tempo ocioso dele (30 s) antes de sair. */
+  await globalThis._pgPool?.end();
 }

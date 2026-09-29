@@ -68,6 +68,127 @@ await etapa("recusa tipo de arquivo não aceito", async () => {
   return "HTTP 415";
 });
 
+/*
+ * ── O NAVEGADOR QUE NÃO SABE O QUE É UM HEIC (29/09/2026) ─────────────────
+ *
+ * A Carol tentou subir uma galeria nova e recebeu "0 de 74 — 33 com erro", e
+ * subindo. Nada no servidor: a recusa é 415, resposta esperada, não exceção.
+ *
+ * A causa é o Windows. `File.type` sai do registro do sistema, e o Windows não
+ * traz mime para `.heic`/`.heif` sem a extensão da Microsoft instalada — o
+ * navegador manda string VAZIA. O servidor lia só o mime, não achava no mapa e
+ * recusava TODOS os arquivos, com uma mensagem que culpa o arquivo ("tipo não
+ * aceito") por uma lacuna do sistema operacional. E a zona de envio anuncia
+ * HEIC na própria tela.
+ *
+ * O nome do arquivo é a única pista que sempre chega. Ele não vale MAIS que o
+ * mime — vale QUANDO o mime não diz nada. A ordem importa: mime conhecido
+ * manda, porque é o único dos dois que o navegador conferiu.
+ */
+await etapa("HEIC sem mime (Windows) é aceito pela extensão", async () => {
+  for (const nome of ["IMG_4471.HEIC", "familia.heif", "foto.heic"]) {
+    const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ nome, mime: "", bytes: 2_500_000 }),
+    });
+    if (r.status === 415) {
+      const { erro } = await r.json();
+      throw new Error(`${nome} recusado: ${erro}`);
+    }
+    if (!r.ok) throw new Error(`${nome}: HTTP ${r.status}`);
+  }
+  return "3 aceitos";
+});
+
+await etapa("extensão desconhecida continua recusada, mesmo sem mime", async () => {
+  /* A saída pela extensão não pode virar porta dos fundos: sem mime E sem
+     extensão conhecida, a recusa é a mesma de sempre. */
+  for (const nome of ["virus.exe", "backup.zip", "sem-extensao"]) {
+    const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ nome, mime: "", bytes: 100 }),
+    });
+    if (r.status !== 415) throw new Error(`${nome} passou com ${r.status}`);
+  }
+  return "3 recusados";
+});
+
+await etapa("mime conhecido continua mandando na decisão", async () => {
+  /* Extensão mentindo (um JPEG chamado .png) segue o MIME, que é o que o
+     navegador de fato conferiu. */
+  const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie },
+    body: JSON.stringify({ nome: "retrato.png", mime: "image/jpeg", bytes: 1000 }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return "mime vence a extensão";
+});
+
+/*
+ * ── A TELA AVISA ANTES, EM VEZ DE DEIXAR TENTAR (29/09/2026) ──────────────
+ *
+ * A Carol arrastou 74 fotos e recebeu "0 de 74 — 33 com erro", com o motivo
+ * escondido numa lista que só aparece expandindo a barra. A trava do servidor
+ * estava certa — o e-mail da conta nova dela nunca foi confirmado — mas quem
+ * usa não descobre isso arrastando uma pasta de casamento e vendo erro subir.
+ *
+ * Felipe: "para que os usuários não tenham o mesmo erro, não permita que eles
+ * tentem publicar as imagens sem ter confirmado o e-mail".
+ *
+ * A trava do servidor FICA (ela é quem protege de verdade, e um cliente pode
+ * chamar a rota sem passar pela tela). O que muda é a tela deixar de oferecer
+ * o que vai recusar.
+ */
+/*
+ * A NEGATIVA NÃO É EXERCITÁVEL AQUI, e é honesto dizer por quê: a regra é
+ * "e-mail LIGADO e não confirmado", e no desenvolvimento o envio de e-mail está
+ * desligado — então não existe estado pendente para reproduzir por HTTP. As
+ * três combinações da regra já estão presas, puras, em
+ * `testar-cadastro-protegido.mjs`. O que falta prender é a LIGAÇÃO: a aba Fotos
+ * consultar essa regra e não desenhar o que vai ser recusado.
+ */
+await etapa("a aba Fotos decide o envio pela mesma regra do aviso do painel", async () => {
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const raiz = path.resolve(import.meta.dirname, "..");
+  const pagina = readFileSync(
+    path.join(raiz, "src/app/painel/galerias/[id]/fotos/page.tsx"),
+    "utf8",
+  );
+  if (!/precisaConfirmarEmail/.test(pagina)) {
+    throw new Error("a aba Fotos não pergunta se o e-mail está pendente");
+  }
+  /* E que a zona de envio dependa dessa resposta — não basta importar. */
+  const trecho = pagina.match(/<EnviarArquivos[^]*?\/>/)?.[0] ?? "";
+  if (!trecho) throw new Error("não achei a zona de envio na página");
+  const antesDaZona = pagina.slice(0, pagina.indexOf("<EnviarArquivos"));
+  if (!/emailPendente|precisaConfirmarEmail\(/.test(antesDaZona)) {
+    throw new Error("a zona de envio não olha o estado do e-mail antes de aparecer");
+  }
+  /* E que exista explicação no lugar dela: sumir sem dizer por quê é pior que
+     o erro de antes. */
+  if (!/EnvioBloqueadoPorEmail|confirm/i.test(pagina)) {
+    throw new Error("sumiu o envio e não explicou por quê");
+  }
+  return "pergunta antes de oferecer";
+});
+
+await etapa("com o e-mail confirmado, a zona de envio volta", async () => {
+  const html = await (
+    await fetch(`${BASE}/painel/galerias/${galeria.id}/fotos`, {
+      headers: { cookie },
+      cache: "no-store",
+    })
+  ).text();
+  if (!/Arraste a pasta do casamento aqui/.test(html)) {
+    throw new Error("a zona de envio não voltou para quem confirmou");
+  }
+  return "envio normal";
+});
+
 await etapa("recusa quem não está autenticado", async () => {
   const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
     method: "POST",

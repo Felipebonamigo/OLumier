@@ -142,9 +142,15 @@ export type IdGaleria = (typeof GALERIAS_DA_HOME)[number];
  */
 const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
   /* Na ordem do dia: a noiva pronta, a entrada, a cerimônia, a saída, os
-     retratos, a festa. */
+     retratos, a festa.
+
+     A CAPA É O RETRATO NA CADEIRA (29/09/2026). Felipe, com o print da home
+     e a foto: "mude a capa da primeira imagem, para a da segunda". Era o
+     guarda-chuva, que passa para o lugar 9, entre os retratos — a troca é
+     só entre os dois lugares, para nenhuma foto trocada pelo admin em outro
+     lugar mudar de posição. */
   delicada: [
-    ACERVO.guardaChuva,
+    ACERVO.noivosCadeira,
     ACERVO.noivaVeu,
     ACERVO.noivaNaPorta,
     ACERVO.maosNoAltar,
@@ -152,7 +158,7 @@ const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
     ACERVO.saida,
     ACERVO.ternoMarrom,
     ACERVO.noivosTijolos,
-    ACERVO.noivosCadeira,
+    ACERVO.guardaChuva,
     ACERVO.madrinhas,
     ACERVO.noivoBrinde,
     ACERVO.ramos,
@@ -160,13 +166,26 @@ const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
     ACERVO.caminhada,
   ],
   editorial: [ACERVO.praia, ACERVO.maos, ACERVO.alianca, ACERVO.palmeira, ACERVO.contraluz, ACERVO.cadeiras, ACERVO.confete, ACERVO.baloes],
-  /* A capa (a casa de pedra, deitada — a capa jornal é larga) e depois as
-     outras na ordem em que o Juan mandou. */
+  /*
+   * A CAPA É A QUE O JUAN MARCOU (28/09/2026).
+   *
+   * Aqui vinha primeiro a casa de pedra, escolhida por ser DEITADA — a capa
+   * "jornal" é larga, e uma foto em pé pede mais recorte. Só que ele tinha
+   * marcado outra: "uma das fotos eu sinalizei com o nome 'capa'", o beijo
+   * debaixo da árvore grande, com o véu espalhado na grama.
+   *
+   * O formato é razão nossa; a escolha é dele. Numa página cujo argumento é
+   * "a marca do fotógrafo fica na frente", exibir a galeria dele com a capa
+   * que NÓS preferimos contradiz o que a própria página afirma. O recorte se
+   * resolve com o ponto focal (45/65, o casal no terço de baixo).
+   *
+   * Depois dela, as outras na ordem em que ele mandou.
+   */
   classica: [
+    ACERVO.lrBeijoArvore,
     ACERVO.lrCasaDePedra,
     ACERVO.lrMaosDadas,
     ACERVO.lrCaminhadaPb,
-    ACERVO.lrBeijoArvore,
     ACERVO.lrAbraco,
     ACERVO.lrGiro,
     ACERVO.lrSentados,

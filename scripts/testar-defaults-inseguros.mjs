@@ -67,7 +67,15 @@ function ocorrencias(padrao, filtro = () => true) {
   const achados = [];
   for (const { caminho, texto } of FONTES) {
     if (!filtro(caminho)) continue;
-    const linhas = texto.split("\n");
+    /*
+     * `\r?\n`, e não `\n`: no Windows o git entrega os arquivos com CRLF, e o
+     * `\r` que sobrava no fim da linha quebrava o corte de comentário logo
+     * abaixo — `$` não casa antes de um `\r`, então a linha inteira passava
+     * como se fosse código. O efeito era um falso positivo que acusava o
+     * COMENTÁRIO que explica um defeito já consertado (medido em 28/09/2026,
+     * em `lib/eventos.ts`), e que só aparecia na máquina do Felipe.
+     */
+    const linhas = texto.split(/\r?\n/);
     linhas.forEach((linha, i) => {
       /* Comentário não é código: a suíte procura o que EXECUTA. Sem isto, o
          comentário que explica o defeito consertado reprovaria o conserto. */
