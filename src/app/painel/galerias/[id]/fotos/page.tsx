@@ -6,7 +6,7 @@ import { formatarBytes } from "@/lib/tenants";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { precisaConfirmarEmail } from "@/lib/confirmacao-email";
 import { listarMedias } from "@/lib/medias";
-import { armazemDe, urlDaDerivada } from "@/lib/armazem";
+import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
 import { CAPITULOS_SUGERIDOS, listarSecoes } from "@/lib/secoes";
 import { resumoDaGaleria } from "@/lib/favoritas";
 import { downloadsPorFoto } from "@/lib/galerias-publicas";
@@ -61,6 +61,24 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       favoritas: favoritas.porMedia.get(m.id) ?? 0,
       baixadas: baixadas.get(m.id) ?? 0,
       url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), 3600),
+      /*
+       * ── O FILME PRECISA DO ENDEREÇO DELE (29/09/2026) ──────────────────
+       *
+       * `url` sai de `urlDaDerivada`, que devolve a MINIATURA quando ela
+       * existe. A grade desenhava `<video src={url}>` com isso — ou seja, o
+       * player recebia um WebP. Vídeo com capa não tocava no painel, e os
+       * únicos que tocavam eram os que estavam SEM capa: a inversão perfeita.
+       * Em produção, 44 dos 46 vídeos tinham capa gravada.
+       *
+       * Agora são dois endereços para duas coisas: `urlFilme` no `src`,
+       * `url` no `poster`. Só para vídeo — assinar o original de toda foto
+       * dobraria as assinaturas da aba sem ninguém usar a segunda.
+       */
+      urlFilme:
+        m.tipo === "video"
+          ? await urlDoOriginal(m.chave, armazemDe(m.armazem), 3600)
+          : undefined,
+      temCapa: Boolean(m.chave_thumb),
     })),
   );
 
