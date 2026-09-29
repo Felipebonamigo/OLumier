@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { MarcaSimbolo } from "@/components/marca-tile";
+import { irParaAba } from "@/lib/aba-nomeada";
 
 /**
  * O SELETOR DE PLATAFORMA — "Galeria Átomo | Atomatiza", como duas abas.
@@ -16,6 +17,8 @@ import { MarcaSimbolo } from "@/components/marca-tile";
  * primeiro clique abre uma aba nova, e os seguintes voltam para a mesma, em vez
  * de empilhar uma aba por clique. Para a volta também cair aqui, esta janela
  * se chama `JANELA_GALERIA` — o Atomatiza aponta o link de lá para esse nome.
+ * Quando a aba já existe, o clique só a traz para a frente, sem recarregar
+ * (`lib/aba-nomeada.ts`); o `target` fica para o clique sem JavaScript.
  *
  * Sem `rel="noopener"` de propósito: com ele o navegador põe a aba nova num
  * grupo à parte, e o nome deixa de ser encontrado — cada clique voltaria a
@@ -54,12 +57,15 @@ export function SeletorPlataforma({
       className={`items-center gap-0.5 rounded-full border border-linha p-[3px] ${largo ? "flex w-full" : "inline-flex"}`}
     >
       <Link href="/painel" aria-current="true" className={`${aba} bg-carbon-2 text-texto ring-1 ring-inset ring-linha`}>
-        <MarcaSimbolo tamanho={18} />
+        {/* Desenho completo, o mesmo do logo do site: a versão miúda (duas
+            órbitas, sem a câmera) virava um "88" no botão. */}
+        <MarcaSimbolo tamanho={22} completo />
         Galeria Átomo
       </Link>
       <a
         href={linkAtomatiza}
         target={janelaAtomatiza}
+        onClick={(e) => irParaAba(e, linkAtomatiza, janelaAtomatiza)}
         title="Abrir o Atomatiza (em outra aba)"
         className={`${aba} text-texto-soft hover:bg-carbon hover:text-texto`}
       >
