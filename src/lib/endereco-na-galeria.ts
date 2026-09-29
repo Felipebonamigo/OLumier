@@ -12,6 +12,10 @@
  *
  *     /g/sirius-fotografia/julia-gustavo-wedding/cerimonia
  *
+ * Desde 29/09/2026 esse caminho é só o de IDA: quando o capítulo abre, a barra
+ * volta para o endereço da galeria (`galeria-cliente.tsx`), porque o fotógrafo
+ * pediu o link sem o capítulo. A rota continua abrindo o capítulo.
+ *
  * ── POR QUE A BASE VEM DE FORA ────────────────────────────────────────────
  *
  * Porque ela não é sempre `/g/<estudio>/<galeria>`. Num estúdio com domínio
@@ -45,5 +49,20 @@ export function enderecoNaGaleria(
   const consulta = p.toString();
   /* Sem barra no fim: `/galeria` e não `/galeria/`, que é o que o casal copia. */
   const caminho = base.replace(/\/+$/, "") + (mudar.cap ? `/${mudar.cap}` : "");
+  return consulta ? `${caminho}?${consulta}` : caminho;
+}
+
+/**
+ * O endereço que fica na BARRA depois que um capítulo abriu: o da galeria, sem
+ * o capítulo — nem no caminho, nem no `?cap=` dos links antigos (29/09/2026,
+ * ver o efeito em `galeria-cliente.tsx`). O resto da consulta fica: `?fotos=`
+ * é o recorte da busca por rosto, e ele não depende de capítulo.
+ */
+export function enderecoDaBarra(base: string, buscaAtual: string): string {
+  const p = new URLSearchParams(buscaAtual.replace(/^\?/, ""));
+  p.delete("cap");
+  p.delete("parte");
+  const consulta = p.toString();
+  const caminho = base.replace(/\/+$/, "");
   return consulta ? `${caminho}?${consulta}` : caminho;
 }

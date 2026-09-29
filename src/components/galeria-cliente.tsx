@@ -3,7 +3,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
+import { enderecoDaBarra, enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -246,6 +246,32 @@ export function GaleriaCliente({
      o que mudou, e é o caminho que o próprio framework pede. */
   const router = useRouter();
   const caminho = usePathname();
+
+  /*
+   * ── O CAPÍTULO NÃO FICA NA BARRA (29/09/2026) ───────────────────────────
+   *
+   * Um fotógrafo entrou no "Making of", copiou a barra e mandou para o casal
+   * `…/sarah-e-levi/making-of`. Pedido dele, pelo Felipe: tirar o capítulo do
+   * link. A barra volta para o endereço da galeria assim que o capítulo abre —
+   * então o que se copia dali é sempre o link da galeria.
+   *
+   * A rota do capítulo continua existindo: é por ela que a pastilha abre o
+   * capítulo, e link de capítulo já mandado continua abrindo (o mesmo cuidado
+   * das migrações 025 e 030). O preço: recarregar a página volta para o começo
+   * da galeria, e o "não sou eu" (que recarrega) também.
+   *
+   * `replaceState` e não `router.replace`: trocar a rota buscaria a galeria
+   * inteira de novo. O Next acompanha a troca nativa (`usePathname` passa a
+   * dizer o endereço novo) — o que as buscas por `?fotos=` precisam, porque o
+   * recorte delas não depende de capítulo.
+   */
+  useEffect(() => {
+    if (!capituloAberto) return;
+    const limpo = enderecoDaBarra(enderecoBase, window.location.search);
+    if (limpo !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, "", limpo + window.location.hash);
+    }
+  }, [capituloAberto, enderecoBase]);
 
   const [aberto, setAberto] = useState<number | null>(null);
   /*

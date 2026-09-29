@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { marca } from "@/config/marca";
 import { CAMINHO_PUBLICO } from "@/proxy";
+import { COOKIE_PREVIA } from "@/config/previa";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
@@ -136,9 +137,21 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * nada. Só quem está logado como o dono daquela galeria vê o rascunho — e,
    * mais abaixo, também pula o portão de senha, porque pedir a própria senha
    * para o dono conferir o próprio trabalho não faz sentido.
+   *
+   * O PEDIDO chega de três jeitos (29/09/2026, ver `config/previa.ts`):
+   *   - `?previa=1`, que continua valendo — é o que a caixinha do editor usa;
+   *   - o cookie em que o proxy troca esse parâmetro, para a barra do navegador
+   *     mostrar o link do cliente e não o do dono;
+   *   - a galeria ainda não publicada: ali não existe versão do cliente, então o
+   *     dono logado vê o rascunho mesmo sem pedir, e o cookie vencer no meio da
+   *     conferência não vira 404.
    */
   const rascunho = await buscarGaleriaPublica(estudio, galeriaSlug, true);
-  const sessao = previa && rascunho ? await sessaoAtual() : null;
+  const pedePrevia =
+    Boolean(previa) ||
+    (await cookies()).get(COOKIE_PREVIA)?.value === "1" ||
+    rascunho?.publicada === false;
+  const sessao = pedePrevia && rascunho ? await sessaoAtual() : null;
   const ehDono = Boolean(sessao && rascunho && sessao === rascunho.tenant_id);
 
   const galeria = ehDono ? rascunho : await buscarGaleriaPublica(estudio, galeriaSlug);
