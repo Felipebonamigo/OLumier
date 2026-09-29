@@ -324,8 +324,9 @@ try {
       description: "Atomatiza — plano estúdio" }] };
     const r = await trocar("g:foto:500");
     if ("erro" in r) throw new Error(r.erro);
-    // 250 GB + Estúdio = R$ 30,00; 500 GB + Estúdio = R$ 55,00 → R$ 25 × 2/3
-    igual([cobrancas()[0]?.corpo.value, puts()[0]?.corpo.value], [16.67, 55], "diferença / assinatura");
+    // Divisão proporcional: 250 GB + Estúdio = R$ 41,99 (a Galeria cede R$ 8,00);
+    // 500 GB + Estúdio = R$ 65,70 (cede R$ 14,29) → R$ 23,71 × 2/3.
+    igual([cobrancas()[0]?.corpo.value, puts()[0]?.corpo.value], [15.81, 65.7], "diferença / assinatura");
   });
 
   console.log("\nO webhook:\n");

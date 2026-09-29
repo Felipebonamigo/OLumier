@@ -137,7 +137,7 @@ try {
   await etapa("os três combos da proposta fecham no preço prometido", () => {
     const total = (gb, faixa) => {
       const g = montar({ segmento: "foto", espacoGb: gb });
-      const d = C.DESCONTOS_DO_COMBO[C.linhaDaGaleria(gb)][faixa];
+      const d = C.divisaoDoDesconto(gb, faixa);
       return g.precoCentavos - d.galeria + ATOMATIZA[faixa] - d.atomatiza;
     };
     igual(total(250, "solo"), 8990, "250 GB + Solo");
@@ -146,19 +146,27 @@ try {
     return "R$ 89,90 · R$ 139,90 · R$ 269,90";
   });
 
-  await etapa("em todo par o desconto é meio a meio, e os dois preços fecham redondos", () => {
-    for (const linha of LINHAS) {
-      const g = montar({ segmento: "foto", espacoGb: Number(linha) });
+  await etapa("o preço de tabela do Atomatiza é o mesmo dos dois lados", () => {
+    igual(C.PRECO_DE_TABELA_ATOMATIZA, ATOMATIZA, "preço de tabela");
+  });
+
+  await etapa("cada lado cede a mesma porcentagem do próprio preço, e a soma fecha no desconto do pacote", () => {
+    let pares = 0;
+    for (const m of todasAsMontagens()) {
+      if (m.segmento !== "foto") continue;
+      const g = montar(m).precoCentavos;
       for (const faixa of FAIXAS) {
-        const d = C.DESCONTOS_DO_COMBO[linha][faixa];
-        if (d.atomatiza - d.galeria !== 1) {
-          throw new Error(`${linha}/${faixa}: ${d.galeria} × ${d.atomatiza} não é meio a meio`);
-        }
-        if ((g.precoCentavos - d.galeria) % 100 !== 0) throw new Error(`${linha}/${faixa}: a Galeria não fecha em ,00`);
-        if ((ATOMATIZA[faixa] - d.atomatiza) % 100 !== 90) throw new Error(`${linha}/${faixa}: o Atomatiza não fecha em ,90`);
+        const d = C.divisaoDoDesconto(m.espacoGb, faixa);
+        if (d.galeria + d.atomatiza !== d.pacote) throw new Error(`${m.espacoGb}/${faixa}: a soma não fecha`);
+        const exato = (d.pacote * g) / (g + ATOMATIZA[faixa]);
+        if (Math.abs(d.galeria - exato) > 0.5) throw new Error(`${m.espacoGb}/${faixa}: ${d.galeria} longe de ${exato}`);
+        pares++;
       }
     }
-    return "9 pares";
+    // O exemplo do Felipe: 5 TB + Solo — o pacote cede R$ 29,99, 6% de cada lado.
+    igual(C.divisaoDoDesconto(5000, "solo"), { galeria: 2640, atomatiza: 359, pacote: 2999 }, "5 TB + Solo");
+    igual(C.divisaoDoDesconto(250, "solo"), { galeria: 909, atomatiza: 1090, pacote: 1999 }, "250 GB + Solo");
+    return `${pares} pares`;
   });
 
   await etapa("toda montagem da grade, com qualquer combo, ainda deixa lucro para dividir", () => {
@@ -183,14 +191,14 @@ try {
     igual(C.linhaDaGaleria(500), "500", "500 GB");
     igual(C.linhaDaGaleria(5000), "1000", "5 TB");
     const dois = planoPorId("g:foto:2000");
-    igual(C.descontoDaGaleriaCentavos(dois, "estudio"), 2499, "2 TB + Estúdio");
+    igual(C.descontoDaGaleriaCentavos(dois, "estudio"), 2500, "2 TB + Estúdio: R$ 49,99 × 199,99 ÷ 399,89");
     igual(C.descontoDaGaleriaCentavos(planoPorId("foto-100"), "estudio"), 0, "foto-100 (antigo)");
     igual(C.descontoDaGaleriaCentavos(planoPorId("g:foto:250"), null), 0, "sem Atomatiza");
   });
 
   await etapa("no anual o desconto é de dez mensalidades, como o próprio preço", () => {
     const p = planoPorId("g:foto:250");
-    igual(C.precoDoCicloComComboCentavos(p, "anual", "solo"), (4999 - 999) * MESES_PAGOS_NO_ANO, "250 GB anual + Solo");
+    igual(C.precoDoCicloComComboCentavos(p, "anual", "solo"), (4999 - 909) * MESES_PAGOS_NO_ANO, "250 GB anual + Solo");
   });
 
   console.log("\nO contrato das descrições:\n");
@@ -298,11 +306,16 @@ try {
     igual(await faixaDoAtomatiza(DOC), null, "sem referência");
   });
 
-  await etapa("com duas faixas vivas, vale a de desconto menor", async () => {
+  await etapa("com duas faixas vivas, vale a de desconto menor PARA O PLANO", async () => {
     reset();
     atomatiza("estudio");
     atomatiza("solo");
-    igual(await faixaDoAtomatiza(DOC), "solo", "faixa");
+    igual(await faixaDoAtomatiza(DOC), "solo", "sem o plano, a ordem");
+    reset();
+    atomatiza("solo");
+    atomatiza("equipe");
+    // 250 GB: Solo daria R$ 9,09 à Galeria, Equipe R$ 7,14 — vale o Equipe.
+    igual(await faixaDoAtomatiza(DOC, planoPorId("g:foto:250")), "equipe", "250 GB");
   });
 
   /* O estúdio da rodada, com assinatura na nossa ponta. */
@@ -338,10 +351,10 @@ try {
     nossa(79.99);
     await prepararEstudio("g:foto:500");
     const r = await recalcularCombo(t.id, "teste");
-    igual(r.depoisCentavos, 6500, "valor novo");
+    igual(r.depoisCentavos, 6587, "valor novo");
     igual(escritas.length, 1, "uma escrita no Asaas");
     const corpo = escritas[0].corpo;
-    igual(corpo.value, 65, "value");
+    igual(corpo.value, 65.87, "value");
     igual(corpo.updatePendingPayments, true, "a fatura aberta baixa junto");
     if (!corpo.description.includes("combo com o Atomatiza")) throw new Error(`descrição: ${corpo.description}`);
     if (!Array.isArray(corpo.split)) throw new Error("o split não foi junto — os sócios dividiriam o preço velho");
@@ -350,8 +363,8 @@ try {
       "select detalhe from eventos where tenant_id = $1 and acao = 'assinatura.combo' order by criado_em desc limit 1",
       [t.id],
     );
-    igual([ev.rows[0]?.detalhe?.deCentavos, ev.rows[0]?.detalhe?.paraCentavos], [7999, 6500], "evento registrado");
-    return "R$ 79,99 → R$ 65,00";
+    igual([ev.rows[0]?.detalhe?.deCentavos, ev.rows[0]?.detalhe?.paraCentavos], [7999, 6587], "evento registrado");
+    return "R$ 79,99 → R$ 65,87";
   });
 
   await etapa("conferir de novo não escreve nada", async () => {
@@ -391,8 +404,17 @@ try {
     nossa(499.9, { cycle: "YEARLY" });
     await prepararEstudio("g:foto:250", "anual");
     const r = await recalcularCombo(t.id, "teste");
-    igual(r.depoisCentavos, 40000, "valor");
-    igual(escritas[0]?.corpo.value, 400, "value");
+    igual(r.depoisCentavos, 40900, "valor");
+    igual(escritas[0]?.corpo.value, 409, "value");
+  });
+
+  await etapa("quem assinou com a divisão meio a meio (28/09) é trazido à proporcional", async () => {
+    reset();
+    atomatiza("equipe");
+    nossa(65.0);
+    await prepararEstudio("g:foto:500");
+    const r = await recalcularCombo(t.id, "teste");
+    igual([r.mudou, r.depoisCentavos, escritas[0]?.corpo.value], [true, 6587, 65.87], "mudou / valor");
   });
 
   await etapa("plano antigo continua no preço dele, com ou sem Atomatiza", async () => {
@@ -448,6 +470,9 @@ try {
     }
     if (!/after\(\(\) =>\s*recalcularComboDoCliente\(/.test(fonte)) {
       throw new Error("a conferência do Atomatiza não está em after() — seguraria a fila do Asaas");
+    }
+    if (!/startsWith\(PREFIXO_DIFERENCA_ATOMATIZA\)/.test(fonte)) {
+      throw new Error("a diferença de uma troca de faixa no Atomatiza não confere o combo aqui");
     }
     if (!/after\(\(\) =>\s*recalcularCombo\(tenantId/.test(fonte)) {
       throw new Error("o nosso pagamento não confere o combo — um aviso perdido do Atomatiza nunca se acertaria");

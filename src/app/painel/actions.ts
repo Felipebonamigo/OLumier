@@ -684,7 +684,7 @@ export async function criarAssinaturaAction(
      * primeiro pagamento acerta: nunca travar a assinatura por causa do
      * desconto. Ver `lib/combo.ts`.
      */
-    const faixa = await faixaDoAtomatiza(doc).catch(() => null);
+    const faixa = await faixaDoAtomatiza(doc, plano).catch(() => null);
 
     /* O preço da fatura é o do CICLO: no anual são dez mensalidades cobradas de
      * uma vez. A grade continua guardando só o mensal — o anual é derivado,

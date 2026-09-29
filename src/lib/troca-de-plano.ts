@@ -73,7 +73,7 @@ export async function cotarTroca(tenant: Tenant, plano: Plano, agora: Date = new
   /* O combo entra nos dois preços do mesmo jeito: a diferença é a dos planos,
    * não a do desconto. Sem resposta do Asaas, sem combo — o lado seguro. */
   const faixa =
-    temAssinatura && tenant.cpf_cnpj ? await faixaDoAtomatiza(tenant.cpf_cnpj).catch(() => null) : null;
+    temAssinatura && tenant.cpf_cnpj ? await faixaDoAtomatiza(tenant.cpf_cnpj, plano).catch(() => null) : null;
   const precoNovoCentavos = precoDoCicloComComboCentavos(plano, ciclo, faixa);
 
   const planoBase =

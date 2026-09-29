@@ -1,24 +1,25 @@
-import { espacoValido, precoDoCicloCentavos, type Ciclo, type Plano } from "./planos";
+import { espacoValido, precoDoCicloCentavos, precoDoEspacoCentavos, type Ciclo, type Plano } from "./planos";
 
 /**
  * O COMBO GALERIA ÁTOMO + ATOMATIZA — as regras, sem banco e sem rede.
  *
- * ── O QUE FOI DECIDIDO (28/09/2026) ───────────────────────────────────────
+ * ── O QUE FOI DECIDIDO ─────────────────────────────────────────────────────
  *
- * Felipe, sobre a proposta de preço dos dois juntos: "divide o valor 50% para
- * cada plataforma, e cada plataforma já tem a sua divisão em % diferentes com
- * os sócios", e "caso a pessoa já tenha um e queira o outro, o desconto será
- * igual".
+ * 28/09/2026 — Felipe, sobre a proposta de preço dos dois juntos: "caso a
+ * pessoa já tenha um e queira o outro, o desconto será igual". Cada
+ * plataforma cobra a SUA parte na SUA assinatura, e divide com os sócios pela
+ * própria regra (aqui o split já sai do preço que a assinatura cobra). Quem já
+ * tem uma e assina a outra paga o mesmo combo: a que já existia baixa de
+ * preço. Cancelou uma, a outra volta ao cheio no ciclo seguinte.
  *
- *   · O desconto do combo é dividido MEIO A MEIO entre as duas plataformas, em
- *     reais. Quando não divide exato, a Atomatiza cede o centavo a mais — os
- *     preços fecham redondos dos dois lados (a Galeria em ,00; a Atomatiza em
- *     ,90).
- *   · Cada plataforma cobra a SUA parte na SUA assinatura, e divide com os
- *     sócios pela própria regra. Aqui nada muda no split: ele já é calculado
- *     sobre o preço que a assinatura cobra (`montarFatias`).
- *   · Quem já tem uma e assina a outra paga o mesmo combo: a que já existia
- *     baixa de preço. Cancelou uma, a outra volta ao cheio no ciclo seguinte.
+ * 29/09/2026 — a divisão do desconto deixou de ser meio a meio em reais.
+ * Felipe: "a receita é dividida [pela] porcentagem respectiva do pacote de
+ * cada sistema, porque um pode ser bem mais caro que o outro, por exemplo se
+ * a galeria for de 5 TB e o atomatiza o pacote solo". Meio a meio, o Solo
+ * cedia R$ 15 de R$ 59,90 (25% do preço) enquanto os 5 TB cediam R$ 14,99 de
+ * R$ 439,99 (3%). Agora cada lado cede a MESMA porcentagem do seu preço de
+ * tabela — a receita do combo fica dividida na proporção dos dois pacotes, e
+ * o total que o cliente paga continua o aprovado. Ver `divisaoDoDesconto`.
  *
  * ── A TABELA É UM CONTRATO ENTRE DOIS REPOSITÓRIOS ────────────────────────
  *
@@ -52,36 +53,81 @@ export function linhaDaGaleria(gb: number): LinhaDaGaleria {
 }
 
 /**
- * Quanto cada plataforma cede por MÊS, em centavos, em cada par.
+ * Quanto o PACOTE custa a menos por MÊS, em centavos, em cada par — o total
+ * que as duas plataformas cedem juntas.
  *
  * Escrito por extenso, e não calculado, pelo motivo de sempre com dinheiro: um
- * reajuste tem de aparecer no diff, par por par. Os totais são os da proposta
- * aprovada — 250 GB + Solo sai por R$ 89,90 (R$ 40,00 + R$ 49,90), 500 GB +
- * Equipe por R$ 139,90, 1 TB + Estúdio por R$ 269,90.
+ * reajuste tem de aparecer no diff, par por par. São os totais da proposta
+ * aprovada — 250 GB + Solo por R$ 89,90, 500 GB + Equipe por R$ 139,90, 1 TB +
+ * Estúdio por R$ 269,90.
  */
-export const DESCONTOS_DO_COMBO: Record<
-  LinhaDaGaleria,
-  Record<FaixaAtomatiza, { galeria: number; atomatiza: number }>
-> = {
-  "250": {
-    solo: { galeria: 999, atomatiza: 1000 },
-    equipe: { galeria: 999, atomatiza: 1000 },
-    estudio: { galeria: 1999, atomatiza: 2000 },
-  },
-  "500": {
-    solo: { galeria: 999, atomatiza: 1000 },
-    equipe: { galeria: 1499, atomatiza: 1500 },
-    estudio: { galeria: 2499, atomatiza: 2500 },
-  },
-  "1000": {
-    solo: { galeria: 1499, atomatiza: 1500 },
-    equipe: { galeria: 1499, atomatiza: 1500 },
-    estudio: { galeria: 2499, atomatiza: 2500 },
-  },
+export const DESCONTO_DO_PACOTE: Record<LinhaDaGaleria, Record<FaixaAtomatiza, number>> = {
+  "250": { solo: 1999, equipe: 1999, estudio: 3999 },
+  "500": { solo: 1999, equipe: 2999, estudio: 4999 },
+  "1000": { solo: 2999, equipe: 2999, estudio: 4999 },
+};
+
+/**
+ * O preço MENSAL de tabela do Atomatiza, por faixa — a régua da proporção.
+ *
+ * É contrato, e não o preço vivo de lá (que vem do ambiente): as duas
+ * plataformas têm de chegar à MESMA divisão sem se consultar, e a única
+ * maneira é as duas usarem os mesmos números. O Atomatiza guarda uma cópia do
+ * preço da Galeria pelo mesmo motivo.
+ */
+export const PRECO_DE_TABELA_ATOMATIZA: Record<FaixaAtomatiza, number> = {
+  solo: 5990,
+  equipe: 8990,
+  estudio: 19990,
+};
+
+/**
+ * Quanto cada plataforma cede por mês, em centavos, neste par.
+ *
+ * O desconto do pacote é dividido na proporção dos preços de tabela: a Galeria
+ * cede `desconto × galeria ÷ (galeria + atomatiza)`, e o Atomatiza o resto — o
+ * centavo do arredondamento fica com ele, para a soma fechar exata. Assim os
+ * dois cedem a mesma porcentagem do próprio preço, e a receita do combo fica
+ * na proporção dos dois pacotes.
+ *
+ * Com 5 TB (R$ 439,99) + Solo (R$ 59,90), o pacote cede R$ 29,99: R$ 26,40 da
+ * Galeria e R$ 3,59 do Atomatiza, 6% de cada lado.
+ */
+export function divisaoDoDesconto(
+  gb: number,
+  faixa: FaixaAtomatiza,
+): { galeria: number; atomatiza: number; pacote: number } {
+  const pacote = DESCONTO_DO_PACOTE[linhaDaGaleria(gb)][faixa];
+  const g = espacoValido(gb) ? precoDoEspacoCentavos(gb) : 0;
+  const a = PRECO_DE_TABELA_ATOMATIZA[faixa];
+  const galeria = g + a > 0 ? Math.round((pacote * g) / (g + a)) : 0;
+  return { galeria, atomatiza: pacote - galeria, pacote };
+}
+
+/**
+ * A divisão MEIO A MEIO de 28/09/2026, que ficou no ar um dia.
+ *
+ * Só serve à conferência automática (`recalcularCombo`): uma assinatura criada
+ * nesse dia cobra um desses valores, e a conferência precisa reconhecê-lo como
+ * "nosso" para trazê-lo à divisão nova — senão o tomaria por valor mudado à
+ * mão e o deixaria como está.
+ */
+export const DESCONTOS_MEIO_A_MEIO_28_09: Record<LinhaDaGaleria, Record<FaixaAtomatiza, number>> = {
+  "250": { solo: 999, equipe: 999, estudio: 1999 },
+  "500": { solo: 999, equipe: 1499, estudio: 2499 },
+  "1000": { solo: 1499, equipe: 1499, estudio: 2499 },
 };
 
 /** O que o Atomatiza grava no `externalReference` da assinatura dele. */
 export const PREFIXO_ATOMATIZA = "atz:sub:";
+
+/**
+ * E na cobrança da DIFERENÇA de uma troca de faixa lá. Ela também dispara a
+ * conferência do combo aqui: trocar de faixa muda o desconto dos dois lados, e
+ * é por esse aviso que ficamos sabendo da troca na hora — a assinatura de lá
+ * só volta a avisar no próximo pagamento.
+ */
+export const PREFIXO_DIFERENCA_ATOMATIZA = "atz:dif:";
 
 /**
  * A faixa do Atomatiza, lida na descrição da assinatura dele.
@@ -133,7 +179,7 @@ export function planoEntraNoCombo(plano: Plano): boolean {
 /** Quanto a Galeria cede por mês, em centavos, neste par. Zero sem combo. */
 export function descontoDaGaleriaCentavos(plano: Plano, faixa: FaixaAtomatiza | null): number {
   if (!faixa || !planoEntraNoCombo(plano)) return 0;
-  return DESCONTOS_DO_COMBO[linhaDaGaleria(plano.quotaGb)][faixa].galeria;
+  return divisaoDoDesconto(plano.quotaGb, faixa).galeria;
 }
 
 /** O preço da Galeria no ciclo, já com o desconto do combo quando há. */
