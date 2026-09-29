@@ -148,6 +148,12 @@ etapa("todos os chamadores dizem se a cobrança está ligada", () => {
     "src/app/api/g/[id]/urls/route.ts",
     "src/app/api/g/[id]/mais/route.ts",
     "src/lib/entrega-da-galeria.ts",
+    // Os dois da ponte com o Atomatiza. Entram aqui pelo mesmo motivo dos de
+    // cima, e por um a mais: o que eles respondem vira frase na tela de quem
+    // vende ("as fotos estão no ar"). Divergir da régua da página pública
+    // seria o contrato afirmar o contrário do que o link faz.
+    "src/lib/avisos.ts",
+    "src/app/api/galerias/[id]/route.ts",
   ];
   for (const p of arquivos) {
     const fonte = readFileSync(path.join(RAIZ, p), "utf8");

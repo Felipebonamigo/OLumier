@@ -21,12 +21,14 @@ import { PlanoConta } from "@/components/plano-conta";
 import { EditorMarca } from "@/components/editor-marca";
 import { TrocarSenha } from "@/components/trocar-senha";
 import { ChavesApi } from "@/components/chaves-api";
+import { CanalDeAvisos } from "@/components/canal-de-avisos";
 import { EditorEndereco } from "@/components/editor-endereco";
 import { GaleriasDaConta } from "@/components/galerias-da-conta";
 import { enderecosAntigos, LIMITE_TROCAS } from "@/lib/endereco";
 import { marca } from "@/config/marca";
 import { consultar } from "@/lib/db";
 import { listarChaves } from "@/lib/chaves-api";
+import { estadoDoCanal } from "@/lib/avisos";
 import { MINIMO_SENHA } from "@/lib/recuperacao";
 import { urlDeLeitura } from "@/lib/r2";
 
@@ -50,6 +52,7 @@ export default async function ContaPage() {
   const plano = planoPorId(tenant.plano_id);
   const uso = await usoPorEstado(tenantId);
   const chavesApi = await listarChaves(tenantId);
+  const canal = await estadoDoCanal(tenantId);
   const antigos = await enderecosAntigos(tenantId);
 
   /* Galerias da conta, com o peso de cada uma. O tamanho vem aqui porque é a
@@ -315,6 +318,20 @@ export default async function ContaPage() {
           ultimo_uso_em: c.ultimo_uso_em ? c.ultimo_uso_em.toISOString() : null,
         }))}
       />
+
+      {/* Logo abaixo das chaves de API, e é o lugar certo: as duas respondem à
+          mesma pergunta — o que, de fora, alcança esta conta. Uma é a porta de
+          entrada; esta é a de saída. Só aparece para quem tem canal. */}
+      {canal && (
+        <CanalDeAvisos
+          canal={{
+            url: canal.url,
+            criadoEm: canal.criadoEm.toISOString(),
+            ultimoEnvioEm: canal.ultimoEnvioEm ? canal.ultimoEnvioEm.toISOString() : null,
+            ultimoErro: canal.ultimoErro,
+          }}
+        />
+      )}
 
       {/* O endereço saiu da lista de "dados" logo abaixo: ele deixou de ser um
           fato imutável da conta e virou algo que se troca (migração 025). */}

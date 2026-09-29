@@ -178,7 +178,15 @@ const encerrar = () => {
 };
 
 try {
-  await ate(() => saidaDoFilho.includes("servidor de zip em"), 15000).catch(() => {
+  /* 60s, e não 15: isto é ESPERA DE PRONTIDÃO, não medida de desempenho. Na
+   * máquina de quem desenvolve o filho sobe em menos de um segundo; num
+   * corredor de CI ele divide dois núcleos com o Next em dev, o Postgres, o
+   * armazém e as outras suítes — e o filho ainda compila TypeScript na carga
+   * (`--experimental-strip-types`). Reprovar ali não diz nada sobre o servidor
+   * de ZIP; diz que a máquina estava ocupada, que é o tipo de vermelho que
+   * ensina todo mundo a ignorar o portão. Se ele estiver realmente quebrado, a
+   * mensagem abaixo mostra a saída dele e o teste reprova do mesmo jeito. */
+  await ate(() => saidaDoFilho.includes("servidor de zip em"), 60000).catch(() => {
     throw new Error(`o servidor não subiu:\n${saidaDoFilho}`);
   });
 } catch (e) {

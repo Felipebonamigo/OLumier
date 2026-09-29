@@ -47,6 +47,12 @@ export const ACOES = {
    * disputa a pergunta vai ser "fui avisado? quando?". */
   AVISO_LIMPEZA_ENVIADO: "conta.aviso_limpeza",
   ARQUIVOS_DO_TESTE_APAGADOS: "conta.arquivos_apagados",
+  /* Galeria criada por um programa, não por um clique no painel — hoje, o
+   * Atomatiza criando a galeria de um contrato pela chave de API. Entra na
+   * lista porque é ACESSO: a pergunta de disputa é "quem criou isto?", e a
+   * resposta precisa sobreviver à galeria. Criação pelo painel continua sem
+   * evento — registrar cada clique é telemetria, e telemetria não mora aqui. */
+  GALERIA_CRIADA_DE_FORA: "galeria.criada-de-fora",
   /* Consentimento para dado biométrico (LGPD art. 11): ligar é o aceite, e o
    * registro é a prova de quando; desligar apaga os vetores e o registro diz
    * quantos. Sem isto, "quando o estúdio consentiu?" não teria resposta. */
