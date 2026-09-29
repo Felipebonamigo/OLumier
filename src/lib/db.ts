@@ -20,6 +20,11 @@ export function pool(): Pool {
     connectionString: process.env.DATABASE_URL,
     max: 10,
     idleTimeoutMillis: 30_000,
+    // Conexão ociosa não segura o processo. Sem isto todo script que consulta
+    // pelo pool ficava 30 s parado depois de terminar — ~10 min por
+    // publicação. O servidor não depende disso: quem o mantém vivo é o HTTP.
+    // Ver scripts/testar-pool-solta-processo.mjs.
+    allowExitOnIdle: true,
   });
   return globalThis._pgPool;
 }
