@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { consultar, consultarUm } from "@/lib/db";
 import { eventoEhNosso, tenantDaReferencia, tipoDaReferencia } from "@/lib/asaas";
 import { efeitoDoEvento, fimDoPeriodoPago } from "@/lib/assinatura";
-import { PREFIXO_ATOMATIZA } from "@/config/combo";
+import { PREFIXO_ATOMATIZA, PREFIXO_DIFERENCA_ATOMATIZA } from "@/config/combo";
 import { recalcularCombo, recalcularComboDoCliente } from "@/lib/combo";
 import { aplicarEventoDaDiferenca } from "@/lib/troca-de-plano";
 
@@ -80,7 +80,9 @@ export async function POST(request: NextRequest) {
     // Do Atomatiza, o evento ainda serve para conferir o combo de quem tem o
     // mesmo CPF/CNPJ aqui — depois da resposta, e sem nunca virar erro.
     const cliente = corpo.payment?.customer ?? corpo.subscription?.customer;
-    if (referencia?.startsWith(PREFIXO_ATOMATIZA) && cliente) {
+    const doAtomatiza =
+      referencia?.startsWith(PREFIXO_ATOMATIZA) || referencia?.startsWith(PREFIXO_DIFERENCA_ATOMATIZA);
+    if (doAtomatiza && cliente) {
       after(() =>
         recalcularComboDoCliente(cliente, evento).catch((erro) =>
           console.error(`[combo] ${evento} do Atomatiza (cliente ${cliente}):`, erro),

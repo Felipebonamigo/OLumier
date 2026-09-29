@@ -288,24 +288,37 @@ clientes reais pagando. Duas proteções já estão no código:
 
 Ao configurar o webhook do Olumier, **não altere nem remova** o do Atomatiza.
 
-## O combo com o Atomatiza (28/09/2026)
+## O combo com o Atomatiza (28/09/2026; divisão proporcional desde 29/09)
 
 Quem assina a Galeria Átomo **e** o Atomatiza com o mesmo CPF/CNPJ paga menos
-pelos dois. Decisão do Felipe: o desconto é dividido **meio a meio** entre as
-plataformas, cada uma baixa a **sua** assinatura na **sua** metade, e divide com
-os sócios pela própria regra — aqui o split já sai do preço que a assinatura
-cobra, então nada muda nele. Quem já tem um e assina o outro paga o mesmo combo.
+pelos dois. Cada plataforma baixa a **sua** assinatura na **sua** parte do
+desconto, e divide com os sócios pela própria regra — aqui o split já sai do
+preço que a assinatura cobra, então nada muda nele. Quem já tem um e assina o
+outro paga o mesmo combo.
 
-| Galeria | + Solo | + Equipe | + Estúdio |
-|---|---|---|---|
-| 250 GB (R$ 49,99) | −R$ 9,99 → **R$ 40,00** | −R$ 9,99 → **R$ 40,00** | −R$ 19,99 → **R$ 30,00** |
-| 500 GB (R$ 79,99) | −R$ 9,99 → **R$ 70,00** | −R$ 14,99 → **R$ 65,00** | −R$ 24,99 → **R$ 55,00** |
-| 1 TB+ (R$ 119,99…) | −R$ 14,99 | −R$ 14,99 | −R$ 24,99 |
+**Como o desconto se divide (29/09/2026).** Não é mais meio a meio em reais.
+Felipe: "a receita é dividida [pela] porcentagem respectiva do pacote de cada
+sistema, porque um pode ser bem mais caro que o outro, por exemplo se a
+galeria for de 5 TB e o atomatiza o pacote solo". Meio a meio, o Solo cedia
+25% do preço e os 5 TB só 3%. Agora cada lado cede a **mesma porcentagem do seu
+preço de tabela**, e a receita do combo fica na proporção dos dois pacotes. O
+total do pacote é o aprovado:
 
-A outra metade (R$ 10, 15, 20 ou 25) sai do Atomatiza, que fecha em ,90. Acima
-de 1 TB vale a linha de 1 TB. No anual, o desconto é de dez mensalidades, como o
-próprio preço. Planos antigos (ids nomeados e de três peças) não entram: o
-preço deles é de outra época.
+| Pacote (desconto do pacote) | Galeria | Atomatiza | Total | Cada um cede |
+|---|---|---|---|---|
+| 250 GB + Solo (R$ 19,99) | R$ 40,90 | R$ 49,00 | **R$ 89,90** | 18,2% |
+| 500 GB + Equipe (R$ 29,99) | R$ 65,87 | R$ 74,03 | **R$ 139,90** | 17,7% |
+| 1 TB + Estúdio (R$ 49,99) | R$ 101,24 | R$ 168,66 | **R$ 269,90** | 15,6% |
+| 5 TB + Solo (R$ 29,99) | R$ 413,59 | R$ 56,31 | **R$ 469,90** | 6,0% |
+
+O desconto do pacote por par está em `DESCONTO_DO_PACOTE` (`src/config/combo.ts`);
+acima de 1 TB vale a linha de 1 TB. A régua da proporção são os preços de
+**tabela** dos dois (`PRECO_DE_TABELA_ATOMATIZA` aqui, a cópia de `ESPACOS` lá),
+e não os preços vivos, para as duas plataformas chegarem à mesma conta sem se
+consultar. No anual, o desconto é de dez mensalidades, como o próprio preço.
+Planos antigos (ids nomeados e de três peças) não entram: o preço deles é de
+outra época. Quem assinou no dia da divisão meio a meio é trazido à
+proporcional pela própria conferência.
 
 **Como um enxerga o outro.** A conta do Asaas é a mesma, então não há chamada
 de um sistema para o outro nem segredo novo: cada lado procura, pelo CPF/CNPJ,
@@ -357,8 +370,17 @@ até um ano de espaço maior pelo preço do menor.
 | Desceu e subiu de novo no mesmo período | Não cobra outra vez: a base é o maior plano já pago no período (`tenants.plano_do_periodo`, migração 046). |
 
 Exemplo: 250 GB → 500 GB com 20 de 30 dias pela frente = (R$ 79,99 − R$ 49,99)
-× 20/30 = **R$ 20,00**. No anual, a fração é do ano. Com o combo, os dois
-preços entram com o combo — a diferença é só a dos planos.
+× 20/30 = **R$ 20,00**. No anual, a fração é do ano.
+
+**No pacote dos dois.** Com o combo, os dois preços entram com o combo — a
+diferença é a dos planos, com o desconto de cada um. Trocar de plano muda o par,
+e com ele a parte do desconto do OUTRO lado; o outro sistema se ajusta sozinho
+quando o aviso da cobrança da diferença chega no webhook dele (a conta é a
+mesma). O Atomatiza tem a mesma regra na troca de faixa (Solo, Equipe,
+Estúdio), e o aviso da diferença de lá (`atz:dif:`) ajusta o combo aqui. Sem
+cobrança de diferença (teste, abaixo de R$ 5, descida), o outro lado se acerta
+no próximo pagamento — ou na hora, se o webhook dos dois tiver o evento
+`SUBSCRIPTION_UPDATED` ligado no painel do Asaas.
 
 **Onde a diferença é cobrada.** No cartão que a assinatura já guardou
 (`creditCardToken`, com o IP de quem clicou, como o Asaas exige). Sem cartão,

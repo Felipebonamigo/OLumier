@@ -3,7 +3,10 @@ import { consultar } from "@/lib/db";
 import { marca } from "@/config/marca";
 import { cicloDe, planoPorId, precoDoCicloCentavos, type Ciclo, type Plano } from "@/config/planos";
 import {
+  DESCONTOS_MEIO_A_MEIO_28_09,
   PREFIXO_ATOMATIZA,
+  linhaDaGaleria,
+  planoEntraNoCombo,
   descontoDaGaleriaCentavos,
   descricaoDaAssinatura,
   faixaDaDescricaoAtomatiza,
@@ -63,7 +66,7 @@ const ORDEM: FaixaAtomatiza[] = ["solo", "equipe", "estudio"];
  * inclusive o nosso. Quem diz de quem é a ASSINATURA é o `externalReference`
  * dela.
  */
-export async function faixaDoAtomatiza(documento: string): Promise<FaixaAtomatiza | null> {
+export async function faixaDoAtomatiza(documento: string, plano?: Plano): Promise<FaixaAtomatiza | null> {
   const doc = soDigitos(documento);
   if (!doc) return null;
 
@@ -79,13 +82,30 @@ export async function faixaDoAtomatiza(documento: string): Promise<FaixaAtomatiz
       achadas.push(faixa);
     }
   }
+  if (achadas.length === 0) return null;
+  /* Com mais de uma faixa viva (não deveria acontecer), vale a que dá o MENOR
+   * desconto a este plano. Na divisão proporcional, qual é depende do tamanho
+   * da galeria: em 250 GB é o Equipe, e não o Solo. Sem o plano, a ordem. */
+  if (plano) {
+    return achadas.reduce((a, b) => (descontoDaGaleriaCentavos(plano, b) < descontoDaGaleriaCentavos(plano, a) ? b : a));
+  }
   return ORDEM.find((f) => achadas.includes(f)) ?? null;
 }
 
-/** Os valores que ESTE sistema pode ter gravado para o plano: cheio ou com combo. */
+/**
+ * Os valores que ESTE sistema pode ter gravado para o plano: cheio, com combo,
+ * ou com o combo da divisão meio a meio de 28/09 — esse último para a
+ * conferência trazer à divisão proporcional quem assinou naquele dia.
+ */
 function valoresNossos(plano: Plano, ciclo: Ciclo): Set<number> {
   const valores = new Set([precoDoCicloCentavos(plano.precoCentavos, ciclo)]);
-  for (const f of ORDEM) valores.add(precoDoCicloComComboCentavos(plano, ciclo, f));
+  for (const f of ORDEM) {
+    valores.add(precoDoCicloComComboCentavos(plano, ciclo, f));
+    if (planoEntraNoCombo(plano)) {
+      const antigo = DESCONTOS_MEIO_A_MEIO_28_09[linhaDaGaleria(plano.quotaGb)][f];
+      valores.add(precoDoCicloCentavos(plano.precoCentavos - antigo, ciclo));
+    }
+  }
   return valores;
 }
 
@@ -118,7 +138,7 @@ export async function recalcularCombo(tenantId: string, motivo: string): Promise
   if (!plano) return null;
   const ciclo = cicloDe(tenant.ciclo_cobranca);
 
-  const faixa = await faixaDoAtomatiza(tenant.cpf_cnpj);
+  const faixa = await faixaDoAtomatiza(tenant.cpf_cnpj, plano);
   const assinatura = await buscarAssinatura(tenant.asaas_assinatura_id);
   if (assinatura.deleted || assinatura.status !== "ACTIVE") return null;
 
