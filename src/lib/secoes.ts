@@ -27,7 +27,17 @@ export interface Secao {
   total?: number;
 }
 
-/** Sugestões de capítulo — o fotógrafo cria os seis com um clique. */
+/**
+ * Sugestões de capítulo — os momentos típicos de um casamento.
+ *
+ * São SUGESTÕES, e cada uma nasce de um clique próprio. Havia um botão que
+ * criava as seis de uma vez, e ele saiu em 29/09/2026: Juan viu gente clicar
+ * sem querer e ficar com seis capítulos para apagar à mão. Felipe fechou a
+ * questão — "não crie todos os capítulos de uma vez, deixe o usuário criar, se
+ * não ele precisará apagar".
+ *
+ * O preço de um clique errado passa a ser UM capítulo vazio.
+ */
 export const CAPITULOS_SUGERIDOS = [
   "Making Of",
   "Cerimônia",
@@ -363,6 +373,42 @@ export async function apagarSecao(secaoId: string, tenantId: string) {
       where s.id = $1 and s.galeria_id = g.id and g.tenant_id = $2`,
     [secaoId, tenantId],
   );
+}
+
+/**
+ * Apaga TODOS os capítulos desta galeria de uma vez, e devolve quantos foram.
+ *
+ * ── A SAÍDA DE QUEM CLICOU ERRADO (29/09/2026) ────────────────────────────
+ *
+ * Juan: "vi que clicaram errado e criaram vários capítulos sem querer". A
+ * porta de entrada do acidente já foi fechada — não existe mais criar seis de
+ * uma vez —, mas quem já está com os seis dentro precisa de uma saída que não
+ * seja apagar um por um. Felipe: "ou tenha a opção de apagar todos os
+ * capítulos".
+ *
+ * ── POR QUE ISTO NÃO É PERDA DE DADO ──────────────────────────────────────
+ *
+ * `medias.secao_id` é `references secoes(id) on delete set null` desde a
+ * migração 003. Nenhuma foto é apagada: as que estavam em capítulo voltam para
+ * "sem capítulo", que é exatamente o que `apagarSecao` já faz uma a uma. O que
+ * se perde são os NOMES dos capítulos e a divisão — e é por isso que a tela
+ * confirma antes, em vez de apagar no primeiro clique. Trocar um acidente de
+ * seis capítulos criados por um acidente de seis capítulos apagados não seria
+ * conserto nenhum.
+ *
+ * O `where` amarra galeria E tenant na mesma consulta, como em
+ * `reordenarSecoes`: id de galeria de outro estúdio não casa, e o que não casa
+ * não é apagado.
+ */
+export async function apagarTodasAsSecoes(galeriaId: string, tenantId: string): Promise<number> {
+  const apagadas = await consultar<{ id: string }>(
+    `delete from secoes s
+      using galerias g
+      where s.galeria_id = $1 and s.galeria_id = g.id and g.tenant_id = $2
+      returning s.id`,
+    [galeriaId, tenantId],
+  );
+  return apagadas.length;
 }
 
 /**

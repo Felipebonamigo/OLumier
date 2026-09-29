@@ -131,6 +131,31 @@ export async function sessaoAtual(): Promise<string | null> {
   // seguida, e relógio de banco e de app não batem ao milissegundo.
   if (new Date(t.senha_alterada_em).getTime() - 5000 > sessao.emitidoEm) return null;
 
+  /*
+   * ── O CARIMBO DE PASSAGEM (29/09/2026) ──────────────────────────────────
+   *
+   * Aqui é o único lugar por onde TODA requisição autenticada passa, e por isso
+   * é onde a marca de "esse estúdio ainda entra" tem de nascer. Faltava a
+   * resposta: o login não deixava rastro nenhum: `eventos` registra o que MUDA,
+   * e `acessos` é do convidado da galeria. Ver a migração 047.
+   *
+   * `after` e não `await`: a marca não é o que a pessoa veio buscar, e segurar
+   * a resposta por causa dela seria cobrar latência de todo mundo por um dado
+   * do admin. A escrita real acontece no máximo uma vez a cada 15 minutos —
+   * a trava mora no `where` do UPDATE, em `marcarAcessoDoEstudio`.
+   *
+   * O `try` existe porque `after` só vale dentro de uma requisição: um script
+   * que chame `sessaoAtual` fora de uma (a suíte faz isso) não pode quebrar por
+   * causa do carimbo. Sem requisição, não há passagem para marcar.
+   */
+  try {
+    const { after } = await import("next/server");
+    const { marcarAcessoDoEstudio } = await import("./acesso-do-estudio");
+    after(() => marcarAcessoDoEstudio(sessao.tenantId));
+  } catch {
+    /* Fora de uma requisição. Ver acima. */
+  }
+
   return sessao.tenantId;
 }
 

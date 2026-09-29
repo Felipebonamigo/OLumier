@@ -124,17 +124,33 @@ if (forma["--g-capa-h"] === "78vh" && forma["--g-canto"] === "6px") {
  * antigo. Verificar `PRESETS` inteiro voltaria a proibir o que já foi decidido
  * que é permitido.
  */
-const PRESETS_DO_PAR_ANTIGO = [
-  "atomo",
-  "revista",
-  "atelie",
-  "essencial",
-  "convite",
-  "caligrafia",
-  "moda",
-  "cerimonia",
-  "papel",
-];
+/*
+ * ── A LISTA ENCOLHEU PARA UM, E O MOTIVO FOI MEDIDO (29/09/2026) ──────────
+ *
+ * Ela nasceu com nove nomes para impedir que refinar um preset desmarcasse o
+ * cartão de galerias antigas. O raciocínio continua certo; o que faltava era o
+ * NÚMERO de quem ele protegia.
+ *
+ * Rodando `presetEquivalente` sobre as 512 galerias do banco naquele dia:
+ *
+ *     (personalizado)  510
+ *     atomo              2
+ *
+ * Nenhuma galeria casava com Revista, Ateliê, Essencial, Convite, Caligrafia,
+ * Moda, Cerimônia ou Papel. Congelar esses oito não guardava ninguém — só
+ * proibia o conserto que o Juan tinha pedido ("tem várias super iguais, não dá
+ * pra perceber a diferença"), porque a forma é um dos seis eixos que a
+ * miniatura desenha, e portanto um dos poucos jeitos de separar dois cartões.
+ *
+ * O Átomo fica, e agora com a razão em números: ele é o único com galerias
+ * casadas. Quem for mexer nele desmarca duas — e que seja uma decisão, não um
+ * efeito colateral.
+ *
+ * Preset novo entra nesta lista só se alguém decidir que ele deve seguir o par
+ * antigo. `testar-estilos-distintos.mjs` cuida do outro lado: que os dez
+ * continuem diferentes entre si onde a pessoa escolhe.
+ */
+const PRESETS_DO_PAR_ANTIGO = ["atomo"];
 const presetsDivergentes = PRESETS.filter(
   (p) =>
     PRESETS_DO_PAR_ANTIGO.includes(p.id) &&
@@ -358,32 +374,39 @@ try {
     comCapitulo.rows[0].id,
   ]);
   try {
-    const tituloDoCapitulo = (corpo) =>
-      corpo.match(/<h2[^>]*>\s*Cerimônia\s*<\/h2>/)?.[0] ??
-      corpo.match(/<h2[^>]*class="[^"]*"[^>]*>[^<]*Cerim[^<]*<\/h2>/)?.[0] ??
-      "";
-
-    const pintado = await html({ ...base, cores: { destaque: "#22c55e" } });
-    const h2 = tituloDoCapitulo(pintado);
-    if (!h2) {
-      erro("não achei o título do capítulo no HTML — o teste não provaria nada");
-    } else if (!/--g-destaque/.test(h2)) {
-      ok("o nome do capítulo não usa a cor do botão");
+    /*
+     * ── AS DUAS CONFERÊNCIAS DAQUI PERDERAM O OBJETO (29/09/2026) ──────────
+     *
+     * Elas liam o `<h2>` do capítulo dentro da galeria — a cor dele e o
+     * alinhamento dele. Esse `<h2>` NÃO EXISTE MAIS: o Juan pediu para tirá-lo
+     * ("aparece ali em cima a 'aba' prévia e embaixo o mesmo título, fica
+     * repetitivo... tire esse 'título', deixe só a 'aba'"), e ele saiu em
+     * `galeria-cliente.tsx`, onde o motivo está escrito.
+     *
+     * Mantê-las aqui daria vermelho eterno num defeito que não existe. Apagá-las
+     * sem dizer nada perderia a memória de por que elas nasceram. Então ficam
+     * como texto, e a regra que elas guardavam continua guardada onde as duas
+     * queixas do Juan nasceram — na CAPA, por `testar-cores-galeria.mjs` (a cor
+     * de `--g-destaque` é só dos botões) e pelas etapas de alinhamento de
+     * `testar-titulo-da-capa.mjs`.
+     *
+     * Se um dia o nome do capítulo voltar a ser desenhado no corpo da galeria,
+     * estas duas voltam junto — o desenho abaixo é o que elas eram:
+     *
+     *     const tituloDoCapitulo = (corpo) =>
+     *       corpo.match(/<h2[^>]*>\s*Cerimônia\s*<\/h2>/)?.[0] ?? "";
+     *     // a cor: o `<h2>` não podia citar `--g-destaque`
+     *     // o alinhamento: `text-left` com o eixo à esquerda, `text-center` no centro
+     *
+     * O que sobrou desta bancada com capítulo é a conferência de que a galeria
+     * com seção NÃO quebra e continua desenhando os eixos de forma — que é o
+     * assunto deste arquivo.
+     */
+    const comSecao = await html({ ...base, alinhamento: "esquerda" });
+    if (comSecao.includes("--g-capa-h:") && comSecao.includes("--g-canto:")) {
+      ok("galeria com capítulo continua desenhando os eixos de forma");
     } else {
-      erro(`o nome do capítulo ainda pinta com --g-destaque: ${h2.slice(0, 120)}`);
-    }
-
-    for (const [alinhamento, marca, ausente] of [
-      ["centro", "text-center", "text-left"],
-      ["esquerda", "text-left", "text-center"],
-    ]) {
-      const corpo = await html({ ...base, alinhamento });
-      const t = tituloDoCapitulo(corpo);
-      if (t.includes(marca) && !t.includes(ausente)) {
-        ok(`o nome do capítulo acompanha o alinhamento "${alinhamento}"`);
-      } else {
-        erro(`capítulo em "${alinhamento}" veio: ${t.slice(0, 120)}`);
-      }
+      erro("galeria com capítulo perdeu as variáveis de forma");
     }
   } finally {
     await db.query("update medias set secao_id = null where galeria_id = $1", [bancada.id]);

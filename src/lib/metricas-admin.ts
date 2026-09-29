@@ -293,3 +293,116 @@ export function custoDasCortesiasCentavos(estudios: EstudioParaMetrica[]): numbe
     .filter((e) => e.status === "cortesia")
     .reduce((s, e) => s + custoMensalDoEstudioCentavos(e), 0);
 }
+
+// ---------------------------------------------------------------------------
+// A LINHA DE TOTAL DA TABELA DE ESTÚDIOS
+// ---------------------------------------------------------------------------
+
+/**
+ * Os campos da tabela que a linha de total soma, além dos de `EstudioParaMetrica`.
+ *
+ * Interface própria, e não `LinhaAdmin` de `lib/admin.ts`: aquela traz trinta
+ * campos que vêm de uma consulta com banco, e esta função é pura de propósito
+ * — é assim que `testar-totais-do-admin.mjs` consegue montar o estúdio sem
+ * limite, o cancelado com disco cheio e o que nunca foi aberto, todos na mesma
+ * tabela, que é o caso que o banco de desenvolvimento nunca tem junto.
+ */
+export interface EstudioParaTotal extends EstudioParaMetrica {
+  galerias: number;
+  publicadas: number;
+  fotos: number;
+  videos: number;
+  acessos_30d: number;
+  ultimo_acesso: Date | string | null;
+  ultima_alteracao: Date | string | null;
+  ultimo_acesso_estudio: Date | string | null;
+}
+
+export interface TotaisDosEstudios {
+  estudios: number;
+  porStatus: Record<Situacao, number>;
+  /** O que a plataforma recebe por mês — só de quem está `ativo`. */
+  pagaCentavos: number;
+  /** O que os fornecedores cobram — de TODO MUNDO que ocupa disco. */
+  custaCentavos: number;
+  usadoBytes: bigint;
+  /** A quota vendida, SEM os sem-limite: ver o comentário abaixo. */
+  quotaBytes: bigint;
+  semLimite: number;
+  galerias: number;
+  publicadas: number;
+  fotos: number;
+  videos: number;
+  acessos30d: number;
+  /** O MAIS RECENTE, não a soma — e nulo quando ninguém nunca abriu. */
+  ultimoAcesso: Date | null;
+  ultimaAlteracao: Date | null;
+  /** A última vez que ALGUM fotógrafo entrou — ver a migração 047. */
+  ultimoAcessoEstudio: Date | null;
+}
+
+/**
+ * Soma a tabela de estúdios, coluna por coluna.
+ *
+ * Felipe, 29/09/2026: "tenha uma linha com o 'total' de cada coluna, último
+ * acesso, última alteração também".
+ *
+ * ── TRÊS COLUNAS NÃO SOMAM DO JEITO ÓBVIO, E É POR ISSO QUE ISTO É UMA
+ *    FUNÇÃO E NÃO UM `reduce` DENTRO DO JSX ────────────────────────────────
+ *
+ * 1. **Paga** conta só quem está `ativo`, e **Custa** conta todo mundo — é a
+ *    mesma assimetria que a explicação do bloco "Dinheiro" já enuncia: o
+ *    Backblaze cobra por byte guardado, não por situação. Somar as duas colunas
+ *    do mesmo jeito faria a linha de total contradizer o topo da própria
+ *    página.
+ *
+ * 2. **Espaço** não pode somar a quota de quem é sem limite. Cortesia de sócio
+ *    tem `quota_bytes` = 2^62; jogada no total, ela daria um "vendido" de
+ *    exabytes e zeraria a barra de ocupação. Eles são contados à parte, em
+ *    `semLimite`.
+ *
+ * 3. **As datas** são o MAIS RECENTE das linhas, não uma soma. E nulo continua
+ *    nulo: `Math.max` sobre nada devolve `-Infinity`, e sobre nulos devolve 0,
+ *    que vira 01/01/1970 — a data errada mais fácil de deixar passar, porque a
+ *    tela desenha uma data de verdade e ninguém desconfia.
+ */
+export function totaisDosEstudios(estudios: EstudioParaTotal[]): TotaisDosEstudios {
+  const maisRecente = (pegar: (e: EstudioParaTotal) => Date | string | null): Date | null => {
+    let melhor: Date | null = null;
+    for (const e of estudios) {
+      const d = comoData(pegar(e));
+      if (d && (!melhor || d > melhor)) melhor = d;
+    }
+    return melhor;
+  };
+
+  let usadoBytes = ZERO;
+  let quotaBytes = ZERO;
+  let semLimite = 0;
+  for (const e of estudios) {
+    usadoBytes += BigInt(e.bytes_no_ar) + BigInt(e.bytes_no_cofre);
+    if (espacoSemLimite(e)) semLimite += 1;
+    else quotaBytes += quotaEfetivaBytes(e);
+  }
+
+  const soma = (pegar: (e: EstudioParaTotal) => number) =>
+    estudios.reduce((s, e) => s + pegar(e), 0);
+
+  return {
+    estudios: estudios.length,
+    porStatus: contagemPorStatus(estudios),
+    pagaCentavos: receitaMensalCentavos(estudios),
+    custaCentavos: soma(custoMensalDoEstudioCentavos),
+    usadoBytes,
+    quotaBytes,
+    semLimite,
+    galerias: soma((e) => e.galerias),
+    publicadas: soma((e) => e.publicadas),
+    fotos: soma((e) => e.fotos),
+    videos: soma((e) => e.videos),
+    acessos30d: soma((e) => e.acessos_30d),
+    ultimoAcesso: maisRecente((e) => e.ultimo_acesso),
+    ultimaAlteracao: maisRecente((e) => e.ultima_alteracao),
+    ultimoAcessoEstudio: maisRecente((e) => e.ultimo_acesso_estudio),
+  };
+}

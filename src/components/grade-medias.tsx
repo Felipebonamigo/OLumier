@@ -10,6 +10,10 @@ export interface MediaExibida {
   nome: string;
   tipo: "foto" | "video";
   url: string;
+  /** O endereço do FILME. Só em vídeo — ver o comentário na aba Fotos. */
+  urlFilme?: string;
+  /** Há miniatura de verdade? Sem ela o `poster` não pode ser desenhado. */
+  temCapa?: boolean;
   bytes: number;
   secaoId: string | null;
   /** Quantas pessoas marcaram esta foto como favorita. 0 = ninguém. */
@@ -536,7 +540,17 @@ export function GradeMedias({
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <video src={m.url} className="h-full w-full object-cover" preload="metadata" controls />
+                  /* `src` é o filme e `poster` é a capa: são dois endereços
+                     para duas coisas, e o HTML tem um atributo para cada uma.
+                     Sem capa o `poster` some — apontá-lo para o original
+                     mandaria o navegador desenhar um filme como imagem. */
+                  <video
+                    src={m.urlFilme ?? m.url}
+                    poster={m.temCapa ? m.url : undefined}
+                    className="h-full w-full object-cover"
+                    preload="metadata"
+                    controls
+                  />
                 )}
               </div>
 

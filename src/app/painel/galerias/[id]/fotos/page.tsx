@@ -6,8 +6,8 @@ import { formatarBytes } from "@/lib/tenants";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { precisaConfirmarEmail } from "@/lib/confirmacao-email";
 import { listarMedias } from "@/lib/medias";
-import { armazemDe, urlDaDerivada } from "@/lib/armazem";
-import { listarSecoes } from "@/lib/secoes";
+import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { CAPITULOS_SUGERIDOS, listarSecoes } from "@/lib/secoes";
 import { resumoDaGaleria } from "@/lib/favoritas";
 import { downloadsPorFoto } from "@/lib/galerias-publicas";
 import { AvisoDeRepetidas } from "@/components/aviso-de-repetidas";
@@ -61,6 +61,24 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       favoritas: favoritas.porMedia.get(m.id) ?? 0,
       baixadas: baixadas.get(m.id) ?? 0,
       url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), 3600),
+      /*
+       * ── O FILME PRECISA DO ENDEREÇO DELE (29/09/2026) ──────────────────
+       *
+       * `url` sai de `urlDaDerivada`, que devolve a MINIATURA quando ela
+       * existe. A grade desenhava `<video src={url}>` com isso — ou seja, o
+       * player recebia um WebP. Vídeo com capa não tocava no painel, e os
+       * únicos que tocavam eram os que estavam SEM capa: a inversão perfeita.
+       * Em produção, 44 dos 46 vídeos tinham capa gravada.
+       *
+       * Agora são dois endereços para duas coisas: `urlFilme` no `src`,
+       * `url` no `poster`. Só para vídeo — assinar o original de toda foto
+       * dobraria as assinaturas da aba sem ninguém usar a segunda.
+       */
+      urlFilme:
+        m.tipo === "video"
+          ? await urlDoOriginal(m.chave, armazemDe(m.armazem), 3600)
+          : undefined,
+      temCapa: Boolean(m.chave_thumb),
     })),
   );
 
@@ -133,6 +151,10 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       <EditorSecoes
         galeriaId={galeria.id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
+        /* Os momentos típicos, para clicar um a um. Descem por propriedade
+           porque `lib/secoes.ts` é `server-only` e o editor é do cliente — o
+           mesmo caminho do assistente de galeria nova. */
+        sugestoes={CAPITULOS_SUGERIDOS}
         semCapitulo={medias.filter((m) => !m.secao_id).length}
         /* Como esta galeria chama o grupo das soltas (migração 037). Nulo é o
            normal e quer dizer "Outras fotos". */
@@ -158,7 +180,10 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       */}
       {emailPendente ? (
         <section className="mt-8 rounded-xl border border-alerta/40 bg-carbon-2 px-5 py-6">
-          <h2 className="text-base font-medium">Confirme seu e-mail para enviar fotos</h2>
+          {/* A mesma régua do `<h2>` do bloco de envio, porque este cartão
+              ocupa o lugar dele — duas escalas no mesmo slot fariam a tela
+              parecer que trocou de assunto, e não de estado. */}
+          <h2 className="text-sm font-semibold">Confirme seu e-mail para enviar fotos</h2>
           <p className="mt-1.5 max-w-prose text-sm text-texto-soft">
             O link foi para <strong className="font-normal text-texto">{tenant?.email}</strong>. Se
             não chegou, veja o lixo eletrônico — ou peça outro no aviso do topo desta página. Assim

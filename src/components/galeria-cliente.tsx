@@ -3,7 +3,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
+import { enderecoDaBarra, enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -246,6 +246,32 @@ export function GaleriaCliente({
      o que mudou, e é o caminho que o próprio framework pede. */
   const router = useRouter();
   const caminho = usePathname();
+
+  /*
+   * ── O CAPÍTULO NÃO FICA NA BARRA (29/09/2026) ───────────────────────────
+   *
+   * Um fotógrafo entrou no "Making of", copiou a barra e mandou para o casal
+   * `…/sarah-e-levi/making-of`. Pedido dele, pelo Felipe: tirar o capítulo do
+   * link. A barra volta para o endereço da galeria assim que o capítulo abre —
+   * então o que se copia dali é sempre o link da galeria.
+   *
+   * A rota do capítulo continua existindo: é por ela que a pastilha abre o
+   * capítulo, e link de capítulo já mandado continua abrindo (o mesmo cuidado
+   * das migrações 025 e 030). O preço: recarregar a página volta para o começo
+   * da galeria, e o "não sou eu" (que recarrega) também.
+   *
+   * `replaceState` e não `router.replace`: trocar a rota buscaria a galeria
+   * inteira de novo. O Next acompanha a troca nativa (`usePathname` passa a
+   * dizer o endereço novo) — o que as buscas por `?fotos=` precisam, porque o
+   * recorte delas não depende de capítulo.
+   */
+  useEffect(() => {
+    if (!capituloAberto) return;
+    const limpo = enderecoDaBarra(enderecoBase, window.location.search);
+    if (limpo !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, "", limpo + window.location.hash);
+    }
+  }, [capituloAberto, enderecoBase]);
 
   const [aberto, setAberto] = useState<number | null>(null);
   /*
@@ -1263,7 +1289,7 @@ export function GaleriaCliente({
         <div className="my-10 text-center">
           <Link
             href={saidaDoCapitulo.para}
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm transition"
+            className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
             style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
           >
             {saidaDoCapitulo.texto}
@@ -1771,48 +1797,57 @@ export function GaleriaCliente({
             return <section key={cap.id} id={`cap-${cap.id}`} hidden />;
           }
           return (
-          <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
-            {cap.nome && cap.id !== capituloAtivo && (
-              /*
-                COM O CAPÍTULO ABERTO, O TÍTULO SAI (28/09/2026).
+          /*
+            ── O NOME DO CAPÍTULO SAI DA TELA, E NÃO DA ESTRUTURA (29/09/2026)
 
-                Juan: "acho feio o nome do título aparecer duas vezes tão perto
-                um do outro". Aberto um capítulo, a barra já mostra a pastilha
-                dele ACESA — e este título repetia o mesmo texto três linhas
-                abaixo, com a foto ainda nem tendo começado.
+            Juan, com um print da galeria no celular e o título circulado a
+            caneta: "ainda está aparecendo aqui 'prévia do casamento', ou seja
+            ainda aparece ali em cima a 'aba' prévia e embaixo o mesmo título,
+            fica repetitivo, não deixe os 2 se repetirem, tire esse 'título',
+            deixe só a 'aba'".
 
-                Some só o do capítulo ABERTO. Na galeria inteira ele fica: ali
-                é ele que separa uma seção da outra enquanto se rola, e a
-                pastilha lá de cima já saiu da tela. Apagar sempre resolveria
-                esta queixa criando outra — a galeria virando uma tira de fotos
-                sem divisão nenhuma.
-              */
-              /*
-                O NOME DO CAPÍTULO SEGUE O ALINHAMENTO, E NÃO É DA COR DO BOTÃO.
+            Era a segunda vez. Em 28/09 este `<h2>` já tinha sumido do capítulo
+            ABERTO (`?cap=...`), e o argumento para mantê-lo na galeria inteira
+            estava escrito aqui: "é ele que separa uma seção da outra enquanto
+            se rola, e a pastilha lá de cima já saiu da tela".
 
-                Duas queixas do Juan atravessam a capa e continuavam valendo
-                aqui embaixo — e eu tinha corrigido só a metade de cima:
+            A segunda metade dessa frase é falsa, e dava para conferir sem
+            print: a barra é `sticky top-0` e um `IntersectionObserver` acende
+            a pastilha do capítulo que está na tela (`menus-da-galeria.tsx`).
+            A pastilha NUNCA sai da tela, e o nome do capítulo corrente já
+            estava sempre visível — a poucos pixels do título que o repetia.
+            O caso que justificava manter os dois não existia.
 
-                  "deixei os botões verdinhos e gostei, mas a logo também ficou
-                   verde"  → era `--g-destaque`, a mesma variável do botão. Com
-                   a cor escolhida, "Making Of" e "Cerimônia" ficavam verdes
-                   junto. `--g-suave` é o secundário do tema, com contraste
-                   medido em `variaveisDoTema`.
+            O nome continua na `<section>`, por `aria-label`: quem navega por
+            seções, ou por leitor de tela, não vê pastilha acesa nenhuma.
+            Apagar dos dois lugares resolveria a queixa criando uma pior, e
+            invisível para quem a criou.
 
-                  "queria que TODOS os textos estivessem alinhados pra esse
-                   lado" → era `text-center` cravado. Com o eixo à esquerda, a
-                   capa ia para a esquerda e o capítulo ficava no meio: "cada
-                   coisa de um jeito", só que rolando a página para baixo.
-              */
-              <h2
-                className={`mb-4 font-mono text-[11px] uppercase tracking-[0.3em] ${
-                  aparencia.alinhamento === "esquerda" ? "text-left" : "text-center"
-                }`}
-                style={{ color: "var(--g-suave)" }}
-              >
-                {cap.nome}
-              </h2>
-            )}
+            Com o `<h2>` foram duas conferências de `testar-eixos-forma.mjs`
+            (a cor e o alinhamento dele) — elas ficaram sem objeto, e estão
+            comentadas lá com este motivo. As mesmas duas regras continuam
+            valendo e presas na CAPA, que é onde as queixas originais nasceram.
+          */
+          <section
+            key={cap.id}
+            id={`cap-${cap.id}`}
+            /*
+              SÓ CAPÍTULO COM NOME GANHA RÓTULO.
+
+              O `|| GRUPO_SEM_CAPITULO` que estava aqui punha "Outras fotos" na
+              seção das fotos soltas — e numa galeria SEM capítulo nenhum isso
+              inventa um nome que o fotógrafo nunca escolheu. `testar-secoes`
+              guarda exatamente isso ("galeria de fluxo único ganhou um título
+              que não pediu"), e estava certo: sem capítulos não existe grupo,
+              existe a galeria.
+
+              Com capítulos, quem nomeia o grupo das soltas é a pastilha da
+              barra, que já diz "Outras fotos" — ver `testar-secoes`, a etapa
+              logo acima daquela.
+            */
+            aria-label={cap.nome || undefined}
+            className="mb-12 scroll-mt-16"
+          >
             <GaleriaGrade
               aparencia={aparencia}
               quantidade={cap.indices.length}
@@ -1970,7 +2005,7 @@ export function GaleriaCliente({
                     topo. `testar-urls-sob-demanda.mjs` confere que esse caminho
                     existe — sem ele, tirar o botão deixaria o celular sem saída.
                   */
-                  className="grid h-9 w-9 place-items-center rounded-full opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
+                  className="grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
                   style={{ color: "#fff", filter: GLIFO_SOBRE_FOTO }}
                 >
                   <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
@@ -2017,7 +2052,7 @@ export function GaleriaCliente({
                 /* O posicionamento saiu daqui para o <span> que agrupa os dois
                    botões — senão o de baixar e o coração se sobreporiam no
                    mesmo canto. */
-                className={`grid h-9 w-9 place-items-center rounded-full transition max-[900px]:h-11 max-[900px]:w-11
+                className={`grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] transition max-[900px]:h-11 max-[900px]:w-11
                   ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}
                   ${!selecao.aberta && !ehFavorita ? "hidden" : ""}`}
                 /*
@@ -2250,7 +2285,7 @@ export function GaleriaCliente({
                   anterior();
                 }}
                 aria-label="Anterior"
-                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-[var(--g-pilula,9999px)] border transition"
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
                   borderColor: "var(--g-linha)",
@@ -2266,7 +2301,7 @@ export function GaleriaCliente({
                   proximo();
                 }}
                 aria-label="Próxima"
-                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-[var(--g-pilula,9999px)] border transition"
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
                   borderColor: "var(--g-linha)",
@@ -2339,12 +2374,12 @@ function PainelDaEntrega({
       </div>
 
       <div
-        className="h-1.5 w-full overflow-hidden rounded-full"
+        className="h-1.5 w-full overflow-hidden rounded-[var(--g-pilula,9999px)]"
         style={{ background: "var(--g-linha)" }}
         aria-hidden="true"
       >
         <div
-          className="h-full rounded-full transition-[width] duration-300"
+          className="h-full rounded-[var(--g-pilula,9999px)] transition-[width] duration-300"
           style={{ width: `${Math.round(fracao * 100)}%`, background: "var(--g-destaque)" }}
         />
       </div>
@@ -2359,7 +2394,7 @@ function PainelDaEntrega({
         <button
           type="button"
           onClick={suaVez.seguir}
-          className="w-full rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85"
+          className="w-full rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm font-semibold transition hover:opacity-85"
           style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
         >
           Salvar {p.preparadas} {p.preparadas === 1 ? "foto" : "fotos"} no celular

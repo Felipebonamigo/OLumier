@@ -54,8 +54,8 @@ import { definirPrazo, arquivarAgora, reativar } from "@/lib/cofre";
 import { registrarEvento, ACOES } from "@/lib/eventos";
 import { ipDaRequisicao } from "@/lib/origem";
 import {
-  CAPITULOS_SUGERIDOS,
   apagarSecao,
+  apagarTodasAsSecoes,
   criarSecao,
   garantirSecoes,
   moverMediasParaSecao,
@@ -478,15 +478,12 @@ export async function criarSecaoAction(form: FormData): Promise<{ erro?: string 
   return {};
 }
 
-/** Cria os capítulos sugeridos de uma vez — a estrutura típica de um casamento. */
-export async function criarCapitulosSugeridosAction(form: FormData) {
-  const tenantId = await exigirTenant();
-  const galeriaId = String(form.get("galeria_id") ?? "");
-  for (const nome of CAPITULOS_SUGERIDOS) {
-    await criarSecao(galeriaId, tenantId, nome);
-  }
-  revalidatePath(`/painel/galerias/${galeriaId}`);
-}
+/*
+ * Aqui morava `criarCapitulosSugeridosAction`, que criava os seis capítulos de
+ * um casamento num clique. Ela saiu em 29/09/2026 — ver `CAPITULOS_SUGERIDOS`
+ * em `lib/secoes.ts`. As sugestões continuam na tela; cada uma passa por
+ * `criarSecaoAction`, uma de cada vez.
+ */
 
 /**
  * Garante os capítulos que o envio de pasta encontrou e devolve os ids.
@@ -536,6 +533,24 @@ export async function apagarSecaoAction(form: FormData) {
   const tenantId = await exigirTenant();
   await apagarSecao(String(form.get("secao_id") ?? ""), tenantId);
   revalidatePath(`/painel/galerias/${form.get("galeria_id")}`);
+}
+
+/**
+ * Apaga todos os capítulos da galeria — a saída de quem criou sem querer.
+ *
+ * Nenhuma foto some: `medias.secao_id` é `on delete set null`, então elas
+ * voltam para "sem capítulo". Ver `apagarTodasAsSecoes` em `lib/secoes.ts`,
+ * onde está escrito por que isto pode existir.
+ *
+ * A confirmação é da TELA, e não desta ação: quem chama a ação já decidiu.
+ */
+export async function apagarTodosOsCapitulosAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const quantos = await apagarTodasAsSecoes(galeriaId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  if (quantos === 0) return { erro: "Não havia capítulo nenhum para apagar." };
+  return {};
 }
 
 /**

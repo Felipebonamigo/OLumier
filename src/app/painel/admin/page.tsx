@@ -21,6 +21,8 @@ import {
   mensalEquivalenteCentavos,
   custoMensalDoEstudioCentavos,
   custoDasCortesiasCentavos,
+  totaisDosEstudios,
+  SITUACOES,
 } from "@/lib/metricas-admin";
 import { planoPorId, formatarReais, cicloDe, GB } from "@/config/planos";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
@@ -39,6 +41,36 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export const dynamic = "force-dynamic";
+
+/**
+ * ── O ÍNDICE DO TOPO (29/09/2026) ─────────────────────────────────────────
+ *
+ * Felipe, com um print da tabela de estúdios: "cadê a página dos sócios, que
+ * mostrava tudo?".
+ *
+ * Nada tinha sumido. A página inteira estava lá — os oito blocos ACIMA da
+ * tabela —, e ele estava rolado até o pé. Uma página de nove blocos que só se
+ * percorre rolando não mostra o que tem; ela esconde tudo menos onde o dedo
+ * parou.
+ *
+ * A ordem desta lista É a ordem da página, e os dois lados leem daqui: o índice
+ * mapeia a lista, e cada `<Bloco>` pega o seu `id` por posição. Um bloco novo
+ * sem entrada aqui não compila — e `testar-indice-do-admin.mjs` ainda confere,
+ * no HTML servido, que nenhum link cai no vazio e que nenhum bloco ficou de
+ * fora. Índice escrito à mão apodrece em silêncio: o link simplesmente não leva
+ * a lugar nenhum, e ninguém repara até precisar.
+ */
+const SECOES = [
+  { id: "dinheiro", nome: "Dinheiro" },
+  { id: "contas", nome: "Contas" },
+  { id: "espaco", nome: "Espaço" },
+  { id: "uso", nome: "Uso e entrega" },
+  { id: "trafego", nome: "Tráfego" },
+  { id: "meses", nome: "Doze meses" },
+  { id: "atencao", nome: "Precisa de atenção" },
+  { id: "estudios", nome: "Estúdios" },
+  { id: "eventos", nome: "Eventos" },
+] as const;
 
 /**
  * O PAINEL DE ADMINISTRAÇÃO.
@@ -105,6 +137,10 @@ export default async function AdminPage() {
 
   const vencendo = trialsVencendo(estudios, 7, agora);
   const vencidos = trialsVencidos(estudios, agora);
+  /* A linha de total da tabela lá embaixo. Calculada aqui, ao lado do resumo
+     do topo, porque as duas leem a MESMA lista — é o que garante que o total
+     de "Paga" e a "Receita/mês" do primeiro bloco não divirjam. */
+  const totais = totaisDosEstudios(estudios);
   const semDocumento = estudios.filter(
     (e) => !e.cpf_cnpj && !e.tem_assinatura && e.status !== "cancelado",
   );
@@ -148,8 +184,26 @@ export default async function AdminPage() {
         </Link>
       </p>
 
+      {/* O índice. Âncoras de verdade (`<a href="#id">`), e não `<Link>`: o
+          destino é esta mesma página, e o roteador não tem nada a resolver. */}
+      <nav
+        aria-label="Seções desta página"
+        className="mt-5 flex flex-wrap gap-x-4 gap-y-2 border-y border-linha py-3"
+      >
+        {SECOES.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            className="font-mono text-[11px] uppercase tracking-widest text-texto-faint transition hover:text-acento"
+          >
+            {s.nome}
+          </a>
+        ))}
+      </nav>
+
       {/* ── 1. DINHEIRO ───────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[0].id}
         titulo="Dinheiro"
         explicacao="Receita conta só quem está ativo. Custo conta todo mundo que ocupa disco, inclusive quem cancelou — o Backblaze cobra por byte guardado, não por situação."
       >
@@ -199,7 +253,7 @@ export default async function AdminPage() {
       </Bloco>
 
       {/* ── 2. CONTAS ─────────────────────────────────────────────────── */}
-      <Bloco titulo="Contas" explicacao="Quem existe hoje, e quem chegou agora.">
+      <Bloco id={SECOES[1].id} titulo="Contas" explicacao="Quem existe hoje, e quem chegou agora.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <Cartao rotulo="Estúdios" valor={r.estudios} nota={`+${r.novos30} em 30 dias`} />
           <Cartao rotulo="Pagando" valor={r.porStatus.ativo} tom="ok" />
@@ -229,6 +283,7 @@ export default async function AdminPage() {
 
       {/* ── 3. ESPAÇO ─────────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[2].id}
         titulo="Espaço"
         explicacao="O que está guardado agora, contra o que foi vendido. A quota de quem está em teste é o teto do período gratuito, não a do plano escolhido."
       >
@@ -257,6 +312,7 @@ export default async function AdminPage() {
 
       {/* ── 4. USO E ENTREGA ──────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[3].id}
         titulo="Uso e entrega"
         explicacao="Acessos dos últimos 30 dias. É a prova de que a entrega chegou ao cliente final — e de que o produto está sendo usado, não só contratado."
       >
@@ -273,6 +329,7 @@ export default async function AdminPage() {
 
       {/* ── 4b. TRÁFEGO E CUSTO DA ENTREGA ────────────────────────────── */}
       <Bloco
+        id={SECOES[4].id}
         titulo="Tráfego e custo da entrega"
         explicacao="O mês corrente. É a tela que responde se o desenho da entrega está custando o previsto — e o que fazer quando não estiver. Download avulso é estimativa pelo tamanho médio de uma mídia."
       >
@@ -367,6 +424,7 @@ export default async function AdminPage() {
 
       {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[5].id}
         titulo="Doze meses"
         explicacao="Cadastros e envio, mês a mês. A escala de cada série é o maior mês dela — as duas não se comparam entre si."
       >
@@ -411,6 +469,7 @@ export default async function AdminPage() {
 
       {/* ── 6. QUEM PRECISA DE ATENÇÃO ────────────────────────────────── */}
       <Bloco
+        id={SECOES[6].id}
         titulo="Precisa de atenção"
         explicacao="Cada linha é uma conversa que vale a pena ter esta semana."
       >
@@ -465,6 +524,7 @@ export default async function AdminPage() {
 
       {/* ── 7. TODOS OS ESTÚDIOS ──────────────────────────────────────── */}
       <Bloco
+        id={SECOES[7].id}
         titulo={`Estúdios (${estudios.length})`}
         explicacao="Clique num nome para a ficha completa."
       >
@@ -485,7 +545,39 @@ export default async function AdminPage() {
                     "Custa por mês",
                     "Espaço",
                     "Conteúdo",
-                    "Entrega",
+                    /*
+                      ── DOIS NOMES QUE FALTAVAM (29/09/2026) ──────────────
+
+                      Felipe: "último acesso, última alteração também".
+
+                      O último acesso do CLIENTE já estava nesta tabela — mas
+                      debaixo de um cabeçalho chamado "Entrega", que não diz que
+                      ali mora uma data. Quem procura "quando isto foi aberto
+                      pela última vez" não encontra uma coluna que se chama
+                      outra coisa. Agora a coluna tem o nome do que ela guarda.
+
+                      A última alteração é nova, e é sobre o ESTÚDIO: o mais
+                      recente entre editar galeria, subir foto e mexer na conta
+                      (ver `ultima_alteracao` em `lib/admin.ts`). As duas juntas
+                      respondem a pergunta que a tabela existe para responder —
+                      esta conta está viva dos dois lados?
+                    */
+                    /*
+                      ── AS DATAS AGRUPADAS POR QUEM AGIU (29/09/2026) ──────
+
+                      Eram duas colunas com nome de MOMENTO ("Último acesso",
+                      "Última alteração"), e o carimbo do fotógrafo (migração
+                      047) pediria uma terceira — três colunas de data seguidas,
+                      todas dizendo "29 de set.", sem dizer de quem.
+
+                      Agora o cabeçalho diz QUEM: o cliente de um lado, o
+                      estúdio do outro. Cada um leva a sua segunda linha — os
+                      acessos de 30 dias com o cliente, a última alteração com o
+                      estúdio, que é quem altera. A tabela não cresceu e as três
+                      perguntas continuam respondidas.
+                    */
+                    "Cliente abriu",
+                    "Estúdio entrou",
                     "Entrou",
                   ].map((h) => (
                     <th
@@ -602,16 +694,106 @@ export default async function AdminPage() {
                           {e.acessos_30d} acesso{e.acessos_30d === 1 ? "" : "s"} em 30d
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        {data(e.criado_em)}
+                      <td className="px-4 py-3 text-xs tabular-nums">
+                        {e.ultimo_acesso_estudio ? (
+                          data(e.ultimo_acesso_estudio)
+                        ) : (
+                          /*
+                            Nulo NÃO é conta abandonada: a coluna nasceu em
+                            29/09/2026 e toda conta anterior começa sem marca.
+                            Um travessão aqui leria como ausência, e a primeira
+                            leitura da tabela acusaria a plataforma inteira de
+                            estar parada.
+                          */
+                          <span className="text-texto-faint">sem registro</span>
+                        )}
+                        <span className="block text-[11px] text-texto-faint">
+                          {e.ultima_alteracao
+                            ? `alterou ${data(e.ultima_alteracao)}`
+                            : "nunca alterou"}
+                        </span>
                         <span className="block text-[11px] text-texto-faint">
                           {e.ultimo_envio ? `enviou ${data(e.ultimo_envio)}` : "nunca enviou"}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-xs">{data(e.criado_em)}</td>
                     </tr>
                   );
                 })}
               </tbody>
+              {/*
+                ── A LINHA DE TOTAL ────────────────────────────────────────
+
+                Felipe: "tenha uma linha com o 'total' de cada coluna".
+
+                Em `<tfoot>` e não na última linha do `<tbody>`: é o elemento
+                que existe para isto, o leitor de tela o anuncia como rodapé da
+                tabela, e ele não entra em nenhuma ordenação futura do corpo.
+
+                A aritmética mora em `totaisDosEstudios` (`lib/metricas-admin.ts`),
+                e não aqui, porque três colunas não somam do jeito óbvio — Paga
+                conta só quem está ativo, Custa conta todo mundo, e a quota de
+                quem é sem limite não pode entrar no total. `testar-totais-do-admin.mjs`
+                prende as três, com o estúdio sem limite e o cancelado com disco
+                cheio na mesma tabela.
+              */}
+              <tfoot>
+                <tr className="border-t-2 border-linha bg-carbon text-xs font-medium tabular-nums">
+                  <td className="px-4 py-3">
+                    {totais.estudios} estúdio{totais.estudios === 1 ? "" : "s"}
+                  </td>
+                  <td className="px-4 py-3 text-[11px] font-normal text-texto-faint">
+                    {SITUACOES.filter((s) => totais.porStatus[s] > 0)
+                      .map((s) => `${totais.porStatus[s]} ${s}`)
+                      .join(" · ") || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-texto-faint">—</td>
+                  <td className="px-4 py-3 text-ok">{formatarReais(totais.pagaCentavos)}</td>
+                  <td className="px-4 py-3">{formatarReais(totais.custaCentavos)}</td>
+                  <td className="px-4 py-3 font-mono">
+                    {formatarBytes(totais.usadoBytes)}
+                    <span className="font-sans font-normal text-texto-faint">
+                      {" / "}
+                      {formatarBytes(totais.quotaBytes)}
+                    </span>
+                    {totais.semLimite > 0 && (
+                      <span className="mt-0.5 block font-sans text-[11px] font-normal text-texto-faint">
+                        + {totais.semLimite} sem limite
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {totais.galerias} galeria{totais.galerias === 1 ? "" : "s"}
+                    <span className="block text-[11px] font-normal text-texto-faint">
+                      {totais.publicadas} no ar · {totais.fotos.toLocaleString("pt-BR")} fotos ·{" "}
+                      {totais.videos} vídeos
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {totais.ultimoAcesso ? (
+                      data(totais.ultimoAcesso)
+                    ) : (
+                      <span className="font-normal text-texto-faint">nunca</span>
+                    )}
+                    <span className="block text-[11px] font-normal text-texto-faint">
+                      {totais.acessos30d} acesso{totais.acessos30d === 1 ? "" : "s"} em 30d
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {totais.ultimoAcessoEstudio ? (
+                      data(totais.ultimoAcessoEstudio)
+                    ) : (
+                      <span className="font-normal text-texto-faint">sem registro</span>
+                    )}
+                    <span className="block text-[11px] font-normal text-texto-faint">
+                      {totais.ultimaAlteracao
+                        ? `alterou ${data(totais.ultimaAlteracao)}`
+                        : "nunca alterou"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-texto-faint">—</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
@@ -619,6 +801,7 @@ export default async function AdminPage() {
 
       {/* ── 8. AUDITORIA ──────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[8].id}
         titulo="Últimos eventos"
         explicacao="Os oito mais recentes. O log inteiro, com filtro por ação, estúdio e período, fica no histórico."
       >

@@ -52,6 +52,28 @@ export interface LinhaAdmin {
   favoritas: number;
   ultimo_acesso: Date | null;
   ultimo_envio: Date | null;
+  /**
+   * A última vez que o ESTÚDIO mexeu no trabalho dele.
+   *
+   * É o mais recente entre três coisas, porque "alteração" não tem um carimbo
+   * só: editar a galeria (design, entrega, capítulos) atualiza
+   * `galerias.atualizado_em`, subir foto cria `medias.criado_em`, e mexer na
+   * conta atualiza `tenants.atualizado_em`. Olhar um deles sozinho faz um
+   * estúdio que subiu 400 fotos ontem parecer parado há meses.
+   *
+   * NÃO é "último login": esse carimbo não existe em lugar nenhum do banco, e
+   * inventá-lo seria uma migração mais uma escrita a cada requisição
+   * autenticada. Ver a linha de `ultimo_acesso`, que é do CLIENTE.
+   */
+  ultima_alteracao: Date | null;
+  /**
+   * A última vez que o FOTÓGRAFO entrou — qualquer requisição autenticada.
+   *
+   * Nulo não quer dizer conta abandonada: a coluna nasceu em 29/09/2026 (ver a
+   * migração 047), e toda conta anterior começa sem marca. A tela diz isso em
+   * vez de desenhar um travessão, que pareceria ausência.
+   */
+  ultimo_acesso_estudio: Date | null;
 }
 
 /**
@@ -112,7 +134,13 @@ export async function panoramaDosEstudios(): Promise<LinhaAdmin[]> {
          join galerias g on g.id = a.galeria_id
         where g.tenant_id = t.id) as ultimo_acesso,
       (select max(m.criado_em) from medias m
-        where m.tenant_id = t.id and m.pronto) as ultimo_envio
+        where m.tenant_id = t.id and m.pronto) as ultimo_envio,
+      greatest(
+        t.atualizado_em,
+        (select max(g.atualizado_em) from galerias g where g.tenant_id = t.id),
+        (select max(m.criado_em) from medias m where m.tenant_id = t.id and m.pronto)
+      ) as ultima_alteracao,
+      t.ultimo_acesso_em as ultimo_acesso_estudio
     from tenants t
     order by t.criado_em desc
   `);
