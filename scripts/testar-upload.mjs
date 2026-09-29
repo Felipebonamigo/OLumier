@@ -127,6 +127,68 @@ await etapa("mime conhecido continua mandando na decisão", async () => {
   return "mime vence a extensão";
 });
 
+/*
+ * ── A TELA AVISA ANTES, EM VEZ DE DEIXAR TENTAR (29/09/2026) ──────────────
+ *
+ * A Carol arrastou 74 fotos e recebeu "0 de 74 — 33 com erro", com o motivo
+ * escondido numa lista que só aparece expandindo a barra. A trava do servidor
+ * estava certa — o e-mail da conta nova dela nunca foi confirmado — mas quem
+ * usa não descobre isso arrastando uma pasta de casamento e vendo erro subir.
+ *
+ * Felipe: "para que os usuários não tenham o mesmo erro, não permita que eles
+ * tentem publicar as imagens sem ter confirmado o e-mail".
+ *
+ * A trava do servidor FICA (ela é quem protege de verdade, e um cliente pode
+ * chamar a rota sem passar pela tela). O que muda é a tela deixar de oferecer
+ * o que vai recusar.
+ */
+/*
+ * A NEGATIVA NÃO É EXERCITÁVEL AQUI, e é honesto dizer por quê: a regra é
+ * "e-mail LIGADO e não confirmado", e no desenvolvimento o envio de e-mail está
+ * desligado — então não existe estado pendente para reproduzir por HTTP. As
+ * três combinações da regra já estão presas, puras, em
+ * `testar-cadastro-protegido.mjs`. O que falta prender é a LIGAÇÃO: a aba Fotos
+ * consultar essa regra e não desenhar o que vai ser recusado.
+ */
+await etapa("a aba Fotos decide o envio pela mesma regra do aviso do painel", async () => {
+  const { readFileSync } = await import("node:fs");
+  const path = (await import("node:path")).default;
+  const raiz = path.resolve(import.meta.dirname, "..");
+  const pagina = readFileSync(
+    path.join(raiz, "src/app/painel/galerias/[id]/fotos/page.tsx"),
+    "utf8",
+  );
+  if (!/precisaConfirmarEmail/.test(pagina)) {
+    throw new Error("a aba Fotos não pergunta se o e-mail está pendente");
+  }
+  /* E que a zona de envio dependa dessa resposta — não basta importar. */
+  const trecho = pagina.match(/<EnviarArquivos[^]*?\/>/)?.[0] ?? "";
+  if (!trecho) throw new Error("não achei a zona de envio na página");
+  const antesDaZona = pagina.slice(0, pagina.indexOf("<EnviarArquivos"));
+  if (!/emailPendente|precisaConfirmarEmail\(/.test(antesDaZona)) {
+    throw new Error("a zona de envio não olha o estado do e-mail antes de aparecer");
+  }
+  /* E que exista explicação no lugar dela: sumir sem dizer por quê é pior que
+     o erro de antes. */
+  if (!/EnvioBloqueadoPorEmail|confirm/i.test(pagina)) {
+    throw new Error("sumiu o envio e não explicou por quê");
+  }
+  return "pergunta antes de oferecer";
+});
+
+await etapa("com o e-mail confirmado, a zona de envio volta", async () => {
+  const html = await (
+    await fetch(`${BASE}/painel/galerias/${galeria.id}/fotos`, {
+      headers: { cookie },
+      cache: "no-store",
+    })
+  ).text();
+  if (!/Arraste a pasta do casamento aqui/.test(html)) {
+    throw new Error("a zona de envio não voltou para quem confirmou");
+  }
+  return "envio normal";
+});
+
 await etapa("recusa quem não está autenticado", async () => {
   const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
     method: "POST",
