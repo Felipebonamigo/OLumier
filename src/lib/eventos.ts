@@ -65,6 +65,10 @@ export const ACOES = {
    * (paga, vencida, cancelada, estornada). Ela não mexe no período pago —
    * então, sem este registro, não sobraria rastro dela aqui. */
   DIFERENCA_DA_TROCA: "assinatura.diferenca",
+  /* Um custo da sociedade criado, mudado ou apagado no caixa dos sócios
+   * (migração 047). A lista decide o resultado do mês que os três sócios
+   * leem — "quem mudou o custo do VPS?" precisa de resposta. */
+  CUSTO_DA_SOCIEDADE: "sociedade.custo",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque
