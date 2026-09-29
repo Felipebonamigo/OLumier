@@ -1805,7 +1805,21 @@ export function GaleriaCliente({
           <section
             key={cap.id}
             id={`cap-${cap.id}`}
-            aria-label={cap.nome || GRUPO_SEM_CAPITULO}
+            /*
+              SÓ CAPÍTULO COM NOME GANHA RÓTULO.
+
+              O `|| GRUPO_SEM_CAPITULO` que estava aqui punha "Outras fotos" na
+              seção das fotos soltas — e numa galeria SEM capítulo nenhum isso
+              inventa um nome que o fotógrafo nunca escolheu. `testar-secoes`
+              guarda exatamente isso ("galeria de fluxo único ganhou um título
+              que não pediu"), e estava certo: sem capítulos não existe grupo,
+              existe a galeria.
+
+              Com capítulos, quem nomeia o grupo das soltas é a pastilha da
+              barra, que já diz "Outras fotos" — ver `testar-secoes`, a etapa
+              logo acima daquela.
+            */
+            aria-label={cap.nome || undefined}
             className="mb-12 scroll-mt-16"
           >
             <GaleriaGrade

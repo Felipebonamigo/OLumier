@@ -169,32 +169,43 @@ try {
    * outro". Com o capítulo ABERTO, a barra já mostra a pastilha dele acesa — e
    * o título da seção repetia o mesmo texto três linhas abaixo.
    *
-   * Fora do capítulo aberto o título CONTINUA: ali ele separa uma seção da
-   * outra enquanto se rola, e a pastilha lá em cima já saiu da tela. As duas
-   * etapas andam juntas de propósito — apagar o título sempre resolveria esta
-   * queixa criando outra, a galeria inteira virando uma tira de fotos sem
-   * divisão nenhuma.
+   * ── A SEGUNDA METADE CAIU EM 29/09/2026 ────────────────────────────────
+   *
+   * Aqui havia uma segunda etapa — "na galeria inteira o título da seção
+   * continua" — com esta justificativa: fora do capítulo aberto a pastilha "já
+   * saiu da tela", então o título seria o que separa uma seção da outra.
+   *
+   * Essa justificativa era FALSA, e dava para conferir sem print: a barra de
+   * capítulos é `sticky top-0` e um `IntersectionObserver` acende a pastilha do
+   * capítulo visível (`menus-da-galeria.tsx`). Ela nunca sai da tela.
+   *
+   * Juan voltou ao assunto no dia seguinte, com o título circulado a caneta:
+   * "ainda aparece ali em cima a 'aba' prévia e embaixo o mesmo título, fica
+   * repetitivo... tire esse 'título', deixe só a 'aba'". O `<h2>` saiu dos dois
+   * casos, e o nome do capítulo ficou na `<section>` por `aria-label`.
+   *
+   * A etapa que sobrou vale para os DOIS casos agora, e é o que este trecho
+   * passa a prender. `testar-capitulo-sem-titulo-repetido.mjs` cuida do resto —
+   * inclusive de a pastilha continuar mostrando o nome, que é a metade que
+   * torna a remoção aceitável.
    */
   const tituloDaSecao = (h) =>
     (h.match(/<h2[^>]*>\s*Festa\s*<\/h2>/gi) ?? []).length;
 
-  await etapa("com o capítulo aberto, o nome dele não aparece duas vezes", async () => {
-    const h = await html("?cap=festa");
-    if (!/festa/i.test(h)) throw new Error("a bancada não tem a Festa — não provaria nada");
-    const titulos = tituloDaSecao(h);
-    if (titulos > 0) {
-      throw new Error(`o título da seção repete o que a pastilha acesa já diz (${titulos}×)`);
-    }
-    return "só na barra";
-  });
-
-  await etapa("na galeria inteira o título da seção continua", async () => {
-    const h = await html("");
-    if (tituloDaSecao(h) === 0) {
-      throw new Error("sem capítulo aberto o título sumiu — a galeria perde a divisão ao rolar");
-    }
-    return "separa as seções";
-  });
+  for (const [caso, busca] of [
+    ["com o capítulo aberto", "?cap=festa"],
+    ["na galeria inteira", ""],
+  ]) {
+    await etapa(`${caso}, o nome do capítulo não aparece duas vezes`, async () => {
+      const h = await html(busca);
+      if (!/festa/i.test(h)) throw new Error("a bancada não tem a Festa — não provaria nada");
+      const titulos = tituloDaSecao(h);
+      if (titulos > 0) {
+        throw new Error(`o título da seção repete o que a pastilha já diz (${titulos}×)`);
+      }
+      return "só na barra";
+    });
+  }
 
   /*
    * O PONTO DESTE ARQUIVO: a 601ª foto da Festa tem de ser alcançável. Antes
