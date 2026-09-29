@@ -344,7 +344,7 @@ try {
   await etapa("no webhook, a diferença desvia ANTES do 'pagou' que renova o período", () => {
     const fonte = readFileSync(new URL("../src/app/api/asaas/webhook/route.ts", import.meta.url), "utf8");
     const desvio = fonte.indexOf('tipoDaReferencia(referencia!) === "diferenca"');
-    const renova = fonte.indexOf("fimDoPeriodoPago(tenant.ciclo_cobranca");
+    const renova = fonte.indexOf("pagoAteDepoisDoAviso(");
     if (desvio < 0 || renova < 0 || desvio > renova) throw new Error("a diferença paga renovaria o período inteiro");
     if (!/plano_do_periodo = plano_id/.test(fonte)) throw new Error("a mensalidade paga não grava o plano do período");
   });

@@ -2,7 +2,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { consultar, consultarUm } from "@/lib/db";
 import { eventoEhNosso, tenantDaReferencia, tipoDaReferencia } from "@/lib/asaas";
-import { efeitoDoEvento, fimDoPeriodoPago } from "@/lib/assinatura";
+import { efeitoDoEvento, pagoAteDepoisDoAviso, type DatasDaCobranca } from "@/lib/assinatura";
 import { PREFIXO_ATOMATIZA } from "@/config/combo";
 import { recalcularCombo, recalcularComboDoCliente } from "@/lib/combo";
 import { aplicarEventoDaDiferenca } from "@/lib/troca-de-plano";
@@ -63,7 +63,12 @@ export async function POST(request: NextRequest) {
 
   let corpo: {
     event?: string;
-    payment?: { externalReference?: string; value?: number; id?: string; customer?: string };
+    payment?: DatasDaCobranca & {
+      externalReference?: string;
+      value?: number;
+      id?: string;
+      customer?: string;
+    };
     subscription?: { externalReference?: string; id?: string; customer?: string };
   };
   try {
@@ -91,9 +96,10 @@ export async function POST(request: NextRequest) {
   }
 
   const tenantId = tenantDaReferencia(referencia!);
-  // O ciclo vem junto porque é ele que diz quanto tempo um pagamento compra.
-  const tenant = await consultarUm<{ id: string; ciclo_cobranca: string }>(
-    "select id, ciclo_cobranca from tenants where id = $1",
+  // O ciclo vem junto porque é ele que diz quanto tempo um pagamento compra; o
+  // `pago_ate`, porque é ele que diz se o aviso é repetição de um já contado.
+  const tenant = await consultarUm<{ id: string; ciclo_cobranca: string; pago_ate: Date | null }>(
+    "select id, ciclo_cobranca, pago_ate from tenants where id = $1",
     [tenantId],
   );
   if (!tenant) {
@@ -122,16 +128,33 @@ export async function POST(request: NextRequest) {
 
   if (efeito === "pagou") {
     /*
-     * O período pago é contado a PARTIR DE AGORA, não somado ao que já havia.
+     * O período pago é contado do DIA DA CONFIRMAÇÃO da cobrança, não somado ao
+     * que já havia e não do momento do aviso.
      *
-     * O Asaas manda PAYMENT_CONFIRMED e PAYMENT_RECEIVED para a mesma cobrança.
-     * Somar daria dois meses por um pagamento — e o erro só apareceria meses
-     * depois, num estúdio com acesso que ninguém pagou. Contar de agora torna o
-     * evento repetido inofensivo: o segundo reescreve o mesmo valor.
+     * O Asaas manda PAYMENT_CONFIRMED e PAYMENT_RECEIVED para a mesma cobrança —
+     * no cartão, com 32 dias entre os dois. Somar daria dois meses por um
+     * pagamento; contar do aviso dava quase um mês a mais, e o RECEIVED tardio
+     * ainda marcava `ativo` quem já tinha cancelado. O aviso que não compra tempo
+     * novo volta `null` e não mexe em nada — nem no status. Ver
+     * `pagoAteDepoisDoAviso`.
+     *
+     * Ler `pago_ate` lá em cima e gravar aqui não disputa com outro aviso: a
+     * fila do Asaas é sequencial (ver o cabeçalho).
      *
      * O PREÇO tem desconto anual, o PERÍODO não: doze meses de disco por dez
      * meses de fatura. Ver `fimDoPeriodoPago`.
      */
+    const pagoAte = pagoAteDepoisDoAviso(
+      evento,
+      corpo.payment,
+      tenant.ciclo_cobranca,
+      tenant.pago_ate,
+      new Date(),
+    );
+    if (!pagoAte) {
+      console.log(`[asaas] ${evento} de cobrança já contada → estúdio ${tenantId} intocado`);
+      return NextResponse.json({ ok: true, ignorado: "cobrança já contada" });
+    }
     await consultar(
       `update tenants
           set status = 'ativo', trial_ate = null,
@@ -140,7 +163,7 @@ export async function POST(request: NextRequest) {
               -- aumentar no meio dele (config/troca-de-plano.ts)
               plano_do_periodo = plano_id, atualizado_em = now()
         where id = $1`,
-      [tenantId, fimDoPeriodoPago(tenant.ciclo_cobranca, new Date())],
+      [tenantId, pagoAte],
     );
     // Cada pagamento nosso também confere o combo. É a rede de segurança: se um
     // aviso do Atomatiza se perdeu, o preço se acerta a cada ciclo.
