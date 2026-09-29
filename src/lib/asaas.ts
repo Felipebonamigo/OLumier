@@ -137,10 +137,13 @@ async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> 
  * Se a pergunta falhar, o split vai como antes: melhor tentar e o Asaas dizer
  * o motivo do que travar toda cobrança por uma consulta auxiliar.
  */
+/* Guardada por endereço da API — e não pela chave: trocar a chave em produção
+   é trocar o `.env`, que reinicia o processo e esvazia isto de qualquer jeito.
+   O endereço é o que muda dentro de um processo, nos testes. */
 const carteiraDaConta = new Map<string, string>();
 
 async function carteiraPropria(): Promise<string | null> {
-  const conta = `${base()}|${process.env.ASAAS_API_KEY ?? ""}`;
+  const conta = base();
   const guardada = carteiraDaConta.get(conta);
   if (guardada) return guardada;
   try {
