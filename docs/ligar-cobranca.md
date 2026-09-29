@@ -71,59 +71,53 @@ por quê.*
 | Carteiras dos sócios | ✅ os três têm conta e mandaram o `walletId` (31/08/2026) |
 | Base do split | **lucro** — a reserva de custo sai antes, ver abaixo |
 | Percentuais | 50/25/25 do lucro |
-| Rateio do custo | **igual** — o custo todo dividido em 3 partes iguais (acordo de 01/09/2026) |
+| Rateio do custo | **proporcional** desde 29/09/2026 — o custo sai na mesma proporção, e o lucro fecha em 50/25/25 (até então era `igual`, em terços) |
 | Caixa da operação | **conta principal** (decisão do Felipe, 01/09/2026) — `ASAAS_CARTEIRA_OPERACAO` fica vazia |
 | Ambiente | `producao` |
 | Variáveis no servidor | ✅ as três `ASAAS_CARTEIRA_*` gravadas em 01/09/2026, split conferido no ar |
 
 ## Como o dinheiro é dividido
 
-O acordo, nas palavras do Felipe em 01/09/2026: **o custo todo é dividido em 3
-partes iguais, e o lucro é 50/25/25.**
+Decisão do Felipe em 29/09/2026, perguntado se o 50/25/25 era do lucro ou da
+receita: **do lucro.** O custo de armazenamento (com a folga cambial) e a taxa
+do Asaas ficam na conta principal; o que sobra é dividido **50% Felipe, 25%
+Carol, 25% Sirius** — cada um banca o custo na mesma proporção da sua fatia.
 
-Em conta, cada sócio recebe `fatia × líquido − custo ÷ 3`. Com R$ 1.000 de
-receita e R$ 529 de custo:
+Por plano, sem combo (o que cada um recebe por cobrança):
 
-| | recebe |
-|---|---|
-| Felipe | R$ 323,67 |
-| Carol | R$ 73,67 |
-| Sirius | R$ 73,67 |
-| **soma** | **R$ 471,00** (o lucro inteiro) |
+| Plano | Preço | Felipe | Carol | Sirius |
+|---|---|---|---|---|
+| 250 GB mensal | R$ 49,99 | R$ 16,54 | R$ 8,27 | R$ 8,27 |
+| 500 GB mensal | R$ 79,99 | R$ 23,63 | R$ 11,81 | R$ 11,81 |
+| 1 TB mensal | R$ 119,99 | R$ 28,13 | R$ 14,05 | R$ 14,05 |
+| 250 GB anual | R$ 499,90 | R$ 152,75 | R$ 76,35 | R$ 76,35 |
+| 500 GB anual | R$ 799,90 | R$ 208,76 | R$ 104,38 | R$ 104,38 |
+| 1 TB anual | R$ 1.199,90 | R$ 223,97 | R$ 111,93 | R$ 111,93 |
 
 A reserva de custo sai antes e fica parada na conta principal até a fatura da
 Backblaze e da Cloudflare chegar. Ninguém adianta dinheiro e ninguém cobra
-ninguém.
+ninguém. Com o combo, o desconto da Galeria sai do lucro, e os três o absorvem
+na mesma proporção (1 TB anual com o combo Estúdio: R$ 102,70 / R$ 51,30 /
+R$ 51,30).
 
-### O que isso faz com a divisão do lucro
+### Como era até 29/09/2026: o custo em terços
 
-Com o custo em partes iguais, **o lucro deixa de sair 50/25/25**. No exemplo
-acima o Felipe fica com 68,7% do lucro, e cada um dos outros com 15,6% — porque
-ele banca um terço de um custo que a fatia dele geraria em metade. É consequência
-aritmética do acordo, não defeito. Quem quiser 50/25/25 do lucro precisa do
-rateio `proporcional`, que é uma palavra em `RATEIO_DO_CUSTO`.
+O acordo de 01/09 dizia "o custo todo dividido em 3 partes iguais, e o lucro
+50/25/25" — o que, na conta, não fecha: com o custo em terços, cada um recebia
+`fatia × líquido − custo ÷ 3`, e o lucro saía 68/16/16 no plano de 1 TB mensal.
+Nas faixas de margem curta a parte da Carol e do Sirius ficava negativa, travava
+em zero e o Felipe cobria a diferença (o anual de 1 TB com combo Estúdio, e os
+anuais de 5 e 10 TB). Nenhuma assinatura existia quando mudou.
 
-### Onde o acordo encosta no limite
+Em 31/08/2026 o Felipe chegou a pedir a divisão da receita cheia, com o custo
+acertado por fora. Ficou um dia assim e voltou: da faixa de 2 TB para cima, no
+pior caso (espaço 100% cheio), metade da receita é **menos** que a reserva do
+plano — num ano de 10 TB o descoberto chegaria a **R$ 5.501,75**, adiantados por
+quem opera. `scripts/testar-planos.mjs` continua medindo esse número quando a
+base é `receita`.
 
-Quando o custo passa de **75% da receita**, um terço dele fica maior que a fatia
-de quem tem 25% — ou seja, a Carol e o Sirius deveriam PAGAR. Split negativo não
-existe, então a fatia deles trava em zero e o que sobra vai para o Felipe (nunca
-para a reserva: essa é intocável).
-
-Acontece em seis planos, todos anuais: 5 TB e 10 TB nos três segmentos. Num anual
-de 10 TB (R$ 7.999,90) a Carol e o Sirius ficam com **zero** e o Felipe com
-R$ 840,82. `scripts/testar-planos.mjs` lista esses planos a cada execução, para
-a consequência não sumir de vista.
-
-Em 31/08/2026 o Felipe pediu a divisão da receita cheia, com o custo acertado por
-fora. Ficou um dia assim e voltou, por causa deste número: da faixa de 2 TB para
-cima, no pior caso (espaço 100% cheio), metade da receita é **menos** que a
-reserva do plano — e num ano de 10 TB o descoberto chega a **R$ 5.501,75**,
-adiantados por quem opera. `scripts/testar-planos.mjs` continua medindo e
-imprimindo esse número quando a base é `receita`, para a conta não sumir junto
-com a decisão.
-
-Trocar de volta é uma palavra: `BASE_DO_SPLIT` em `src/config/socios.ts`.
+Trocar qualquer uma das duas regras é uma palavra em `src/config/socios.ts`:
+`BASE_DO_SPLIT` (lucro ou receita) e `RATEIO_DO_CUSTO` (proporcional ou igual).
 
 ### A reserva varia MUITO com o plano
 
@@ -179,7 +173,8 @@ não pertence a cobrança nenhuma e não teria como ser rateado por cobrança se
 mudar de valor a cada cliente novo (ver `src/config/custos-fixos.ts`).
 
 Se o acordo entre os sócios divide o custo fixo, ele precisa ser acertado **por
-fora, uma vez por mês** — R$ 43,11 para cada um, com a lista de três. Nenhum
+fora, uma vez por mês** — com o lucro em 50/25/25, na mesma proporção:
+R$ 64,67 / R$ 32,33 / R$ 32,33. Nenhum
 split de pagamento resolve isso, porque o Asaas divide cobrança por cobrança e
 não conhece o total do mês.
 

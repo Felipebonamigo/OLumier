@@ -440,11 +440,10 @@ await etapa("o split do anual respeita a base declarada", () => {
       const anual = precoDoCicloCentavos(p.precoCentavos, "anual");
       const fatias = montarFatias(p.id, anual, "anual");
       /*
-       * Com o custo em TERÇOS, sócio de 25% pode ficar de fora: quando o custo
-       * passa de 75% da receita, o terço dele é maior que a fatia, e ele
-       * deveria PAGAR — coisa que um split não sabe fazer, então a fatia dele
-       * trava em zero. Não é defeito, é o acordo encostando no limite; o teste
-       * anota QUAIS planos fazem isso, porque é informação de negócio.
+       * Só o custo em TERÇOS (`igual`, até 29/09/2026) deixava sócio de fora:
+       * quando o custo passava de 75% da receita, o terço dele era maior que a
+       * fatia. Com o lucro em 50/25/25 (`proporcional`) isso não acontece —
+       * então aqui, faltar fatia é defeito, e o teste reprova.
        */
       if (fatias.length !== SOCIOS.length) {
         if (RATEIO_DO_CUSTO !== "igual") {

@@ -189,6 +189,13 @@ export const BASE_DO_SPLIT: BaseDoSplit = "lucro";
 /**
  * ── QUEM PAGA O CUSTO ─────────────────────────────────────────────────────
  *
+ * `proporcional` desde 29/09/2026. Felipe, perguntado se o 50/25/25 da Galeria
+ * era do lucro ou da receita: "do lucro, troca e publica". Até então valia
+ * `igual` (acordo de 01/09), que deixava o lucro fora do 50/25/25 — no plano de
+ * 1 TB mensal, 68% para o Felipe e 16% para cada um dos outros —, e que zerava
+ * a Carol e o Sirius nas faixas de margem curta (o anual de 1 TB com combo).
+ * Nenhuma assinatura existia quando mudou: não há split antigo a corrigir.
+ *
  * `proporcional` — o custo sai do bolo antes, e o que sobra é dividido
  *                  50/25/25. Cada um banca o custo na proporção da fatia dele.
  *
@@ -211,11 +218,13 @@ export const BASE_DO_SPLIT: BaseDoSplit = "lucro";
  * ⚠️ O CUSTO FIXO NÃO ESTÁ AQUI. A reserva conhece armazenamento (Backblaze e
  * Cloudflare) e a taxa do Asaas. DAS-MEI, VPS e domínio (R$ 129,33/mês) não
  * pertencem a cobrança nenhuma e não têm como ser rateados por cobrança — o
- * Asaas divide uma de cada vez e não sabe o total do mês. Esse terço é acerto
- * mensal por fora, R$ 43,11 para cada um. Ver `config/custos-fixos.ts`.
+ * Asaas divide uma de cada vez e não sabe o total do mês. Ele é acerto mensal
+ * por fora — e, para o lucro fechar em 50/25/25 (29/09/2026), na mesma
+ * proporção: R$ 64,67 / R$ 32,33 / R$ 32,33 do total de R$ 129,33. Ver
+ * `config/custos-fixos.ts`.
  */
 export type RateioDoCusto = "proporcional" | "igual";
-export const RATEIO_DO_CUSTO: RateioDoCusto = "igual";
+export const RATEIO_DO_CUSTO: RateioDoCusto = "proporcional";
 
 /**
  * O CAIXA DA OPERAÇÃO — a quarta carteira, opcional.
