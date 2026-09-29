@@ -49,8 +49,26 @@ const TITULO_MEDIO = [2, 7, 3.75] as const; //     32 → 60 px (convite, dividi
 const TITULO_MIUDO = [1.75, 7, 3] as const; //     28 → 48 px (redonda, arco, mínima)
 type BaseDoTitulo = typeof TITULO_GRANDE | typeof TITULO_MEDIO | typeof TITULO_MIUDO;
 
-export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia: Aparencia }) {
+export function GaleriaCapa({
+  dados,
+  aparencia,
+  ilustracao = false,
+}: {
+  dados: DadosCapa;
+  aparencia: Aparencia;
+  /**
+   * A capa como ILUSTRAÇÃO de outra página — as galerias de exemplo da home.
+   *
+   * O nome do casal é o `<h1>` da galeria, e na galeria está certo: é o título
+   * da página. Na home, onde doze capas de exemplo aparecem juntas, eram doze
+   * `<h1>` com nome de casal fictício acima do título de verdade da página —
+   * medido no ar em 29/09/2026 pela auditoria de SEO. Aqui o título vira `<p>`,
+   * com o mesmo desenho.
+   */
+  ilustracao?: boolean;
+}) {
   const fonteTitulo = FONTES_TITULO[aparencia.tipografia];
+  const TagDoTitulo = ilustracao ? "p" : "h1";
   const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl, capaEscolhida } = dados;
   const legenda = [dataFormatada, subtitulo].filter(Boolean).join(" · ");
 
@@ -278,13 +296,14 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
       /*
        * O container de medida é uma `div` e não o `h1`: `container-type` só
        * responde por quem está DENTRO do elemento, então o próprio `h1` não
-       * poderia se medir contra si mesmo.
+       * poderia se medir contra si mesmo. (`TagDoTitulo` é o `h1`, ou um `p`
+       * quando a capa é ilustração — ver a prop `ilustracao`.)
        *
        * Ela não leva classe nenhuma de propósito: `text-align` é herdado do
        * pai de cada capa, e é lá que o eixo de alinhamento é aplicado.
        */
       <div style={{ containerType: "inline-size", width: "100%" }}>
-        <h1
+        <TagDoTitulo
           /* `text-balance` reparte bem um título de várias palavras — e, quando
              a quebra DENTRO da palavra está liberada, o balanceador escolhe o
              mínimo e escreve o nome uma letra por linha. Os dois não convivem. */
@@ -318,7 +337,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
                 </span>
               ))
             : titulo}
-        </h1>
+        </TagDoTitulo>
       </div>
     );
   };

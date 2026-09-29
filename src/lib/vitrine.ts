@@ -1,7 +1,13 @@
 import "server-only";
 import { consultar, consultarUm } from "./db";
 import { marca } from "@/config/marca";
-import type { Site } from "./site-estudio";
+import {
+  paragrafos,
+  secoesComConteudo,
+  urlDoInstagram,
+  urlDoWhatsapp,
+  type Site,
+} from "./site-estudio";
 
 /**
  * O QUE A VITRINE DO ESTÚDIO LÊ DO BANCO — num lugar só.
@@ -134,4 +140,74 @@ export function enderecoDaVitrine(t: {
 }): string {
   if (t.dominio_proprio && t.dominio_verificado_em) return `https://${t.dominio_proprio}`;
   return `https://${t.slug}.${marca.dominio}`;
+}
+
+/** Teto do resumo: o que o Google mostra sem cortar no meio da frase. */
+const TETO_DA_DESCRICAO = 155;
+
+/**
+ * O resumo da vitrine no Google e no cartão do link — sempre palavras DO
+ * ESTÚDIO, nunca uma frase nossa.
+ *
+ * A ordem é a do que o fotógrafo escolheu dizer primeiro:
+ *
+ *   1. a frase da capa;
+ *   2. o começo do "sobre" — mas só com o site LIGADO, porque desligado o
+ *      "sobre" não aparece na página, e resumo que promete o que a página não
+ *      mostra é o que o buscador pune;
+ *   3. só então o genérico com o nome.
+ *
+ * O degrau 2 entrou em 29/09/2026: a vitrine da Caroline, medida no ar, saía
+ * como "Galerias de Caroline Tedesco" — 28 caracteres, e o Google troca uma
+ * descrição curta dessas por um trecho qualquer da página.
+ */
+export function descricaoDaVitrine(nome: string, site: Site): string {
+  if (site.frase) return site.frase;
+  const sobre = site.ligado ? paragrafos(site.sobre)[0]?.replace(/\s+/g, " ") : undefined;
+  if (sobre) {
+    if (sobre.length <= TETO_DA_DESCRICAO) return sobre;
+    const corte = sobre.slice(0, TETO_DA_DESCRICAO - 1);
+    return `${corte.slice(0, corte.lastIndexOf(" ")).replace(/[\s,;:.]+$/, "")}…`;
+  }
+  return `Galerias de fotos de ${nome}.`;
+}
+
+/**
+ * QUEM É O ESTÚDIO, para o buscador — o bloco estruturado da vitrine
+ * (29/09/2026).
+ *
+ * `Organization`, e não `LocalBusiness`/`ProfessionalService`: esses dois são
+ * de negócio com ENDEREÇO, que é campo obrigatório para o Google — e o site do
+ * estúdio não pede endereço. Com o tipo de loja, cada vitrine viraria um erro
+ * no relatório do Search Console; com `Organization`, nada é obrigatório além
+ * do que já existe.
+ *
+ * Só entra o que a página MOSTRA. O contato (WhatsApp, Instagram, e-mail) só
+ * aparece com a seção de contato no ar — site ligado e algum canal preenchido
+ * —, então só então entra aqui. A imagem é o cartão de link, que tem endereço
+ * estável; a logo e as fotos vivem atrás de link assinado que expira.
+ */
+export function dadosEstruturadosDaVitrine(
+  t: { slug: string; nome_estudio: string },
+  site: Site,
+  endereco: string,
+  descricao: string,
+) {
+  const contato = site.ligado && secoesComConteudo(site).includes("contato");
+  const perfis = contato ? [urlDoInstagram(site.instagram)].filter(Boolean) : [];
+  const whatsapp = contato ? urlDoWhatsapp(site.whatsapp) : null;
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": `${endereco}#estudio`,
+    name: t.nome_estudio,
+    url: endereco,
+    description: descricao,
+    image: `https://${marca.dominio}/e/${t.slug}/opengraph-image`,
+    ...(perfis.length ? { sameAs: perfis } : {}),
+    ...(contato && site.email ? { email: site.email } : {}),
+    ...(whatsapp
+      ? { contactPoint: { "@type": "ContactPoint", contactType: "customer service", url: whatsapp } }
+      : {}),
+  };
 }

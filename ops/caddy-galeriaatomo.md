@@ -40,10 +40,11 @@ galeriaatomo.com.br, www.galeriaatomo.com.br {
 }
 ```
 
-> **O `www` não precisa de `redir` aqui.** Desde 26/09/2026 o próprio app
-> manda `www.galeriaatomo.com.br` para a raiz com 308 (`src/proxy.ts`), menos a
-> `/api`. Antes os dois nomes respondiam 200 com a mesma página, e para o
-> buscador eram dois sites com o conteúdo copiado.
+> **O `www`, medido no ar em 29/09/2026, já chega redirecionado à raiz** — o
+> servidor tem um redirecionamento que o bloco acima não mostra. O app faz o
+> mesmo desde 26/09/2026 (`src/proxy.ts`, 308, menos a `/api`), como segunda
+> camada: se o Caddy um dia servir os dois nomes com 200, o buscador continua
+> vendo um site só, e não dois com o conteúdo copiado.
 
 ## 2. O matcher do subdomínio de estúdio — **não existe mais**
 

@@ -201,9 +201,11 @@ etapa("a cor do título NÃO mexe nas variáveis do tema", () => {
 
 etapa("a capa pinta o NOME com ela, e só quando ela existe", () => {
   const capa = readFileSync(path.join(RAIZ, "src/components/galeria-capa.tsx"), "utf8");
-  const h1 = capa.slice(capa.indexOf("<h1"), capa.indexOf("</h1>"));
-  if (!/corTitulo \? \{ color: corTitulo \}/.test(h1)) {
-    throw new Error("o <h1> da capa não usa a cor do título");
+  /* `TagDoTitulo` é o `<h1>` da galeria (um `<p>` só quando a capa é
+     ilustração na home) — o elemento que carrega o nome, nos dois casos. */
+  const h1 = capa.slice(capa.indexOf("<TagDoTitulo"), capa.indexOf("</TagDoTitulo>"));
+  if (!h1 || !/corTitulo \? \{ color: corTitulo \}/.test(h1)) {
+    throw new Error("o título da capa não usa a cor do título");
   }
   if (!/const corTitulo = aparencia\.cores\?\.titulo/.test(capa)) {
     throw new Error("a capa não lê `cores.titulo`");

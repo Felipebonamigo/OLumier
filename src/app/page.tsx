@@ -9,7 +9,7 @@ import { Revelar } from "@/components/revelar";
 import { OPCOES, PRESETS } from "@/config/aparencia";
 import { ESPACOS, formatarGb, formatarReais } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
-import { metadadosDaCasa } from "@/lib/metadados";
+import { dadosEstruturadosDaCasa, jsonLd, metadadosDaCasa } from "@/lib/metadados";
 import { DOMINIO_PROPRIO_LIBERADO, VIDEO_LIBERADO } from "@/config/lancamentos";
 import {
   GALERIA_EM_DESTAQUE,
@@ -938,6 +938,12 @@ export default async function Home() {
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_LD).replace(/</g, "\\u003c") }}
+          />
+          {/* Quem é a casa (site, organização, produto) — ver
+              `dadosEstruturadosDaCasa` em lib/metadados.ts. */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: jsonLd(dadosEstruturadosDaCasa(DESCRICAO)) }}
           />
           <div className="mt-10 border-t border-[var(--h-linha)]">
             {FAQ.map((p) => (

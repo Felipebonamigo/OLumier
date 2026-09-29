@@ -4,8 +4,11 @@ import { resolverEstudio } from "@/lib/endereco";
 import { marca } from "@/config/marca";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { iconeDoEstudio } from "@/lib/icone-do-estudio";
+import { jsonLd } from "@/lib/metadados";
 import {
   buscarEstudio,
+  dadosEstruturadosDaVitrine,
+  descricaoDaVitrine,
   enderecoDaVitrine,
   galeriaDoTopo,
   galeriasDaVitrine,
@@ -53,9 +56,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const t = await buscarEstudio(estudio);
   if (!t) return { title: "Estúdio" };
   const site = lerSite(t.site);
-  // A frase da capa é o que o fotógrafo escolheu dizer primeiro — serve melhor
-  // como resumo no Google e no WhatsApp que um texto genérico nosso.
-  const descricao = site.frase || `Galerias de ${t.nome_estudio}`;
+  const descricao = descricaoDaVitrine(t.nome_estudio, site);
   const endereco = `${enderecoDaVitrine(t)}/`;
 
   /*
@@ -152,6 +153,20 @@ export default async function EstudioPage({ params }: Props) {
       className="min-h-dvh"
       style={{ ...TEMAS[site.tema], background: "var(--g-fundo)", color: "var(--g-texto)" }}
     >
+      {/* Quem é o estúdio, para o buscador — ver `dadosEstruturadosDaVitrine`. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLd(
+            dadosEstruturadosDaVitrine(
+              t,
+              site,
+              `${enderecoDaVitrine(t)}/`,
+              descricaoDaVitrine(t.nome_estudio, site),
+            ),
+          ),
+        }}
+      />
       {secoes.length > 2 && (
         <Menu secoes={secoes} site={site} cor={t.cor_destaque} fonteTitulo={fonteTitulo} />
       )}
@@ -288,6 +303,13 @@ function Capa({
         leitor de tela anunciar. Justamente a página que existe para o casal
         ACHAR o fotógrafo. Não dava para ver lendo o código, só contando as tags
         do HTML pronto — ver `scripts/testar-vitrine.mjs`.
+
+        E o nome vai em TEXTO também quando há logo (29/09/2026). Com a imagem
+        sozinha, o `<h1>` existia mas só tinha o `alt` dentro: a auditoria no
+        ar leu a vitrine da Caroline como "h1 vazio", e é assim que a lê todo
+        robô que não interpreta imagem. O texto fica só para leitor de tela e
+        buscador (`sr-only`); a logo sai com `alt` vazio para o nome não ser
+        anunciado duas vezes.
       */}
       <h1
         className={
@@ -296,12 +318,15 @@ function Capa({
         style={urlLogo ? undefined : { fontFamily: fonteTitulo }}
       >
         {urlLogo ? (
-          // eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária
-          <img
-            src={urlLogo}
-            alt={nome}
-            className="mx-auto max-h-24 w-auto max-w-[min(20rem,80vw)] object-contain"
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
+            <img
+              src={urlLogo}
+              alt=""
+              className="mx-auto max-h-24 w-auto max-w-[min(20rem,80vw)] object-contain"
+            />
+            <span className="sr-only">{nome}</span>
+          </>
         ) : (
           nome
         )}

@@ -112,8 +112,14 @@ de link dizia "Galeria Átomo", a aba terminava em "· Galeria Átomo", e
   lista só a vitrine.
 - **Ícone da aba.** A logo do estúdio, ou nenhum — nunca o átomo da plataforma
   (`lib/icone-do-estudio.ts`).
+- **`<h1>` com texto e descrição do estúdio (29/09/2026).** Com logo, o nome vai
+  também em texto dentro do `<h1>` (só para leitor de tela e buscador). A
+  descrição é a frase da capa; sem ela, o começo do "sobre" (só com o site
+  ligado); só então o genérico. E um bloco `Organization` com o endereço
+  canônico e, se a seção de contato estiver no ar, os canais dela.
 
-`scripts/testar-seo.mjs` prende os quatro.
+`scripts/testar-seo.mjs` prende tudo isso. O plano geral de SEO está em
+`docs/seo.md`.
 
 ## Aberto
 

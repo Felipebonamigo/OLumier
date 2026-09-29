@@ -71,6 +71,11 @@ const meta = (html, nome) =>
   html.match(new RegExp(`<meta (?:property|name)="${nome}" content="([^"]*)"`))?.[1] ?? null;
 const canonico = (html) => html.match(/<link rel="canonical" href="([^"]*)"/)?.[1] ?? null;
 const titulo = (html) => html.match(/<title>([^<]*)<\/title>/)?.[1] ?? null;
+/** Todos os blocos `application/ld+json` da página, já lidos. */
+const blocosEstruturados = (html) =>
+  [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) =>
+    JSON.parse(m[1]),
+  );
 /* O Next escreve a raiz sem a barra final; as duas formas são o mesmo endereço. */
 const semBarra = (u) => (u ?? "").replace(/\/$/, "");
 
@@ -134,10 +139,10 @@ await etapa("a FAQ da home existe como dado estruturado, e diz a verdade", async
    * página não tem é a receita da penalidade manual.
    */
   const r = await pegar("/");
-  const m = r.corpo.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-  if (!m) throw new Error("sem bloco ld+json — a FAQ não vira resultado expandido");
-  const dados = JSON.parse(m[1]);
-  if (dados["@type"] !== "FAQPage") throw new Error(`@type é ${dados["@type"]}, não FAQPage`);
+  /* A home tem MAIS de um bloco desde 29/09/2026 (a FAQ e o de quem é a
+     casa): procura-se o FAQPage entre eles, não o primeiro que aparecer. */
+  const dados = blocosEstruturados(r.corpo).find((b) => b["@type"] === "FAQPage");
+  if (!dados) throw new Error("sem bloco FAQPage — a FAQ não vira resultado expandido");
   const perguntas = dados.mainEntity ?? [];
   if (perguntas.length < 4) throw new Error(`só ${perguntas.length} perguntas no bloco`);
   for (const p of perguntas) {
@@ -192,6 +197,66 @@ await etapa("a home tem descrição que cabe inteira no resultado de busca", () 
     throw new Error(`descrição com ${descricao.length} caracteres — fora de 110 a 160`);
   }
   return `${descricao.length} caracteres`;
+});
+
+await etapa("a home tem um <h1> só — o dela", () => {
+  /*
+   * Medido no ar em 29/09/2026: doze. As galerias de exemplo usam a capa de
+   * verdade, e a capa marca o nome do casal como `<h1>` — na galeria, é o
+   * título da página; na home, eram doze nomes fictícios competindo com o
+   * título real. Ver a prop `ilustracao` de `GaleriaCapa`.
+   */
+  const h1s = [...home.matchAll(/<h1[\s>]/g)].length;
+  if (h1s !== 1) throw new Error(`${h1s} <h1> na home`);
+});
+
+await etapa("a home diz quem é: site, organização e produto com o preço que mostra", async () => {
+  /*
+   * `WebSite` dá o nome que o Google escreve acima do resultado; `Organization`
+   * diz quem responde; `SoftwareApplication` diz o que se compra. O preço é o
+   * PISO da grade (`ESPACOS[0]`) — e a etapa confere que a home mostra esse
+   * mesmo número, porque dado estruturado que promete o que a página não diz
+   * é o que o Google pune.
+   */
+  const { ESPACOS, formatarReais } = await import("../src/config/planos.ts");
+  const grafo = blocosEstruturados(home).find((b) => Array.isArray(b["@graph"]))?.["@graph"] ?? [];
+  const tipo = (t) => grafo.find((n) => n["@type"] === t);
+  for (const t of ["WebSite", "Organization", "SoftwareApplication"]) {
+    if (!tipo(t)) throw new Error(`sem ${t} no bloco da casa`);
+  }
+  if (tipo("WebSite").name !== marca.nome) throw new Error(`WebSite.name é ${tipo("WebSite").name}`);
+  const oferta = tipo("SoftwareApplication").offers ?? {};
+  const piso = (ESPACOS[0].precoCentavos / 100).toFixed(2);
+  if (oferta.lowPrice !== piso || oferta.priceCurrency !== "BRL") {
+    throw new Error(`oferta ${oferta.lowPrice} ${oferta.priceCurrency}, esperava ${piso} BRL`);
+  }
+  /* O mesmo número tem de estar na página que as pessoas leem. */
+  const visivel = formatarReais(ESPACOS[0].precoCentavos).replace(/\s/g, " ");
+  if (!home.replace(/&nbsp;|\u00a0/g, " ").includes(visivel)) {
+    throw new Error(`a home não mostra ${visivel} — o bloco promete um preço que a página não diz`);
+  }
+  /* Sem nota inventada: não há avaliação real para mostrar. */
+  if (/aggregateRating|"review"/.test(JSON.stringify(grafo))) throw new Error("avaliação no bloco");
+  return `a partir de ${visivel}`;
+});
+
+await etapa("o /llms.txt resume a casa com o que ela já publica", async () => {
+  /*
+   * Buscador de resposta (ChatGPT, Claude, Perplexity) lê este arquivo para
+   * saber o que o site é. Ele sai de `marca.ts` e `planos.ts` — e não pode
+   * prometer vídeo enquanto `VIDEO_LIBERADO` estiver desligado: é a mesma
+   * trava da home, num lugar que ninguém lembraria de reler.
+   */
+  const r = await pegar("/llms.txt");
+  if (r.status !== 200) throw new Error(`HTTP ${r.status}`);
+  if (!r.corpo.startsWith(`# ${marca.nome}`)) throw new Error("não abre com o nome da marca");
+  const { ESPACOS, formatarReais } = await import("../src/config/planos.ts");
+  if (!r.corpo.includes(formatarReais(ESPACOS[0].precoCentavos))) throw new Error("sem o piso de preço");
+  const { VIDEO_LIBERADO } = await import("../src/config/lancamentos.ts");
+  if (!VIDEO_LIBERADO && /v[íi]deo|filme|4K|filmmaker/i.test(r.corpo)) {
+    throw new Error("fala de vídeo com VIDEO_LIBERADO desligado");
+  }
+  return `${r.corpo.split("\n").length} linhas`;
 });
 
 await etapa("o www manda para o domínio canônico, e a API fica onde está", async () => {
@@ -454,6 +519,40 @@ await etapa("a aba da vitrine é do estúdio: o nome dele, e nunca o nosso ícon
   }
 });
 
+await etapa("com logo, o <h1> da vitrine ainda diz o nome em texto", async () => {
+  /* Medido no ar em 29/09/2026: a vitrine com logo tinha um <h1> só com a
+     imagem dentro — "h1 vazio" para todo robô que não lê imagem. A chave não
+     precisa existir no armazém: a página só assina o link. */
+  await db.query("update tenants set logo_chave = $1 where id = $2", ["logos/teste-seo.png", g.estudio.id]);
+  try {
+    const html = (await pegarComo("/", hostEstudio)).corpo;
+    const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/)?.[1] ?? "";
+    if (!h1.includes("<img")) throw new Error("a logo não está no <h1>");
+    const texto = h1.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (texto !== nomeEstudio) throw new Error(`o texto do <h1> é "${texto}"`);
+  } finally {
+    await db.query("update tenants set logo_chave = null where id = $1", [g.estudio.id]);
+  }
+});
+
+await etapa("sem frase, a descrição da vitrine vem do 'sobre' — e só com o site ligado", async () => {
+  const sobre = "Fotografia de casamento no litoral gaúcho, com calma e sem pose.";
+  const desc = async (site) => {
+    await db.query("update tenants set site = $1 where id = $2", [JSON.stringify(site), g.estudio.id]);
+    return meta((await pegarComo("/", hostEstudio)).corpo, "description");
+  };
+  try {
+    const ligado = await desc({ ligado: true, sobre });
+    if (ligado !== sobre) throw new Error(`site ligado: descrição "${ligado}"`);
+    /* Desligado, o "sobre" não aparece na página — e o resumo não pode prometer
+       o que a página não mostra. */
+    const desligado = await desc({ ligado: false, sobre });
+    if (desligado?.includes("litoral")) throw new Error("usou o 'sobre' com o site desligado");
+  } finally {
+    await db.query("update tenants set site = '{}'::jsonb where id = $1", [g.estudio.id]);
+  }
+});
+
 await etapa("o cartão da vitrine é do estúdio", async () => {
   if (meta(vitrine, "og:title") !== nomeEstudio) throw new Error(`og:title é ${meta(vitrine, "og:title")}`);
   if (meta(vitrine, "og:site_name") !== nomeEstudio) throw new Error("og:site_name é o da plataforma");
@@ -470,6 +569,34 @@ await etapa("o cartão da vitrine é do estúdio", async () => {
     throw new Error(`o cartão da vitrine não veio PNG (HTTP ${png.status})`);
   }
   return `${Math.round(bytes.length / 1024)} KB`;
+});
+
+await etapa("a vitrine diz quem é o estúdio — e o contato só quando a página mostra", async () => {
+  const org = blocosEstruturados(vitrine).find((b) => b["@type"] === "Organization");
+  if (!org) throw new Error("sem bloco Organization na vitrine");
+  if (org.name !== nomeEstudio) throw new Error(`name é ${org.name}`);
+  if (semBarra(org.url) !== enderecoEstudio) throw new Error(`url é ${org.url}, e não o canônico`);
+  /* A bancada nasce com o site desligado: a seção de contato não aparece, e o
+     bloco não pode anunciar um canal que a página esconde. */
+  if (org.contactPoint || org.sameAs || org.email) throw new Error("contato no bloco com o site desligado");
+
+  await db.query("update tenants set site = $1 where id = $2", [
+    JSON.stringify({ ligado: true, instagram: "estudio.teste", whatsapp: "5551999998888" }),
+    g.estudio.id,
+  ]);
+  try {
+    const ligado = blocosEstruturados((await pegarComo("/", hostEstudio)).corpo).find(
+      (b) => b["@type"] === "Organization",
+    );
+    if (!ligado?.sameAs?.includes("https://instagram.com/estudio.teste")) {
+      throw new Error("com o contato no ar, o Instagram não entrou em sameAs");
+    }
+    if (!ligado.contactPoint?.url?.includes("wa.me/5551999998888")) {
+      throw new Error("com o contato no ar, o WhatsApp não entrou");
+    }
+  } finally {
+    await db.query("update tenants set site = '{}'::jsonb where id = $1", [g.estudio.id]);
+  }
 });
 
 await etapa("a vitrine aponta um endereço canônico, venha por onde vier", async () => {
