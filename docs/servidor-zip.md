@@ -39,7 +39,7 @@ navegador ──(3) GET /z/<id>.<hmac>────▶ servidor de ZIP (Hetzner)
                                         │ (4) pede o MANIFESTO ao app
                                         │ (5) monta uma vez → disco, ou serve do disco
           ◀─(6) application/zip ────────┤ com Range: retomável
-                                        └ (7) RELATA ao app: montado / servido / abortado
+                                        └ (7) RELATA ao app: montado / servido / trecho / abortado
 ```
 
 **O servidor não tem banco, nem credencial de bucket, nem cookie.** Tudo que
@@ -186,6 +186,18 @@ tamanho sugerido ("aumente o volume para pelo menos X GB"), calculado pelos
 ZIPs completos distintos dos últimos 14 dias ÷ 0,85. A fração "do arquivo
 guardado" conta só galeria inteira e capítulo: favoritas nunca são guardadas.
 
+**Entregue, trecho e queda (29/09/2026, migração 050).** "Entregue"
+(`servido`) é o pedido que chegou ao **último byte** do ZIP — inteiro, ou
+retomado do meio com Range. Um Range que termina antes do fim (os pedaços de
+um acelerador de download) é `trecho`: conta tráfego, não conta entrega nem
+vira linha na Atividade. Conexão que fecha antes do fim é `abortado`, e o app
+marca como `retomado` quando a mesma pessoa completa o mesmo ZIP em até 12 h
+(o mesmo pedido, o mesmo IP ou a mesma pessoa identificada). O aviso de
+"downloads caindo" olha só o abortado que **não** foi retomado: o navegador
+fecha conexão sem o download cair (o Chrome do Android reabre o link no
+gerenciador do sistema; o "Retomar" pede o resto numa conexão nova). As quedas
+pelo VPS não são reconhecidas como retomadas — lá não há pedido gravado.
+
 **E-mail semanal.** O vigia do VPS (`ops/fotonio-vigia.sh`) pergunta uma vez
 por semana a `scripts/avisos-da-entrega.mjs` se o bloco tem aviso de erro e,
 se tiver, manda pelo mesmo Resend do "site fora do ar" (`ALERTA_EMAIL_DESTINO`
@@ -223,7 +235,11 @@ Os degraus previstos, quando os avisos começarem a aparecer:
 - `scripts/testar-servidor-zip.mjs` — o servidor de verdade num processo
   filho, com app e balde falsos: montagem única com dois cliques simultâneos,
   nova tentativa numa foto que caiu, ZIP julgado por descompactador de verdade,
-  terceiro clique sem tocar o balde, Range, HEAD, favoritas em fluxo, download
-  abandonado relatado como abortado.
+  terceiro clique sem tocar o balde, Range (o que chega ao fim é `servido`, o
+  do meio é `trecho`), HEAD, favoritas em fluxo, download abandonado relatado
+  como abortado.
+- `scripts/testar-zip-retomado.mjs` — contra o banco: a queda que a mesma
+  pessoa completou depois vira `retomado`, a de outra pessoa ou de outro
+  capítulo não, e o `trecho` não aparece na Atividade.
 - `scripts/testar-metricas-entrega.mjs` — cada aviso do painel provocado de
   propósito.

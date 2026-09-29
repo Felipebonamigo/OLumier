@@ -124,9 +124,18 @@ async function servirDoDisco(
     console.error(`falha servindo ${chave}:`, (e as Error).message);
     res.destroy();
   }
+  /*
+   * ENTREGA É O ÚLTIMO BYTE, não a resposta que terminou (29/09/2026).
+   *
+   * Um Range que para antes do fim — os pedaços de um acelerador de download —
+   * terminava como 'servido', e cada pedaço virava um "baixou tudo" na
+   * Atividade. Agora é 'trecho': conta tráfego e nada mais. O pedido que chega
+   * ao fim, inteiro ou retomado do meio, é o que entrega o ZIP.
+   */
+  const chegouAoFim = fim === tamanho - 1;
   void relatar({
     pedidoId: manifesto.pedidoId,
-    evento: saida.completo ? "servido" : "abortado",
+    evento: !saida.completo ? "abortado" : chegouAoFim ? "servido" : "trecho",
     bytes: saida.bytes,
     doCache,
     duracaoMs: Date.now() - comeco,
