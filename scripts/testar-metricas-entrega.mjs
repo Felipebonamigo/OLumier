@@ -56,6 +56,8 @@ const somas = (over = {}) => ({
   abortadosN: 0,
   abortadosBytes: 0,
   abortadosVpsBytes: 0,
+  quedasN: 0,
+  trechosBytes: 0,
   avulsosN: 0,
   bytesPorMedia: 5 * 1024 * 1024,
   guardaveisServidosN: 0,
@@ -225,9 +227,43 @@ await etapa("sem montagem para medir, não há tamanho sugerido nem aviso de dis
   semAviso(r, "disco do servidor de ZIP");
 });
 
-await etapa("muitos downloads caindo no meio é avisado", () => {
-  const r = resumoDeTrafego(somas({ servidosServidorN: 6, abortadosN: 5, abortadosBytes: GB }), contexto());
-  temAviso(r, "alerta", "caíram no meio");
+await etapa("muitos downloads caindo de verdade é avisado", () => {
+  const r = resumoDeTrafego(
+    somas({ servidosServidorN: 6, abortadosN: 5, quedasN: 5, abortadosBytes: GB }),
+    contexto(),
+  );
+  temAviso(r, "alerta", "5 de 11 downloads de ZIP caíram");
+});
+
+await etapa("conexão fechada que foi retomada NÃO é queda (o print de 29/09/2026)", () => {
+  /* 13 conexões fechadas antes do fim, 8 entregas: o painel dizia "13 de 21
+     caíram no meio". Se todas foram retomadas ou refeitas, não há aviso. */
+  const r = resumoDeTrafego(
+    somas({ servidosServidorN: 8, abortadosN: 13, quedasN: 0, abortadosBytes: 2 * GB }),
+    contexto(),
+  );
+  semAviso(r, "caíram");
+  const parte = resumoDeTrafego(
+    somas({ servidosServidorN: 8, abortadosN: 13, quedasN: 2, abortadosBytes: 2 * GB }),
+    contexto(),
+  );
+  semAviso(parte, "caíram");
+});
+
+await etapa("a conexão retomada continua contando tráfego do servidor", () => {
+  const r = resumoDeTrafego(
+    somas({ servidosServidorN: 1, servidosServidorBytes: 3 * GB, abortadosN: 1, abortadosBytes: 2 * GB, quedasN: 0 }),
+    contexto(),
+  );
+  igual(r.trafegoServidorBytes, 5 * GB, "entregue + o que saiu antes de cair");
+});
+
+await etapa("pedaço de Range que não chega ao fim é tráfego, não entrega", () => {
+  const r = resumoDeTrafego(
+    somas({ servidosServidorN: 1, servidosServidorBytes: 1 * GB, trechosBytes: 3 * GB }),
+    contexto(),
+  );
+  igual(r.trafegoServidorBytes, 4 * GB, "os trechos entram no tráfego");
 });
 
 console.log("\ne-mail semanal");
