@@ -90,6 +90,11 @@ jobs:
       # próprio código aceitarem. Nada aqui fala com o Asaas.
       SESSION_SECRET: segredo-de-sessao-so-do-ci-0123456789abcdef
       ASAAS_WEBHOOK_TOKEN: token-de-webhook-so-do-ci-0123456789abcdef
+      # A cifra do canal de avisos (`src/lib/avisos.ts`). Sem ela o canal se
+      # recusa a guardar o segredo do outro lado, e `testar-conexao-atomatiza` e
+      # `testar-tela-avisos` reprovam o portão. O `verificar.yml` já tinha;
+      # aqui faltou, e a publicação de 29/09/2026 parou nisso.
+      AVISOS_ENC_KEY: segredo-de-cifra-do-canal-de-avisos-so-do-ci-2026
       # `R2_ACCOUNT_ID` precisa existir porque é dele que sai o
       # `armazenamentoConfigurado` do `src/lib/r2.ts` — sem ele o healthz
       # responde 503 com "armazenamento=credenciais ausentes" e o servidor do
@@ -225,6 +230,7 @@ jobs:
             echo "DATABASE_URL=$DATABASE_URL"
             echo "SESSION_SECRET=$SESSION_SECRET"
             echo "ASAAS_WEBHOOK_TOKEN=$ASAAS_WEBHOOK_TOKEN"
+            echo "AVISOS_ENC_KEY=$AVISOS_ENC_KEY"
             echo "R2_ACCOUNT_ID=$R2_ACCOUNT_ID"
             echo "R2_ENDPOINT=$R2_ENDPOINT"
             echo "ARMAZEM_CAMINHO_NO_ENDERECO=$ARMAZEM_CAMINHO_NO_ENDERECO"
