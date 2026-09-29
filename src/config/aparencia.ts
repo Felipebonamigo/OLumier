@@ -18,7 +18,19 @@ export type Capa =
    * mais minimalista. Foto em formato de arco, reta na parte inferior
    * horizontal, título embaixo." Ver `galeria-capa.tsx`. */
   | "redonda"
-  | "arco";
+  | "arco"
+  /*
+   * A de 29/09/2026: "adicionar outra de capa grande, tipo a imersa, mas sem
+   * degradê".
+   *
+   * Não é a imersa com o véu apagado — é capa nova, porque o véu da imersa não
+   * é enfeite. Lá o título fica SOBRE a foto e nenhum elemento tem sombra nem
+   * fundo próprio: sem o degradê, o título branco do tema noite sai em 1,13:1
+   * sobre vestido ao sol, contra o mínimo de 3:1. Sobre o fundo do tema, o
+   * mesmo token dá 17,69:1. Então o que sai de cima da foto é o TEXTO, e não o
+   * véu de cima do texto. Ver `galeria-capa.tsx`.
+   */
+  | "cartaz";
 export type Tema = "noite" | "claro" | "creme";
 export type Tipografia =
   | "serifada"
@@ -694,6 +706,7 @@ export const alturaLogoPx = (t: TamanhoLogo): number =>
 export const OPCOES = {
   capa: [
     { id: "imersa", nome: "Imersa", desc: "Foto em tela cheia com o título por cima" },
+    { id: "cartaz", nome: "Cartaz", desc: "Foto grande e limpa, sem véu — o título vem embaixo" },
     { id: "jornal", nome: "Jornal", desc: "Fundo limpo, tipografia grande, botão de entrada" },
     { id: "dividida", nome: "Dividida", desc: "Foto de um lado, texto do outro" },
     { id: "minima", nome: "Mínima", desc: "Só tipografia, sem foto de capa" },

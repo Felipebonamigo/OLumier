@@ -169,6 +169,22 @@ export function AmostraDoPreset({
       );
     }
 
+    if (c1 === "cartaz") {
+      /* Foto sangrando em cima, nome EMBAIXO dela — é a diferença inteira em
+         relação à imersa, e é o que a miniatura precisa mostrar. Sem este ramo
+         o cartaz cairia na mínima e apareceria no editor como uma capa sem
+         foto, que é o contrário do que ele é. */
+      return (
+        <span style={{ display: "block", height: "52%" }}>
+          {foto(c.foto, { height: "62%", borderRadius: 0 })}
+          <span style={{ display: "block", padding: "5px 6px 0" }}>
+            {nome(12)}
+            {legenda("34%")}
+          </span>
+        </span>
+      );
+    }
+
     if (c1 === "jornal") {
       /* Manchete em cima, imagem grande embaixo (08/09/2026). */
       return (

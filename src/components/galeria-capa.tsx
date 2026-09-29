@@ -391,6 +391,84 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
     );
   }
 
+  /* --- CARTAZ: a foto grande e limpa, o texto embaixo ----------------------
+   *
+   * Felipe, 29/09/2026: "adicionar outra de capa grande, tipo a imersa, mas sem
+   * degradê" — "sugeriram de adicionar uma opção de capa grande, mas sem o
+   * degradê".
+   *
+   * ── POR QUE NÃO É A IMERSA COM O VÉU APAGADO ────────────────────────────
+   *
+   * Porque o véu da imersa é o que torna o nome legível. Ali o título fica
+   * SOBRE a foto, e nenhum dos cinco elementos tem sombra, contorno ou fundo
+   * próprio. Medido com os tokens do tema noite — o dos presets Átomo e
+   * Cerimônia —, o título sem véu sai em 1,13:1 sobre vestido ao sol, 1,39:1
+   * sobre pele clara e 1,62:1 sobre céu. O mínimo da WCAG para texto grande é
+   * 3:1. O nome do casal some.
+   *
+   * Sobre o fundo do tema, os MESMOS tokens dão 17,69:1 no noite, 16,77:1 no
+   * claro e 10,16:1 no creme. Então o que sai de cima da foto é o TEXTO. A
+   * imersa fica exatamente como está: quem escolheu uma não quer a outra.
+   *
+   * ── A DOBRA, E POR QUE NÃO HÁ MULTIPLICADOR AQUI ───────────────────────
+   *
+   * Com o texto embaixo, a conta do celular muda. Em 390×844 com `cheia`, os
+   * 78vh dariam 658 px de foto e sobrariam 186 px para um bloco que pede ~276
+   * com a logo média — o nome cairia abaixo da dobra, que é o contrário de
+   * "capa grande com o nome à vista".
+   *
+   * A saída tentadora é encolher a foto com um `calc(var(--g-capa-h)*0.82)`.
+   * Ela custa caro: "Cheia" passaria a dizer 78vh no painel e desenhar 64vh na
+   * tela, só nesta capa, e o eixo mentiria para quem o lê. Aqui `--g-capa-h`
+   * mede o CABEÇALHO INTEIRO e a foto fica com o que sobra (`flex-1`) — o eixo
+   * continua querendo dizer "quanto da tela a capa ocupa", como nas outras seis.
+   *
+   * ── LIMITE CONHECIDO: `capaFixa` quase não tem efeito aqui ─────────────
+   *
+   * `grudada` vira `sticky top-0 z-0`, e um cabeçalho de 78vh mais o bloco de
+   * texto passa perto de 100vh. Sobra pouquíssimo para grudar. Não quebra nada
+   * — a capa rola e as fotos passam —, mas quem escolher "Fica no lugar" vai
+   * ver pouca diferença. Fica escrito para a próxima sessão não ler como bug.
+   */
+  if (aparencia.capa === "cartaz" && urlImagem) {
+    return (
+      <header
+        data-capa="cartaz"
+        className={`flex min-h-[var(--g-capa-h,78vh)] flex-col ${grudada}`}
+        style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
+        <img
+          src={urlImagem}
+          alt=""
+          fetchPriority="high"
+          style={foco}
+          /* `min-h-0` junto do `flex-1`: sem ele, a altura natural da imagem
+             vira o piso do item flex e a foto se recusa a encolher — o bloco de
+             texto é empurrado para fora do cabeçalho, que é o defeito que esta
+             capa existe para não ter. */
+          className="min-h-0 w-full flex-1 object-cover"
+        />
+        <div className={`px-6 py-10 sm:py-12 ${alinharTexto}`}>
+          <Rotulo />
+          <div className="mt-2">
+            <Titulo base={TITULO_GRANDE} />
+          </div>
+          <div className="mt-4">
+            <Legenda />
+          </div>
+          {/* Como na redonda e no arco: o embrulho sai junto, senão o `mt-6`
+              dele deixa um vão morto no pé da capa. */}
+          {!semAssinatura && (
+            <div className="mt-6">
+              <Estudio />
+            </div>
+          )}
+        </div>
+      </header>
+    );
+  }
+
   // --- JORNAL: a referência do Sirius — fundo limpo, tipografia grande -------
   if (aparencia.capa === "jornal") {
     return (
