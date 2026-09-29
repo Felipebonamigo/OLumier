@@ -153,7 +153,76 @@ async function redimensionar(bitmap: ImageBitmap, alvo: number, qualidade: numbe
  * `muted` não é detalhe: sem ele o navegador recusa carregar o vídeo sem
  * gesto da pessoa, e a extração falha em silêncio no Safari.
  */
-const SEGUNDO_DO_POSTER = 1;
+/**
+ * Os pontos do filme que valem uma tentativa, em ordem.
+ *
+ * Era um número só — o segundo 1 —, e ele é o certo para começar: um casamento
+ * abre em movimento, e um segundo adiante já é imagem. Mas um vídeo que abre em
+ * FADE tem o segundo 1 preto de verdade, e desistir ali entregaria "sem capa"
+ * para um filme perfeitamente bom.
+ *
+ * Os dois seguintes são frações da duração, e não segundos fixos: 3 s não é
+ * "mais adiante" num clipe de 4 s, é quase o fim.
+ */
+const SEGUNDOS_DO_POSTER = [1, 0.25, 0.5] as const;
+
+/**
+ * ESTE QUADRO TEM IMAGEM?
+ *
+ * ── O DEFEITO QUE ISTO EXISTE PARA MATAR (29/09/2026) ─────────────────────
+ *
+ * Baixando as 46 capas de vídeo de produção e comparando o conteúdo:
+ * QUARENTA E UMA eram a mesma imagem, byte a byte — 4.195 B, PNG 360×640,
+ * transparente —, em três estúdios diferentes. Só três eram capa de verdade.
+ *
+ * A capa existia, estava gravada, e era vazia. Ninguém descobriu por meses
+ * porque a tela mostra um ladrilho, não um erro, e foi preciso o Juan mandar um
+ * print para alguém olhar.
+ *
+ * A causa primeira era o Safari não honrar `createImageBitmap(<video>)`. Mas o
+ * defeito que deixou isso virar quarenta e uma capas brancas foi outro: NADA
+ * conferia o quadro antes de guardá-lo. Qualquer falha de decodificação, em
+ * qualquer navegador, de qualquer codec, vira capa branca gravada como sucesso.
+ * Por isso a conferência fica aqui, depois do desenho e antes de subir — ela
+ * vale para a causa de ontem e para a de amanhã.
+ *
+ * ── POR QUE "COR CHAPADA", E NÃO "TRANSPARENTE" ──────────────────────────
+ *
+ * Transparente pegaria só o caso do Safari. Preto chapado (fade de abertura) e
+ * branco chapado (tela de intro) são igualmente inúteis como capa: somem na
+ * grade do mesmo jeito. E guardá-los impediria a tentativa no ponto seguinte.
+ *
+ * ── E POR QUE A TOLERÂNCIA ───────────────────────────────────────────────
+ *
+ * Um quadro preto REAL não é 0,0,0 em todo pixel: tem ±2 de ruído de
+ * compressão. Uma comparação exata nunca recusaria nada, e a capa branca
+ * voltaria pela porta dos fundos.
+ */
+const TOLERANCIA_CHAPADO = 6;
+
+export function quadroTemImagem(dados: Uint8ClampedArray): boolean {
+  if (dados.length < 4) return false;
+
+  let minR = 255, maxR = 0, minG = 255, maxG = 0, minB = 255, maxB = 0, maxA = 0;
+  for (let i = 0; i < dados.length; i += 4) {
+    const a = dados[i + 3];
+    if (a > maxA) maxA = a;
+    /* Pixel transparente não tem cor que valha comparar — o RGB embaixo dele é
+       lixo indefinido, e incluí-lo inventaria variação onde não há nada. */
+    if (a === 0) continue;
+    const r = dados[i], g = dados[i + 1], b = dados[i + 2];
+    if (r < minR) minR = r;
+    if (r > maxR) maxR = r;
+    if (g < minG) minG = g;
+    if (g > maxG) maxG = g;
+    if (b < minB) minB = b;
+    if (b > maxB) maxB = b;
+  }
+
+  if (maxA === 0) return false; // tudo transparente: o caso do Safari
+  const variacao = Math.max(maxR - minR, maxG - minG, maxB - minB);
+  return variacao > TOLERANCIA_CHAPADO;
+}
 
 async function quadroDoVideo(arquivo: File): Promise<ImageBitmap | null> {
   const url = URL.createObjectURL(arquivo);
@@ -188,12 +257,58 @@ async function quadroDoVideo(arquivo: File): Promise<ImageBitmap | null> {
       });
 
     await pronto("loadedmetadata");
-    const duracao = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : SEGUNDO_DO_POSTER * 2;
-    v.currentTime = Math.min(SEGUNDO_DO_POSTER, duracao / 2);
-    await pronto("seeked");
-    /* `createImageBitmap` de um `<video>` lê o quadro que está na tela agora —
-       o que acabou de ser buscado pelo `seeked`. */
-    return await createImageBitmap(v);
+    const duracao = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 2;
+
+    /*
+     * ── O QUADRO SAI DE UM CANVAS, E NÃO DO <video> (29/09/2026) ──────────
+     *
+     * Era `createImageBitmap(v)`, que lê o elemento direto. O Safari NÃO honra
+     * isso: devolve um bitmap vazio, sem erro nenhum. Foi o que produziu as 41
+     * capas transparentes de produção — todas geradas no iPhone, o que a
+     * própria assinatura dos arquivos denuncia (são PNG sob chave `.webp`,
+     * porque o Safari antigo também não codifica webp e cai para PNG calado).
+     *
+     * `drawImage` num canvas é o caminho antigo e universalmente suportado, e
+     * tem outra virtude: de um canvas dá para LER os pixels e conferir se veio
+     * alguma coisa. Do `<video>` não dava.
+     */
+    for (const ponto of SEGUNDOS_DO_POSTER) {
+      const quando = ponto < 1 ? duracao * ponto : Math.min(ponto, duracao / 2);
+      v.currentTime = Math.max(0, quando);
+      await pronto("seeked");
+
+      const w = v.videoWidth;
+      const h = v.videoHeight;
+      if (!w || !h) return null;
+
+      const tela = document.createElement("canvas");
+      tela.width = w;
+      tela.height = h;
+      const ctx = tela.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(v, 0, 0, w, h);
+
+      /*
+       * A conferência lê uma MINIATURA do quadro, e não os 8,3 milhões de
+       * pixels de um 4K: `getImageData` de uma tela cheia custa dezenas de MB e
+       * um engasgo visível no celular. 32×32 é amostra de sobra para separar
+       * "chapado" de "tem imagem" — e é a mesma decisão de sempre, medir no
+       * menor tamanho que ainda responde a pergunta.
+       */
+      const amostra = document.createElement("canvas");
+      amostra.width = 32;
+      amostra.height = 32;
+      const ctxAmostra = amostra.getContext("2d", { willReadFrequently: true });
+      if (!ctxAmostra) return null;
+      ctxAmostra.drawImage(tela, 0, 0, 32, 32);
+      if (!quadroTemImagem(ctxAmostra.getImageData(0, 0, 32, 32).data)) continue;
+
+      return await createImageBitmap(tela);
+    }
+    /* Nenhum dos pontos deu imagem. Devolver null é melhor do que devolver o
+       vazio: sem miniatura a galeria cai no original, e o fotógrafo pode
+       escolher a capa à mão. Com a capa branca gravada, ninguém nem sabia. */
+    return null;
   } catch {
     return null;
   } finally {
