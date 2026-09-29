@@ -9,14 +9,6 @@ export interface Tenant {
   slug: string;
   nome_estudio: string;
   email: string;
-  /** Quem criou esta conta, quando não foi o formulário de cadastro — migração
-   *  047. Hoje só `"atomatiza"`. Nulo na esmagadora maioria, que se cadastrou
-   *  normalmente: a coluna descreve procedência, não estado. */
-  origem: string | null;
-  /** O id do estúdio no sistema de origem. OPACO — guardado e devolvido, nunca
-   *  interpretado. É ele que torna o provisionamento idempotente, e é por isso
-   *  que um retry não fabrica uma segunda conta. Ver `lib/provisionamento.ts`. */
-  origem_ref: string | null;
   /** Chave do objeto no bucket — não é URL. O link é assinado na hora de exibir. */
   logo_chave: string | null;
   /* A fonte própria do estúdio (migração 026). Nulas para quem nunca enviou —
