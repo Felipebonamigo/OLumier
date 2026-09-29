@@ -158,9 +158,42 @@ export async function manifestoDoPedido(
 }
 
 /**
- * Registra o que aconteceu com um ZIP — montado, servido ou abortado — com os
- * bytes. É o que o painel de administração soma para dizer se o desenho está
- * custando o previsto.
+ * O ZIP chegou inteiro: as quedas ANTERIORES do mesmo download deixam de ser
+ * queda (migração 050).
+ *
+ * "O mesmo download" é o mesmo ZIP (galeria, tipo e capítulo) pedido pela
+ * mesma pessoa — o mesmo pedido (o "Retomar" e o gerenciador de download do
+ * Android reabrem o mesmo link) ou outro pedido do mesmo IP ou da mesma pessoa
+ * identificada (quem clicou em baixar de novo). Até 12 h para trás, que é a
+ * vida de um pedido: é pelo pedido que se sabe quem foi, e ele é apagado
+ * depois disso.
+ *
+ * Feito AGORA porque depois não dá: quando o pedido some, `pedido_id` vira
+ * nulo nas entregas e nada mais liga a queda à entrega.
+ *
+ * Pelo VPS não há pedido gravado, então as quedas de lá não são reconhecidas.
+ * É o caminho de reserva, e o painel já avisa quando ele está em uso.
+ */
+async function marcarQuedasRetomadas(pedidoId: string): Promise<void> {
+  await consultar(
+    `update entregas_zip a set retomado = true
+       from pedidos_zip antes, pedidos_zip agora
+      where agora.id = $1
+        and a.pedido_id = antes.id
+        and a.evento = 'abortado' and not a.retomado
+        and a.criado_em > now() - interval '12 hours'
+        and antes.galeria_id = agora.galeria_id
+        and antes.tipo = agora.tipo
+        and antes.secao_id is not distinct from agora.secao_id
+        and (antes.id = agora.id or antes.ip_hash = agora.ip_hash or antes.pessoa_id = agora.pessoa_id)`,
+    [pedidoId],
+  );
+}
+
+/**
+ * Registra o que aconteceu com um ZIP — montado, servido, trecho ou abortado —
+ * com os bytes. É o que o painel de administração soma para dizer se o desenho
+ * está custando o previsto.
  *
  * `servido` também vira a linha de sempre em `acessos`, porque é ela que a
  * Atividade da galeria mostra ao fotógrafo ("o casal baixou dia tal").
@@ -208,6 +241,7 @@ export async function registrarEntregaDeZip(
           pedido.pessoa_id,
         ],
       );
+      if (pedido.id) await marcarQuedasRetomadas(pedido.id);
     }
   } catch {
     /* Registro é secundário, como em `registrarAcesso`: o ZIP já foi entregue. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState, useSyncExternalStore } from "react";
+import { startTransition, useActionState, useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { cadastrarAction, type EstadoForm } from "../actions";
 import { Campo, Erro, BotaoEnviar } from "@/components/form-ui";
@@ -26,8 +26,28 @@ export function FormCadastrar({ minimo }: { minimo: number }) {
   const fragmento = useSyncExternalStore(assinarFragmento, () => window.location.hash, () => "");
   const pre = useMemo(() => lerPreenchimento(fragmento), [fragmento]);
 
+  /*
+   * O ERRO NÃO APAGA O QUE FOI DIGITADO (29/09/2026).
+   *
+   * Com `<form action>`, o React 19 limpa o formulário ao fim de TODA ação —
+   * inclusive a que volta com erro. "Já existe uma conta com esse e-mail"
+   * chegava com nome, e-mail e as duas senhas em branco (só o CPF ficava,
+   * por ser controlado), e a pessoa digitava tudo de novo para trocar uma
+   * letra.
+   *
+   * Chamar a ação por aqui, numa transição, é a saída que o próprio React
+   * prevê: ele não limpa o formulário e o `useFormStatus` do botão continua
+   * valendo. O `action` fica no <form> para o envio antes da hidratação, que
+   * sem ele seria um GET com a senha na barra de endereço.
+   */
+  function enviar(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const dados = new FormData(e.currentTarget);
+    startTransition(() => action(dados));
+  }
+
   return (
-    <form action={action} className="mt-8 flex flex-col gap-4">
+    <form action={action} onSubmit={enviar} className="mt-8 flex flex-col gap-4">
       {/* `key`: os campos da empresa nascem de novo quando o fragmento é lido,
           porque o valor inicial de um campo só vale na montagem. */}
       <CamposDaEmpresa key={fragmento} pre={pre} />

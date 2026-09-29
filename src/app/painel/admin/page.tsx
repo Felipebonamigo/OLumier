@@ -349,7 +349,7 @@ export default async function AdminPage() {
           <Cartao
             rotulo="ZIPs entregues"
             valor={somasDeZip.servidosServidorN + somasDeZip.servidosVpsN}
-            nota={`${porcento(trafego.fracaoDoCache)} dos completos saíram do disco · ${somasDeZip.abortadosN} caíram no meio`}
+            nota={`${porcento(trafego.fracaoDoCache)} dos completos saíram do disco · ${somasDeZip.quedasN} caíram · ${somasDeZip.abortadosN - somasDeZip.quedasN} retomados`}
             tom="ok"
           />
           <Cartao
