@@ -1,5 +1,15 @@
 # Ligar a cobrança — passo a passo
 
+> ⚠️ **Correção de 29/09/2026.** A frase abaixo ("ligada em produção desde
+> 01/09") não vale hoje: a tela de Conta em produção mostra "A cobrança ainda
+> não foi ligada nesta instalação", que só aparece sem `ASAAS_API_KEY` no
+> `.env.production` (`/opt/fotonio-shared/.env.production`). As carteiras e o
+> webhook seguem como descritos; falta a chave. Para ligar, com a mesma conta do
+> Atomatiza: marcar como `cortesia` as contas que não pagam (senão travam na
+> hora), copiar `ASAAS_API_KEY` e `ASAAS_AMBIENTE` de `/opt/atomatiza-secrets.env`
+> e reiniciar o `fotonio`. Com a cobrança desligada, desde 29/09 nenhuma galeria
+> sai do ar por teste vencido (`galeriasNoAr`).
+
 *A cobrança está **ligada em produção** desde 01/09/2026, com split para as três
 carteiras. Nenhum cliente pagante existe ainda, então nada foi cobrado nem
 distribuído até agora. Este documento descreve como está e por quê.*

@@ -1214,8 +1214,9 @@ export async function apagarGaleriaAction(form: FormData) {
  * está fazendo. Sem ela, "apagar" não apaga — e quem quer o espaço de volta
  * hoje não tem caminho nenhum.
  *
- * As chaves são lidas ANTES do delete: depois não haveria como saber o que tirar
- * do bucket, e o arquivo viraria lixo invisível que só aparece na fatura.
+ * Os arquivos são lidos ANTES do delete, dentro de `destruirGaleria` — com o
+ * armazém de cada original e a capa. Depois não haveria como saber o que tirar
+ * do armazém, e o arquivo viraria lixo invisível que só aparece na fatura.
  *
  * O filtro por `tenant_id` está na consulta, e não só na tela: id adivinhado
  * não alcança galeria alheia.
@@ -1225,19 +1226,9 @@ export async function destruirGaleriaAction(form: FormData) {
   const galeriaId = String(form.get("galeria_id") ?? "");
   if (!galeriaId) return;
 
-  const alvo = await consultarUm<{ id: string; chaves: string[] }>(
-    `select g.id,
-            coalesce(
-              array_remove(
-                array_agg(m.chave) || array_agg(m.chave_thumb) || array_agg(m.chave_preview),
-                null
-              ),
-              '{}'
-            ) as chaves
-       from galerias g
-       left join medias m on m.galeria_id = g.id
-      where g.id = $1 and g.tenant_id = $2 and g.estado = 'lixeira'
-      group by g.id`,
+  const alvo = await consultarUm<{ id: string }>(
+    `select g.id from galerias g
+      where g.id = $1 and g.tenant_id = $2 and g.estado = 'lixeira'`,
     [galeriaId, tenantId],
   );
   /* Só destrói o que ESTÁ na lixeira. Sem essa condição, um formulário montado à
@@ -1245,7 +1236,7 @@ export async function destruirGaleriaAction(form: FormData) {
   if (!alvo) return;
 
   const { destruirGaleria } = await import("@/lib/tenants");
-  await destruirGaleria(alvo.id, alvo.chaves, "estudio");
+  await destruirGaleria(alvo.id, "estudio");
 
   revalidatePath("/painel");
   revalidatePath("/painel/conta");

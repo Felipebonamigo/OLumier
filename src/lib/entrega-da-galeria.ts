@@ -5,6 +5,7 @@ import { listarSecoes } from "@/lib/secoes";
 import { favoritasDaPessoa, pessoaAtual } from "@/lib/favoritas";
 import { nomeComCapitulo, nomeDoGrupoSolto, vaiPrefixar } from "@/lib/nome-de-arquivo";
 import { galeriasNoAr } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
 import { TETO_DE_ESCOLHIDAS } from "@/config/fatia-galeria";
 
 /**
@@ -82,7 +83,7 @@ export async function prepararEntrega(
    * terminou"; sem estas linhas, quem guardou o id da galeria baixava tudo pelo
    * zip mesmo assim.
    */
-  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate })) {
+  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado())) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   }
   if (galeria.estado !== "online") return NextResponse.json({ erro: "sem acesso" }, { status: 409 });

@@ -536,7 +536,6 @@ export async function galeriasVencidasNaLixeira() {
  */
 export async function destruirGaleria(
   galeriaId: string,
-  chaves: string[],
   /*
    * QUEM mandou destruir. O padrão é o temporizador, que é o caminho comum.
    *
@@ -548,16 +547,57 @@ export async function destruirGaleria(
   ator: "sistema" | "estudio" = "sistema",
 ) {
   /*
+   * Até 29/09/2026 o segundo parâmetro era a lista de chaves, montada por quem
+   * chamava. Um script JavaScript que ainda passe a lista cairia AQUI como ator
+   * — e o evento seria recusado pela tabela em silêncio (`registrarEvento` não
+   * lança). Melhor quebrar alto.
+   */
+  if (ator !== "sistema" && ator !== "estudio") {
+    throw new Error(`destruirGaleria: ator inválido (${String(ator)}) — a assinatura agora é (galeriaId, ator)`);
+  }
+
+  /*
    * Lido antes do delete, pelo mesmo motivo de sempre: depois não existe mais
    * de onde tirar. Este é o evento que alguém vai procurar anos depois — é o
    * único registro de que aquela galeria existiu.
    */
-  const antes = await consultarUm<{ titulo: string; tenant_id: string; estudio: string }>(
-    `select g.titulo, g.tenant_id, t.nome_estudio as estudio
+  const antes = await consultarUm<{
+    titulo: string;
+    tenant_id: string;
+    estudio: string;
+    capa_chave: string | null;
+  }>(
+    `select g.titulo, g.tenant_id, t.nome_estudio as estudio, g.capa_chave
        from galerias g join tenants t on t.id = g.tenant_id
       where g.id = $1`,
     [galeriaId],
   );
+
+  /*
+   * OS ARQUIVOS, LIDOS AQUI — e com o armazém de cada original.
+   *
+   * Até 29/09/2026 quem chamava mandava só as chaves, e tudo ia para
+   * `r2.apagarObjetos`. Só que o original pode morar no B2 (`medias.armazem`,
+   * migração 015), e apagar no R2 uma chave que não está lá "dá certo" sem
+   * fazer nada: o original seguia no B2, pago, sem linha nenhuma que o citasse.
+   * A capa enviada como arquivo (`capa_chave`, migração 029) nem entrava na
+   * lista. Ninguém via — só a fatura crescia.
+   *
+   * Quem sabe onde cada arquivo mora é `armazem.ts`; aqui só se junta o que a
+   * galeria tem, na hora de apagar, para nenhum chamador poder mandar a lista
+   * errada.
+   */
+  const medias = await consultar<{
+    chave: string;
+    chave_thumb: string | null;
+    chave_preview: string | null;
+    armazem: string | null;
+  }>("select chave, chave_thumb, chave_preview, armazem from medias where galeria_id = $1", [
+    galeriaId,
+  ]);
+  const quantos =
+    medias.reduce((n, m) => n + [m.chave, m.chave_thumb, m.chave_preview].filter(Boolean).length, 0) +
+    (antes?.capa_chave ? 1 : 0);
 
   const apagou = await consultar<{ id: string }>(
     "delete from galerias where id = $1 returning id",
@@ -575,23 +615,25 @@ export async function destruirGaleria(
       alvoId: galeriaId,
       detalhe: {
         titulo: antes.titulo,
-        arquivos: chaves.length,
+        arquivos: quantos,
         ...(ator === "sistema" ? { apos_dias: PRAZO_LIXEIRA_DIAS } : { antes_do_prazo: true }),
       },
     });
   }
 
-  if (apagou.length === 0 || chaves.length === 0) return;
+  if (apagou.length === 0 || quantos === 0) return;
 
-  // O banco já é a fonte da verdade e a galeria já sumiu. Se o bucket falhar
+  // O banco já é a fonte da verdade e a galeria já sumiu. Se o armazém falhar
   // aqui, registramos e seguimos — `varrer-orfaos.mjs` recolhe o que sobrar.
-  const { apagarObjetos } = await import("./r2");
-  try {
-    await apagarObjetos(chaves);
-  } catch (e) {
-    console.error(
-      `[destruirGaleria] ${chaves.length} objeto(s) da galeria ${galeriaId} podem ter ficado no bucket:`,
-      e,
+  const { apagarArquivosDasMedias } = await import("./armazem");
+  const r = await apagarArquivosDasMedias(medias);
+  if (r.falhou) {
+    console.error(`[destruirGaleria] arquivos da galeria ${galeriaId} podem ter ficado no armazém: ${r.falhou}`);
+  }
+  if (antes?.capa_chave) {
+    const { apagarObjetos } = await import("./r2");
+    await apagarObjetos([antes.capa_chave]).catch((e) =>
+      console.error(`[destruirGaleria] a capa da galeria ${galeriaId} pode ter ficado no bucket:`, e),
     );
   }
 }

@@ -165,10 +165,28 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
  * casal por um estado que ninguém previu é pior do que servir um trial vencido
  * por mais um tempo.
  */
-export function galeriasNoAr(tenant: {
-  status: string;
-  trial_ate: Date | string | null;
-}): boolean {
+export function galeriasNoAr(
+  tenant: {
+    status: string;
+    trial_ate: Date | string | null;
+  },
+  /*
+   * A cobrança está ligada? OBRIGATÓRIO, sem valor padrão, de propósito: é o
+   * que obriga cada chamador a responder.
+   *
+   * Até 29/09/2026 esta regra não perguntava. Com a cobrança desligada no
+   * servidor, o teste que vencia continuava valendo como "não pagou" — e a
+   * galeria saía do ar para o cliente do fotógrafo 15 dias depois, sem que
+   * existisse jeito nenhum de pagar para ela voltar. A tela de Conta dizia
+   * "enquanto isso, o uso segue liberado", e a entrega do casal sumia.
+   *
+   * É a decisão 1 do cabeçalho deste arquivo, que `situacaoDoTenant` sempre
+   * seguiu e esta regra não: sem porta para pagar, ninguém é punido por não
+   * passar por ela.
+   */
+  cobrancaLigada: boolean,
+): boolean {
+  if (!cobrancaLigada) return true;
   if (tenant.status !== "trial") return true;
 
   const fim = comoData(tenant.trial_ate);

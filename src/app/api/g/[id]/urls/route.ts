@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { consultar, consultarUm } from "@/lib/db";
 import { temAcessoLiberado } from "@/lib/galerias-publicas";
 import { galeriasNoAr } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
 import { nomeComCapitulo, vaiPrefixar, nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
 
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
    * galeria assinava os originais por aqui mesmo assim. As mesmas portas de
    * `prepararEntrega`, que guarda o zip e a lista.
    */
-  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate })) {
+  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado())) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   }
   if (galeria.estado !== "online") return NextResponse.json({ erro: "sem acesso" }, { status: 409 });

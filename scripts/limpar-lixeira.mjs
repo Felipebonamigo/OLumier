@@ -70,7 +70,7 @@ try {
     } else {
       let destruidas = 0;
       for (const g of vencidas) {
-        await destruirGaleria(g.id, g.chaves);
+        await destruirGaleria(g.id);
         destruidas++;
       }
       console.log(`\n✓ ${destruidas} galeria(s) destruída(s) depois de ${PRAZO_LIXEIRA_DIAS} dias`);

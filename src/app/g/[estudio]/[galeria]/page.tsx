@@ -13,6 +13,7 @@ import {
   dadosDaPessoa,
 } from "@/lib/favoritas";
 import { galeriasNoAr } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
 import { resolverEstudio } from "@/lib/endereco";
 import { resolverGaleriaDoEstudio } from "@/lib/endereco-galeria";
 import {
@@ -193,7 +194,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * O dono continua vendo — é a tela onde ele descobre por que a galeria dele
    * sumiu, e de onde ele sai para assinar.
    */
-  if (!ehDono && !galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate })) {
+  if (!ehDono && !galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado())) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 text-center">
         <h1 className="font-serif text-2xl font-bold">{galeria.titulo}</h1>

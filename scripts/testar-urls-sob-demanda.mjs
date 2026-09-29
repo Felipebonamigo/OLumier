@@ -263,7 +263,19 @@ await etapa("galeria com prazo vencido não assina preview nem original", async 
   }
 });
 
-await etapa("estúdio com trial abandonado não assina preview nem original", async () => {
+/*
+ * O trial abandonado só fecha a porta com a COBRANÇA LIGADA (29/09/2026,
+ * `galeriasNoAr`). O servidor da bancada lê o mesmo `.env.local` que este
+ * processo: com a chave do Asaas, espera-se 409; sem ela (o normal aqui), a
+ * entrega continua e as assinaturas saem.
+ */
+const COBRANCA_LIGADA = Boolean(process.env.ASAAS_API_KEY);
+const ESPERADO_TRIAL = COBRANCA_LIGADA ? "preview 409 · download 409" : "preview 200 · download 200";
+await etapa(
+  COBRANCA_LIGADA
+    ? "estúdio com trial abandonado não assina preview nem original"
+    : "sem cobrança ligada, trial abandonado continua assinando preview e original",
+  async () => {
   const { rows: [antes] } = await db.query("select status, trial_ate from tenants where id = $1", [g.tenant_id]);
   await db.query(
     "update tenants set status = 'trial', trial_ate = now() - interval '400 days' where id = $1",
@@ -274,8 +286,8 @@ await etapa("estúdio com trial abandonado não assina preview nem original", as
        ficar escondido atrás da falha do preview. */
     const preview = (await pedir([m0.id], "preview")).status;
     const download = (await pedir([m0.id], "download")).status;
-    igual(`preview ${preview} · download ${download}`, "preview 409 · download 409", "status");
-    return "preview 409 · download 409";
+    igual(`preview ${preview} · download ${download}`, ESPERADO_TRIAL, "status");
+    return ESPERADO_TRIAL;
   } finally {
     await db.query("update tenants set status = $2, trial_ate = $3 where id = $1", [
       g.tenant_id,
@@ -283,7 +295,8 @@ await etapa("estúdio com trial abandonado não assina preview nem original", as
       antes.trial_ate,
     ]);
   }
-});
+},
+);
 
 await etapa("pedido torto é recusado: sem ids, tipo inventado, id que não é uuid, lista enorme", async () => {
   igual((await pedir([], "preview")).status, 400, "vazio");
