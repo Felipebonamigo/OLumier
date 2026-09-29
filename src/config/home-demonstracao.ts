@@ -142,9 +142,15 @@ export type IdGaleria = (typeof GALERIAS_DA_HOME)[number];
  */
 const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
   /* Na ordem do dia: a noiva pronta, a entrada, a cerimônia, a saída, os
-     retratos, a festa. */
+     retratos, a festa.
+
+     A CAPA É O RETRATO NA CADEIRA (29/09/2026). Felipe, com o print da home
+     e a foto: "mude a capa da primeira imagem, para a da segunda". Era o
+     guarda-chuva, que passa para o lugar 9, entre os retratos — a troca é
+     só entre os dois lugares, para nenhuma foto trocada pelo admin em outro
+     lugar mudar de posição. */
   delicada: [
-    ACERVO.guardaChuva,
+    ACERVO.noivosCadeira,
     ACERVO.noivaVeu,
     ACERVO.noivaNaPorta,
     ACERVO.maosNoAltar,
@@ -152,7 +158,7 @@ const FOTOS_DAS_GALERIAS: Record<IdGaleria, readonly FotoDemo[]> = {
     ACERVO.saida,
     ACERVO.ternoMarrom,
     ACERVO.noivosTijolos,
-    ACERVO.noivosCadeira,
+    ACERVO.guardaChuva,
     ACERVO.madrinhas,
     ACERVO.noivoBrinde,
     ACERVO.ramos,
