@@ -1771,48 +1771,43 @@ export function GaleriaCliente({
             return <section key={cap.id} id={`cap-${cap.id}`} hidden />;
           }
           return (
-          <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
-            {cap.nome && cap.id !== capituloAtivo && (
-              /*
-                COM O CAPÍTULO ABERTO, O TÍTULO SAI (28/09/2026).
+          /*
+            ── O NOME DO CAPÍTULO SAI DA TELA, E NÃO DA ESTRUTURA (29/09/2026)
 
-                Juan: "acho feio o nome do título aparecer duas vezes tão perto
-                um do outro". Aberto um capítulo, a barra já mostra a pastilha
-                dele ACESA — e este título repetia o mesmo texto três linhas
-                abaixo, com a foto ainda nem tendo começado.
+            Juan, com um print da galeria no celular e o título circulado a
+            caneta: "ainda está aparecendo aqui 'prévia do casamento', ou seja
+            ainda aparece ali em cima a 'aba' prévia e embaixo o mesmo título,
+            fica repetitivo, não deixe os 2 se repetirem, tire esse 'título',
+            deixe só a 'aba'".
 
-                Some só o do capítulo ABERTO. Na galeria inteira ele fica: ali
-                é ele que separa uma seção da outra enquanto se rola, e a
-                pastilha lá de cima já saiu da tela. Apagar sempre resolveria
-                esta queixa criando outra — a galeria virando uma tira de fotos
-                sem divisão nenhuma.
-              */
-              /*
-                O NOME DO CAPÍTULO SEGUE O ALINHAMENTO, E NÃO É DA COR DO BOTÃO.
+            Era a segunda vez. Em 28/09 este `<h2>` já tinha sumido do capítulo
+            ABERTO (`?cap=...`), e o argumento para mantê-lo na galeria inteira
+            estava escrito aqui: "é ele que separa uma seção da outra enquanto
+            se rola, e a pastilha lá de cima já saiu da tela".
 
-                Duas queixas do Juan atravessam a capa e continuavam valendo
-                aqui embaixo — e eu tinha corrigido só a metade de cima:
+            A segunda metade dessa frase é falsa, e dava para conferir sem
+            print: a barra é `sticky top-0` e um `IntersectionObserver` acende
+            a pastilha do capítulo que está na tela (`menus-da-galeria.tsx`).
+            A pastilha NUNCA sai da tela, e o nome do capítulo corrente já
+            estava sempre visível — a poucos pixels do título que o repetia.
+            O caso que justificava manter os dois não existia.
 
-                  "deixei os botões verdinhos e gostei, mas a logo também ficou
-                   verde"  → era `--g-destaque`, a mesma variável do botão. Com
-                   a cor escolhida, "Making Of" e "Cerimônia" ficavam verdes
-                   junto. `--g-suave` é o secundário do tema, com contraste
-                   medido em `variaveisDoTema`.
+            O nome continua na `<section>`, por `aria-label`: quem navega por
+            seções, ou por leitor de tela, não vê pastilha acesa nenhuma.
+            Apagar dos dois lugares resolveria a queixa criando uma pior, e
+            invisível para quem a criou.
 
-                  "queria que TODOS os textos estivessem alinhados pra esse
-                   lado" → era `text-center` cravado. Com o eixo à esquerda, a
-                   capa ia para a esquerda e o capítulo ficava no meio: "cada
-                   coisa de um jeito", só que rolando a página para baixo.
-              */
-              <h2
-                className={`mb-4 font-mono text-[11px] uppercase tracking-[0.3em] ${
-                  aparencia.alinhamento === "esquerda" ? "text-left" : "text-center"
-                }`}
-                style={{ color: "var(--g-suave)" }}
-              >
-                {cap.nome}
-              </h2>
-            )}
+            Com o `<h2>` foram duas conferências de `testar-eixos-forma.mjs`
+            (a cor e o alinhamento dele) — elas ficaram sem objeto, e estão
+            comentadas lá com este motivo. As mesmas duas regras continuam
+            valendo e presas na CAPA, que é onde as queixas originais nasceram.
+          */
+          <section
+            key={cap.id}
+            id={`cap-${cap.id}`}
+            aria-label={cap.nome || GRUPO_SEM_CAPITULO}
+            className="mb-12 scroll-mt-16"
+          >
             <GaleriaGrade
               aparencia={aparencia}
               quantidade={cap.indices.length}
