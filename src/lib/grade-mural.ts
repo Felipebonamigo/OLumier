@@ -18,6 +18,31 @@
  * Não há como consertar isso só com CSS: quem decide quantas fotos cabem em
  * cada coluna é o próprio motor de multi-column, e ele não expõe esse número.
  * Por isso a largura é MEDIDA no navegador e a distribuição é feita à mão.
+ *
+ * ── A GRADE "COLUNAS" VIROU FILEIRAS (26/09/2026) ─────────────────────────
+ *
+ * Até aqui ela era um mural de verdade: colunas de largura fixa, cada foto na
+ * coluna mais curta. Juan reclamou da ordem quatro vezes — a última com o
+ * print numerado à mão, "era pra ser 1 2 3 4 5, mas está 2 - 1 - 4 - 5 - 3" —
+ * e o Felipe fechou a questão: "não pode trocar, ele tem que seguir a ordem".
+ *
+ * Num mural de colunas com fotos de alturas diferentes isso é impossível, e
+ * não por falta de regra: com duas colunas, uma deitada e retratos depois, a
+ * única distribuição que nunca lê fora de ordem é empilhar tudo numa coluna
+ * só. Medido em galerias sortidas: a regra "coluna mais curta" lia 35 de cada
+ * 100 pares seguidos ao contrário; a melhor variante ainda lia 17, e as mais
+ * agressivas passavam a jogar fotos posteriores para cima das anteriores.
+ * Colunas iguais + nada cortado + ordem garantida só se consegue deixando
+ * buraco — 14% da grade vazia numa galeria com um quarto de horizontais.
+ *
+ * O Felipe escolheu ceder na LARGURA: a "Colunas" monta fileiras com o mesmo
+ * número de fotos que tem de colunas, cada fileira esticada até a borda. A
+ * ordem é a da leitura por construção — cada fileira é um trecho contínuo, da
+ * esquerda para a direita —, nada é cortado e não sobra buraco. A horizontal
+ * sai mais larga, na mesma altura das vizinhas.
+ *
+ * O que a separa da "Panorama" é a conta da fileira: lá a deitada vale por
+ * duas e a fileira tem menos fotos; aqui toda fileira tem exatamente N.
  */
 
 /** A partir daqui a foto conta como deitada — 4:3 (1,33) entra, quadrada não. */
@@ -39,68 +64,6 @@ export function colunasQueCabem(
 ): number {
   if (!Number.isFinite(larguraDisponivel) || larguraDisponivel <= 0) return 1;
   return Math.max(1, Math.floor((larguraDisponivel + gap) / (larguraAlvo + gap)));
-}
-
-/**
- * Reparte os índices entre as colunas, na ordem de LEITURA e pela ALTURA.
- *
- * Cada foto vai para a coluna mais CURTA no momento. Empate vai para a mais à
- * esquerda, então as primeiras fotos ainda ocupam 0, 1, 2 — o topo continua
- * sendo o começo da galeria, lido da esquerda para a direita, que é a regra que
- * este arquivo nasceu para proteger. Dentro de cada coluna os índices seguem
- * crescendo, então a leitura de cima para baixo também se mantém.
- *
- * ── O DEFEITO QUE ISTO CONSERTA (16/09/2026) ──────────────────────────────
- *
- * Era `i % colunas`: a foto 0 na coluna 0, a 1 na 1, a 2 na 2, a 3 na 0 de
- * novo. Repartia a CONTAGEM igualmente e ignorava a altura — e num mural as
- * alturas é que são desiguais, porque as fotos têm proporções diferentes e
- * nenhuma é cortada.
- *
- * Com sorte ruim, uma coluna junta os retratos e a vizinha junta as deitadas:
- * a mesma quantidade de fotos, quase o dobro de altura. Felipe, com a foto do
- * fim da galeria: "ficou estranho, umas partes vazias e outra comprida".
- *
- * Distribuir pela altura não muda a ordem e fecha o buraco: o rodapé das
- * colunas passa a terminar quase junto, e a diferença que resta é, no máximo, a
- * altura de uma foto.
- *
- * @param alturaDe Altura da foto `i` para uma coluna de largura 1 — ou seja,
- *   `1 / proporção`. Sem ela a repartição volta a ser por contagem, que é o
- *   certo quando as alturas não são conhecidas (a grade quadrada, por exemplo,
- *   onde toda foto tem a mesma).
- */
-export function distribuirEmColunas(
-  quantidade: number,
-  colunas: number,
-  alturaDe?: (i: number) => number,
-): number[][] {
-  const n = Math.max(1, Math.floor(colunas));
-  /* Colunas a mais que fotos ficariam vazias e ainda assim ocupariam largura,
-   * espremendo as que têm foto. Com poucas fotos, menos colunas. */
-  const usadas = Math.max(1, Math.min(n, quantidade));
-  const saida: number[][] = Array.from({ length: usadas }, () => []);
-  if (!alturaDe) {
-    for (let i = 0; i < quantidade; i++) saida[i % usadas].push(i);
-    return saida;
-  }
-
-  const altura = new Array<number>(usadas).fill(0);
-  for (let i = 0; i < quantidade; i++) {
-    let escolhida = 0;
-    for (let c = 1; c < usadas; c++) {
-      /* `<` e não `<=`: no empate fica a mais à esquerda, e é isso que põe as
-         primeiras fotos em 0, 1, 2 com todas as colunas ainda zeradas. */
-      if (altura[c] < altura[escolhida]) escolhida = c;
-    }
-    saida[escolhida].push(i);
-    /* Proporção inválida (foto sem largura/altura no banco) não pode virar
-       NaN: uma coluna com altura NaN nunca mais seria escolhida, e todas as
-       fotos seguintes cairiam numa coluna só. */
-    const h = alturaDe(i);
-    altura[escolhida] += Number.isFinite(h) && h > 0 ? h : 1;
-  }
-  return saida;
 }
 
 /**
@@ -157,6 +120,205 @@ export function agruparEmFileiras(
   }
   if (atual.length) fileiras.push(atual);
   return fileiras;
+}
+
+/**
+ * As fileiras da grade "Colunas": N fotos por fileira, na ordem, e nenhuma
+ * fileira curta no fim.
+ *
+ * Toda foto vale uma — ao contrário da Panorama, a deitada não empurra
+ * ninguém para a fileira seguinte; ela sai mais larga porque a fileira é
+ * justificada pela proporção de cada foto.
+ *
+ * ── SEM ESPAÇO VAZIO NO FIM (26/09/2026) ──────────────────────────────────
+ *
+ * Felipe, com as fileiras já no lugar do mural: "tente deixar sem
+ * espaçamento, é importante seguir a ordem". O único vazio que sobrava era o
+ * fim: 48 fotos em fileiras de 5 deixavam uma última fileira de 3, e ela não
+ * pode ser esticada até a borda sem virar três fotos do tamanho de um pôster.
+ *
+ * Então a falta é REPARTIDA pelas últimas fileiras: em vez de 5 + 5 + 3,
+ * 5 + 4 + 4. Faltando `N − k` fotos para a última fechar, as `N − k` últimas
+ * fileiras levam uma a menos cada, e todas chegam à borda. Nenhuma fileira
+ * fica com menos de N − 1 fotos, então as do fim saem no máximo `N / (N − 1)`
+ * maiores que as outras — 25% com cinco colunas — em vez de o dobro ou mais.
+ * A ordem não muda: continua sendo uma fatia contínua por fileira.
+ *
+ * Galeria pequena demais para repartir assim (menos fileiras do que fotos
+ * faltando) reparte o que dá, o mais igual possível.
+ *
+ * `listaCompleta = false` é a galeria fatiada, que chega rolando (ver
+ * `config/fatia-galeria.ts`): enquanto vem mais, o fim do lote não é o fim da
+ * galeria, e repartir ali faria as fotos de baixo mudarem de fileira na frente
+ * da pessoa quando o próximo lote chegasse. Nesse caso a última fileira fica
+ * curta — e ganha as fotos que faltam assim que elas chegam.
+ */
+export function fileirasDeColunas(
+  quantidade: number,
+  colunas: number,
+  listaCompleta = true,
+): number[][] {
+  const n = Math.max(1, Math.floor(colunas));
+  const q = Math.max(0, Math.floor(quantidade));
+  const inteiras = Math.floor(q / n);
+  const sobra = q % n;
+
+  /* Quantas fotos cada fileira leva, de cima para baixo. */
+  let tamanhos: number[];
+  if (sobra === 0 || inteiras === 0 || !listaCompleta) {
+    tamanhos = Array.from({ length: inteiras }, () => n);
+    if (sobra) tamanhos.push(sobra);
+  } else {
+    const fileiras = inteiras + 1;
+    const faltam = n - sobra;
+    if (faltam <= fileiras) {
+      tamanhos = Array.from({ length: fileiras }, (_, f) => (f >= fileiras - faltam ? n - 1 : n));
+    } else {
+      /* Poucas fileiras: tudo o mais igual possível, as maiores em cima. */
+      const base = Math.floor(q / fileiras), maiores = q % fileiras;
+      tamanhos = Array.from({ length: fileiras }, (_, f) => base + (f < maiores ? 1 : 0));
+    }
+  }
+
+  const saida: number[][] = [];
+  let i = 0;
+  for (const t of tamanhos) {
+    saida.push(Array.from({ length: t }, (_, k) => i + k));
+    i += t;
+  }
+  return saida;
+}
+
+/**
+ * As fileiras da grade "Linhas": fotos na altura-alvo, cada fileira
+ * justificada até a borda — sem cortar nada e sem sobra à direita.
+ *
+ * ── A BARRA BRANCA (28/09/2026) ───────────────────────────────────────────
+ *
+ * Felipe, com o print de uma galeria no celular: "tem fotos que não ocupam o
+ * tamanho correto, aquela ali tá com uma barra branca do lado".
+ *
+ * A "Linhas" era `flex-wrap` com `flex-grow` igual à proporção da foto, e isso
+ * tem um canto que o CSS define assim de propósito: quando a SOMA dos
+ * `flex-grow` de uma linha é menor que 1, a linha distribui só essa FRAÇÃO da
+ * sobra. Uma foto vertical (2:3) sozinha na linha — porque a seguinte era
+ * deitada e não cabia ao lado — crescia 67% da sobra e parava; os outros 33%
+ * eram a barra. As medidas do print batem com essa conta a 2 px. E a foto que
+ * crescia era cortada, porque a altura era fixa: a promessa "nada é cortado"
+ * desta grade não valia justamente onde ela esticava.
+ *
+ * Agora é a mesma matemática da Panorama e da Colunas — fileira justificada,
+ * altura = largura útil ÷ soma das proporções —, com a quebra escolhida pela
+ * altura: a fileira fecha quando a próxima foto a faria passar da borda, e
+ * essa foto entra ou abre a fileira seguinte conforme o que deixar a altura
+ * mais perto da alvo. A vertical que ficava sozinha agora divide a fileira
+ * com a deitada, as duas um pouco mais baixas.
+ *
+ * ── O FIM ─────────────────────────────────────────────────────────────────
+ *
+ * A última fileira escolhe entre esticar até a borda e juntar-se à anterior —
+ * o que ficar mais perto da altura-alvo —, desde que o resultado fique entre
+ * a metade e o dobro dela. Não dando (um capítulo de uma foto vertical), ela
+ * fica na altura-alvo, alinhada à esquerda, como a Colunas faz.
+ *
+ * Com a lista ainda chegando (`listaCompleta = false` — a leva seguinte do
+ * desenho, ou a rede), a última fileira não estica nem se junta: é o fim de um
+ * lote. As outras não mudam quando o resto chega — a quebra de cada fileira só
+ * depende das fotos dela e da primeira da seguinte.
+ */
+export interface FileirasPorAltura {
+  fileiras: number[][];
+  /** A última fileira estica até a borda? Sem esticar, fica na altura-alvo. */
+  ultimaEstica: boolean;
+}
+
+export function fileirasPorAltura(
+  proporcoes: readonly number[],
+  largura: number,
+  alturaAlvo: number,
+  gap: number,
+  listaCompleta = true,
+): FileirasPorAltura {
+  if (proporcoes.length === 0) return { fileiras: [], ultimaEstica: false };
+  /* Antes de medir não há largura para dividir: uma foto por fileira, que é o
+     primeiro quadro de todas as grades de fileira. */
+  if (!(largura > 0) || !(alturaAlvo > 0)) {
+    return { fileiras: proporcoes.map((_, i) => [i]), ultimaEstica: false };
+  }
+
+  const justificada = (soma: number, fotos: number) => (largura - gap * (fotos - 1)) / soma;
+  /* Distância em escala de proporção: 2× mais alta e 2× mais baixa pesam igual. */
+  const distancia = (altura: number) => Math.abs(Math.log(altura / alturaAlvo));
+
+  const fileiras: number[][] = [];
+  let atual: number[] = [];
+  let soma = 0;
+  const fechar = () => {
+    fileiras.push(atual);
+    atual = [];
+    soma = 0;
+  };
+
+  for (let i = 0; i < proporcoes.length; i++) {
+    const p = proporcoes[i];
+    if (atual.length > 0 && (soma + p) * alturaAlvo + gap * atual.length >= largura) {
+      const com = justificada(soma + p, atual.length + 1);
+      const sem = justificada(soma, atual.length);
+      if (distancia(com) <= distancia(sem)) {
+        atual.push(i);
+        fechar();
+        continue;
+      }
+      fechar();
+    }
+    atual.push(i);
+    soma += p;
+    /* Uma foto sozinha já mais larga que a tela na altura-alvo (um panorama
+       3:1 no celular) fecha a própria fileira, um pouco mais baixa. */
+    if (atual.length === 1 && p * alturaAlvo >= largura) fechar();
+  }
+
+  if (atual.length === 0) return { fileiras, ultimaEstica: true };
+  if (!listaCompleta) {
+    fileiras.push(atual);
+    return { fileiras, ultimaEstica: false };
+  }
+
+  const dentro = (altura: number) => altura <= alturaAlvo * 2 && altura >= alturaAlvo / 2;
+  const estica = justificada(soma, atual.length);
+  const anterior = fileiras[fileiras.length - 1];
+  const junta = anterior
+    ? justificada(anterior.reduce((t, k) => t + proporcoes[k], 0) + soma, anterior.length + atual.length)
+    : NaN;
+
+  if (anterior && dentro(junta) && (!dentro(estica) || distancia(junta) < distancia(estica))) {
+    anterior.push(...atual);
+    return { fileiras, ultimaEstica: true };
+  }
+  fileiras.push(atual);
+  return { fileiras, ultimaEstica: dentro(estica) };
+}
+
+/**
+ * Esta fileira da "Colunas" pode ser esticada até a borda?
+ *
+ * Esticar deixa as fotos `colunas ÷ fotos` vezes maiores que numa fileira
+ * cheia. O fim repartido por `fileirasDeColunas` fica em 25% com cinco
+ * colunas, e um capítulo de três fotos em cinco colunas chega a 1,7× — ainda
+ * parece a mesma galeria. Passando do dobro, não: a foto sozinha de um
+ * capítulo sairia da largura da tela e mais alta que ela. Aí a fileira fica
+ * com a altura de uma fileira cheia, e o vazio à direita é o de um capítulo
+ * que tem poucas fotos.
+ *
+ * Com a galeria ainda chegando pela rolagem (`listaCompleta = false`), só a
+ * fileira cheia estica: a última é o fim de um lote, não o da galeria.
+ */
+export function fileiraChegaNaBorda(
+  fotos: number,
+  colunas: number,
+  listaCompleta = true,
+): boolean {
+  return listaCompleta ? fotos * 2 >= colunas : fotos >= colunas;
 }
 
 /**

@@ -90,7 +90,7 @@ export function EncontrarMe({
         <button
           type="button"
           onClick={() => aoEncontrar(null)}
-          className="rounded-full px-4 py-2 text-sm transition hover:opacity-85"
+          className="rounded-[var(--g-pilula,9999px)] px-4 py-2 text-sm transition hover:opacity-85"
           style={{ border: "1px solid var(--g-linha)", color: "var(--g-suave)" }}
         >
           ver a galeria inteira
@@ -117,7 +117,7 @@ export function EncontrarMe({
           <button
             type="button"
             onClick={() => setLendo(true)}
-            className="rounded-full px-5 py-2.5 text-sm transition hover:opacity-85"
+            className="rounded-[var(--g-pilula,9999px)] px-5 py-2.5 text-sm transition hover:opacity-85"
             style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
           >
             Encontrar as minhas fotos
@@ -174,7 +174,7 @@ export function EncontrarMe({
                 type="button"
                 disabled={ocupado}
                 onClick={() => setLendo(false)}
-                className="rounded-full px-4 py-2 text-sm transition hover:opacity-85 disabled:opacity-50"
+                className="rounded-[var(--g-pilula,9999px)] px-4 py-2 text-sm transition hover:opacity-85 disabled:opacity-50"
                 style={{ border: "1px solid var(--g-linha)", color: "var(--g-suave)" }}
               >
                 Ver a galeria inteira
@@ -183,7 +183,7 @@ export function EncontrarMe({
                 type="button"
                 disabled={ocupado}
                 onClick={() => inputRef.current?.click()}
-                className="rounded-full px-5 py-2 text-sm font-semibold transition hover:opacity-85 disabled:opacity-60"
+                className="rounded-[var(--g-pilula,9999px)] px-5 py-2 text-sm font-semibold transition hover:opacity-85 disabled:opacity-60"
                 style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
               >
                 {estado === "preparando"

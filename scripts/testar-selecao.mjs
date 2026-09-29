@@ -227,7 +227,53 @@ await etapa("limite menor que o já marcado não apaga escolha de ninguém", asy
 
 /* ── fechar ──────────────────────────────────────────────────────────────── */
 
+/*
+ * SÓ FECHA ESCOLHA COMBINADA (28/09/2026).
+ *
+ * Felipe, numa galeria entregue da Carol: "escolha do quê? não deveria ter
+ * escolha aqui, se for dos favoritos, é ilimitado os favoritos". Alguém com o
+ * link tocou em "Terminei minha escolha" numa galeria SEM limite e SEM prazo, e
+ * os corações sumiram para todo mundo. Sem combinado, favorita é favorita.
+ * As etapas de fechar abaixo combinam um número antes — é o caso em que
+ * encerrar faz sentido.
+ */
+const combinar = () => definirRegrasSelecao(galeriaId, tenantId, { limite: 50, prazo: null });
+
+await etapa("sem limite e sem prazo, ninguém encerra — as favoritas são livres", async () => {
+  await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
+  const fechou = await fecharSelecao(galeriaId);
+  if (fechou) throw new Error("encerrou uma galeria sem escolha combinada");
+
+  const e = await estadoSelecao(galeriaId, NOIVA);
+  if (!e.aberta || e.motivo !== null) throw new Error(`trancou: ${JSON.stringify(e)}`);
+  if (e.combinada) throw new Error("disse que há escolha combinada sem limite nem prazo");
+  const r = await alternarDaPessoa(galeriaId, fotos[1].id, NOIVA);
+  if (r?.favorita !== true) throw new Error("não deixou marcar");
+  return "marca à vontade, sem 'terminei'";
+});
+
+await etapa("um 'terminei' antigo não tranca favoritas livres", async () => {
+  /* O que estava gravado na galeria da Carol: a data de encerramento, sem
+     limite nem prazo. Tem de valer como aberta. */
+  await db.query("update galerias set selecao_fechada_em = now() where id = $1", [galeriaId]);
+  const e = await estadoSelecao(galeriaId, NOIVA);
+  if (!e.aberta) throw new Error(`segue trancada: ${JSON.stringify(e)}`);
+  const r = await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
+  if (r?.favorita !== true) throw new Error("não deixou marcar");
+});
+
+await etapa("tirar limite e prazo desfaz o encerramento de antes", async () => {
+  await combinar();
+  await fecharSelecao(galeriaId);
+  await definirRegrasSelecao(galeriaId, tenantId, { limite: null, prazo: null });
+  /* Combinar de novo não pode nascer trancado por aquele clique antigo. */
+  await combinar();
+  const e = await estadoSelecao(galeriaId, NOIVA);
+  if (!e.aberta) throw new Error("o combinado novo nasceu trancado");
+});
+
 await etapa("fechada, não aceita mais marcar nem desmarcar", async () => {
+  await combinar();
   await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   await fecharSelecao(galeriaId);
 
@@ -244,6 +290,7 @@ await etapa("fechada, não aceita mais marcar nem desmarcar", async () => {
 });
 
 await etapa("o fotógrafo consegue reabrir — cliente que muda de ideia é comum", async () => {
+  await combinar();
   await alternarDaPessoa(galeriaId, fotos[0].id, NOIVA);
   await fecharSelecao(galeriaId);
   await reabrirSelecao(galeriaId, tenantId);
@@ -256,6 +303,7 @@ await etapa("o fotógrafo consegue reabrir — cliente que muda de ideia é comu
 });
 
 await etapa("reabrir é do dono da galeria, não de quem tem o link", async () => {
+  await combinar();
   await fecharSelecao(galeriaId);
   const alheio = await reabrirSelecao(galeriaId, "00000000-0000-0000-0000-000000000000");
   if (alheio) throw new Error("estúdio errado conseguiu reabrir");

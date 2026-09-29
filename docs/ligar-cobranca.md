@@ -1,8 +1,49 @@
 # Ligar a cobrança — passo a passo
 
-*A cobrança está **ligada em produção** desde 01/09/2026, com split para as três
-carteiras. Nenhum cliente pagante existe ainda, então nada foi cobrado nem
-distribuído até agora. Este documento descreve como está e por quê.*
+> ✅ **Ligada de verdade em 29/09/2026** (pelo Felipe, no servidor). O que este
+> documento afirmava desde 01/09 não era verdade: faltava `ASAAS_API_KEY` no
+> `.env.production`, e a Conta dizia "A cobrança ainda não foi ligada nesta
+> instalação". As carteiras e o webhook estavam como descritos abaixo.
+>
+> **Como foi ligada — e a armadilha do `$`:**
+>
+> 1. Antes, as contas que não pagam viraram `cortesia` (Felipe; Carol, Sirius e
+>    Tedesco já eram). Sem isso, teste vencido trava no instante em que a
+>    cobrança liga.
+> 2. A chave é a MESMA do Atomatiza (decisão registrada), copiada de
+>    `/opt/atomatiza-secrets.env` para `/opt/fotonio-shared/.env.production`,
+>    com `ASAAS_AMBIENTE=producao`. Cópia do arquivo anterior:
+>    `/opt/fotonio-shared/.env.production.antes-da-cobranca`.
+> 3. **Todo `$` da chave vai escapado como `\$`.** A chave de produção do Asaas
+>    começa com `$aact_…`, e o Next, ao ler o `.env.production`, trata
+>    `$palavra` como variável e a troca por vazio — mesmo entre aspas simples.
+>    Copiada crua, a chave chega ao app vazia ou quebrada, e a Conta continua
+>    dizendo "não foi ligada". Foi o que aconteceu na primeira tentativa. No
+>    Atomatiza não acontece porque lá os segredos entram pelo systemd.
+>
+>    ```
+>    sed -i '/^ASAAS_API_KEY=/d; /^ASAAS_AMBIENTE=/d' /opt/fotonio-shared/.env.production
+>    grep '^ASAAS_API_KEY=' /opt/atomatiza-secrets.env | sed 's/\$/\\$/g' >> /opt/fotonio-shared/.env.production
+>    echo 'ASAAS_AMBIENTE=producao' >> /opt/fotonio-shared/.env.production
+>    systemctl restart fotonio
+>    ```
+>
+>    Efeito colateral conhecido: os scripts do servidor, que carregam o mesmo
+>    arquivo com `node --env-file`, leem a chave COM a barra (`\$aact…`). Hoje
+>    eles só conferem se a chave existe (`asaasConfigurado`), então funcionam;
+>    um script novo que chame a API do Asaas por esse caminho precisa tirar a
+>    barra antes.
+>
+> Com a cobrança ligada: teste vencido não envia mais (`situacaoDoTenant`), a
+> galeria dele sai do ar 15 dias depois (`galeriasNoAr`), e a limpeza de testes
+> abandonados passa a avisar e, aos 60 dias, apagar (`lib/testes-abandonados.ts`).
+> Desligada, desde 29/09 nenhuma galeria sai do ar por teste vencido.
+
+*A cobrança está **ligada em produção** desde 29/09/2026 (ver acima — o
+"01/09" que estava aqui valia para as carteiras e o webhook, não para a chave),
+com split para as três carteiras. Nenhum cliente pagante existe ainda, então
+nada foi cobrado nem distribuído até agora. Este documento descreve como está e
+por quê.*
 
 > ⚠️ **Correção de 20/08/2026.** Este documento dizia "pronto e testado" e estava
 > errado, de um jeito que só apareceria no pior momento: o `scripts/testar-cobranca.mjs`
@@ -30,59 +71,53 @@ distribuído até agora. Este documento descreve como está e por quê.*
 | Carteiras dos sócios | ✅ os três têm conta e mandaram o `walletId` (31/08/2026) |
 | Base do split | **lucro** — a reserva de custo sai antes, ver abaixo |
 | Percentuais | 50/25/25 do lucro |
-| Rateio do custo | **igual** — o custo todo dividido em 3 partes iguais (acordo de 01/09/2026) |
+| Rateio do custo | **proporcional** desde 29/09/2026 — o custo sai na mesma proporção, e o lucro fecha em 50/25/25 (até então era `igual`, em terços) |
 | Caixa da operação | **conta principal** (decisão do Felipe, 01/09/2026) — `ASAAS_CARTEIRA_OPERACAO` fica vazia |
 | Ambiente | `producao` |
 | Variáveis no servidor | ✅ as três `ASAAS_CARTEIRA_*` gravadas em 01/09/2026, split conferido no ar |
 
 ## Como o dinheiro é dividido
 
-O acordo, nas palavras do Felipe em 01/09/2026: **o custo todo é dividido em 3
-partes iguais, e o lucro é 50/25/25.**
+Decisão do Felipe em 29/09/2026, perguntado se o 50/25/25 era do lucro ou da
+receita: **do lucro.** O custo de armazenamento (com a folga cambial) e a taxa
+do Asaas ficam na conta principal; o que sobra é dividido **50% Felipe, 25%
+Carol, 25% Sirius** — cada um banca o custo na mesma proporção da sua fatia.
 
-Em conta, cada sócio recebe `fatia × líquido − custo ÷ 3`. Com R$ 1.000 de
-receita e R$ 529 de custo:
+Por plano, sem combo (o que cada um recebe por cobrança):
 
-| | recebe |
-|---|---|
-| Felipe | R$ 323,67 |
-| Carol | R$ 73,67 |
-| Sirius | R$ 73,67 |
-| **soma** | **R$ 471,00** (o lucro inteiro) |
+| Plano | Preço | Felipe | Carol | Sirius |
+|---|---|---|---|---|
+| 250 GB mensal | R$ 49,99 | R$ 16,54 | R$ 8,27 | R$ 8,27 |
+| 500 GB mensal | R$ 79,99 | R$ 23,63 | R$ 11,81 | R$ 11,81 |
+| 1 TB mensal | R$ 119,99 | R$ 28,13 | R$ 14,05 | R$ 14,05 |
+| 250 GB anual | R$ 499,90 | R$ 152,75 | R$ 76,35 | R$ 76,35 |
+| 500 GB anual | R$ 799,90 | R$ 208,76 | R$ 104,38 | R$ 104,38 |
+| 1 TB anual | R$ 1.199,90 | R$ 223,97 | R$ 111,93 | R$ 111,93 |
 
 A reserva de custo sai antes e fica parada na conta principal até a fatura da
 Backblaze e da Cloudflare chegar. Ninguém adianta dinheiro e ninguém cobra
-ninguém.
+ninguém. Com o combo, o desconto da Galeria sai do lucro, e os três o absorvem
+na mesma proporção (1 TB anual com o combo Estúdio: R$ 102,70 / R$ 51,30 /
+R$ 51,30).
 
-### O que isso faz com a divisão do lucro
+### Como era até 29/09/2026: o custo em terços
 
-Com o custo em partes iguais, **o lucro deixa de sair 50/25/25**. No exemplo
-acima o Felipe fica com 68,7% do lucro, e cada um dos outros com 15,6% — porque
-ele banca um terço de um custo que a fatia dele geraria em metade. É consequência
-aritmética do acordo, não defeito. Quem quiser 50/25/25 do lucro precisa do
-rateio `proporcional`, que é uma palavra em `RATEIO_DO_CUSTO`.
+O acordo de 01/09 dizia "o custo todo dividido em 3 partes iguais, e o lucro
+50/25/25" — o que, na conta, não fecha: com o custo em terços, cada um recebia
+`fatia × líquido − custo ÷ 3`, e o lucro saía 68/16/16 no plano de 1 TB mensal.
+Nas faixas de margem curta a parte da Carol e do Sirius ficava negativa, travava
+em zero e o Felipe cobria a diferença (o anual de 1 TB com combo Estúdio, e os
+anuais de 5 e 10 TB). Nenhuma assinatura existia quando mudou.
 
-### Onde o acordo encosta no limite
+Em 31/08/2026 o Felipe chegou a pedir a divisão da receita cheia, com o custo
+acertado por fora. Ficou um dia assim e voltou: da faixa de 2 TB para cima, no
+pior caso (espaço 100% cheio), metade da receita é **menos** que a reserva do
+plano — num ano de 10 TB o descoberto chegaria a **R$ 5.501,75**, adiantados por
+quem opera. `scripts/testar-planos.mjs` continua medindo esse número quando a
+base é `receita`.
 
-Quando o custo passa de **75% da receita**, um terço dele fica maior que a fatia
-de quem tem 25% — ou seja, a Carol e o Sirius deveriam PAGAR. Split negativo não
-existe, então a fatia deles trava em zero e o que sobra vai para o Felipe (nunca
-para a reserva: essa é intocável).
-
-Acontece em seis planos, todos anuais: 5 TB e 10 TB nos três segmentos. Num anual
-de 10 TB (R$ 7.999,90) a Carol e o Sirius ficam com **zero** e o Felipe com
-R$ 840,82. `scripts/testar-planos.mjs` lista esses planos a cada execução, para
-a consequência não sumir de vista.
-
-Em 31/08/2026 o Felipe pediu a divisão da receita cheia, com o custo acertado por
-fora. Ficou um dia assim e voltou, por causa deste número: da faixa de 2 TB para
-cima, no pior caso (espaço 100% cheio), metade da receita é **menos** que a
-reserva do plano — e num ano de 10 TB o descoberto chega a **R$ 5.501,75**,
-adiantados por quem opera. `scripts/testar-planos.mjs` continua medindo e
-imprimindo esse número quando a base é `receita`, para a conta não sumir junto
-com a decisão.
-
-Trocar de volta é uma palavra: `BASE_DO_SPLIT` em `src/config/socios.ts`.
+Trocar qualquer uma das duas regras é uma palavra em `src/config/socios.ts`:
+`BASE_DO_SPLIT` (lucro ou receita) e `RATEIO_DO_CUSTO` (proporcional ou igual).
 
 ### A reserva varia MUITO com o plano
 
@@ -138,7 +173,8 @@ não pertence a cobrança nenhuma e não teria como ser rateado por cobrança se
 mudar de valor a cada cliente novo (ver `src/config/custos-fixos.ts`).
 
 Se o acordo entre os sócios divide o custo fixo, ele precisa ser acertado **por
-fora, uma vez por mês** — R$ 43,11 para cada um, com a lista de três. Nenhum
+fora, uma vez por mês** — com o lucro em 50/25/25, na mesma proporção:
+R$ 64,67 / R$ 32,33 / R$ 32,33. Nenhum
 split de pagamento resolve isso, porque o Asaas divide cobrança por cobrança e
 não conhece o total do mês.
 
@@ -252,6 +288,124 @@ clientes reais pagando. Duas proteções já estão no código:
 
 Ao configurar o webhook do Olumier, **não altere nem remova** o do Atomatiza.
 
+## O combo com o Atomatiza (28/09/2026; divisão proporcional desde 29/09)
+
+Quem assina a Galeria Átomo **e** o Atomatiza com o mesmo CPF/CNPJ paga menos
+pelos dois. Cada plataforma baixa a **sua** assinatura na **sua** parte do
+desconto, e divide com os sócios pela própria regra — aqui o split já sai do
+preço que a assinatura cobra, então nada muda nele. Quem já tem um e assina o
+outro paga o mesmo combo.
+
+**Como o desconto se divide (29/09/2026).** Não é mais meio a meio em reais.
+Felipe: "a receita é dividida [pela] porcentagem respectiva do pacote de cada
+sistema, porque um pode ser bem mais caro que o outro, por exemplo se a
+galeria for de 5 TB e o atomatiza o pacote solo". Meio a meio, o Solo cedia
+25% do preço e os 5 TB só 3%. Agora cada lado cede a **mesma porcentagem do seu
+preço de tabela**, e a receita do combo fica na proporção dos dois pacotes. O
+total do pacote é o aprovado:
+
+| Pacote (desconto do pacote) | Galeria | Atomatiza | Total | Cada um cede |
+|---|---|---|---|---|
+| 250 GB + Solo (R$ 19,99) | R$ 40,90 | R$ 49,00 | **R$ 89,90** | 18,2% |
+| 500 GB + Equipe (R$ 29,99) | R$ 65,87 | R$ 74,03 | **R$ 139,90** | 17,7% |
+| 1 TB + Estúdio (R$ 49,99) | R$ 101,24 | R$ 168,66 | **R$ 269,90** | 15,6% |
+| 5 TB + Solo (R$ 29,99) | R$ 413,59 | R$ 56,31 | **R$ 469,90** | 6,0% |
+
+O desconto do pacote por par está em `DESCONTO_DO_PACOTE` (`src/config/combo.ts`);
+acima de 1 TB vale a linha de 1 TB. A régua da proporção são os preços de
+**tabela** dos dois (`PRECO_DE_TABELA_ATOMATIZA` aqui, a cópia de `ESPACOS` lá),
+e não os preços vivos, para as duas plataformas chegarem à mesma conta sem se
+consultar. No anual, o desconto é de dez mensalidades, como o próprio preço.
+Planos antigos (ids nomeados e de três peças) não entram: o preço deles é de
+outra época. Quem assinou no dia da divisão meio a meio é trazido à
+proporcional pela própria conferência.
+
+**Como um enxerga o outro.** A conta do Asaas é a mesma, então não há chamada
+de um sistema para o outro nem segredo novo: cada lado procura, pelo CPF/CNPJ,
+a assinatura do outro (`externalReference` com `atz:sub:` lá, `olumier:`
+aqui) e lê o plano na **descrição** dela — "Atomatiza — plano equipe" lá,
+"Galeria Átomo — Foto · 500 GB" aqui. As descrições e a tabela são **contrato
+entre os dois repositórios**: mudou aqui, mude lá (`src/config/combo.ts` aqui,
+`src/lib/combo.ts` lá).
+
+**Quando vale.** A assinatura do outro lado tem de estar viva, **já paga ao
+menos uma vez** e **sem cobrança vencida**. O combo começa quando as duas estão
+pagas e dura enquanto as duas estão em dia.
+
+**Quando é conferido** (`recalcularCombo`, em `src/lib/combo.ts`):
+
+- ao criar a assinatura e ao trocar de plano, aqui;
+- a cada evento do Atomatiza que chega no nosso webhook (a conta é a mesma, e
+  ele já chegava — era só ignorado); a conferência roda **depois** da resposta,
+  com `after()`, para não segurar a fila sequencial da conta;
+- a cada pagamento nosso — a rede de segurança para um aviso perdido.
+
+**O que a conferência não faz:** mexer em valor que não é um dos que este
+sistema grava (mudado à mão no Asaas — ela avisa no log e deixa); mexer na
+fatura já emitida quando o preço **sobe** (quem cancelou o Atomatiza volta ao
+cheio no ciclo seguinte; quando o preço baixa, a fatura aberta baixa junto); e
+devolver erro ao Asaas por causa do combo.
+
+A coluna `tenants.combo_atomatiza` (migração 045) guarda só o que a última
+conferência achou, para a tela de Conta. A verdade é o Asaas. Cada troca de
+valor fica no registro de eventos como `assinatura.combo`.
+
+```bash
+node --env-file=.env.local --conditions=react-server --experimental-strip-types --import ./scripts/registrar-ts.mjs scripts/testar-combo.mjs
+```
+
+## Trocar de plano no meio do período (28/09/2026)
+
+Felipe: "se o usuário quiser aumentar o pacote da galeria, não cobre
+novamente, apenas a diferença". Até aqui a troca só mudava o valor da
+assinatura: o período já pago seguia sem cobrança nenhuma, e no anual isso era
+até um ano de espaço maior pelo preço do menor.
+
+| Troca | O que acontece |
+|---|---|
+| Subiu, com período pago | Espaço novo na hora. Cobra **só a diferença**, proporcional ao que falta do período. Da próxima fatura em diante, o preço novo. |
+| Subiu, sem nada pago (teste, fatura em aberto) | Nenhuma cobrança à parte: a fatura que vai vencer já sai com o preço novo. |
+| Diferença abaixo de R$ 5,00 | Não é cobrada (é o mínimo do Asaas). Fica registrada como absorvida. |
+| Desceu | Nada volta; o preço menor vale da próxima fatura. |
+| Desceu e subiu de novo no mesmo período | Não cobra outra vez: a base é o maior plano já pago no período (`tenants.plano_do_periodo`, migração 046). |
+
+Exemplo: 250 GB → 500 GB com 20 de 30 dias pela frente = (R$ 79,99 − R$ 49,99)
+× 20/30 = **R$ 20,00**. No anual, a fração é do ano.
+
+**No pacote dos dois.** Com o combo, os dois preços entram com o combo — a
+diferença é a dos planos, com o desconto de cada um. Trocar de plano muda o par,
+e com ele a parte do desconto do OUTRO lado; o outro sistema se ajusta sozinho
+quando o aviso da cobrança da diferença chega no webhook dele (a conta é a
+mesma). O Atomatiza tem a mesma regra na troca de faixa (Solo, Equipe,
+Estúdio), e o aviso da diferença de lá (`atz:dif:`) ajusta o combo aqui. Sem
+cobrança de diferença (teste, abaixo de R$ 5, descida), o outro lado se acerta
+no próximo pagamento — ou na hora, se o webhook dos dois tiver o evento
+`SUBSCRIPTION_UPDATED` ligado no painel do Asaas.
+
+**Onde a diferença é cobrada.** No cartão que a assinatura já guardou
+(`creditCardToken`, com o IP de quem clicou, como o Asaas exige). Sem cartão,
+ou se ele recusar, vira fatura com Pix, boleto e cartão, vencendo em 3 dias, e
+aparece na Conta até ser paga. Se nem a fatura puder ser criada, a assinatura
+volta ao valor antigo e nada muda. A tela mostra o valor antes do clique, e o
+servidor recusa se ele tiver mudado desde então.
+
+**O split da diferença** reserva só o custo do espaço A MAIS pelos meses que
+faltam (`lucroDaDiferencaCentavos`, em `config/socios.ts`) e divide o resto
+pela regra de sempre.
+
+**No webhook**, a diferença tem referência própria
+(`olumier:<estúdio>:diferenca:<quando>`) e **não renova o período pago** — se
+renovasse, pagar R$ 20 de diferença daria um mês, ou um ano no anual, a partir
+daquele dia. Vencida sem pagar, a conta fica em atraso como numa mensalidade;
+paga, volta a ativa.
+
+Regra em `src/config/troca-de-plano.ts`, fluxo em `src/lib/troca-de-plano.ts`,
+prova em:
+
+```bash
+node --env-file=.env.local --conditions=react-server --experimental-strip-types --import ./scripts/registrar-ts.mjs scripts/testar-troca-de-plano.mjs
+```
+
 ## Como conferir depois de ligar
 
 ```bash
@@ -285,24 +439,39 @@ entrou cobre o serviço". Quem escreve nela:
 
 | Evento | `status` | `pago_ate` |
 |---|---|---|
-| `PAYMENT_CONFIRMED` / `PAYMENT_RECEIVED` | `ativo` | agora + 1 mês (ou + **12** se anual) |
+| `PAYMENT_CONFIRMED` / `PAYMENT_RECEIVED` | `ativo` | dia da confirmação + 1 mês (ou + **12** se anual) |
+| `PAYMENT_RECEIVED` de cobrança já contada | **intocado** | **intocado** |
 | `PAYMENT_OVERDUE` | `inadimplente` | intocado |
 | `PAYMENT_DELETED` / `SUBSCRIPTION_DELETED` | `cancelado` | **intocado** — o dinheiro ficou conosco |
 | `PAYMENT_REFUNDED` / `PAYMENT_CHARGEBACK_REQUESTED` | `cancelado` | **null** — o dinheiro voltou |
 | cancelamento pelo painel | `cancelado` | **intocado** |
 
-Três detalhes que não são óbvios:
+Quatro detalhes que não são óbvios:
 
 - **O anual compra 12 meses, não 10.** O desconto está no preço (paga 10, leva
   12). Se o período seguisse a fatura, todo estúdio anual ficaria dois meses
   descoberto por ano — e descobriria justamente ao cancelar.
-- **O período conta a partir de agora, não soma.** O Asaas manda
-  `PAYMENT_CONFIRMED` *e* `PAYMENT_RECEIVED` para a mesma cobrança; somar daria
-  dois meses por um pagamento.
+- **O período conta do dia da confirmação, não soma e não conta do aviso.** O
+  Asaas manda `PAYMENT_CONFIRMED` *e* `PAYMENT_RECEIVED` para a mesma cobrança;
+  somar daria dois meses por um pagamento. E no **cartão** os dois chegam com
+  **32 dias** de distância (confirmado na aprovação, recebido quando o dinheiro
+  cai — boleto: dias; Pix: só o recebido). Até 29/09/2026 o período contava do
+  momento do aviso, e o recebido tardio dava quase um mês a mais — e marcava
+  `ativo` de novo quem tinha cancelado, com envio liberado para sempre e sem
+  assinatura. Agora a conta sai de `payment.confirmedDate`, igual nos dois
+  avisos (começo do dia em Brasília; sem data no corpo, o momento do aviso).
+- **O recebido só vale se comprar tempo novo.** Se o fim que ele daria não passa
+  do `pago_ate` atual, é repetição de cobrança já contada e o estúdio fica
+  intocado — nem status. O confirmado sempre vale, mas nunca encolhe o período.
+  Limite conhecido: pagar, cancelar e reassinar pagando no Pix **no mesmo dia**
+  deixa o estúdio `cancelado` até a mensalidade seguinte (o Pix novo dá o mesmo
+  fim e parece repetição). Se acontecer, a saída é guardar o `payment.id` já
+  contado. Regra em `pagoAteDepoisDoAviso`.
 - **Inadimplência não olha `pago_ate`.** É outra régua, e ainda não foi
   decidida: a cobrança em aberto é a do período seguinte.
 
-Regra em `src/lib/assinatura.ts` (`fimDoPeriodoPago`, `efeitoDoEvento`), coluna
+Regra em `src/lib/assinatura.ts` (`fimDoPeriodoPago`, `pagoAteDepoisDoAviso`,
+`efeitoDoEvento`), coluna
 na migração `021-periodo-pago.sql`, prova em:
 
 ```bash

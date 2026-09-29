@@ -27,7 +27,17 @@ export interface Secao {
   total?: number;
 }
 
-/** Sugestões de capítulo — o fotógrafo cria os seis com um clique. */
+/**
+ * Sugestões de capítulo — os momentos típicos de um casamento.
+ *
+ * São SUGESTÕES, e cada uma nasce de um clique próprio. Havia um botão que
+ * criava as seis de uma vez, e ele saiu em 29/09/2026: Juan viu gente clicar
+ * sem querer e ficar com seis capítulos para apagar à mão. Felipe fechou a
+ * questão — "não crie todos os capítulos de uma vez, deixe o usuário criar, se
+ * não ele precisará apagar".
+ *
+ * O preço de um clique errado passa a ser UM capítulo vazio.
+ */
 export const CAPITULOS_SUGERIDOS = [
   "Making Of",
   "Cerimônia",
@@ -366,6 +376,42 @@ export async function apagarSecao(secaoId: string, tenantId: string) {
 }
 
 /**
+ * Apaga TODOS os capítulos desta galeria de uma vez, e devolve quantos foram.
+ *
+ * ── A SAÍDA DE QUEM CLICOU ERRADO (29/09/2026) ────────────────────────────
+ *
+ * Juan: "vi que clicaram errado e criaram vários capítulos sem querer". A
+ * porta de entrada do acidente já foi fechada — não existe mais criar seis de
+ * uma vez —, mas quem já está com os seis dentro precisa de uma saída que não
+ * seja apagar um por um. Felipe: "ou tenha a opção de apagar todos os
+ * capítulos".
+ *
+ * ── POR QUE ISTO NÃO É PERDA DE DADO ──────────────────────────────────────
+ *
+ * `medias.secao_id` é `references secoes(id) on delete set null` desde a
+ * migração 003. Nenhuma foto é apagada: as que estavam em capítulo voltam para
+ * "sem capítulo", que é exatamente o que `apagarSecao` já faz uma a uma. O que
+ * se perde são os NOMES dos capítulos e a divisão — e é por isso que a tela
+ * confirma antes, em vez de apagar no primeiro clique. Trocar um acidente de
+ * seis capítulos criados por um acidente de seis capítulos apagados não seria
+ * conserto nenhum.
+ *
+ * O `where` amarra galeria E tenant na mesma consulta, como em
+ * `reordenarSecoes`: id de galeria de outro estúdio não casa, e o que não casa
+ * não é apagado.
+ */
+export async function apagarTodasAsSecoes(galeriaId: string, tenantId: string): Promise<number> {
+  const apagadas = await consultar<{ id: string }>(
+    `delete from secoes s
+      using galerias g
+      where s.galeria_id = $1 and s.galeria_id = g.id and g.tenant_id = $2
+      returning s.id`,
+    [galeriaId, tenantId],
+  );
+  return apagadas.length;
+}
+
+/**
  * Grava a ordem inteira dos capítulos de uma vez.
  *
  * ── POR QUE ISTO EXISTE AO LADO DE `moverSecao` (11/09/2026) ──────────────
@@ -516,6 +562,47 @@ export async function moverMediasParaSecao(
  * Devolve quantas moveu. Zero quando o capítulo não é válido para esta
  * galeria: quem chama trata como "não fiz nada", que é a verdade.
  */
+/**
+ * DEVOLVE AS FOTOS DE UM CAPÍTULO PARA "SEM CAPÍTULO" — o caminho de volta.
+ *
+ * ── DE ONDE VEIO (28/09/2026) ─────────────────────────────────────────────
+ *
+ * A ida existia desde 04/09: o grupo "Outras fotos" tem "mover todas para…". A
+ * volta, não. Quem criou um capítulo errado, ou mandou a pasta inteira para o
+ * lugar errado no envio, tinha duas saídas: desfazer foto a foto, ou APAGAR o
+ * capítulo — um botão vermelho, com aviso de que não dá para desfazer, para uma
+ * operação que só queria desarrumar as fotos de novo.
+ *
+ * ESVAZIAR NÃO É APAGAR: o capítulo continua existindo, vazio. É justamente o
+ * estado de quem vai reorganizar e quer o nome de pé enquanto move as fotos.
+ *
+ * O `tenant_id` no WHERE do UPDATE, e não só na conferência do capítulo: é ele
+ * que garante que o id vindo do navegador não alcance a galeria de ninguém —
+ * mesma régua de `moverSoltasParaSecao`, logo abaixo.
+ */
+export async function esvaziarSecao(
+  galeriaId: string,
+  secaoId: string,
+  tenantId: string,
+): Promise<number> {
+  const alvo = await consultarUm<{ id: string }>(
+    `select s.id
+       from secoes s
+       join galerias g on g.id = s.galeria_id
+      where s.id = $1 and s.galeria_id = $2 and g.tenant_id = $3`,
+    [secaoId, galeriaId, tenantId],
+  );
+  if (!alvo) return 0;
+
+  const soltas = await consultar<{ id: string }>(
+    `update medias set secao_id = null
+      where galeria_id = $1 and tenant_id = $2 and secao_id = $3
+      returning id`,
+    [galeriaId, tenantId, secaoId],
+  );
+  return soltas.length;
+}
+
 export async function moverSoltasParaSecao(
   galeriaId: string,
   secaoId: string,

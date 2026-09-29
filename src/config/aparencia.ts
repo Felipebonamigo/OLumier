@@ -18,7 +18,19 @@ export type Capa =
    * mais minimalista. Foto em formato de arco, reta na parte inferior
    * horizontal, título embaixo." Ver `galeria-capa.tsx`. */
   | "redonda"
-  | "arco";
+  | "arco"
+  /*
+   * A de 29/09/2026: "adicionar outra de capa grande, tipo a imersa, mas sem
+   * degradê".
+   *
+   * Não é a imersa com o véu apagado — é capa nova, porque o véu da imersa não
+   * é enfeite. Lá o título fica SOBRE a foto e nenhum elemento tem sombra nem
+   * fundo próprio: sem o degradê, o título branco do tema noite sai em 1,13:1
+   * sobre vestido ao sol, contra o mínimo de 3:1. Sobre o fundo do tema, o
+   * mesmo token dá 17,69:1. Então o que sai de cima da foto é o TEXTO, e não o
+   * véu de cima do texto. Ver `galeria-capa.tsx`.
+   */
+  | "cartaz";
 export type Tema = "noite" | "claro" | "creme";
 export type Tipografia =
   | "serifada"
@@ -359,6 +371,18 @@ export interface CoresProprias {
    * passa a ser a do tamanho da letra, que já as separa.
    */
   detalhe?: string;
+  /**
+   * A cor do NOME na capa, separada do texto.
+   *
+   * Felipe, 28/09/2026: "poderia ter mais uma opção de cores: título. O título
+   * ser separado do texto. Pois eu queria o título de uma cor e o restante dos
+   * textos em um tom mais escuro".
+   *
+   * Pelo mesmo motivo do `detalhe`, fica fora da paleta: pinta uma palavra só,
+   * o nome do casal, e não entra na derivação dos outros tons. Sem ela, o
+   * título continua herdando a cor do texto, como sempre.
+   */
+  titulo?: string;
 }
 
 export interface Aparencia {
@@ -625,7 +649,7 @@ function lerCores(bruto: unknown): CoresProprias | null {
   if (!bruto || typeof bruto !== "object") return null;
   const o = bruto as Record<string, unknown>;
   const cores: CoresProprias = {};
-  for (const chave of ["fundo", "texto", "destaque", "detalhe"] as const) {
+  for (const chave of ["fundo", "texto", "destaque", "detalhe", "titulo"] as const) {
     const v = o[chave];
     if (typeof v !== "string") continue;
     const t = v.toLowerCase();
@@ -641,6 +665,20 @@ export const alturaCapaVh = (a: AlturaCapa): number =>
 /** Raio do canto das fotos, em pixels. Zero é canto vivo, e é uma escolha. */
 export const raioDoCantoPx = (c: CantoFoto): number =>
   OPCOES.canto.find((o) => o.id === c)?.px ?? OPCOES.canto[1].px;
+
+/**
+ * Raio dos BOTÕES e das fichas, em pixels — a outra metade do mesmo eixo.
+ *
+ * Só `reto` devolve 0; os outros três devolvem a cápsula de sempre. Ver o
+ * comentário de `OPCOES.canto`, onde está escrito por que a tabela é assim.
+ *
+ * O padrão vem pelo NOME e não pela posição, como em `alturaLogoPx`: lista que
+ * cresce não pode carregar um índice cravado.
+ */
+export const raioDaPilulaPx = (c: CantoFoto): number =>
+  OPCOES.canto.find((o) => o.id === c)?.pilula ??
+  OPCOES.canto.find((o) => o.id === APARENCIA_PADRAO.canto)?.pilula ??
+  999;
 
 /**
  * Altura máxima da logo na capa, em pixels.
@@ -668,6 +706,7 @@ export const alturaLogoPx = (t: TamanhoLogo): number =>
 export const OPCOES = {
   capa: [
     { id: "imersa", nome: "Imersa", desc: "Foto em tela cheia com o título por cima" },
+    { id: "cartaz", nome: "Cartaz", desc: "Foto grande e limpa, sem véu — o título vem embaixo" },
     { id: "jornal", nome: "Jornal", desc: "Fundo limpo, tipografia grande, botão de entrada" },
     { id: "dividida", nome: "Dividida", desc: "Foto de um lado, texto do outro" },
     { id: "minima", nome: "Mínima", desc: "Só tipografia, sem foto de capa" },
@@ -721,7 +760,10 @@ export const OPCOES = {
     { id: "propria", nome: "A minha fonte", desc: "O arquivo que você enviou em Conta", familia: "Sua fonte" },
   ],
   grade: [
-    { id: "colunas", nome: "Colunas", desc: "Alturas variadas, estilo mural" },
+    /* Até 26/09/2026 era "Alturas variadas, estilo mural". O mural trocava fotos
+       de lugar na fileira, e a grade passou a montar fileiras — ver
+       `lib/grade-mural.ts`. */
+    { id: "colunas", nome: "Colunas", desc: "Mesmo número de fotos por fileira, na ordem" },
     { id: "linhas", nome: "Linhas", desc: "Fileiras alinhadas, sem cortar foto" },
     { id: "quadrada", nome: "Quadrada", desc: "Tudo no mesmo tamanho" },
     { id: "editorial", nome: "Editorial", desc: "Destaques maiores intercalados" },
@@ -765,11 +807,41 @@ export const OPCOES = {
     { id: "media", nome: "Média", desc: "Metade da tela", vh: 60 },
     { id: "cheia", nome: "Cheia", desc: "Quase a tela inteira", vh: 78 },
   ],
+  /*
+   * ── `pilula`: O CANTO TAMBÉM GOVERNA OS BOTÕES (29/09/2026) ─────────────
+   *
+   * Juan, com um print da galeria no celular: "tem como adicionar alguma opção
+   * no design de fazer os acabamentos retos? (se serão circulares, quadrados,
+   * ou outros formatos)". Na imagem, as miniaturas saíam com o canto quase reto
+   * — escolha dele, pelo eixo abaixo — e a ficha "MAKING OF" e o botão
+   * "Encontrar as minhas fotos" eram cápsulas inteiras. Foto quadrada ao lado
+   * de botão redondo, na mesma tela.
+   *
+   * ── POR QUE AQUI, E NÃO NUM EIXO NOVO ─────────────────────────────────
+   *
+   * Um eixo "acabamento" à parte seria o décimo oitavo controle da tela de
+   * Design, e o Juan já reclamou que ali tem coisa demais parecida. Pior: com
+   * dois controles, o padrão de fábrica continuaria sendo a mistura do print, e
+   * só sumiria se a pessoa achasse os dois e os fizesse concordar. A forma da
+   * galeria é uma decisão só.
+   *
+   * ── POR QUE SÓ `reto` MEXE NA PÍLULA ──────────────────────────────────
+   *
+   * Porque a objeção séria ao reuso é galeria entregue mudando de cara. Em
+   * 29/09/2026, das 510 galerias do banco, ZERO tinham `canto` gravado: todas
+   * caem em `suave` por `lerAparencia`. Mantendo a cápsula em `suave`,
+   * `redondo` e `muito`, nenhuma delas muda um pixel — e quem quer o conjunto
+   * reto marca uma opção, não duas. `testar-acabamento-reto.mjs` prende os
+   * quatro números.
+   *
+   * 999px e não 9999px: qualquer valor acima de metade do lado maior já é
+   * cápsula, e três dígitos cabem na leitura de quem depura o HTML.
+   */
   canto: [
-    { id: "reto", nome: "Reto", desc: "Canto vivo, ar de impresso", px: 0 },
-    { id: "suave", nome: "Suave", desc: "Só tira a ponta", px: 6 },
-    { id: "redondo", nome: "Redondo", desc: "Arredondado de verdade", px: 14 },
-    { id: "muito", nome: "Bem redondo", desc: "Cantos macios, ar de aplicativo", px: 24 },
+    { id: "reto", nome: "Reto", desc: "Canto vivo nas fotos e nos botões, ar de impresso", px: 0, pilula: 0 },
+    { id: "suave", nome: "Suave", desc: "Só tira a ponta", px: 6, pilula: 999 },
+    { id: "redondo", nome: "Redondo", desc: "Arredondado de verdade", px: 14, pilula: 999 },
+    { id: "muito", nome: "Bem redondo", desc: "Cantos macios, ar de aplicativo", px: 24, pilula: 999 },
   ],
   cartao: [
     { id: "sobreposto", nome: "Com o nome", desc: "A capa com o título e o estúdio por cima" },
@@ -831,6 +903,20 @@ export interface Preset {
  * já tiver escolha própria gravada —, dá para dar a cada preset o canto que
  * combina com ele (Moda com `reto`, Papel com `redondo`) sem esse efeito.
  *
+ * ── ESSE DIA CHEGOU, E FOI CONTADO (29/09/2026) ─────────────────────────
+ *
+ * Só o Átomo continua com o par antigo. A previsão acima se cumpriu ao pé da
+ * letra — Moda ficou com `reto`, Papel com `redondo` —, e o gatilho não foi
+ * palpite: rodando `presetEquivalente` sobre as 512 galerias do banco, 510 já
+ * apareciam como "personalizado" e as 2 que casavam com algum preset casavam
+ * com o ÁTOMO. Refinar os outros oito desmarcou zero galerias.
+ *
+ * Foi o que destravou o pedido do Juan de 29/09 ("refinar os estilos prontos",
+ * "tem várias super iguais"): a forma é um dos seis eixos que a miniatura
+ * desenha, e congelá-la em nove presets tirava justamente o que separava um
+ * cartão do outro. `testar-estilos-distintos.mjs` passou a exigir que dois
+ * estilos difiram em pelo menos DOIS desses seis.
+ *
  * O "Marfim" (16/09/2026) já escolhe o seu, e isso não desmarca ninguém: ele
  * NASCEU com essa combinação. O efeito descrito acima só existe ao MUDAR um
  * preset que galerias antigas já casam.
@@ -848,14 +934,14 @@ export const PRESETS: Preset[] = [
   {
     id: "revista",
     nome: "Revista",
-    desc: "Fundo claro, tipografia grande, mural de colunas.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Banca de jornal: fundo claro, letra grande e tudo de canto vivo.",
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
-    desc: "Tons terrosos e manuscrita. Clima de convite de casamento.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Terrosa, manuscrita e de cantos macios. Clima de ateliê.",
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     /*
@@ -880,7 +966,9 @@ export const PRESETS: Preset[] = [
      *   capa mínima   — o desenho não tem foto de capa: abre no nome do casal
      *   creme         — o papel da imagem, marfim e não branco de tela
      *   manuscrita    — a Great Vibes, que é a `font-script` daquele mock
-     *   colunas       — o mural de duas colunas com alturas diferentes
+     *   colunas       — o mural de duas colunas com alturas diferentes (desde
+     *                   26/09/2026 a "Colunas" monta fileiras; ver
+     *                   `lib/grade-mural.ts`)
      *   normal        — e não `compacta`: ela tem piso de TRÊS colunas, e no
      *                   celular o desenho vira três fileiras estreitas. A
      *                   imagem tem duas, que é o que `normal` dá num telefone
@@ -888,14 +976,14 @@ export const PRESETS: Preset[] = [
      */
     id: "marfim",
     nome: "Marfim",
-    desc: "Creme e manuscrita, mural rente. É o desenho da nossa página inicial.",
+    desc: "Creme e manuscrita, fotos rentes. É o desenho da nossa página inicial.",
     aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "essencial",
     nome: "Essencial",
-    desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho e de canto vivo.",
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     /*
@@ -934,26 +1022,26 @@ export const PRESETS: Preset[] = [
      * banco (ver o comentário do preset Átomo), então renomear é seguro. */
     id: "caligrafia",
     nome: "Caligrafia",
-    desc: "Caligrafia sobre creme, fotos em fileiras. Clima de papel timbrado.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Caligrafia sobre creme, foto em arco e cantos bem macios. Clima de papel timbrado.",
+    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "moda",
     nome: "Moda",
-    desc: "Contraste alto e destaques grandes, como editorial de revista.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Contraste alto, destaques grandes e canto vivo, como editorial de moda.",
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
-    desc: "Maiúsculas romanas sobre fundo escuro. Solene, sem ser pesada.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Maiúsculas romanas sobre fundo escuro, com a foto grande e limpa.",
+    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
   {
     id: "papel",
     nome: "Papel",
-    desc: "Branco, ar déco e muito espaço. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    desc: "Branco, ar déco, muito espaço e cantos arredondados. As fotos respiram.",
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
   },
 ];
 
@@ -983,6 +1071,20 @@ export function presetEquivalente(a: Aparencia): string | null {
     x.linhasTitulo === y.linhasTitulo && x.tamanhoTitulo === y.tamanhoTitulo &&
     x.capaFixa === y.capaFixa;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
+}
+
+/*
+ * A galeria está no PADRÃO DO ESTÚDIO? Comparação inteira, cor própria
+ * inclusive.
+ *
+ * Ao contrário de `presetEquivalente`, aqui a cor não tira ninguém do lugar: o
+ * padrão é a combinação do próprio fotógrafo, e o botão rosa pode ser
+ * justamente o que ele salvou. As duas passam por `lerAparencia` para a ordem
+ * das chaves não decidir nada — o editor espalha objetos, e `{...ap, cores}`
+ * põe a cor no fim de um e no meio do outro.
+ */
+export function mesmaAparencia(a: unknown, b: unknown): boolean {
+  return JSON.stringify(lerAparencia(a)) === JSON.stringify(lerAparencia(b));
 }
 
 // --- tradução para CSS --------------------------------------------------------
@@ -1108,6 +1210,9 @@ export function variaveisDeForma(a: Aparencia): Record<string, string> {
   return {
     "--g-capa-h": `${alturaCapaVh(a.alturaCapa)}vh`,
     "--g-canto": `${raioDoCantoPx(a.canto)}px`,
+    /* O acabamento dos botões e das fichas. Sai do MESMO eixo do canto das
+       fotos, de propósito — ver `OPCOES.canto`. */
+    "--g-pilula": `${raioDaPilulaPx(a.canto)}px`,
   };
 }
 

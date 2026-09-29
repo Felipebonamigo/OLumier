@@ -135,7 +135,11 @@ Três coisas que um concorrente vizinho não copia de graça:
   mas **não tem DNS curinga**, e é o curinga que sustenta o subdomínio de cada
   estúdio. Enquanto ele não existir, mudar `marca.dominio` quebra os links já
   publicados. Ver `scripts/testar-marca-plataforma.mjs`.
-- Assinatura: **"Sua luz, entregue."**
+- Assinatura: **nenhum slogan oficial** (26/09/2026). "Onde o instante
+  permanece." foi rejeitada pela estratégia de marca, e "Sua luz, entregue." não
+  deve ser assumida. Antes de qualquer decisão de marca, texto, interface ou
+  apresentação, ler [`docs/estrategia-de-marca.md`](docs/estrategia-de-marca.md)
+  — a camada estratégica, com os conflitos que o produto no ar ainda tem com ela.
 - Voz: direta e concreta, sem jargão de marketing e sem promessa que o sistema
   não cumpre. A interface fala de coisas que o fotógrafo reconhece — "a pasta do
   casamento", "o filme de 30 GB", "não recebi" — em vez de falar de recursos.
@@ -166,7 +170,11 @@ originou, a marca e o símbolo, e a documentação de operação em `docs/`.
    baixar, favoritar, compartilhar — precisa funcionar sem cadastro, sem senha e
    sem aplicativo.
 2. **Nada é apagado sem alguém pedir e nomear.** Vencimento manda para o cofre;
-   não destrói. Quem apaga é o dono do arquivo.
+   não destrói. Quem apaga é o dono do arquivo. **Uma exceção, com data:** os
+   arquivos do teste grátis que termina sem assinatura são apagados 60 dias
+   depois do fim do teste, com dois avisos por e-mail antes (decisão do Felipe,
+   28/09/2026 — `src/lib/testes-abandonados.ts`). Sem e-mail ligado, não há
+   aviso, e sem aviso nada é apagado.
 3. **A marca da tela é a do estúdio.** Quando a nossa aparece na frente da dele,
    o produto errou.
 4. **Prometer menos do que se cumpre.** Restauração ensaiada em vez de "backup

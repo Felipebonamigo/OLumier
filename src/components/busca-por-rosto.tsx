@@ -174,7 +174,7 @@ export function BuscaPorRosto({
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-texto-soft">
             <li>
-              é você quem decide o que fotografar e publicar — o {marca.nome} só executa;
+              é você quem decide o que fotografar e publicar — a {marca.nome} só executa;
             </li>
             <li>
               você tem, ou vai obter, autorização das pessoas fotografadas para este uso

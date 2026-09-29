@@ -197,7 +197,7 @@ await etapa("apagar preserva; destruir é que remove do bucket", async () => {
   const alvo = vencidas.find((v) => v.id === galeriaId);
   if (!alvo) throw new Error("a limpeza não encontrou a galeria vencida");
 
-  await destruirGaleria(alvo.id, alvo.chaves);
+  await destruirGaleria(alvo.id);
 
   const { rows: depois } = await db.query("select 1 from galerias where id = $1", [galeriaId]);
   if (depois.length) throw new Error("a galeria continua no banco depois de destruída");
@@ -208,6 +208,66 @@ await etapa("apagar preserva; destruir é que remove do bucket", async () => {
     throw new Error(`${sobraram.length} arquivo(s) ficaram sendo cobrados: ${sobraram[0]}`);
   }
   return "apagar preservou, destruir limpou banco e bucket";
+});
+
+/*
+ * O ORIGINAL NO B2 E A CAPA — 29/09/2026.
+ *
+ * `destruirGaleria` recebia só as chaves e mandava todas para o R2. O original
+ * que mora no B2 (`medias.armazem = 'b2'`) "era apagado" no balde errado, sem
+ * erro nenhum, e seguia pago para sempre; a capa enviada como arquivo
+ * (`capa_chave`) nem entrava na lista. A etapa acima só planta arquivos no R2,
+ * e por isso nunca viu.
+ */
+await etapa("destruir apaga o original no B2 e a capa enviada à parte", async () => {
+  const { arquivosConfigurado, urlDeUploadArquivo, arquivoExiste } = await import("../src/lib/b2.ts");
+  const { urlDeUpload } = await import("../src/lib/r2.ts");
+  const { destruirGaleria } = await import("../src/lib/tenants.ts");
+  if (!arquivosConfigurado) return "pulado: sem o armazém de originais nesta bancada";
+
+  const tenantId = (await estudioDaRodada(db)).id;
+  const g = await db.query(
+    `insert into galerias (tenant_id, slug, titulo, estado, apagada_em)
+     values ($1, $2, 'Galeria do B2', 'lixeira', now()) returning id`,
+    [tenantId, `limpeza-b2-${Date.now()}`],
+  );
+  const galeriaId = g.rows[0].id;
+  const pos = async (url) => {
+    const r = await fetch(url, { method: "PUT", body: Buffer.from("x"), headers: { "content-type": "image/jpeg" } });
+    if (!r.ok) throw new Error(`não consegui plantar o arquivo (HTTP ${r.status})`);
+  };
+
+  const original = `${tenantId}/${galeriaId}/original-b2.jpg`;
+  const thumb = `${tenantId}/${galeriaId}/original-b2_thumb.webp`;
+  const capa = `${tenantId}/${galeriaId}/capa.jpg`;
+  await pos(await urlDeUploadArquivo(original, "image/jpeg"));
+  await pos(await urlDeUpload(thumb, "image/jpeg"));
+  await pos(await urlDeUpload(capa, "image/jpeg"));
+  await db.query(
+    `insert into medias (galeria_id, tenant_id, chave, chave_thumb, nome_original, tipo, mime, bytes, pronto, armazem)
+     values ($1, $2, $3, $4, 'original-b2.jpg', 'foto', 'image/jpeg', 1, true, 'b2')`,
+    [galeriaId, tenantId, original, thumb],
+  );
+  await db.query("update galerias set capa_chave = $1 where id = $2", [capa, galeriaId]);
+  if (!(await arquivoExiste(original))) throw new Error("o original não foi plantado no B2");
+
+  await destruirGaleria(galeriaId, "estudio");
+
+  if (await arquivoExiste(original)) throw new Error("o original continua no B2 — pago, sem dono");
+  if (await objetoExiste(thumb)) throw new Error("a miniatura continua no R2");
+  if (await objetoExiste(capa)) throw new Error("a capa enviada à parte continua no R2");
+  return "original no B2, miniatura e capa no R2 — os três saíram";
+});
+
+await etapa("destruir recusa a assinatura antiga (id, chaves)", async () => {
+  const { destruirGaleria } = await import("../src/lib/tenants.ts");
+  try {
+    await destruirGaleria("00000000-0000-0000-0000-000000000000", ["x"]);
+  } catch (e) {
+    if (/ator inválido/.test(e.message)) return;
+    throw e;
+  }
+  throw new Error("aceitou uma lista de chaves no lugar do ator — o evento seria perdido em silêncio");
 });
 
 await etapa("galeria de OUTRO estúdio não é apagada nem perde arquivo", async () => {

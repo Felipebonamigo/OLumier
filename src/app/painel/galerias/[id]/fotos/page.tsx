@@ -3,9 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel, fotosRepetidas } from "@/lib/galeria-painel";
 import { formatarBytes } from "@/lib/tenants";
+import { buscarTenantPorId } from "@/lib/tenants";
+import { precisaConfirmarEmail } from "@/lib/confirmacao-email";
 import { listarMedias } from "@/lib/medias";
-import { armazemDe, urlDaDerivada } from "@/lib/armazem";
-import { listarSecoes } from "@/lib/secoes";
+import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { CAPITULOS_SUGERIDOS, listarSecoes } from "@/lib/secoes";
 import { resumoDaGaleria } from "@/lib/favoritas";
 import { downloadsPorFoto } from "@/lib/galerias-publicas";
 import { AvisoDeRepetidas } from "@/components/aviso-de-repetidas";
@@ -33,6 +35,11 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
   const tenantId = await sessaoAtual();
   if (!tenantId) redirect("/entrar");
   const galeria = await galeriaDoPainel(id, tenantId);
+  /* A MESMA pergunta que o aviso do topo do painel faz (`painel/layout.tsx`).
+     Duas regras diferentes para a mesma coisa é como a tela passa a dizer uma
+     coisa em cima e outra embaixo. */
+  const tenant = await buscarTenantPorId(tenantId);
+  const emailPendente = tenant ? precisaConfirmarEmail(tenant) : false;
   if (!galeria) notFound();
 
   const medias = await listarMedias(galeria.id);
@@ -54,6 +61,24 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       favoritas: favoritas.porMedia.get(m.id) ?? 0,
       baixadas: baixadas.get(m.id) ?? 0,
       url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), 3600),
+      /*
+       * ── O FILME PRECISA DO ENDEREÇO DELE (29/09/2026) ──────────────────
+       *
+       * `url` sai de `urlDaDerivada`, que devolve a MINIATURA quando ela
+       * existe. A grade desenhava `<video src={url}>` com isso — ou seja, o
+       * player recebia um WebP. Vídeo com capa não tocava no painel, e os
+       * únicos que tocavam eram os que estavam SEM capa: a inversão perfeita.
+       * Em produção, 44 dos 46 vídeos tinham capa gravada.
+       *
+       * Agora são dois endereços para duas coisas: `urlFilme` no `src`,
+       * `url` no `poster`. Só para vídeo — assinar o original de toda foto
+       * dobraria as assinaturas da aba sem ninguém usar a segunda.
+       */
+      urlFilme:
+        m.tipo === "video"
+          ? await urlDoOriginal(m.chave, armazemDe(m.armazem), 3600)
+          : undefined,
+      temCapa: Boolean(m.chave_thumb),
     })),
   );
 
@@ -126,12 +151,46 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       <EditorSecoes
         galeriaId={galeria.id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
+        /* Os momentos típicos, para clicar um a um. Descem por propriedade
+           porque `lib/secoes.ts` é `server-only` e o editor é do cliente — o
+           mesmo caminho do assistente de galeria nova. */
+        sugestoes={CAPITULOS_SUGERIDOS}
         semCapitulo={medias.filter((m) => !m.secao_id).length}
         /* Como esta galeria chama o grupo das soltas (migração 037). Nulo é o
            normal e quer dizer "Outras fotos". */
         grupoSolto={galeria.grupo_solto}
       />
 
+      {/*
+        ── NÃO OFERECER O QUE VAI SER RECUSADO (29/09/2026) ─────────────────
+
+        A Carol arrastou 74 fotos e recebeu "0 de 74 — 33 com erro", com o
+        motivo escondido numa lista que só aparece expandindo a barra de envio.
+        A trava do servidor estava certa (o e-mail da conta nova dela nunca foi
+        confirmado); o que estava errado era a tela convidar para uma pasta de
+        casamento inteira e só então dizer não, 74 vezes.
+
+        Felipe: "não permita que eles tentem publicar as imagens sem ter
+        confirmado o e-mail".
+
+        A trava do servidor FICA — é ela que protege, e quem chama a rota direto
+        não passa por tela nenhuma. Isto aqui é para a pessoa saber ANTES de
+        arrastar, e com o caminho da saída à mão: o aviso do topo do painel tem
+        o botão de pedir outro link.
+      */}
+      {emailPendente ? (
+        <section className="mt-8 rounded-xl border border-alerta/40 bg-carbon-2 px-5 py-6">
+          {/* A mesma régua do `<h2>` do bloco de envio, porque este cartão
+              ocupa o lugar dele — duas escalas no mesmo slot fariam a tela
+              parecer que trocou de assunto, e não de estado. */}
+          <h2 className="text-sm font-semibold">Confirme seu e-mail para enviar fotos</h2>
+          <p className="mt-1.5 max-w-prose text-sm text-texto-soft">
+            O link foi para <strong className="font-normal text-texto">{tenant?.email}</strong>. Se
+            não chegou, veja o lixo eletrônico — ou peça outro no aviso do topo desta página. Assim
+            que confirmar, a área de envio aparece aqui.
+          </p>
+        </section>
+      ) : (
       <EnviarArquivos
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
         rostosAtivos={galeria.rostos_ativos}
@@ -141,6 +200,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
            dado que ele não usa. */
         nomesNaGaleria={medias.map((m) => m.nome_original)}
       />
+      )}
 
       {/*
         ── FOTOS REPETIDAS ───────────────────────────────────────────────

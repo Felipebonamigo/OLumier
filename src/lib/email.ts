@@ -24,7 +24,7 @@ const API = process.env.EMAIL_API ?? "https://api.resend.com/emails";
 /**
  * O remetente precisa ser de um domínio VERIFICADO no Resend.
  *
- * Mandar "redefina sua senha do Galeria Átomo" de um endereço de outro domínio é
+ * Mandar "redefina sua senha da Galeria Átomo" de um endereço de outro domínio é
  * exatamente o que um golpe faria: o cliente veria remetente estranho pedindo
  * troca de senha. Por isso o remetente é configurável e não tem valor padrão
  * chutado — ou está certo, ou o recurso fica desligado.

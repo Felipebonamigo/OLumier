@@ -148,15 +148,21 @@ await etapa("a criação usa o padrão do estúdio", async () => {
   }
 });
 
-await etapa("a action de criar conhece as duas fontes, na ordem certa", async () => {
-  /* Leitura do código, e não do banco: o que se guarda é a ORDEM da decisão, e
-     ela é uma linha só — trocá-la faria o estilo escolhido na hora perder para
-     o padrão, sem nada quebrar. */
-  const fonte = await import("node:fs/promises").then((fs) =>
-    fs.readFile("src/app/painel/actions.ts", "utf8"),
-  );
-  if (!/preset\?\.aparencia \?\? \(await padraoDoEstudio\(tenantId\)\)/.test(fonte)) {
-    throw new Error("a ordem entre o preset e o padrão do estúdio mudou");
+await etapa("a galeria nova nasce pela ordem certa: pronto, depois o padrão", async () => {
+  /* Era uma leitura da linha do código; desde 28/09/2026 a ordem mora em
+     `aparenciaInicialDaGaleria` (com os estilos salvos no meio — ver
+     testar-estilos-do-estudio), e aqui ela é exercitada de verdade. */
+  const { aparenciaInicialDaGaleria } = await import("../src/lib/aparencia-galeria.ts");
+  const { PRESETS } = await import("../src/config/aparencia.ts");
+  await salvarPadraoDoEstudio(t.id, MEU);
+  const pronto = PRESETS[0];
+  const comPreset = await aparenciaInicialDaGaleria(t.id, pronto.id, "");
+  if (JSON.stringify(comPreset) !== JSON.stringify(pronto.aparencia)) throw new Error("o preset não venceu o padrão");
+  const semNada = lerAparencia(await aparenciaInicialDaGaleria(t.id, "", ""));
+  if (semNada.capa !== MEU.capa || semNada.tema !== MEU.tema) throw new Error("sem escolha, não nasceu no padrão");
+  const fonte = await import("node:fs/promises").then((fs) => fs.readFile("src/app/painel/actions.ts", "utf8"));
+  if (!/aparenciaInicialDaGaleria\(\s*tenantId,\s*String\(form\.get\("preset"\)/.test(fonte)) {
+    throw new Error("criarGaleriaAction não passa mais o preset para aparenciaInicialDaGaleria");
   }
   return "preset escolhido vence o padrão";
 });

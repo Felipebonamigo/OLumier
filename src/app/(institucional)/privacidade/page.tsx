@@ -4,12 +4,12 @@ import { metadadosDaCasa } from "@/lib/metadados";
 
 export const metadata: Metadata = metadadosDaCasa({
   titulo: "Política de Privacidade",
-  descricao: `Como o ${marca.nome} trata dados pessoais.`,
+  descricao: `Como a ${marca.nome} trata dados pessoais.`,
   caminho: "/privacidade",
 });
 
 /** Data da última revisão do texto — precisa mudar junto com o conteúdo. */
-const ATUALIZADO_EM = "25 de agosto de 2026";
+const ATUALIZADO_EM = "28 de setembro de 2026";
 
 export default function PrivacidadePage() {
   return (
@@ -18,14 +18,14 @@ export default function PrivacidadePage() {
       <p className="mt-1 text-xs text-texto-faint">Atualizada em {ATUALIZADO_EM}</p>
 
       <p>
-        Esta política explica quais dados o {marca.nome} coleta, por quê, e o que você pode fazer a
+        Esta política explica quais dados a {marca.nome} coleta, por quê, e o que você pode fazer a
         respeito. Ela vale para duas pessoas diferentes: o <strong>fotógrafo</strong>, que contrata
         o serviço, e o <strong>visitante</strong>, que recebe um link e abre uma galeria.
       </p>
 
       <h2>Quem é o responsável</h2>
       <p>
-        O {marca.nome} é operado por Felipe Carboni Bonamigo. Contato para qualquer assunto de
+        A {marca.nome} é operada por Felipe Carboni Bonamigo. Contato para qualquer assunto de
         privacidade, inclusive os pedidos descritos abaixo:{" "}
         <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a>.
       </p>
@@ -41,9 +41,9 @@ export default function PrivacidadePage() {
           sua senha, nem para te ajudar: se você perder, ela é substituída, nunca recuperada.
         </li>
         <li>
-          <strong>CPF ou CNPJ</strong> — pedido <em>somente</em> quando você ativa a assinatura,
-          porque o processador de pagamento exige para emitir a cobrança. Quem usa o teste grátis
-          nunca informa documento.
+          <strong>CPF ou CNPJ</strong> — pedido no cadastro, para garantir um teste grátis por
+          pessoa: não pode haver duas contas com o mesmo documento. É também o que vai na
+          cobrança, quando você assina — o processador de pagamento exige para emiti-la.
         </li>
       </ul>
 
@@ -146,6 +146,11 @@ export default function PrivacidadePage() {
           mas <em>nada é apagado</em> — é o comportamento contratado.
         </li>
         <li>
+          <strong>Teste grátis que termina sem assinatura</strong>: os arquivos enviados durante o
+          teste são apagados 60 dias depois do fim dele, com dois avisos por e-mail antes. A conta
+          e os dados dela continuam, e você pode assinar quando quiser.
+        </li>
+        <li>
           <strong>Ao apagar uma galeria</strong>, ela vai para a lixeira e fica{" "}
           <strong>30 dias</strong> lá — nada é removido do armazenamento nesse período, e você pode
           restaurar tudo com um clique. Passado o prazo, os arquivos são apagados de vez do
@@ -189,7 +194,7 @@ export default function PrivacidadePage() {
         que dá tempo de desfazer um apagar por engano.
       </p>
       <p>
-        Nenhum sistema é perfeito, e nós não fingimos que o nosso é. O {marca.nome} é serviço de
+        Nenhum sistema é perfeito, e nós não fingimos que o nosso é. A {marca.nome} é serviço de
         entrega e de cofre — <strong>não substitui o seu backup</strong>, e nenhum serviço deveria
         ser a sua única cópia. Se descobrirmos um incidente que possa te afetar, avisamos.
       </p>

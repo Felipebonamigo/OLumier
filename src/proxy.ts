@@ -3,6 +3,7 @@ import { SUBDOMINIOS_RESERVADOS } from "@/config/subdominios";
 import { ehDominioPrincipal, estudioDoHost } from "@/config/dominios";
 import { estudioDoDominioProprio } from "@/lib/dominio-proprio";
 import { marca } from "@/config/marca";
+import { COOKIE_PREVIA, VALIDADE_PREVIA_S, baseDaGaleria } from "@/config/previa";
 
 /**
  * No Next 16 o antigo `middleware.ts` passou a se chamar `proxy.ts`.
@@ -17,6 +18,9 @@ import { marca } from "@/config/marca";
  * 2. Subdomínio por estúdio — `siriusfotografia.olumier.com.br/lu-marino` é
  *    reescrito para a rota interna `/g/siriusfotografia/lu-marino`. É reescrita,
  *    não redirecionamento: o visitante continua vendo o endereço bonito.
+ *
+ * 3. Prévia do dono — o `?previa=1` vira cookie e sai da barra, para o link
+ *    que o fotógrafo copia dali ser o do cliente. Ver `config/previa.ts`.
  */
 
 const NOME_COOKIE = "olumier_sessao";
@@ -176,6 +180,33 @@ export async function proxy(request: NextRequest) {
       return NextResponse.rewrite(new URL(destino + search, request.url), {
         request: { headers: cabecalhos },
       });
+    }
+  }
+
+  // --- prévia do dono: o pedido vira cookie, e a barra fica limpa ------------
+  // Ver `config/previa.ts`. Só no domínio principal, que é onde mora a sessão:
+  // no endereço do estúdio o `?previa=1` não tem quem atender.
+  if (
+    pathname.startsWith("/g/") &&
+    request.nextUrl.searchParams.has("previa") &&
+    request.headers.get("sec-fetch-dest") === "document"
+  ) {
+    const base = baseDaGaleria(pathname);
+    if (base) {
+      const busca = new URLSearchParams(search);
+      busca.delete("previa");
+      const consulta = busca.toString();
+      const resposta = NextResponse.redirect(
+        new URL(pathname + (consulta ? `?${consulta}` : ""), request.url),
+      );
+      resposta.cookies.set(COOKIE_PREVIA, "1", {
+        path: base,
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: VALIDADE_PREVIA_S,
+      });
+      return resposta;
     }
   }
 

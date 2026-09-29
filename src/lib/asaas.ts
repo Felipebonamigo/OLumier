@@ -2,6 +2,7 @@ import "server-only";
 import { montarFatias, type FatiaSocio } from "@/config/socios";
 import type { Ciclo } from "@/config/planos";
 import type { FormaAssinatura } from "@/config/forma-assinatura";
+import type { PagamentoDoAsaas } from "./caixa-dos-socios";
 
 /**
  * Traduz uma fatia para o formato do split do Asaas.
@@ -52,6 +53,20 @@ function base(): string {
 export const asaasConfigurado = () => Boolean(process.env.ASAAS_API_KEY);
 
 export const asaasEmProducao = () => process.env.ASAAS_AMBIENTE === "producao";
+
+/**
+ * Um id do Asaas como UM segmento do caminho, nunca mais que isso.
+ *
+ * Desde o combo (28/09/2026) ids chegam de fora — o `customer` de um evento do
+ * webhook — e vão para o caminho de uma chamada com a chave da conta. O `fetch`
+ * resolve `..` como um navegador; sem esta guarda, um id forjado trocaria "este
+ * cliente" por outra rota da conta inteira. Mesmo remédio do Atomatiza
+ * (`segmento`, no `asaas.ts` de lá).
+ */
+function segmento(id: string): string {
+  if (!id || id === "." || id === "..") throw new Error("Asaas: identificador inválido");
+  return encodeURIComponent(id);
+}
 
 async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
   const chave = process.env.ASAAS_API_KEY;
@@ -148,6 +163,10 @@ export interface AssinaturaAsaas {
   status: string;
   nextDueDate: string;
   value: number;
+  /** O cliente do Asaas dono da assinatura. */
+  customer?: string;
+  description?: string | null;
+  externalReference?: string | null;
   /** O Asaas devolve a assinatura apagada com este campo — ver `criarAssinatura`. */
   deleted?: boolean;
   /**
@@ -158,6 +177,9 @@ export interface AssinaturaAsaas {
   creditCard?: {
     creditCardNumber?: string | null;
     creditCardBrand?: string | null;
+    /** O cartão salvo, reusável numa cobrança avulsa (a diferença da troca de
+     *  plano) sem ninguém digitar o número de novo. Nunca é o número. */
+    creditCardToken?: string | null;
   } | null;
 }
 
@@ -264,6 +286,13 @@ export async function atualizarAssinatura(dados: {
   /** O ciclo da assinatura que já existe — trocar de ciclo NÃO passa por aqui. */
   ciclo: Ciclo;
   descricao: string;
+  /**
+   * A cobrança já emitida e não paga acompanha o valor novo? Sim por padrão
+   * (troca de plano). O combo desliga quando o preço SOBE: quem cancelou a
+   * outra plataforma volta ao preço cheio no ciclo seguinte, não numa fatura
+   * que ele já recebeu com outro valor.
+   */
+  atualizarPendentes?: boolean;
 }): Promise<AssinaturaAsaas> {
   /* Mesmo motivo de `criarAssinatura`: sem o ciclo, uma troca de plano dentro do
    * anual recalcularia o split com reserva de um mês e mandaria embora o
@@ -275,10 +304,67 @@ export async function atualizarAssinatura(dados: {
     body: JSON.stringify({
       value: dados.precoCentavos / 100,
       description: dados.descricao,
-      updatePendingPayments: true,
+      updatePendingPayments: dados.atualizarPendentes ?? true,
       split: fatias.map((f) => montarFatiaAsaas(f)),
     }),
   });
+}
+
+// --- combo com o Atomatiza (28/09/2026) ------------------------------------
+//
+// A conta do Asaas é a mesma dos dois produtos, e é por ela que um enxerga a
+// assinatura do outro: o mesmo CPF/CNPJ, um cliente de cada lado. Ver
+// `lib/combo.ts`.
+
+export interface ClienteDoDocumento {
+  id: string;
+  cpfCnpj?: string | null;
+  externalReference?: string | null;
+  deleted?: boolean;
+}
+
+/** Os clientes da conta com este CPF/CNPJ — o nosso e o do Atomatiza. */
+export async function clientesDoDocumento(documento: string): Promise<ClienteDoDocumento[]> {
+  const r = await chamar<{ data?: ClienteDoDocumento[] }>(
+    `/customers?cpfCnpj=${encodeURIComponent(documento)}&limit=100`,
+  );
+  return (r.data ?? []).filter((c) => !c.deleted);
+}
+
+export async function buscarCliente(clienteId: string): Promise<ClienteDoDocumento> {
+  return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`);
+}
+
+export async function assinaturasDoCliente(clienteId: string): Promise<AssinaturaAsaas[]> {
+  const r = await chamar<{ data?: AssinaturaAsaas[] }>(
+    `/subscriptions?customer=${encodeURIComponent(clienteId)}&limit=100`,
+  );
+  return r.data ?? [];
+}
+
+/** A assinatura tem cobrança vencida e não paga? */
+export async function temCobrancaVencida(assinaturaId: string): Promise<boolean> {
+  const r = await chamar<{ data?: unknown[] }>(
+    `/subscriptions/${segmento(assinaturaId)}/payments?status=OVERDUE&limit=1`,
+  );
+  return (r.data?.length ?? 0) > 0;
+}
+
+/** Os estados de cobrança em que o dinheiro entrou (cartão, Pix/boleto, em mãos). */
+const PAGAS = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]);
+
+/**
+ * A assinatura já foi paga alguma vez?
+ *
+ * Uma chamada sem filtro de estado, e não três (uma por estado pago): as
+ * primeiras cem cobranças bastam — assinatura que não pagou nenhuma em cem
+ * ciclos já teria sido cancelada muito antes.
+ */
+export async function temCobrancaPaga(assinaturaId: string): Promise<boolean> {
+  const r = await chamar<{ data?: { status?: string }[] }>(
+    `/subscriptions/${segmento(assinaturaId)}/payments?limit=100`,
+  );
+  return (r.data ?? []).some((c) => PAGAS.has(c.status ?? ""));
 }
 
 export async function cancelarAssinatura(assinaturaId: string) {
@@ -297,12 +383,138 @@ export async function proximaCobranca(assinaturaId: string) {
   return r.data?.[0] ?? null;
 }
 
-/** true se o evento do webhook pertence ao Galeria Átomo (a conta é dividida com o Atomatiza). */
+/** true se o evento do webhook pertence à Galeria Átomo (a conta é dividida com o Atomatiza). */
 export function eventoEhNosso(referenciaExterna: string | null | undefined): boolean {
   return Boolean(referenciaExterna?.startsWith(PREFIXO));
 }
 
-/** Extrai o id do estúdio de uma referência nossa. */
+/**
+ * Extrai o id do estúdio de uma referência nossa.
+ *
+ * A mensalidade leva `olumier:<estúdio>`; a cobrança da diferença de uma troca
+ * de plano leva `olumier:<estúdio>:diferenca:<quando>` (ver
+ * `referenciaDaDiferenca`). O id é sempre o segundo pedaço — um uuid não tem
+ * dois-pontos.
+ */
 export function tenantDaReferencia(referenciaExterna: string): string {
-  return referenciaExterna.slice(PREFIXO.length);
+  return referenciaExterna.slice(PREFIXO.length).split(":")[0];
+}
+
+/**
+ * De que é a cobrança: a mensalidade da assinatura, ou a diferença de uma
+ * troca de plano. O webhook trata as duas de jeitos diferentes — a diferença
+ * NÃO renova o período pago; se renovasse, pagar R$ 20 de diferença daria um
+ * mês (ou um ano, no anual) inteiro de serviço a partir daquele dia.
+ */
+export function tipoDaReferencia(referenciaExterna: string): "assinatura" | "diferenca" {
+  return referenciaExterna.slice(PREFIXO.length).split(":")[1] === "diferenca" ? "diferenca" : "assinatura";
+}
+
+export const referenciaDaDiferenca = (tenantId: string, quando: Date = new Date()) =>
+  `${PREFIXO}${tenantId}:diferenca:${quando.getTime()}`;
+
+// --- a diferença da troca de plano (28/09/2026) -----------------------------
+//
+// Ver `config/troca-de-plano.ts` para a regra e `lib/troca-de-plano.ts` para o
+// fluxo.
+
+export interface CobrancaAsaas {
+  id: string;
+  status: string;
+  value: number;
+  dueDate: string;
+  invoiceUrl?: string | null;
+  externalReference?: string | null;
+  description?: string | null;
+}
+
+/** As faturas da assinatura ainda não pagas — a vencer e vencidas. */
+export async function cobrancasEmAberto(assinaturaId: string): Promise<CobrancaAsaas[]> {
+  const id = segmento(assinaturaId);
+  const [pendentes, vencidas] = await Promise.all([
+    chamar<{ data?: CobrancaAsaas[] }>(`/subscriptions/${id}/payments?status=PENDING&limit=100`),
+    chamar<{ data?: CobrancaAsaas[] }>(`/subscriptions/${id}/payments?status=OVERDUE&limit=100`),
+  ]);
+  return [...(pendentes.data ?? []), ...(vencidas.data ?? [])];
+}
+
+/**
+ * Uma cobrança avulsa — a diferença da troca de plano.
+ *
+ * Com `cartao`, é capturada na hora no cartão que a assinatura já guardou
+ * (`creditCardToken`), com o IP de quem clicou — o Asaas exige o IP do
+ * pagador, nunca o do servidor. Sem cartão, vira fatura com Pix, boleto e
+ * cartão lado a lado, como a mensalidade de quem paga na mão.
+ *
+ * O split viaja na cobrança, como na assinatura: os sócios recebem a parte
+ * deles da diferença no mesmo pagamento.
+ */
+export async function criarCobrancaAvulsa(dados: {
+  clienteAsaasId: string;
+  centavos: number;
+  vencimento: string;
+  descricao: string;
+  referencia: string;
+  fatias: FatiaSocio[];
+  cartao?: { token: string; ip: string } | null;
+}): Promise<CobrancaAsaas> {
+  return chamar<CobrancaAsaas>("/payments", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: dados.clienteAsaasId,
+      billingType: dados.cartao ? "CREDIT_CARD" : "UNDEFINED",
+      value: dados.centavos / 100,
+      dueDate: dados.vencimento,
+      description: dados.descricao,
+      externalReference: dados.referencia,
+      ...(dados.cartao ? { creditCardToken: dados.cartao.token, remoteIp: dados.cartao.ip } : {}),
+      split: dados.fatias.length ? dados.fatias.map((f) => montarFatiaAsaas(f)) : undefined,
+    }),
+  });
+}
+
+/** A fatura de diferença que ainda espera pagamento, se houver — para a Conta. */
+export async function diferencaEmAberto(clienteAsaasId: string): Promise<CobrancaAsaas | null> {
+  const r = await chamar<{ data?: CobrancaAsaas[] }>(
+    `/payments?customer=${encodeURIComponent(clienteAsaasId)}&status=PENDING&limit=100`,
+  );
+  return (r.data ?? []).find((c) => c.externalReference?.startsWith(PREFIXO) &&
+    tipoDaReferencia(c.externalReference) === "diferenca") ?? null;
+}
+
+// --- o caixa dos sócios (29/09/2026) ----------------------------------------
+//
+// Leitura só: os pagamentos da conta inteira, dos DOIS produtos. Ver
+// `lib/caixa-dos-socios.ts` para o que se faz com eles.
+
+/** Páginas de 100 (o máximo do Asaas). Trinta páginas são 3.000 pagamentos num mês. */
+const PAGINAS_DO_CAIXA = 30;
+
+async function listarTodos(filtros: Record<string, string>): Promise<{
+  pagamentos: PagamentoDoAsaas[];
+  incompleto: boolean;
+}> {
+  const pagamentos: PagamentoDoAsaas[] = [];
+  for (let pagina = 0; pagina < PAGINAS_DO_CAIXA; pagina++) {
+    const q = new URLSearchParams({ ...filtros, limit: "100", offset: String(pagina * 100) });
+    const r = await chamar<{ data?: PagamentoDoAsaas[]; hasMore?: boolean }>(`/payments?${q}`);
+    pagamentos.push(...(r.data ?? []));
+    if (!r.hasMore) return { pagamentos, incompleto: false };
+  }
+  return { pagamentos, incompleto: true };
+}
+
+/**
+ * O que CAIU na conta entre duas datas (`paymentDate`, "AAAA-MM-DD").
+ *
+ * Pix e boleto caem no dia em que o cliente paga; cartão, quando o Asaas
+ * libera. O que foi pago no cartão e ainda não caiu está em `pagamentosAReceber`.
+ */
+export function pagamentosRecebidos(de: string, ate: string) {
+  return listarTodos({ "paymentDate[ge]": de, "paymentDate[le]": ate });
+}
+
+/** Cartão aprovado, esperando o Asaas liberar. */
+export function pagamentosAReceber() {
+  return listarTodos({ status: "CONFIRMED" });
 }

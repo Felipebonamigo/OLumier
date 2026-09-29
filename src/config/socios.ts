@@ -189,6 +189,13 @@ export const BASE_DO_SPLIT: BaseDoSplit = "lucro";
 /**
  * ── QUEM PAGA O CUSTO ─────────────────────────────────────────────────────
  *
+ * `proporcional` desde 29/09/2026. Felipe, perguntado se o 50/25/25 da Galeria
+ * era do lucro ou da receita: "do lucro, troca e publica". Até então valia
+ * `igual` (acordo de 01/09), que deixava o lucro fora do 50/25/25 — no plano de
+ * 1 TB mensal, 68% para o Felipe e 16% para cada um dos outros —, e que zerava
+ * a Carol e o Sirius nas faixas de margem curta (o anual de 1 TB com combo).
+ * Nenhuma assinatura existia quando mudou: não há split antigo a corrigir.
+ *
  * `proporcional` — o custo sai do bolo antes, e o que sobra é dividido
  *                  50/25/25. Cada um banca o custo na proporção da fatia dele.
  *
@@ -211,11 +218,13 @@ export const BASE_DO_SPLIT: BaseDoSplit = "lucro";
  * ⚠️ O CUSTO FIXO NÃO ESTÁ AQUI. A reserva conhece armazenamento (Backblaze e
  * Cloudflare) e a taxa do Asaas. DAS-MEI, VPS e domínio (R$ 129,33/mês) não
  * pertencem a cobrança nenhuma e não têm como ser rateados por cobrança — o
- * Asaas divide uma de cada vez e não sabe o total do mês. Esse terço é acerto
- * mensal por fora, R$ 43,11 para cada um. Ver `config/custos-fixos.ts`.
+ * Asaas divide uma de cada vez e não sabe o total do mês. Ele é acerto mensal
+ * por fora — e, para o lucro fechar em 50/25/25 (29/09/2026), na mesma
+ * proporção: R$ 64,67 / R$ 32,33 / R$ 32,33 do total de R$ 129,33. Ver
+ * `config/custos-fixos.ts`.
  */
 export type RateioDoCusto = "proporcional" | "igual";
-export const RATEIO_DO_CUSTO: RateioDoCusto = "igual";
+export const RATEIO_DO_CUSTO: RateioDoCusto = "proporcional";
 
 /**
  * O CAIXA DA OPERAÇÃO — a quarta carteira, opcional.
@@ -283,6 +292,55 @@ export function montarFatias(
    * adianta nada se quem monta o split chamar sem contar: o cálculo fica certo
    * num lugar e errado no outro, e as duas funções parecem corretas isoladas.
    * `testar-planos.mjs` junta as duas de propósito. */
+  return fatiasDoLucro(precoCentavos, lucroCentavos(planoId, precoCentavos, ciclo));
+}
+
+/**
+ * Quanto sobra de lucro numa cobrança de DIFERENÇA — a troca para um plano
+ * maior no meio de um período já pago (ver `config/troca-de-plano.ts`).
+ *
+ * A reserva do período inteiro já saiu da mensalidade que foi paga; o que esta
+ * cobrança acrescenta de custo é só o espaço A MAIS, pelos meses que faltam.
+ * Reservar o plano novo inteiro, como `lucroCentavos` faria, engoliria a
+ * diferença toda e os sócios não receberiam nada dela; não reservar nada
+ * mandaria embora o dinheiro do disco que o estúdio acabou de ganhar.
+ *
+ * Plano irreconhecível cai no mesmo chute conservador de `lucroCentavos`.
+ */
+export function lucroDaDiferencaCentavos(
+  planoAntigoId: string,
+  planoNovoId: string,
+  precoCentavos: number,
+  mesesRestantes: number,
+): number {
+  const antigo = planoPorId(planoAntigoId);
+  const novo = planoPorId(planoNovoId);
+  if (!antigo || !novo) return Math.max(0, precoCentavos - Math.round(precoCentavos * 0.35));
+  const aMaisPorMes = Math.max(
+    0,
+    custoArmazenamentoCentavos({ segmento: novo.segmento, espacoGb: novo.quotaGb }) -
+      custoArmazenamentoCentavos({ segmento: antigo.segmento, espacoGb: antigo.quotaGb }),
+  );
+  const reserva =
+    Math.round(aMaisPorMes * FOLGA_ESPACO * Math.max(0, mesesRestantes)) + taxaCobrancaCentavos(precoCentavos);
+  return Math.max(0, precoCentavos - reserva);
+}
+
+/** O split de uma cobrança de diferença: a mesma regra, sobre o lucro dela. */
+export function montarFatiasDaDiferenca(
+  planoAntigoId: string,
+  planoNovoId: string,
+  precoCentavos: number,
+  mesesRestantes: number,
+): FatiaSocio[] {
+  return fatiasDoLucro(
+    precoCentavos,
+    lucroDaDiferencaCentavos(planoAntigoId, planoNovoId, precoCentavos, mesesRestantes),
+  );
+}
+
+/** A divisão entre sócios de uma cobrança, dado o lucro que ela deixa. */
+function fatiasDoLucro(precoCentavos: number, lucro: number): FatiaSocio[] {
   const fatias: FatiaSocio[] = [];
   const liquido = Math.max(0, precoCentavos - taxaCobrancaCentavos(precoCentavos));
   if (liquido === 0) return fatias;
@@ -305,8 +363,6 @@ export function montarFatias(
    * O ciclo não entra no percentual: 25% de uma cobrança anual já são 25% do
    * ano. Ele entra na RAZÃO, porque o lucro do anual é outro.
    */
-  const lucro = lucroCentavos(planoId, precoCentavos, ciclo);
-
   /*
    * A RAZÃO — o que sobra para dividir, depois de guardada a reserva.
    *

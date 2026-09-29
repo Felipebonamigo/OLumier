@@ -105,6 +105,7 @@ export default async function AtividadePage({ params }: { params: Promise<{ id: 
         fechadaEm={selecao.fechadaEm ? selecao.fechadaEm.toISOString() : null}
         aberta={selecao.aberta}
         motivo={selecao.motivo}
+        combinada={selecao.combinada}
         lista={listaSelecao.map((l) => ({ nome: l.nome, capitulo: l.capitulo }))}
         pessoas={pessoas}
       />

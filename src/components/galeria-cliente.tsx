@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
+import { enderecoDaBarra, enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { GaleriaGrade } from "./galeria-grade";
 import type { Aparencia } from "@/config/aparencia";
 import {
@@ -34,6 +34,7 @@ import { EncontrarMe } from "./encontrar-me";
 import { MenusDaGaleria } from "./menus-da-galeria";
 import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-visiveis";
 import { capitulosComOsExtras } from "@/lib/capitulos-da-rolagem";
+import { recortarParaDesenhar, PRIMEIRA_LEVA, LEVA } from "@/lib/grade-por-partes";
 import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 
 export interface ItemGaleria {
@@ -197,6 +198,9 @@ export function GaleriaCliente({
     limite: number | null;
     aberta: boolean;
     motivo: "fechada" | "prazo" | null;
+    /** O fotógrafo combinou limite ou prazo. Sem isso as favoritas são
+        livres e não há "Terminei minha escolha" — ver `EstadoSelecao.combinada`. */
+    combinada: boolean;
   };
 }) {
   /*
@@ -242,6 +246,32 @@ export function GaleriaCliente({
      o que mudou, e é o caminho que o próprio framework pede. */
   const router = useRouter();
   const caminho = usePathname();
+
+  /*
+   * ── O CAPÍTULO NÃO FICA NA BARRA (29/09/2026) ───────────────────────────
+   *
+   * Um fotógrafo entrou no "Making of", copiou a barra e mandou para o casal
+   * `…/sarah-e-levi/making-of`. Pedido dele, pelo Felipe: tirar o capítulo do
+   * link. A barra volta para o endereço da galeria assim que o capítulo abre —
+   * então o que se copia dali é sempre o link da galeria.
+   *
+   * A rota do capítulo continua existindo: é por ela que a pastilha abre o
+   * capítulo, e link de capítulo já mandado continua abrindo (o mesmo cuidado
+   * das migrações 025 e 030). O preço: recarregar a página volta para o começo
+   * da galeria, e o "não sou eu" (que recarrega) também.
+   *
+   * `replaceState` e não `router.replace`: trocar a rota buscaria a galeria
+   * inteira de novo. O Next acompanha a troca nativa (`usePathname` passa a
+   * dizer o endereço novo) — o que as buscas por `?fotos=` precisam, porque o
+   * recorte delas não depende de capítulo.
+   */
+  useEffect(() => {
+    if (!capituloAberto) return;
+    const limpo = enderecoDaBarra(enderecoBase, window.location.search);
+    if (limpo !== window.location.pathname + window.location.search) {
+      window.history.replaceState(null, "", limpo + window.location.hash);
+    }
+  }, [capituloAberto, enderecoBase]);
 
   const [aberto, setAberto] = useState<number | null>(null);
   /*
@@ -1044,6 +1074,60 @@ export function GaleriaCliente({
       : [];
 
   /*
+   * ── A GRADE DESENHA POR PARTES (26/09/2026) ─────────────────────────────
+   *
+   * "A galeria parece lenta para abrir." Era: com 600 fotos, o documento
+   * saía com 600 cards — seis mil nós que o celular montava e hidratava antes
+   * de responder ao primeiro toque, para mostrar uma dúzia. Medido e explicado
+   * em `lib/grade-por-partes.ts`.
+   *
+   * Agora a grade nasce com `PRIMEIRA_LEVA` cards e ganha mais `LEVA` a cada
+   * vez que a rolagem chega perto do fim do que já foi desenhado. As fotos
+   * seguintes já estão em `itens` — nenhuma ida ao servidor, só o React
+   * acrescentando cards. Tudo o que não é desenho (filtro, slideshow,
+   * visualizador, menus, baixar) continua olhando a lista inteira.
+   *
+   * O corte é pelas fotos VISÍVEIS e respeita os filtros: "só as favoritas"
+   * mostra as primeiras favoritas, e não as favoritas que por acaso caíram
+   * nas 60 primeiras posições.
+   *
+   * `startTransition` porque acrescentar 120 cards é trabalho que pode
+   * esperar um toque: a rolagem e o coração respondem primeiro.
+   */
+  const [limiteDoDesenho, setLimiteDoDesenho] = useState(PRIMEIRA_LEVA);
+  const desenho = useMemo(
+    () => recortarParaDesenhar(capitulos, (i) => fotoVisivel(itens[i].id, filtros), limiteDoDesenho),
+    [capitulos, itens, filtros, limiteDoDesenho],
+  );
+  const faltaDesenhar = desenho.falta;
+  const sentinelaDoDesenho = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const alvo = sentinelaDoDesenho.current;
+    if (!alvo || !faltaDesenhar) return;
+    /*
+     * O observador é refeito a cada leva (`limiteDoDesenho` nas dependências),
+     * e isso é o que faz a tela alta funcionar: no monitor grande a leva nova
+     * pode não empurrar a sentinela para fora da margem, e um observador
+     * antigo só avisaria de novo quando ela saísse e voltasse. O novo avisa na
+     * hora, com o estado de agora, e a grade cresce até sair da margem.
+     *
+     * 1200 px de antecedência: a leva entra quando o fim do desenho está a uma
+     * dobra e meia de distância, antes de o dedo chegar lá.
+     */
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (entradas.some((e) => e.isIntersecting)) {
+          startTransition(() => setLimiteDoDesenho((n) => n + LEVA));
+        }
+      },
+      { rootMargin: "0px 0px 1200px 0px" },
+    );
+    observador.observe(alvo);
+    return () => observador.disconnect();
+  }, [faltaDesenhar, limiteDoDesenho]);
+
+  /*
    * ── AS PARTES DE UMA PASTA MAIOR QUE A TELA (16/09/2026) ─────────────────
    *
    * O corte por fatia serve no máximo `FOTOS_POR_TELA` fotos por documento, e
@@ -1070,6 +1154,12 @@ export function GaleriaCliente({
    */
   const [buscando, setBuscando] = useState(false);
   const [acabou, setAcabou] = useState(!fatia);
+  /* As fotos chegam agrupadas por capítulo (`listarMediasPublicas`): só o
+     capítulo da última foto que chegou pode ter mais a caminho. Os de antes
+     já vieram inteiros e fecham a última fileira sem esperar a galeria toda. */
+  const capituloAindaChegando = acabou
+    ? null
+    : (capitulos.find((capitulo) => capitulo.indices.at(-1) === itens.length - 1)?.id ?? null);
   const sentinela = useRef<HTMLDivElement | null>(null);
 
   const carregarMais = useCallback(async () => {
@@ -1098,7 +1188,11 @@ export function GaleriaCliente({
 
   useEffect(() => {
     const alvo = sentinela.current;
-    if (!alvo || acabou) return;
+    /* Enquanto falta desenhar, a sentinela da rede nem está na página — e
+       `faltaDesenhar` nas dependências é o que faz este efeito rodar de novo
+       quando ela entra. Sem isso ele olhava uma vez, não achava nada, e a
+       galeria fatiada parava nas primeiras 600 fotos. */
+    if (!alvo || acabou || faltaDesenhar) return;
     /*
      * `rootMargin` de 800 px embaixo: o pedido sai quando o fim está a uma
      * dobra de distância, não quando já chegou. É a diferença entre a galeria
@@ -1112,7 +1206,7 @@ export function GaleriaCliente({
     );
     observador.observe(alvo);
     return () => observador.disconnect();
-  }, [carregarMais, acabou]);
+  }, [carregarMais, acabou, faltaDesenhar]);
 
 
   /*
@@ -1178,7 +1272,12 @@ export function GaleriaCliente({
 
   const fimDaGaleria = (
     <>
-      {fatia && !acabou ? (
+      {/* A rede só é chamada quando tudo o que já chegou foi desenhado: com a
+          sentinela da rede logo abaixo dos primeiros cards, a galeria fatiada
+          pediria a segunda remessa ao servidor tendo 540 fotos na memória. */}
+      {faltaDesenhar ? (
+        <div ref={sentinelaDoDesenho} aria-hidden className="h-px" />
+      ) : fatia && !acabou ? (
         <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
           {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
         </div>
@@ -1186,11 +1285,11 @@ export function GaleriaCliente({
       {/* Só depois que as fotos deste capítulo acabaram: oferecer a saída no
           meio do carregamento é convidar a pessoa a sair antes de ver o que
           ainda está vindo. */}
-      {saidaDoCapitulo && (!fatia || acabou) && (
+      {saidaDoCapitulo && (!fatia || acabou) && !faltaDesenhar && (
         <div className="my-10 text-center">
           <Link
             href={saidaDoCapitulo.para}
-            className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm transition"
+            className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
             style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
           >
             {saidaDoCapitulo.texto}
@@ -1267,6 +1366,7 @@ export function GaleriaCliente({
                   );
                 },
                 selecaoAberta: selecao.aberta,
+                podeEncerrar: selecao.aberta && selecao.combinada,
                 limite,
                 cheia,
                 encerrar: encerrarSelecao,
@@ -1678,7 +1778,7 @@ export function GaleriaCliente({
 
 
       <div id="fotos" className="mt-8 scroll-mt-4">
-        {capitulos.map((capOriginal) => {
+        {desenho.capitulos.map((cap) => {
           /*
            * Com o filtro ligado, o capítulo mostra só o que foi marcado — e some
            * inteiro se nada ali foi. Manter um capítulo vazio com o título na
@@ -1687,42 +1787,74 @@ export function GaleriaCliente({
           /* Os dois filtros somam: "só as favoritas" E "só onde eu apareço"
              podem estar ligados ao mesmo tempo, e o resultado é a interseção.
              A regra mora em `lib/fotos-visiveis.ts` porque o slideshow precisa
-             da mesma resposta — duas cópias dela é como filtros discordam. */
-          const indices = capOriginal.indices.filter((i) => fotoVisivel(itens[i].id, filtros));
-          if (indices.length === 0) return null;
-          const cap = { ...capOriginal, indices };
+             da mesma resposta — duas cópias dela é como filtros discordam.
+             O corte do filtro e o do desenho por partes saem juntos de
+             `recortarParaDesenhar`. */
+          /* Capítulo que a rolagem ainda não alcançou: a seção já existe,
+             vazia e escondida, para o menu de capítulos enxergá-la desde já —
+             ver `recortarParaDesenhar`. */
+          if (cap.indices.length === 0) {
+            return <section key={cap.id} id={`cap-${cap.id}`} hidden />;
+          }
           return (
-          <section key={cap.id} id={`cap-${cap.id}`} className="mb-12 scroll-mt-16">
-            {cap.nome && (
-              /*
-                O NOME DO CAPÍTULO SEGUE O ALINHAMENTO, E NÃO É DA COR DO BOTÃO.
+          /*
+            ── O NOME DO CAPÍTULO SAI DA TELA, E NÃO DA ESTRUTURA (29/09/2026)
 
-                Duas queixas do Juan atravessam a capa e continuavam valendo
-                aqui embaixo — e eu tinha corrigido só a metade de cima:
+            Juan, com um print da galeria no celular e o título circulado a
+            caneta: "ainda está aparecendo aqui 'prévia do casamento', ou seja
+            ainda aparece ali em cima a 'aba' prévia e embaixo o mesmo título,
+            fica repetitivo, não deixe os 2 se repetirem, tire esse 'título',
+            deixe só a 'aba'".
 
-                  "deixei os botões verdinhos e gostei, mas a logo também ficou
-                   verde"  → era `--g-destaque`, a mesma variável do botão. Com
-                   a cor escolhida, "Making Of" e "Cerimônia" ficavam verdes
-                   junto. `--g-suave` é o secundário do tema, com contraste
-                   medido em `variaveisDoTema`.
+            Era a segunda vez. Em 28/09 este `<h2>` já tinha sumido do capítulo
+            ABERTO (`?cap=...`), e o argumento para mantê-lo na galeria inteira
+            estava escrito aqui: "é ele que separa uma seção da outra enquanto
+            se rola, e a pastilha lá de cima já saiu da tela".
 
-                  "queria que TODOS os textos estivessem alinhados pra esse
-                   lado" → era `text-center` cravado. Com o eixo à esquerda, a
-                   capa ia para a esquerda e o capítulo ficava no meio: "cada
-                   coisa de um jeito", só que rolando a página para baixo.
-              */
-              <h2
-                className={`mb-4 font-mono text-[11px] uppercase tracking-[0.3em] ${
-                  aparencia.alinhamento === "esquerda" ? "text-left" : "text-center"
-                }`}
-                style={{ color: "var(--g-suave)" }}
-              >
-                {cap.nome}
-              </h2>
-            )}
+            A segunda metade dessa frase é falsa, e dava para conferir sem
+            print: a barra é `sticky top-0` e um `IntersectionObserver` acende
+            a pastilha do capítulo que está na tela (`menus-da-galeria.tsx`).
+            A pastilha NUNCA sai da tela, e o nome do capítulo corrente já
+            estava sempre visível — a poucos pixels do título que o repetia.
+            O caso que justificava manter os dois não existia.
+
+            O nome continua na `<section>`, por `aria-label`: quem navega por
+            seções, ou por leitor de tela, não vê pastilha acesa nenhuma.
+            Apagar dos dois lugares resolveria a queixa criando uma pior, e
+            invisível para quem a criou.
+
+            Com o `<h2>` foram duas conferências de `testar-eixos-forma.mjs`
+            (a cor e o alinhamento dele) — elas ficaram sem objeto, e estão
+            comentadas lá com este motivo. As mesmas duas regras continuam
+            valendo e presas na CAPA, que é onde as queixas originais nasceram.
+          */
+          <section
+            key={cap.id}
+            id={`cap-${cap.id}`}
+            /*
+              SÓ CAPÍTULO COM NOME GANHA RÓTULO.
+
+              O `|| GRUPO_SEM_CAPITULO` que estava aqui punha "Outras fotos" na
+              seção das fotos soltas — e numa galeria SEM capítulo nenhum isso
+              inventa um nome que o fotógrafo nunca escolheu. `testar-secoes`
+              guarda exatamente isso ("galeria de fluxo único ganhou um título
+              que não pediu"), e estava certo: sem capítulos não existe grupo,
+              existe a galeria.
+
+              Com capítulos, quem nomeia o grupo das soltas é a pastilha da
+              barra, que já diz "Outras fotos" — ver `testar-secoes`, a etapa
+              logo acima daquela.
+            */
+            aria-label={cap.nome || undefined}
+            className="mb-12 scroll-mt-16"
+          >
             <GaleriaGrade
               aparencia={aparencia}
               quantidade={cap.indices.length}
+              /* O fim do que está desenhado só é o fim do capítulo quando o
+                 desenho por partes chegou até ele E nenhuma foto dele ainda
+                 vem pela rede. Ver `fileirasDeColunas`. */
+              listaCompleta={cap.inteiro && cap.id !== capituloAindaChegando}
               proporcao={(k) => {
                 const it = itens[cap.indices[k]];
                 return it.largura && it.altura ? it.largura / it.altura : 4 / 5;
@@ -1873,7 +2005,7 @@ export function GaleriaCliente({
                     topo. `testar-urls-sob-demanda.mjs` confere que esse caminho
                     existe — sem ele, tirar o botão deixaria o celular sem saída.
                   */
-                  className="grid h-9 w-9 place-items-center rounded-full opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
+                  className="grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
                   style={{ color: "#fff", filter: GLIFO_SOBRE_FOTO }}
                 >
                   <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"
@@ -1920,7 +2052,7 @@ export function GaleriaCliente({
                 /* O posicionamento saiu daqui para o <span> que agrupa os dois
                    botões — senão o de baixar e o coração se sobreporiam no
                    mesmo canto. */
-                className={`grid h-9 w-9 place-items-center rounded-full transition max-[900px]:h-11 max-[900px]:w-11
+                className={`grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] transition max-[900px]:h-11 max-[900px]:w-11
                   ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}
                   ${!selecao.aberta && !ehFavorita ? "hidden" : ""}`}
                 /*
@@ -2153,7 +2285,7 @@ export function GaleriaCliente({
                   anterior();
                 }}
                 aria-label="Anterior"
-                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                className="absolute left-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-[var(--g-pilula,9999px)] border transition"
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
                   borderColor: "var(--g-linha)",
@@ -2169,7 +2301,7 @@ export function GaleriaCliente({
                   proximo();
                 }}
                 aria-label="Próxima"
-                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border transition"
+                className="absolute right-3 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-[var(--g-pilula,9999px)] border transition"
                 style={{
                   background: "color-mix(in srgb, var(--g-fundo) 70%, transparent)",
                   borderColor: "var(--g-linha)",
@@ -2242,12 +2374,12 @@ function PainelDaEntrega({
       </div>
 
       <div
-        className="h-1.5 w-full overflow-hidden rounded-full"
+        className="h-1.5 w-full overflow-hidden rounded-[var(--g-pilula,9999px)]"
         style={{ background: "var(--g-linha)" }}
         aria-hidden="true"
       >
         <div
-          className="h-full rounded-full transition-[width] duration-300"
+          className="h-full rounded-[var(--g-pilula,9999px)] transition-[width] duration-300"
           style={{ width: `${Math.round(fracao * 100)}%`, background: "var(--g-destaque)" }}
         />
       </div>
@@ -2262,7 +2394,7 @@ function PainelDaEntrega({
         <button
           type="button"
           onClick={suaVez.seguir}
-          className="w-full rounded-full px-6 py-3 text-sm font-semibold transition hover:opacity-85"
+          className="w-full rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm font-semibold transition hover:opacity-85"
           style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
         >
           Salvar {p.preparadas} {p.preparadas === 1 ? "foto" : "fotos"} no celular

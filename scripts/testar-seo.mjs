@@ -14,7 +14,7 @@
  */
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 import http from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { marca } from "../src/config/marca.ts";
 
@@ -180,19 +180,16 @@ for (const caminho of PAGINAS_DA_CASA) {
   });
 }
 
-await etapa("a home diz ao buscador o que o produto é, e não só o slogan", () => {
+await etapa("a home tem descrição que cabe inteira no resultado de busca", () => {
   /*
-   * O título era "Galeria Átomo — Onde o instante permanece." e a descrição
-   * tinha 44 caracteres: bonito na página, mudo no resultado de busca. O
-   * intervalo é o que o Google mostra sem cortar e sem inventar um trecho
-   * próprio no lugar.
+   * A descrição antiga tinha 44 caracteres: o Google, diante de uma descrição
+   * curta demais, costuma trocá-la por um trecho qualquer da página. O
+   * intervalo é o que ele mostra sem cortar e sem inventar. O TEXTO é do
+   * briefing da home (docs/briefing-home.md); aqui só se mede o tamanho.
    */
   const descricao = meta(home, "description") ?? "";
   if (descricao.length < 110 || descricao.length > 160) {
     throw new Error(`descrição com ${descricao.length} caracteres — fora de 110 a 160`);
-  }
-  if (titulo(home) === `${marca.nome} — ${marca.tagline}`) {
-    throw new Error("o título voltou a ser só marca + slogan");
   }
   return `${descricao.length} caracteres`;
 });
@@ -209,24 +206,35 @@ await etapa("o www manda para o domínio canônico, e a API fica onde está", as
   return "308 com caminho e consulta";
 });
 
-await etapa("a home só pré-carrega a foto do topo", () => {
+await etapa("toda <img> da home diz quando carregar", () => {
   /*
-   * O React 19 pendura `<link rel="preload">` para toda <img> sem
-   * `loading="lazy"`, e duas fotos do fim da página (600 KB somadas) disputavam
-   * a banda com a do topo na primeira pintura. Conferido no FONTE, e não no
-   * HTML: o servidor de desenvolvimento não emite esses preloads, e a etapa
-   * passaria verde sem medir nada.
+   * O React 19 pendura `<link rel="preload">` no <head> para toda <img> sem
+   * `loading="lazy"`. Na home de 26/09/2026 isso fazia duas fotos do fim da
+   * página (600 KB) disputarem a banda com a do topo. A regra é que cada <img>
+   * DECLARE a escolha — `lazy`, `eager` ou uma expressão —, para ninguém
+   * herdar o pré-carregamento sem saber.
+   *
+   * Conferido no FONTE, e não no HTML: o portão de publicação sobe `next dev`,
+   * que não emite esses preloads, e a etapa passaria verde sem medir nada.
    */
-  const fonte = readFileSync(path.join(RAIZ, "src/app/page.tsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const imagens = [...fonte.matchAll(/<img\b[\s\S]*?\/>/g)].map((m) => m[0]);
-  const topo = imagens.filter((i) => /fetchPriority="high"/.test(i));
-  if (topo.length !== 1) throw new Error(`${topo.length} imagens com prioridade alta, esperava 1`);
-  const soltas = imagens.filter((i) => !/fetchPriority="high"/.test(i) && !/loading="lazy"/.test(i));
-  if (soltas.length) {
-    const qual = soltas.map((i) => i.match(/src=\{?"?([^"\s}]+)/)?.[1]).join(", ");
-    throw new Error(`sem loading="lazy": ${qual} — vira preload e atrasa a foto do topo`);
+  const arquivos = [
+    "src/app/page.tsx",
+    ...readdirSync(path.join(RAIZ, "src/components/home"))
+      .filter((f) => f.endsWith(".tsx"))
+      .map((f) => `src/components/home/${f}`),
+  ];
+  let total = 0;
+  for (const arquivo of arquivos) {
+    const fonte = readFileSync(path.join(RAIZ, arquivo), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [img] of fonte.matchAll(/<img\b[\s\S]*?\/>/g)) {
+      total++;
+      if (!/\bloading=/.test(img) && !/fetchPriority=/.test(img)) {
+        const src = img.match(/src=\{?"?([^"\s}]+)/)?.[1] ?? "?";
+        throw new Error(`${arquivo}: <img src=${src}> sem loading — vira preload e disputa com o topo`);
+      }
+    }
   }
-  return `${imagens.length} <img>, 1 prioritária`;
+  return `${total} <img> em ${arquivos.length} arquivos`;
 });
 
 /*

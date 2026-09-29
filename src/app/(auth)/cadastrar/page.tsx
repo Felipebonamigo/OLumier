@@ -11,7 +11,7 @@ import { FormCadastrar } from "./form";
    primeiro lugar em que o cliente desconfia. */
 export const metadata: Metadata = metadadosDaCasa({
   titulo: "Criar conta",
-  descricao: `Crie a conta do seu estúdio no ${marca.nome} e teste grátis, sem cartão: suba uma entrega de verdade e mande o link para o seu cliente.`,
+  descricao: `Crie a conta do seu estúdio na ${marca.nome} e teste grátis, sem cartão: suba uma entrega de verdade e mande o link para o seu cliente.`,
   caminho: "/cadastrar",
 });
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { definirCapaAction, moverMediasAction } from "@/app/painel/actions";
+import { definirCapaAction, moverMediasAction, moverFotoAction } from "@/app/painel/actions";
 import { depoisDoClique } from "@/lib/trecho-selecionado";
 
 export interface MediaExibida {
@@ -10,6 +10,10 @@ export interface MediaExibida {
   nome: string;
   tipo: "foto" | "video";
   url: string;
+  /** O endereço do FILME. Só em vídeo — ver o comentário na aba Fotos. */
+  urlFilme?: string;
+  /** Há miniatura de verdade? Sem ela o `poster` não pode ser desenhado. */
+  temCapa?: boolean;
   bytes: number;
   secaoId: string | null;
   /** Quantas pessoas marcaram esta foto como favorita. 0 = ninguém. */
@@ -49,6 +53,7 @@ export function GradeMedias({
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [definindoCapa, setDefinindoCapa] = useState<string | null>(null);
   const [apagandoTudo, setApagandoTudo] = useState(false);
+  const [apagandoSelecao, setApagandoSelecao] = useState(false);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
   /* Aberta por padrão: quem acabou de subir quer VER o que subiu. Recolher é
    * para depois, quando a grade vira obstáculo entre a pessoa e o resto da
@@ -151,6 +156,82 @@ export function GradeMedias({
       alert(`Não foi possível apagar agora. ${(e as Error).message}`);
     } finally {
       setApagandoTudo(false);
+    }
+  }
+
+  /*
+   * A ORDEM ENQUANTO O DEDO ANDA — igual à da lista de capítulos.
+   *
+   * `null` quer dizer "quem manda é a lista do servidor", e é o que faz a tela
+   * voltar sozinha ao certo depois do `router.refresh()`. Zerar antes da volta
+   * do servidor faria o ladrilho piscar no lugar antigo.
+   */
+  const [ordemLocal, setOrdemLocal] = useState<string[] | null>(null);
+  const [arrastando, setArrastando] = useState<string | null>(null);
+
+  function aoCruzar(alvoId: string) {
+    if (!arrastando || arrastando === alvoId) return;
+    const atual = (ordemLocal ?? medias.map((m) => m.id)).slice();
+    const de = atual.indexOf(arrastando);
+    const para = atual.indexOf(alvoId);
+    if (de < 0 || para < 0) return;
+    atual.splice(para, 0, ...atual.splice(de, 1));
+    setOrdemLocal(atual);
+  }
+
+  function aoSoltar() {
+    const arrastada = arrastando;
+    setArrastando(null);
+    if (!arrastada || !ordemLocal) return;
+    const original = medias.map((m) => m.id);
+    if (ordemLocal.join() === original.join()) return setOrdemLocal(null);
+
+    /*
+     * Vai o PAR, e não a lista inteira: numa galeria de 4.577 fotos a lista
+     * seriam 169 KB de formulário e 4.577 linhas reescritas para mover uma. O
+     * servidor refaz o mesmo `splice` e mexe só no trecho entre as duas.
+     *
+     * O alvo é quem ESTAVA na posição onde ela caiu, lido da ordem original —
+     * é a informação que o servidor precisa para chegar ao mesmo resultado.
+     */
+    const destino = ordemLocal.indexOf(arrastada);
+    const alvo = original[destino];
+    if (!alvo || alvo === arrastada) return setOrdemLocal(null);
+
+    iniciar(async () => {
+      const f = new FormData();
+      f.set("galeria_id", galeriaId);
+      f.set("arrastado", arrastada);
+      f.set("alvo", alvo);
+      await moverFotoAction(f);
+      router.refresh();
+      setOrdemLocal(null);
+    });
+  }
+
+  async function apagarSelecionadas() {
+    const quantas = selecao.size;
+    if (quantas === 0) return;
+    if (!confirm(`Apagar ${quantas} ${quantas === 1 ? "foto" : "fotos"}? Não dá para desfazer.`)) {
+      return;
+    }
+    setApagandoSelecao(true);
+    try {
+      /* A MESMA rota do "apagar todas", com a lista — uma transação só, um
+         gatilho de uso só. Trinta chamadas à rota de uma foto seriam trinta
+         transações e trinta recontagens do espaço da galeria. */
+      const r = await fetch(`/api/galerias/${galeriaId}/medias`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [...selecao] }),
+      });
+      if (!r.ok) throw new Error();
+      setSelecao(new Set());
+      router.refresh();
+    } catch {
+      alert("Não foi possível apagar agora. Tente de novo.");
+    } finally {
+      setApagandoSelecao(false);
     }
   }
 
@@ -309,6 +390,28 @@ export function GradeMedias({
               ))}
               <option value="__nenhum">— sem capítulo —</option>
             </select>
+
+            {/*
+              APAGAR AS MARCADAS (28/09/2026).
+
+              Juan: "Marquei algumas que eu quero excluir. Mas não tem botão de
+              excluir. Só apagar todas. Ou apagar individualmente." A frase acima
+              desta barra já prometia "mover para um capítulo, ou remover" — e a
+              barra só movia. Quem marcava trinta fotos escolhia entre apagar a
+              galeria inteira e trinta confirmações.
+
+              Confirmação simples, e não a digitação da contagem que "apagar
+              todas" exige: ali o clique errado custa o casamento inteiro, aqui
+              custa o que está marcado na tela, à vista de quem marcou.
+            */}
+            <button
+              type="button"
+              disabled={ocupado || apagandoSelecao}
+              onClick={apagarSelecionadas}
+              className="rounded-md border border-erro/40 px-2.5 py-1.5 text-xs text-erro transition hover:bg-erro/10 disabled:opacity-40"
+            >
+              {apagandoSelecao ? "apagando…" : `apagar selecionadas (${selecao.size})`}
+            </button>
           </span>
         </div>
       )}
@@ -352,13 +455,53 @@ export function GradeMedias({
       */}
       {aberta && (
       <ul className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10">
-        {medias.map((m) => {
+        {(ordemLocal
+          ? (ordemLocal.map((id) => medias.find((m) => m.id === id)).filter(Boolean) as typeof medias)
+          : medias
+        ).map((m) => {
           const selecionada = selecao.has(m.id);
           const capitulo = nomeSecao(m.secaoId);
           return (
             <li
               key={m.id}
-              className="group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto]"
+              /*
+                ARRASTAR PARA REORDENAR (28/09/2026).
+
+                Felipe: "quero adicionar as fotos analógicas que fiz no 'local'
+                certo, na ordem cronológica e não consigo arrastar". A ordem era
+                decidida no ENVIO e ponto — quem revela um filme depois não tinha
+                onde encaixá-lo.
+
+                Mesmo idioma da lista de capítulos: a ordem local manda enquanto
+                o dedo anda, o servidor recebe só o par (arrastada, alvo) e a
+                lista do servidor volta a mandar quando o `router.refresh()`
+                chega. E a conta do servidor usa o MESMO `splice` daqui — se as
+                duas discordassem, o ladrilho pularia de lugar ao recarregar.
+
+                `draggable` não existe no toque, e é por isso que o "mover para"
+                do menu continua: no celular ele é o único caminho.
+              */
+              draggable={!ocupado && !apagandoSelecao}
+              onDragStart={(e) => {
+                setArrastando(m.id);
+                setOrdemLocal(medias.map((x) => x.id));
+                /* Sem `setData` o Firefox não inicia o arrasto. */
+                e.dataTransfer.setData("text/plain", m.id);
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                aoCruzar(m.id);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                aoSoltar();
+              }}
+              onDragEnd={aoSoltar}
+              className={`group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto] ${
+                arrastando === m.id ? "opacity-40" : ""
+              }`}
             >
               {/*
                 A MOLDURA ACENDE SOB O PONTEIRO (pedido do Juan em 05/09/2026).
@@ -397,7 +540,17 @@ export function GradeMedias({
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <video src={m.url} className="h-full w-full object-cover" preload="metadata" controls />
+                  /* `src` é o filme e `poster` é a capa: são dois endereços
+                     para duas coisas, e o HTML tem um atributo para cada uma.
+                     Sem capa o `poster` some — apontá-lo para o original
+                     mandaria o navegador desenhar um filme como imagem. */
+                  <video
+                    src={m.urlFilme ?? m.url}
+                    poster={m.temCapa ? m.url : undefined}
+                    className="h-full w-full object-cover"
+                    preload="metadata"
+                    controls
+                  />
                 )}
               </div>
 

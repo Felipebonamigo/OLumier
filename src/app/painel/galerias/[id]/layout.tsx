@@ -148,10 +148,11 @@ export default async function GaleriaLayout({
             porque a pergunta "como está ficando?" não pertence a nenhuma delas
             em particular.
 
-            `?previa=1` é o que faz o rascunho abrir para o DONO: sem ele, uma
-            galeria ainda não publicada devolveria 404 justamente para quem
-            está montando. A permissão vem da sessão, não do parâmetro — ver
-            `app/g/[estudio]/[galeria]/page.tsx`.
+            `?previa=1` pede a PRÉVIA do dono: o design ainda não publicado,
+            sem senha e sem contar como abertura. A permissão vem da sessão,
+            não do parâmetro — ver `app/g/[estudio]/[galeria]/page.tsx`. Desde
+            29/09/2026 o proxy troca o parâmetro por um cookie e a barra abre
+            limpa, com o link do cliente (`config/previa.ts`).
           */}
           <a
             href={`/g/${galeria.estudio_slug}/${galeria.slug}?previa=1`}
@@ -228,7 +229,7 @@ export default async function GaleriaLayout({
       <ProvedorDeEnvio galeriaId={galeria.id}>
         <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-10">
           <div className="lg:sticky lg:top-6 lg:w-56 lg:shrink-0">
-            <MenuGaleria galeriaId={galeria.id} />
+            <MenuGaleria galeriaId={galeria.id} temVideo={Boolean(galeria.tem_video)} />
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-8">{children}</div>
         </div>

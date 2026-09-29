@@ -9,6 +9,7 @@
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
+import { readFileSync } from "node:fs";
 import { criarSecao, garantirSecoes } from "../src/lib/secoes.ts";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
@@ -255,6 +256,100 @@ await etapa("mover as soltas de OUTRO estúdio não move nada", async () => {
   );
   const movidas = await moverSoltasParaSecao(galeriaId, destino.id, crypto.randomUUID());
   if (movidas !== 0) throw new Error(`moveu ${movidas} com o tenant errado`);
+});
+
+/*
+ * ── O CAMINHO DE VOLTA (28/09/2026) ───────────────────────────────────────
+ *
+ * Pedido do Felipe: "adicionar a opção de mover as fotos de um capítulo para
+ * 'sem capítulo'".
+ *
+ * A ida existia desde 04/09 — "Outras fotos" tinha "mover todas para…" — e a
+ * volta não. Quem criou um capítulo errado, ou mandou a pasta inteira para o
+ * lugar errado no envio, só podia desfazer foto a foto, ou APAGANDO o capítulo:
+ * um botão vermelho, com aviso de que não dá para desfazer, para uma operação
+ * que só queria desarrumar as fotos de novo.
+ */
+/**
+ * Guarda em que capítulo cada foto está, para devolver a bancada no fim.
+ *
+ * As etapas seguintes contam com a lotação — a de apagar capítulo precisa de
+ * uma foto DENTRO do capítulo que ela apaga. Esvaziar sem devolver faz a etapa
+ * vizinha falhar por um motivo que não é dela, que é o jeito mais rápido de
+ * transformar uma suíte em fonte de susto.
+ */
+const lotacaoAtual = async () =>
+  (await db.query("select id, secao_id from medias where galeria_id = $1", [galeriaId])).rows;
+const devolverLotacao = async (antes) => {
+  for (const m of antes) {
+    await db.query("update medias set secao_id = $2 where id = $1", [m.id, m.secao_id]);
+  }
+};
+
+await etapa("esvaziar um capítulo devolve as fotos para “sem capítulo”", async () => {
+  const { esvaziarSecao } = await import("../src/lib/secoes.ts");
+  const lotacao = await lotacaoAtual();
+  const { rows: [alvo] } = await db.query(
+    "select id from secoes where galeria_id = $1 order by ordem limit 1",
+    [galeriaId],
+  );
+  await db.query("update medias set secao_id = $2 where galeria_id = $1", [galeriaId, alvo.id]);
+  const { rows: [antes] } = await db.query(
+    "select count(*)::int as n from medias where galeria_id = $1 and secao_id = $2",
+    [galeriaId, alvo.id],
+  );
+  if (antes.n === 0) throw new Error("a bancada não tem foto no capítulo — não provaria nada");
+
+  const soltas = await esvaziarSecao(galeriaId, alvo.id, tenantId);
+  if (soltas !== antes.n) throw new Error(`soltou ${soltas} de ${antes.n}`);
+
+  const { rows: [depois] } = await db.query(
+    `select count(*) filter (where secao_id = $2)::int as no_capitulo,
+            count(*) filter (where secao_id is null)::int as soltas
+       from medias where galeria_id = $1`,
+    [galeriaId, alvo.id],
+  );
+  if (depois.no_capitulo !== 0) throw new Error(`${depois.no_capitulo} ficaram no capítulo`);
+  if (depois.soltas !== antes.n) throw new Error(`${depois.soltas} soltas, esperava ${antes.n}`);
+
+  /* E o capítulo CONTINUA existindo: esvaziar não é apagar. Quem quer o
+     capítulo vazio para reorganizar não pode perdê-lo no caminho. */
+  const { rows: [vive] } = await db.query("select id from secoes where id = $1", [alvo.id]);
+  if (!vive) throw new Error("esvaziar apagou o capítulo junto");
+
+  await devolverLotacao(lotacao);
+  return `${soltas} fotos soltas, capítulo intacto`;
+});
+
+await etapa("esvaziar capítulo de OUTRO estúdio não move nada", async () => {
+  const { esvaziarSecao } = await import("../src/lib/secoes.ts");
+  const lotacao = await lotacaoAtual();
+  const { rows: [alvo] } = await db.query(
+    "select id from secoes where galeria_id = $1 order by ordem limit 1",
+    [galeriaId],
+  );
+  await db.query("update medias set secao_id = $2 where galeria_id = $1", [galeriaId, alvo.id]);
+  const soltas = await esvaziarSecao(galeriaId, alvo.id, crypto.randomUUID());
+  if (soltas !== 0) throw new Error(`soltou ${soltas} com o tenant errado`);
+  const { rows: [ainda] } = await db.query(
+    "select count(*)::int as n from medias where galeria_id = $1 and secao_id = $2",
+    [galeriaId, alvo.id],
+  );
+  if (ainda.n === 0) throw new Error("as fotos saíram do capítulo mesmo assim");
+
+  await devolverLotacao(lotacao);
+  return "intocado";
+});
+
+await etapa("a tela do capítulo oferece a volta", async () => {
+  const fonte = readFileSync(
+    new URL("../src/components/editor-secoes.tsx", import.meta.url),
+    "utf8",
+  );
+  if (!/esvaziarSecaoAction/.test(fonte)) {
+    throw new Error("a linha do capítulo não chama a ação de esvaziar");
+  }
+  return "editor-secoes chama a ação";
 });
 
 await etapa("garantir capítulos: cria o que falta e devolve o id do que já existe", async () => {

@@ -103,6 +103,7 @@ export default async function PainelPage({
             estudioSlug: estudio?.slug ?? "",
             publicada: g.publicada,
             estado: g.estado,
+            origem: g.origem,
             diasAteCofre: diasAteArquivar(g.expira_em),
             dataFormatada: formatarData(g.data_evento),
             arquivos: g.total_medias ?? 0,

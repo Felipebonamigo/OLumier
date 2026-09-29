@@ -3,6 +3,7 @@ import { consultarUm } from "@/lib/db";
 import { listarMediasPublicas, temAcessoLiberado } from "@/lib/galerias-publicas";
 import { secaoPeloApelido } from "@/lib/secoes";
 import { galeriasNoAr } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 
 /**
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     [id],
   );
   if (!galeria) return NextResponse.json({ erro: "sem acesso" }, { status: 404 });
-  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate })) {
+  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado())) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   }
   if (galeria.estado !== "online") return NextResponse.json({ erro: "sem acesso" }, { status: 409 });

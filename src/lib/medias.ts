@@ -1,5 +1,5 @@
 import "server-only";
-import { consultar, consultarUm } from "./db";
+import { consultar, consultarUm, emTransacao } from "./db";
 
 export interface Media {
   id: string;
@@ -36,17 +36,9 @@ export interface Media {
 }
 
 /** O que aceitamos subir. Fora desta lista, recusamos antes de gerar a URL. */
-export const TIPOS_ACEITOS: Record<string, "foto" | "video"> = {
-  "image/jpeg": "foto",
-  "image/png": "foto",
-  "image/webp": "foto",
-  "image/avif": "foto",
-  "image/heic": "foto",
-  "image/heif": "foto",
-  "video/mp4": "video",
-  "video/quicktime": "video",
-  "video/webm": "video",
-};
+/* A decisão de TIPO mora em `lib/tipos-de-arquivo.ts`, que NÃO é server-only:
+   o navegador precisa da mesma regra para gerar o pôster do vídeo. */
+export { TIPOS_ACEITOS, reconhecerArquivo } from "./tipos-de-arquivo";
 
 /**
  * Acima deste tamanho, o envio vai em partes. O R2 aceita até 5 GiB num PUT
@@ -365,17 +357,125 @@ export async function republicarMedia(
  * O filtro por tenant está no próprio DELETE, e não numa consulta antes: entre
  * conferir e apagar cabe uma troca de dono, e o banco não deixa essa fresta.
  */
-export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
+/**
+ * MOVE UMA FOTO PARA ANTES DE OUTRA — o arrastar da aba Fotos.
+ *
+ * ── DE ONDE VEIO (28/09/2026) ─────────────────────────────────────────────
+ *
+ * Felipe: "quero adicionar as fotos analógicas que fiz no 'local' certo, na
+ * ordem cronológica e não consigo arrastar".
+ *
+ * A ordem da galeria é a narrativa do casamento — este arquivo já brigou três
+ * vezes por ela (a migração 038 e o lote de 23/09). Só que ela era decidida no
+ * ENVIO e ponto: quem revela um filme depois, ou recebe a foto do segundo
+ * fotógrafo na semana seguinte, não tinha como encaixá-la no meio.
+ *
+ * ── A CONTA, E POR QUE ELA É BOUNDED ──────────────────────────────────────
+ *
+ * Não se renumera a galeria inteira: numa de 4.577 fotos seriam 4.577 linhas
+ * reescritas para mover uma. Só o TRECHO entre a origem e o destino muda de
+ * casa, e ele é a distância que o dedo percorreu — normalmente algumas fotos.
+ *
+ * Descendo (a foto vai para uma posição maior), quem está no caminho sobe uma
+ * casa; subindo, desce uma casa. Os dois sentidos NÃO são simétricos, e trocar
+ * os sinais dá uma lista que parece certa com três fotos e embaralha com
+ * trezentas — `testar-arrastar-fotos.mjs` confere a sequência inteira.
+ *
+ * NÃO MEXE NO CAPÍTULO de propósito: arrastar é sobre posição. Trocar de
+ * capítulo é o "mover para", que já existe e diz o que faz.
+ */
+export async function moverMediaNaOrdem(
+  galeriaId: string,
+  tenantId: string,
+  arrastadoId: string,
+  alvoId: string,
+): Promise<boolean> {
+  if (arrastadoId === alvoId) return false;
+
+  /* As duas na MESMA galeria e do MESMO estúdio, numa consulta só: os ids vêm
+     do navegador, e é este `where` que impede arrastar foto que não é de quem
+     pede — ou para dentro de uma galeria que não é dele. */
+  const pontas = await consultar<{ id: string; ordem: number }>(
+    `select id, ordem from medias
+      where galeria_id = $1 and tenant_id = $2 and id = any($3::uuid[])`,
+    [galeriaId, tenantId, [arrastadoId, alvoId]],
+  );
+  if (pontas.length !== 2) return false;
+
+  const de = pontas.find((p) => p.id === arrastadoId)!.ordem;
+  const para = pontas.find((p) => p.id === alvoId)!.ordem;
+  if (de === para) return false;
+
+  await emTransacao(async (consultarNaTransacao) => {
+    if (de < para) {
+      /* Descendo: o trecho (de, para] sobe uma casa e a arrastada assume o
+         lugar de quem era o alvo. */
+      await consultarNaTransacao(
+        `update medias set ordem = ordem - 1
+          where galeria_id = $1 and tenant_id = $2 and ordem > $3 and ordem <= $4`,
+        [galeriaId, tenantId, de, para],
+      );
+      await consultarNaTransacao("update medias set ordem = $2 where id = $1", [
+        arrastadoId,
+        para,
+      ]);
+    } else {
+      /* Subindo: o trecho [para, de) desce uma casa e a arrastada ocupa o
+         começo dele — que é o "antes desta" que o dedo pediu. */
+      await consultarNaTransacao(
+        `update medias set ordem = ordem + 1
+          where galeria_id = $1 and tenant_id = $2 and ordem >= $3 and ordem < $4`,
+        [galeriaId, tenantId, para, de],
+      );
+      await consultarNaTransacao("update medias set ordem = $2 where id = $1", [
+        arrastadoId,
+        para,
+      ]);
+    }
+  });
+
+  return true;
+}
+
+export async function apagarTodasAsMedias(
+  galeriaId: string,
+  tenantId: string,
+  /**
+   * AS ESCOLHIDAS, ou todas (28/09/2026).
+   *
+   * Juan: "Marquei algumas que eu quero excluir. Mas não tem botão de excluir.
+   * Só apagar todas. Ou apagar individualmente." A barra de seleção já prometia
+   * o contrário por escrito, e oferecia apenas o mover.
+   *
+   * `undefined` é "todas", que é o que esta função sempre fez. Uma LISTA apaga
+   * só aquelas — e lista VAZIA apaga nada, que é diferente de não ter lista:
+   * quem pediu para apagar zero fotos pediu para apagar zero fotos, e cair no
+   * caminho de "todas" aqui seria apagar um casamento inteiro por causa de um
+   * array vazio.
+   */
+  ids?: string[],
+) {
   const galeria = await consultarUm<{ id: string; titulo: string }>(
     "select id, titulo from galerias where id = $1 and tenant_id = $2",
     [galeriaId, tenantId],
   );
   if (!galeria) return null;
+  if (ids?.length === 0) return [];
 
-  const apagadas = await consultar<Media>(
-    "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
-    [galeriaId, tenantId],
-  );
+  /* O `galeria_id` e o `tenant_id` ficam no WHERE mesmo com a lista de ids: a
+     lista vem do navegador, e é o filtro que impede um id de outra galeria —
+     ou de outro estúdio — apagar o que não é dele. */
+  const apagadas = ids
+    ? await consultar<Media>(
+        `delete from medias
+          where galeria_id = $1 and tenant_id = $2 and id = any($3::uuid[])
+          returning *`,
+        [galeriaId, tenantId, ids],
+      )
+    : await consultar<Media>(
+        "delete from medias where galeria_id = $1 and tenant_id = $2 returning *",
+        [galeriaId, tenantId],
+      );
 
   if (apagadas.length > 0) {
     const { registrarEvento, ACOES } = await import("./eventos");
@@ -389,10 +489,41 @@ export async function apagarTodasAsMedias(galeriaId: string, tenantId: string) {
         galeria: galeria.titulo,
         quantas: String(apagadas.length),
         bytes: String(apagadas.reduce((s, m) => s + Number(m.bytes), 0)),
-        motivo: "todas de uma vez",
+        motivo: ids ? "as selecionadas" : "todas de uma vez",
       },
     });
   }
 
   return apagadas;
+}
+
+/**
+ * Grava a miniatura de uma mídia — a capa de vídeo escolhida à mão.
+ *
+ * Só VÍDEO, e a trava está no próprio `where`: a capa de uma foto é a própria
+ * foto, e um dia alguém chamaria isto com o id de uma sem perceber. Amarrar
+ * `tipo` na consulta faz o banco recusar, em vez de depender de quem chama
+ * lembrar — o mesmo argumento de `reordenarSecoes`, que amarra tenant e galeria
+ * no `where` em vez de conferir antes.
+ *
+ * `largura` e `altura` são opcionais porque são um detalhe da grade (reservar o
+ * espaço certo antes de a imagem chegar), e a capa vale sem eles.
+ */
+export async function definirMiniatura(
+  mediaId: string,
+  tenantId: string,
+  chaveThumb: string,
+  largura?: number,
+  altura?: number,
+): Promise<boolean> {
+  const linhas = await consultar<{ id: string }>(
+    `update medias
+        set chave_thumb = $3,
+            largura = coalesce($4, largura),
+            altura = coalesce($5, altura)
+      where id = $1 and tenant_id = $2 and tipo = 'video'
+      returning id`,
+    [mediaId, tenantId, chaveThumb, largura ?? null, altura ?? null],
+  );
+  return linhas.length > 0;
 }

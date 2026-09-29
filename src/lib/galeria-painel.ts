@@ -20,12 +20,29 @@ import type { Galeria } from "./tenants";
 export interface GaleriaDoPainel extends Galeria {
   estudio_slug: string;
   estudio_fonte: string | null;
+  /** Há filme pronto nesta galeria? É o que faz a aba Vídeo existir. */
+  tem_video: boolean;
 }
 
 /** A galeria DESTE estúdio, ou null. Id de outro estúdio simplesmente não existe. */
 export function galeriaDoPainel(id: string, tenantId: string) {
   return consultarUm<GaleriaDoPainel>(
-    `select g.*, t.slug as estudio_slug, t.fonte_chave as estudio_fonte
+    /*
+     * `tem_video` é uma COLUNA, e não uma consulta à parte, porque o layout diz
+     * (escrito) que carrega "só o que TODA aba precisa… uma consulta". A aba
+     * Vídeo só existe quando há vídeo, e quem desenha o menu é o layout — então
+     * a resposta tem de vir junto, ou o menu paga uma ida ao banco por página.
+     *
+     * É um semi-join: `exists` para na primeira linha e usa o índice
+     * `(galeria_id, ordem)` de `medias`. Numa galeria de 600 fotos sem vídeo
+     * nenhum ele varre até achar que não há — e mesmo assim é uma varredura de
+     * índice, não das linhas.
+     */
+    `select g.*, t.slug as estudio_slug, t.fonte_chave as estudio_fonte,
+            exists (
+              select 1 from medias m
+               where m.galeria_id = g.id and m.tipo = 'video' and m.pronto
+            ) as tem_video
        from galerias g join tenants t on t.id = g.tenant_id
       where g.id = $1 and g.tenant_id = $2`,
     [id, tenantId],

@@ -10,7 +10,7 @@ import { FormEntrar } from "./form";
    debaixo do link quando alguém busca "galeria átomo entrar". */
 export const metadata: Metadata = metadadosDaCasa({
   titulo: "Entrar",
-  descricao: `Entre no painel do ${marca.nome} para enviar, publicar e acompanhar as galerias do seu estúdio.`,
+  descricao: `Entre no painel da ${marca.nome} para enviar, publicar e acompanhar as galerias do seu estúdio.`,
   caminho: "/entrar",
 });
 

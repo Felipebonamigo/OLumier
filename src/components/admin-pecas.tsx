@@ -42,16 +42,25 @@ export function Cartao({
 
 /** Título de bloco, com uma linha de explicação — o painel é lido por uma pessoa só. */
 export function Bloco({
+  id,
   titulo,
   explicacao,
   children,
 }: {
+  /**
+   * A âncora do bloco, para o índice do topo da página.
+   *
+   * `scroll-mt-4` junto: sem ele o título encosta na borda de cima da janela
+   * depois do salto, e a pessoa chega no bloco sem o respiro que diz onde ele
+   * começa.
+   */
+  id?: string;
   titulo: string;
   explicacao?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="mt-10">
+    <section id={id} className="mt-10 scroll-mt-4">
       <h2 className="text-sm font-semibold">{titulo}</h2>
       {explicacao && <p className="mt-0.5 text-xs text-texto-faint">{explicacao}</p>}
       <div className="mt-3">{children}</div>

@@ -47,6 +47,10 @@ const etapa = (nome, fn) => {
   }
 };
 
+/* Os casos abaixo são os da cobrança LIGADA — é quando a carência vale. O caso
+ * desligado tem etapa própria, mais abaixo. */
+const LIGADA = true;
+
 const DIA = 24 * 60 * 60 * 1000;
 const haDias = (n) => new Date(Date.now() - n * DIA);
 const emDias = (n) => new Date(Date.now() + n * DIA);
@@ -60,26 +64,26 @@ etapa("a carência é de 15 dias", () => {
 });
 
 etapa("trial em dia: galerias no ar", () => {
-  if (!galeriasNoAr({ status: "trial", trial_ate: emDias(3) })) {
+  if (!galeriasNoAr({ status: "trial", trial_ate: emDias(3) }, LIGADA)) {
     throw new Error("derrubou quem ainda está testando");
   }
 });
 
 etapa("trial vencido há 1 dia: ainda no ar", () => {
-  if (!galeriasNoAr({ status: "trial", trial_ate: haDias(1) })) {
+  if (!galeriasNoAr({ status: "trial", trial_ate: haDias(1) }, LIGADA)) {
     throw new Error("derrubou no dia seguinte ao fim do teste, sem carência nenhuma");
   }
   return "a carência existe";
 });
 
 etapa("trial vencido há 14 dias: ainda no ar", () => {
-  if (!galeriasNoAr({ status: "trial", trial_ate: haDias(14) })) {
+  if (!galeriasNoAr({ status: "trial", trial_ate: haDias(14) }, LIGADA)) {
     throw new Error("caiu um dia antes da hora");
   }
 });
 
 etapa("trial vencido há 16 dias: FORA do ar", () => {
-  if (galeriasNoAr({ status: "trial", trial_ate: haDias(16) })) {
+  if (galeriasNoAr({ status: "trial", trial_ate: haDias(16) }, LIGADA)) {
     throw new Error("a carência não termina nunca — é o 'para sempre' de antes");
   }
   return "sai do ar depois de 15 dias";
@@ -89,7 +93,7 @@ etapa("quem PAGOU volta ao ar, mesmo com trial_ate velho", () => {
   /* O webhook põe `status = 'ativo'` e zera `trial_ate`, mas um estúdio antigo
    * pode ter os dois preenchidos. Se a regra olhasse só a data, quem pagou
    * continuaria fora do ar — a pior falha possível desta função. */
-  if (!galeriasNoAr({ status: "ativo", trial_ate: haDias(90) })) {
+  if (!galeriasNoAr({ status: "ativo", trial_ate: haDias(90) }, LIGADA)) {
     throw new Error("estúdio pagante fora do ar por causa de uma data velha");
   }
 });
@@ -97,13 +101,13 @@ etapa("quem PAGOU volta ao ar, mesmo com trial_ate velho", () => {
 etapa("cancelado NÃO é alcançado pela carência", () => {
   /* O recado de `cancelado` promete, em texto, que as galerias continuam no ar.
    * A carência é a régua do TRIAL. */
-  if (!galeriasNoAr({ status: "cancelado", trial_ate: haDias(90) })) {
+  if (!galeriasNoAr({ status: "cancelado", trial_ate: haDias(90) }, LIGADA)) {
     throw new Error("estendeu a carência ao cancelado e desmentiu o recado da tela");
   }
 });
 
 etapa("inadimplente NÃO é alcançado pela carência", () => {
-  if (!galeriasNoAr({ status: "inadimplente", trial_ate: haDias(90) })) {
+  if (!galeriasNoAr({ status: "inadimplente", trial_ate: haDias(90) }, LIGADA)) {
     throw new Error("boleto atrasado tirou a galeria do casal do ar");
   }
 });
@@ -111,14 +115,53 @@ etapa("inadimplente NÃO é alcançado pela carência", () => {
 etapa("status desconhecido fica no ar", () => {
   /* Mesma regra do portão de cobrança e do teto: um estado que ninguém previu
    * não pode derrubar a entrega de quem está pagando. */
-  if (!galeriasNoAr({ status: "seja-la-o-que-for", trial_ate: haDias(90) })) {
+  if (!galeriasNoAr({ status: "seja-la-o-que-for", trial_ate: haDias(90) }, LIGADA)) {
     throw new Error("status novo virou galeria fora do ar");
   }
 });
 
 etapa("trial sem data nenhuma fica no ar", () => {
-  if (!galeriasNoAr({ status: "trial", trial_ate: null })) {
+  if (!galeriasNoAr({ status: "trial", trial_ate: null }, LIGADA)) {
     throw new Error("sem data para contar, a regra derrubou por via das dúvidas");
+  }
+});
+
+/*
+ * COBRANÇA DESLIGADA — 29/09/2026.
+ *
+ * O teste vencido não pode derrubar a entrega quando não existe como pagar. Foi
+ * o que acontecia: a Conta dizia "o uso segue liberado", e a galeria do cliente
+ * saía do ar 15 dias depois do fim do teste, com a cobrança desligada no
+ * servidor e nenhuma porta para o fotógrafo resolver.
+ */
+etapa("com a cobrança desligada, nenhuma galeria sai do ar", () => {
+  for (const dias of [16, 60, 400]) {
+    if (!galeriasNoAr({ status: "trial", trial_ate: haDias(dias) }, false)) {
+      throw new Error(`teste vencido há ${dias} dias derrubou a galeria sem haver como pagar`);
+    }
+  }
+});
+
+etapa("todos os chamadores dizem se a cobrança está ligada", () => {
+  const arquivos = [
+    "src/app/g/[estudio]/[galeria]/page.tsx",
+    "src/app/api/g/[id]/urls/route.ts",
+    "src/app/api/g/[id]/mais/route.ts",
+    "src/lib/entrega-da-galeria.ts",
+    // Os dois da ponte com o Atomatiza. Entram aqui pelo mesmo motivo dos de
+    // cima, e por um a mais: o que eles respondem vira frase na tela de quem
+    // vende ("as fotos estão no ar"). Divergir da régua da página pública
+    // seria o contrato afirmar o contrário do que o link faz.
+    "src/lib/avisos.ts",
+    "src/app/api/galerias/[id]/route.ts",
+  ];
+  for (const p of arquivos) {
+    const fonte = readFileSync(path.join(RAIZ, p), "utf8");
+    const chamadas = fonte.match(/galeriasNoAr\([^;]*\)/g) ?? [];
+    if (chamadas.length === 0) throw new Error(`${p} não chama a regra`);
+    for (const c of chamadas) {
+      if (!c.includes("asaasConfigurado()")) throw new Error(`${p} chama a regra sem dizer se a cobrança está ligada`);
+    }
   }
 });
 

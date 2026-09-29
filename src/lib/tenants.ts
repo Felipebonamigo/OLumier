@@ -36,6 +36,22 @@ export interface Tenant {
    */
   ciclo_cobranca: string;
   /**
+   * A faixa do Atomatiza que a última conferência do combo encontrou, ou null.
+   * Só para a tela: quem decide o preço é o Asaas. Ver `lib/combo.ts`.
+   */
+  combo_atomatiza: string | null;
+  /**
+   * A última vez que o Atomatiza perguntou por este estúdio e achou conta aqui.
+   * Liga o seletor de plataforma no painel. Ver `lib/ponte-atomatiza.ts`.
+   */
+  atomatiza_visto_em: Date | null;
+  /**
+   * O maior plano já pago no período corrente — a base da diferença quando o
+   * estúdio aumenta o plano. Nulo = vale o plano atual. Ver
+   * `config/troca-de-plano.ts` e a migração 046.
+   */
+  plano_do_periodo: string | null;
+  /**
    * Até quando o dinheiro JÁ RECEBIDO cobre o serviço — null se nada foi pago.
    *
    * Só o ramo `cancelado` de `situacaoDoTenant` consulta: cancelar para a
@@ -44,6 +60,17 @@ export interface Tenant {
    * estúdio já pagou. Ver migração 021.
    */
   pago_ate: Date | null;
+  /**
+   * Quando o dono clicou no link de confirmação — nulo = pendente. Só trava o
+   * envio com o e-mail transacional ligado; ver `lib/confirmacao-email.ts` e a
+   * migração 045, que deu a data de criação a toda conta anterior.
+   */
+  email_confirmado_em: Date | null;
+  /* Os passos da limpeza do teste abandonado (migração 045). Quem os escreve é
+     só `lib/testes-abandonados.ts`. */
+  aviso_limpeza_em: Date | null;
+  aviso_limpeza_final_em: Date | null;
+  arquivos_limpos_em: Date | null;
   criado_em: Date;
 }
 
@@ -68,6 +95,9 @@ export interface Galeria {
      O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
   aparencia_rascunho: unknown;
   capa_media_id: string | null;
+  /** De onde a galeria veio, quando não nasceu no painel — ver migração 047. */
+  origem: string | null;
+  origem_ref: string | null;
   /* Capa enviada como arquivo (migração 029). Vence capa_media_id, e não é uma
      linha em `medias`: não aparece na galeria nem conta como entrega. */
   capa_chave: string | null;
@@ -119,6 +149,14 @@ export async function criarTenant(dados: {
   email: string;
   senha: string;
   planoId: string;
+  /** Só dígitos. Pedido no cadastro desde a migração 045 — único entre as contas. */
+  cpfCnpj?: string | null;
+  /**
+   * false = a conta nasce com o e-mail PENDENTE e não envia fotos até o dono
+   * clicar no link. Omitido, nasce confirmada — é o padrão da coluna, e o que
+   * vale para toda conta criada fora do cadastro (testes, scripts).
+   */
+  emailConfirmado?: boolean;
 }) {
   const plano = planoPorId(dados.planoId);
   if (!plano) throw new Error("Plano inválido");
@@ -146,10 +184,20 @@ export async function criarTenant(dados: {
   const quota = BigInt(plano.quotaGb) * BigInt(GB);
 
   const linha = await consultarUm<Tenant>(
-    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes)
-     values ($1, $2, $3, $4, $5, $6)
+    `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes,
+                          cpf_cnpj, email_confirmado_em)
+     values ($1, $2, $3, $4, $5, $6, $7, case when $8::boolean then now() else null end)
      returning *`,
-    [slug, dados.nomeEstudio, dados.email.toLowerCase(), senhaHash, plano.id, quota.toString()],
+    [
+      slug,
+      dados.nomeEstudio,
+      dados.email.toLowerCase(),
+      senhaHash,
+      plano.id,
+      quota.toString(),
+      dados.cpfCnpj || null,
+      dados.emailConfirmado ?? true,
+    ],
   );
   return linha!;
 }
@@ -312,6 +360,12 @@ export async function criarGaleria(dados: {
   titulo: string;
   subtitulo?: string;
   dataEvento?: string;
+  /**
+   * Quem criou de fora, e a partir de quê — ver migração 045. O painel e o
+   * plugin do Lightroom não passam nada aqui; hoje só o Atomatiza passa, pela
+   * rota `POST /api/galerias`, que também é quem garante a idempotência.
+   */
+  origem?: { de: string; ref: string };
 }) {
   const base = gerarSlug(dados.titulo) || "galeria";
   let slug = base;
@@ -325,10 +379,18 @@ export async function criarGaleria(dados: {
   }
 
   return consultarUm<Galeria>(
-    `insert into galerias (tenant_id, slug, titulo, subtitulo, data_evento)
-     values ($1, $2, $3, $4, $5)
+    `insert into galerias (tenant_id, slug, titulo, subtitulo, data_evento, origem, origem_ref)
+     values ($1, $2, $3, $4, $5, $6, $7)
      returning *`,
-    [dados.tenantId, slug, dados.titulo, dados.subtitulo || null, dados.dataEvento || null],
+    [
+      dados.tenantId,
+      slug,
+      dados.titulo,
+      dados.subtitulo || null,
+      dados.dataEvento || null,
+      dados.origem?.de ?? null,
+      dados.origem?.ref ?? null,
+    ],
   );
 }
 
@@ -409,10 +471,31 @@ export async function restaurarGaleria(tenantId: string, galeriaId: string, ip?:
     [galeriaId, tenantId],
   );
 
+  /*
+   * A referência de origem pode ter dona nova. Entre apagar e restaurar, o
+   * Atomatiza pode ter recriado a galeria do mesmo contrato — o índice parcial
+   * da migração 045 deixa a lixeira de fora justamente para permitir isso. Se
+   * a restauração mantivesse o vínculo, o índice a recusaria e o fotógrafo
+   * veria a lixeira "quebrada" no pior momento. A restaurada volta inteira,
+   * só que sem a procedência: das duas, a que representa o contrato hoje é a
+   * recriada.
+   */
   await consultar(
-    `update galerias
-        set estado = 'online', apagada_em = null, atualizado_em = now()
-      where id = $1 and tenant_id = $2 and estado = 'lixeira'`,
+    `update galerias g
+        set estado = 'online', apagada_em = null, atualizado_em = now(),
+            origem = case when exists (
+                select 1 from galerias o
+                 where o.tenant_id = g.tenant_id and o.id <> g.id
+                   and o.origem = g.origem and o.origem_ref = g.origem_ref
+                   and o.estado <> 'lixeira'
+              ) then null else g.origem end,
+            origem_ref = case when exists (
+                select 1 from galerias o
+                 where o.tenant_id = g.tenant_id and o.id <> g.id
+                   and o.origem = g.origem and o.origem_ref = g.origem_ref
+                   and o.estado <> 'lixeira'
+              ) then null else g.origem_ref end
+      where g.id = $1 and g.tenant_id = $2 and g.estado = 'lixeira'`,
     [galeriaId, tenantId],
   );
 
@@ -496,7 +579,6 @@ export async function galeriasVencidasNaLixeira() {
  */
 export async function destruirGaleria(
   galeriaId: string,
-  chaves: string[],
   /*
    * QUEM mandou destruir. O padrão é o temporizador, que é o caminho comum.
    *
@@ -508,16 +590,57 @@ export async function destruirGaleria(
   ator: "sistema" | "estudio" = "sistema",
 ) {
   /*
+   * Até 29/09/2026 o segundo parâmetro era a lista de chaves, montada por quem
+   * chamava. Um script JavaScript que ainda passe a lista cairia AQUI como ator
+   * — e o evento seria recusado pela tabela em silêncio (`registrarEvento` não
+   * lança). Melhor quebrar alto.
+   */
+  if (ator !== "sistema" && ator !== "estudio") {
+    throw new Error(`destruirGaleria: ator inválido (${String(ator)}) — a assinatura agora é (galeriaId, ator)`);
+  }
+
+  /*
    * Lido antes do delete, pelo mesmo motivo de sempre: depois não existe mais
    * de onde tirar. Este é o evento que alguém vai procurar anos depois — é o
    * único registro de que aquela galeria existiu.
    */
-  const antes = await consultarUm<{ titulo: string; tenant_id: string; estudio: string }>(
-    `select g.titulo, g.tenant_id, t.nome_estudio as estudio
+  const antes = await consultarUm<{
+    titulo: string;
+    tenant_id: string;
+    estudio: string;
+    capa_chave: string | null;
+  }>(
+    `select g.titulo, g.tenant_id, t.nome_estudio as estudio, g.capa_chave
        from galerias g join tenants t on t.id = g.tenant_id
       where g.id = $1`,
     [galeriaId],
   );
+
+  /*
+   * OS ARQUIVOS, LIDOS AQUI — e com o armazém de cada original.
+   *
+   * Até 29/09/2026 quem chamava mandava só as chaves, e tudo ia para
+   * `r2.apagarObjetos`. Só que o original pode morar no B2 (`medias.armazem`,
+   * migração 015), e apagar no R2 uma chave que não está lá "dá certo" sem
+   * fazer nada: o original seguia no B2, pago, sem linha nenhuma que o citasse.
+   * A capa enviada como arquivo (`capa_chave`, migração 029) nem entrava na
+   * lista. Ninguém via — só a fatura crescia.
+   *
+   * Quem sabe onde cada arquivo mora é `armazem.ts`; aqui só se junta o que a
+   * galeria tem, na hora de apagar, para nenhum chamador poder mandar a lista
+   * errada.
+   */
+  const medias = await consultar<{
+    chave: string;
+    chave_thumb: string | null;
+    chave_preview: string | null;
+    armazem: string | null;
+  }>("select chave, chave_thumb, chave_preview, armazem from medias where galeria_id = $1", [
+    galeriaId,
+  ]);
+  const quantos =
+    medias.reduce((n, m) => n + [m.chave, m.chave_thumb, m.chave_preview].filter(Boolean).length, 0) +
+    (antes?.capa_chave ? 1 : 0);
 
   const apagou = await consultar<{ id: string }>(
     "delete from galerias where id = $1 returning id",
@@ -535,23 +658,25 @@ export async function destruirGaleria(
       alvoId: galeriaId,
       detalhe: {
         titulo: antes.titulo,
-        arquivos: chaves.length,
+        arquivos: quantos,
         ...(ator === "sistema" ? { apos_dias: PRAZO_LIXEIRA_DIAS } : { antes_do_prazo: true }),
       },
     });
   }
 
-  if (apagou.length === 0 || chaves.length === 0) return;
+  if (apagou.length === 0 || quantos === 0) return;
 
-  // O banco já é a fonte da verdade e a galeria já sumiu. Se o bucket falhar
+  // O banco já é a fonte da verdade e a galeria já sumiu. Se o armazém falhar
   // aqui, registramos e seguimos — `varrer-orfaos.mjs` recolhe o que sobrar.
-  const { apagarObjetos } = await import("./r2");
-  try {
-    await apagarObjetos(chaves);
-  } catch (e) {
-    console.error(
-      `[destruirGaleria] ${chaves.length} objeto(s) da galeria ${galeriaId} podem ter ficado no bucket:`,
-      e,
+  const { apagarArquivosDasMedias } = await import("./armazem");
+  const r = await apagarArquivosDasMedias(medias);
+  if (r.falhou) {
+    console.error(`[destruirGaleria] arquivos da galeria ${galeriaId} podem ter ficado no armazém: ${r.falhou}`);
+  }
+  if (antes?.capa_chave) {
+    const { apagarObjetos } = await import("./r2");
+    await apagarObjetos([antes.capa_chave]).catch((e) =>
+      console.error(`[destruirGaleria] a capa da galeria ${galeriaId} pode ter ficado no bucket:`, e),
     );
   }
 }

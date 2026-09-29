@@ -139,6 +139,13 @@ O gargalo hoje: a grade carrega os ORIGINAIS (uma foto de 8 MB por miniatura). P
   download usa o original. É exatamente o modelo do Pixieset (640px na grade).
 - Schema: colunas `chave_thumb` e `chave_preview` em `medias` (nulas para vídeo).
 - Lazy loading (já temos), `fetchpriority=high` nas primeiras miniaturas, HTTP/2 do Caddy.
+- **A grade desenha por partes** (26/09/2026): o documento sai com 60 cards e o resto
+  entra conforme a rolagem, a partir dos dados que já vieram na página. Com 600 fotos,
+  o celular montava 6.113 nós antes de responder; agora monta ~700. Ver
+  `src/lib/grade-por-partes.ts`.
+- **Assinatura das miniaturas sem o `getSignedUrl`** (26/09/2026): o mesmo assinador do
+  SDK, criado uma vez, em vez de a pilha inteira do SDK por foto — ~8× mais rápido, com
+  a URL idêntica byte a byte. Ver o cabeçalho em `src/lib/r2.ts`.
 - Futuro (escala): servir mídia por subdomínio atrás da Cloudflare para cache de borda.
 
 ## 5. Cofre automático com prazo escolhido pelo fotógrafo

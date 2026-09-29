@@ -12,11 +12,16 @@
  * nenhum: **quantos clientes pagam a operação?** É a conta de ponto de
  * equilíbrio, e é ela que diz se o negócio se paga — não a margem de um plano.
  *
- * ── Nada aqui é consumido pelo app ───────────────────────────────────────
- * Nenhuma tela, cobrança ou split lê este arquivo. É ferramenta de decisão, e
- * `scripts/ponto-de-equilibrio.mjs` é quem a imprime. Mora em `config/` para
- * ser testável e para os números terem um lugar só — não para ser importado por
- * rota nenhuma.
+ * ── Quem lê isto ───────────────────────────────────────────────────────────
+ * Nenhuma cobrança ou split. É ferramenta de decisão, e
+ * `scripts/ponto-de-equilibrio.mjs` é quem a imprime.
+ *
+ * Desde 29/09/2026 a lista que as TELAS mostram é a tabela
+ * `custos_da_sociedade` (migração 047), que os sócios editam no caixa dos
+ * sócios (`/painel/admin/caixa`) — ela nasceu com estes mesmos valores, e o
+ * DAS e o VPS lá são "dos dois". Este arquivo fica como o padrão do painel
+ * quando a tabela não existe, e como a base do ponto de equilíbrio. Mudou uma
+ * fatura? Mude na tela; aqui, só se o ponto de equilíbrio precisar acompanhar.
  */
 import {
   ESPACOS,

@@ -163,6 +163,51 @@ try {
   });
 
   /*
+   * ── O NOME DO CAPÍTULO, DUAS VEZES, A UM DEDO DE DISTÂNCIA (28/09/2026) ──
+   *
+   * Juan: "acho feio o nome do título aparecer duas vezes tão perto um do
+   * outro". Com o capítulo ABERTO, a barra já mostra a pastilha dele acesa — e
+   * o título da seção repetia o mesmo texto três linhas abaixo.
+   *
+   * ── A SEGUNDA METADE CAIU EM 29/09/2026 ────────────────────────────────
+   *
+   * Aqui havia uma segunda etapa — "na galeria inteira o título da seção
+   * continua" — com esta justificativa: fora do capítulo aberto a pastilha "já
+   * saiu da tela", então o título seria o que separa uma seção da outra.
+   *
+   * Essa justificativa era FALSA, e dava para conferir sem print: a barra de
+   * capítulos é `sticky top-0` e um `IntersectionObserver` acende a pastilha do
+   * capítulo visível (`menus-da-galeria.tsx`). Ela nunca sai da tela.
+   *
+   * Juan voltou ao assunto no dia seguinte, com o título circulado a caneta:
+   * "ainda aparece ali em cima a 'aba' prévia e embaixo o mesmo título, fica
+   * repetitivo... tire esse 'título', deixe só a 'aba'". O `<h2>` saiu dos dois
+   * casos, e o nome do capítulo ficou na `<section>` por `aria-label`.
+   *
+   * A etapa que sobrou vale para os DOIS casos agora, e é o que este trecho
+   * passa a prender. `testar-capitulo-sem-titulo-repetido.mjs` cuida do resto —
+   * inclusive de a pastilha continuar mostrando o nome, que é a metade que
+   * torna a remoção aceitável.
+   */
+  const tituloDaSecao = (h) =>
+    (h.match(/<h2[^>]*>\s*Festa\s*<\/h2>/gi) ?? []).length;
+
+  for (const [caso, busca] of [
+    ["com o capítulo aberto", "?cap=festa"],
+    ["na galeria inteira", ""],
+  ]) {
+    await etapa(`${caso}, o nome do capítulo não aparece duas vezes`, async () => {
+      const h = await html(busca);
+      if (!/festa/i.test(h)) throw new Error("a bancada não tem a Festa — não provaria nada");
+      const titulos = tituloDaSecao(h);
+      if (titulos > 0) {
+        throw new Error(`o título da seção repete o que a pastilha já diz (${titulos}×)`);
+      }
+      return "só na barra";
+    });
+  }
+
+  /*
    * O PONTO DESTE ARQUIVO: a 601ª foto da Festa tem de ser alcançável. Antes
    * de 11/09 não era; entre 11/09 e 16/09 era por um link; hoje é rolando.
    */

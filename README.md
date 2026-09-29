@@ -3,13 +3,29 @@
 Galerias de entrega para fotógrafos e filmakers. Multi-tenant: cada estúdio tem
 seu endereço (`siriusfotografia.olumier.com.br`), sua marca e seu espaço.
 
+## Banco novo, do zero
+
+`db/schema.sql` é um RETRATO, e ele parou na migração 008. Levantar um banco
+funcional é sempre em duas partes — só o retrato deixa o banco anos atrasado, e
+só as migrações não têm o que migrar:
+
+```bash
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+node scripts/migrar.mjs --aplicar
+```
+
+É a receita que o CI usa, e é a única testada. (O `--marcar` serve para outra
+coisa: registrar como aplicada uma migração que já foi rodada à mão. Num banco
+novo ele PULA o que faltava aplicar de verdade.)
+
 ## Rodar
 
 ```bash
 npm install
 .\tunel.ps1          # túnel SSH para o Postgres do VPS (deixe aberto)
 npm run dev          # http://localhost:3040
-npm test             # as 16 suítes
+npm test             # as 63 suítes (as de HTTP precisam do `npm run dev` de pé)
+npm test -- --exigir-tudo   # o mesmo, mas "pulado" conta como REPROVADO
 ```
 
 `.env.local` a partir de `.env.local.example`. O banco de desenvolvimento é
@@ -50,6 +66,7 @@ produção, se o build falhar, ou se o app subir sem falar com banco e R2.
 - [`docs/subdominio-por-estudio.md`](docs/subdominio-por-estudio.md) — DNS, TLS e as armadilhas
 - [`docs/ligar-cobranca.md`](docs/ligar-cobranca.md) — passo a passo do Asaas
 - [`docs/experiencia-galeria.md`](docs/experiencia-galeria.md) — decisões da galeria pública
+- [`docs/estrategia-de-marca.md`](docs/estrategia-de-marca.md) — posicionamento, linguagem e direção visual (camada estratégica)
 
 ## Next 16
 

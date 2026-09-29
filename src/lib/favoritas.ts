@@ -133,6 +133,23 @@ export interface EstadoSelecao {
   /** Chegou ao limite. Com a lista cheia ainda dá para DESmarcar. */
   cheia: boolean;
   motivo: MotivoFechada | null;
+  /**
+   * O fotógrafo COMBINOU uma escolha — definiu limite ou prazo.
+   *
+   * ── SEM COMBINADO, AS FAVORITAS SÃO LIVRES (28/09/2026) ────────────────
+   *
+   * Felipe, no celular, numa galeria entregue da Carol: "escolha do quê? não
+   * deveria ter escolha aqui, se for dos favoritos, é ilimitado os
+   * favoritos". A galeria dizia "Escolha encerrada" e os corações tinham
+   * sumido para todo mundo: alguém com o link tocou em "Terminei minha
+   * escolha", e isso trancava a lista da galeria inteira — de todas as
+   * pessoas, numa galeria em que o fotógrafo nunca combinou escolha nenhuma.
+   *
+   * Agora a escolha só existe quando o fotógrafo a combina. Sem limite e sem
+   * prazo, favorita é favorita: ninguém encerra, nada tranca, e o "Terminei"
+   * nem aparece. Com um dos dois, tudo segue como antes.
+   */
+  combinada: boolean;
 }
 
 /**
@@ -302,13 +319,31 @@ export async function estadoSelecao(
   );
 
   if (!linha) {
-    return { total: 0, limite: null, prazo: null, fechadaEm: null, aberta: false, cheia: false, motivo: "fechada" };
+    return {
+      total: 0,
+      limite: null,
+      prazo: null,
+      fechadaEm: null,
+      aberta: false,
+      cheia: false,
+      motivo: "fechada",
+      combinada: false,
+    };
   }
 
   const vencida = linha.prazo !== null && linha.prazo.getTime() <= Date.now();
+  /* Sem limite e sem prazo não há escolha combinada, e nada tranca — nem um
+     "terminei" gravado antes desta regra existir. Ver `combinada`. */
+  const combinada = linha.limite !== null || linha.prazo !== null;
   /* "Fechada" vence "prazo" na mensagem: se o cliente clicou em terminei, é isso
    * que ele lembra de ter feito, e é a explicação que faz sentido para ele. */
-  const motivo: MotivoFechada | null = linha.fechada_em ? "fechada" : vencida ? "prazo" : null;
+  const motivo: MotivoFechada | null = !combinada
+    ? null
+    : linha.fechada_em
+      ? "fechada"
+      : vencida
+        ? "prazo"
+        : null;
 
   return {
     total: linha.total,
@@ -318,6 +353,7 @@ export async function estadoSelecao(
     aberta: motivo === null,
     cheia: linha.limite !== null && linha.total >= linha.limite,
     motivo,
+    combinada,
   };
 }
 
@@ -409,9 +445,14 @@ export async function alternarDaPessoa(
  * clique repetido, ou uma rede que reenviou, mova o "quando" para depois.
  */
 export async function fecharSelecao(galeriaId: string): Promise<boolean> {
+  /* Só fecha escolha COMBINADA (limite ou prazo). Sem isso não há o que
+     encerrar — ver `EstadoSelecao.combinada`. A regra fica no SQL, e não só
+     na rota, para nenhum caminho novo conseguir trancar favoritas livres. */
   const r = await consultar<{ id: string }>(
     `update galerias set selecao_fechada_em = now()
-      where id = $1 and selecao_fechada_em is null returning id`,
+      where id = $1 and selecao_fechada_em is null
+        and (selecao_limite is not null or selecao_prazo is not null)
+      returning id`,
     [galeriaId],
   );
   return r.length > 0;
@@ -452,7 +493,12 @@ export async function definirRegrasSelecao(
       ? Math.floor(regras.limite)
       : null;
   const r = await consultar<{ id: string }>(
-    `update galerias set selecao_limite = $3, selecao_prazo = $4
+    /* Tirar limite E prazo desfaz a escolha combinada — e com ela o
+       "terminei" que estivesse gravado. Sem isto, combinar um número de novo
+       meses depois nasceria trancado por um clique antigo. */
+    `update galerias set selecao_limite = $3, selecao_prazo = $4,
+            selecao_fechada_em = case when $3::int is null and $4::timestamptz is null
+                                      then null else selecao_fechada_em end
       where id = $1 and tenant_id = $2 returning id`,
     [galeriaId, tenantId, limite, regras.prazo],
   );

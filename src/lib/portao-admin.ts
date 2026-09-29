@@ -40,6 +40,20 @@ export async function exigirAdmin() {
 }
 
 /**
+ * O mesmo portão, para ROTA DE API: devolve o administrador ou `null`.
+ *
+ * `redirect` e `notFound` são para página. Numa rota que responde JSON, quem
+ * chama devolve 404 — pela mesma razão da regra 1 lá em cima: de fora, a rota
+ * do admin não pode parecer que existe.
+ */
+export async function adminDaRequisicao() {
+  const tenantId = await sessaoAtual();
+  if (!tenantId) return null;
+  const eu = await buscarTenantPorId(tenantId);
+  return eu && ehAdmin(eu.email) ? eu : null;
+}
+
+/**
  * O título da aba, com o mesmo portão da página.
  *
  * Para quem não é admin devolve o título neutro da marca — o mesmo de qualquer

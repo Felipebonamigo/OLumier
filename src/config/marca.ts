@@ -54,7 +54,20 @@ export const marca = {
   nome: NOME,
   nomeSimples: "galeria-atomo",
   simbolo: "GA",
-  tagline: "Onde o instante permanece.",
+  /*
+   * DESCRITIVA, E NÃO SLOGAN (26/09/2026).
+   *
+   * Era "Onde o instante permanece.", rejeitada pela estratégia de marca por
+   * ser romântica e clichê — e ela saía no título de toda página e no cartão
+   * do link compartilhado no WhatsApp. Enquanto a camada estratégica não
+   * aprova uma assinatura, o lugar fica com o que o produto É: a mesma frase
+   * da sobrancelha da home nova. A frase do hero ("Sua fotografia tem
+   * identidade. Sua entrega também.") NÃO veio para cá de propósito: a
+   * estratégia (§15) pede validação antes de ela virar assinatura.
+   *
+   * Ver `docs/estrategia-de-marca.md` e `docs/home-leitura-critica.md`.
+   */
+  tagline: "Galeria brasileira para fotógrafos",
   /* FASE 2 — ver o bloco acima antes de tocar nestes dois. */
   dominio: "galeriaatomo.com.br",
   /*
@@ -133,7 +146,7 @@ export const marca = {
    * expectativa errada sobre isso é a única que custa um casamento inteiro.
    */
   entregaNaoBackup:
-    "O " +
+    "A " +
     NOME +
     " é uma ferramenta de entrega, não de backup: o arquivo aqui é a cópia que o seu cliente " +
     "recebe. Guarde os seus originais onde você já guarda — nenhum serviço deveria ser a sua " +
@@ -157,3 +170,20 @@ export const cores = {
   linha: "rgba(190, 205, 230, 0.13)",
   linhaForte: "rgba(190, 205, 230, 0.26)",
 } as const;
+
+/**
+ * O endereço público de uma galeria — o ÚNICO formato que sai daqui.
+ *
+ * Sempre `https://<estudio>.<canônico>/<galeria>`, sempre `marca.dominio`:
+ * link que a gente entrega a outro sistema (hoje, o Atomatiza) vira link que o
+ * casal recebe, e dois formatos para o mesmo lugar viram dois endereços que
+ * envelhecem separados. O `olumier.com.br` continua ABRINDO (ver
+ * `config/dominios.ts`), mas não sai mais em link novo.
+ *
+ * Nada de senha, nada de query: senha de galeria viaja pelo combinado entre
+ * fotógrafo e casal, nunca dentro de URL — URL vaza em histórico, em print,
+ * em "encaminhar".
+ */
+export function enderecoDaGaleria(estudioSlug: string, galeriaSlug: string): string {
+  return `https://${estudioSlug}.${marca.dominio}/${galeriaSlug}`;
+}

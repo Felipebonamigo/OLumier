@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { marca } from "@/config/marca";
 import { CAMINHO_PUBLICO } from "@/proxy";
+import { COOKIE_PREVIA } from "@/config/previa";
 import { urlDeLeitura } from "@/lib/r2";
 import { iconeDoEstudio } from "@/lib/icone-do-estudio";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
@@ -14,6 +15,7 @@ import {
   dadosDaPessoa,
 } from "@/lib/favoritas";
 import { galeriasNoAr } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
 import { resolverEstudio } from "@/lib/endereco";
 import { resolverGaleriaDoEstudio } from "@/lib/endereco-galeria";
 import {
@@ -145,9 +147,21 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * nada. Só quem está logado como o dono daquela galeria vê o rascunho — e,
    * mais abaixo, também pula o portão de senha, porque pedir a própria senha
    * para o dono conferir o próprio trabalho não faz sentido.
+   *
+   * O PEDIDO chega de três jeitos (29/09/2026, ver `config/previa.ts`):
+   *   - `?previa=1`, que continua valendo — é o que a caixinha do editor usa;
+   *   - o cookie em que o proxy troca esse parâmetro, para a barra do navegador
+   *     mostrar o link do cliente e não o do dono;
+   *   - a galeria ainda não publicada: ali não existe versão do cliente, então o
+   *     dono logado vê o rascunho mesmo sem pedir, e o cookie vencer no meio da
+   *     conferência não vira 404.
    */
   const rascunho = await buscarGaleriaPublica(estudio, galeriaSlug, true);
-  const sessao = previa && rascunho ? await sessaoAtual() : null;
+  const pedePrevia =
+    Boolean(previa) ||
+    (await cookies()).get(COOKIE_PREVIA)?.value === "1" ||
+    rascunho?.publicada === false;
+  const sessao = pedePrevia && rascunho ? await sessaoAtual() : null;
   const ehDono = Boolean(sessao && rascunho && sessao === rascunho.tenant_id);
 
   const galeria = ehDono ? rascunho : await buscarGaleriaPublica(estudio, galeriaSlug);
@@ -203,7 +217,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * O dono continua vendo — é a tela onde ele descobre por que a galeria dele
    * sumiu, e de onde ele sai para assinar.
    */
-  if (!ehDono && !galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate })) {
+  if (!ehDono && !galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado())) {
     return (
       <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 text-center">
         <h1 className="font-serif text-2xl font-bold">{galeria.titulo}</h1>
@@ -691,7 +705,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
      * e trocar de tema é trocar cinco valores, não reescrever componentes.
      */
     <main
-      className="min-h-dvh pb-20"
+      className="min-h-dvh"
       style={{
         ...variaveisDoTema(aparencia),
         ...variaveisDeForma(aparencia),
@@ -764,11 +778,20 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
         Com a capa rolando — o padrão — as duas classes não mudam nada: `z-10`
         sem ninguém disputando é só um número, e o fundo é o mesmo da página.
+
+        ── DE BORDA A BORDA (28/09/2026) ──────────────────────────────────
+
+        O fundo estava na mesma caixa que limita as fotos a 1500 px. Numa tela
+        mais larga — o MacBook de 16" tem 1728 — sobravam 114 px de cada lado
+        sem fundo, e a capa grudada aparecia por ali: na dividida, uma faixa
+        da foto da noiva ao lado da grade. Felipe: "achei um pouco estranho a
+        foto continuar só um pedaço ali". A camada que cobre agora ocupa a
+        largura toda; quem limita as fotos é a caixa de dentro. O rodapé e o
+        respiro do fim (o `pb-20`, que era do <main>) entram nela também —
+        fora dela, eram mais dois lugares por onde a capa aparecia.
       */}
-      <div
-        className="relative z-10 mx-auto max-w-[1500px] px-4 sm:px-6"
-        style={{ background: "var(--g-fundo)" }}
-      >
+      <div className="relative z-10 pb-20" style={{ background: "var(--g-fundo)" }}>
+      <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
         {itens.length === 0 && ehDono ? (
           /*
            * A prévia com a galeria vazia mostrava só "as fotos estão sendo
@@ -789,7 +812,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             </p>
             <GaleriaCliente
               favoritasIniciais={[]}
-              selecaoInicial={{ limite: null, aberta: false, motivo: null }}
+              selecaoInicial={{ limite: null, aberta: false, motivo: null, combinada: false }}
               itens={fotosDeDemonstracao(aparencia.tema)}
               permiteDownload={false}
               galeriaId={galeria.id}
@@ -811,6 +834,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               limite: selecao.limite,
               aberta: selecao.aberta,
               motivo: selecao.motivo,
+              combinada: selecao.combinada,
             }}
             itens={itens}
             permiteDownload={galeria.permite_download}
@@ -842,7 +866,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
       <footer className="mt-20 text-center">
         <span
-          className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em]"
+          className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em]"
           style={{ border: "1px solid var(--g-linha)", color: "var(--g-tenue)" }}
         >
           <span
@@ -854,6 +878,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           entregue com {marca.nome}
         </span>
       </footer>
+      </div>
     </main>
   );
 }

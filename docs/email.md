@@ -3,6 +3,33 @@
 Este arquivo existe porque a mesma falta de DNS trava **três** coisas ao mesmo
 tempo, e as três parecem problemas separados quando aparecem.
 
+> **Atualização (29/09/2026) — o envio está LIGADO.** O domínio
+> `galeriaatomo.com.br` está verificado no Resend, a chave `galeria-atomo-producao`
+> está no servidor, e o "esqueci minha senha" chegou de
+> `nao-responda@galeriaatomo.com.br` em 28/09. A tabela "O estado de hoje"
+> abaixo é de 17/09 e ficou para trás. Com a cobrança ligada no mesmo dia
+> (`docs/ligar-cobranca.md`), as duas travas descritas a seguir estão valendo.
+>
+> **Atualização (28/09/2026) — agora são cinco.** Duas das travas contra a
+> conta de teste repetida (migração 045) só funcionam com o envio ligado, e
+> ficam **dormindo** até lá — de propósito, para ninguém ser travado por uma
+> porta que nós não abrimos:
+>
+> | Trava | Com o e-mail desligado (hoje) | Ligado |
+> |---|---|---|
+> | Confirmar o e-mail antes de enviar fotos | conta nova nasce confirmada | nasce pendente; o link sai no cadastro, e o painel mostra o recado com "mandar de novo" |
+> | Apagar os arquivos do teste abandonado | **nada é avisado, nada é apagado** | aviso aos 30 dias do vencimento, aviso final aos 53, apaga aos 60 (`src/lib/testes-abandonados.ts`) |
+>
+> A limpeza também exige a cobrança ligada (`ASAAS_API_KEY`): sem ela ninguém
+> tinha como assinar para salvar os arquivos. Ela roda dentro de
+> `scripts/limpar-lixeira.mjs` (temporizador `fotonio-lixeira`, 04:50), que
+> escreve no journal o que fez. Mais de 20 contas para apagar numa madrugada, e
+> ela para sem apagar nenhuma e manda alerta para `ALERTA_EMAIL_DESTINO` —
+> conferida a lista, rodar à mão com `--aplicar --liberar-teto`.
+>
+> O CPF/CNPJ único e o limite de 3 cadastros por IP por dia valem já, com ou
+> sem e-mail.
+
 ## O estado de hoje (17/09/2026)
 
 | O quê | Estado |
@@ -21,13 +48,13 @@ endereço saiu de vista, o que para o sangramento — mas não cria a caixa.
 
 **Enviar.** O `src/lib/email.ts` fica desligado de propósito enquanto não houver
 `RESEND_API_KEY` e `EMAIL_REMETENTE`, e o remetente **precisa** ser de domínio
-verificado: mandar "redefina sua senha do Galeria Átomo" de outro domínio é
+verificado: mandar "redefina sua senha da Galeria Átomo" de outro domínio é
 exatamente o que um golpe faria. Com ele desligado, a recuperação de senha é
 manual — a pessoa chama no WhatsApp e alguém redefine na mão. Funciona com três
 estúdios; com trinta, é você acordando de madrugada.
 
 **Avisar.** Os avisos de queda e de backup saem de `contato@atomatiza.com.br`
-porque é o único domínio verificado. Funciona, mas um aviso do Galeria Átomo
+porque é o único domínio verificado. Funciona, mas um aviso da Galeria Átomo
 chegando de outro produto é o tipo de coisa que a pessoa marca como spam.
 
 ## O conserto — uma sentada no painel de DNS

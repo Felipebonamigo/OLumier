@@ -75,6 +75,9 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
   /* A cor escolhida vale para as três letrinhas de texto; sem ela, cada uma
      mantém o tom derivado que sempre teve. Ver `CoresProprias.detalhe`. */
   const corDetalhe = aparencia.cores?.detalhe;
+  /* O nome do casal pode ter cor própria, separada do texto. Sem ela, herda a
+     cor do texto como sempre herdou. Ver `CoresProprias.titulo`. */
+  const corTitulo = aparencia.cores?.titulo;
 
   /*
    * A logo, quando existe, SUBSTITUI o nome em texto — não acompanha.
@@ -170,9 +173,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
         src={logoUrl}
         alt={estudio}
         style={{ maxHeight: `${alturaLogo}px` }}
-        // inline-block em vez de mx-auto: assim o alinhamento vem do pai, e a
-        // capa "dividida" (texto à esquerda no desktop) não fica com a logo
-        // centralizada sozinha no meio da coluna.
+        // inline-block em vez de mx-auto: assim o alinhamento vem do pai (ou
+        // do `self-*` que a capa passa quando a logo é filha de um flex).
         className={`inline-block w-auto object-contain ${className}`}
       />
     ) : (
@@ -278,11 +280,8 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
        * responde por quem está DENTRO do elemento, então o próprio `h1` não
        * poderia se medir contra si mesmo.
        *
-       * Ela não leva classe nenhuma de propósito. `text-align` é herdado, e a
-       * capa dividida escreve `md:text-left` no pai: repetir `alinharTexto`
-       * aqui venceria essa regra por estar fora de media query e viraria a capa
-       * do avesso no computador — uma capa entregue mudando de cara por causa
-       * de uma `div` de medição.
+       * Ela não leva classe nenhuma de propósito: `text-align` é herdado do
+       * pai de cada capa, e é lá que o eixo de alinhamento é aplicado.
        */
       <div style={{ containerType: "inline-size", width: "100%" }}>
         <h1
@@ -291,6 +290,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
              mínimo e escreve o nome uma letra por linha. Os dois não convivem. */
           className={`${linhas || quebrarPalavra ? "" : "text-balance"} ${alinharBloco}`}
           style={{
+            ...(corTitulo ? { color: corTitulo } : {}),
             fontFamily: fonteTitulo,
             fontWeight: peso,
             lineHeight: aparencia.tipografia === "manuscrita" ? 1.2 : 1.05,
@@ -386,6 +386,84 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
           <div className="mt-4">
             <Legenda />
           </div>
+        </div>
+      </header>
+    );
+  }
+
+  /* --- CARTAZ: a foto grande e limpa, o texto embaixo ----------------------
+   *
+   * Felipe, 29/09/2026: "adicionar outra de capa grande, tipo a imersa, mas sem
+   * degradê" — "sugeriram de adicionar uma opção de capa grande, mas sem o
+   * degradê".
+   *
+   * ── POR QUE NÃO É A IMERSA COM O VÉU APAGADO ────────────────────────────
+   *
+   * Porque o véu da imersa é o que torna o nome legível. Ali o título fica
+   * SOBRE a foto, e nenhum dos cinco elementos tem sombra, contorno ou fundo
+   * próprio. Medido com os tokens do tema noite — o dos presets Átomo e
+   * Cerimônia —, o título sem véu sai em 1,13:1 sobre vestido ao sol, 1,39:1
+   * sobre pele clara e 1,62:1 sobre céu. O mínimo da WCAG para texto grande é
+   * 3:1. O nome do casal some.
+   *
+   * Sobre o fundo do tema, os MESMOS tokens dão 17,69:1 no noite, 16,77:1 no
+   * claro e 10,16:1 no creme. Então o que sai de cima da foto é o TEXTO. A
+   * imersa fica exatamente como está: quem escolheu uma não quer a outra.
+   *
+   * ── A DOBRA, E POR QUE NÃO HÁ MULTIPLICADOR AQUI ───────────────────────
+   *
+   * Com o texto embaixo, a conta do celular muda. Em 390×844 com `cheia`, os
+   * 78vh dariam 658 px de foto e sobrariam 186 px para um bloco que pede ~276
+   * com a logo média — o nome cairia abaixo da dobra, que é o contrário de
+   * "capa grande com o nome à vista".
+   *
+   * A saída tentadora é encolher a foto com um `calc(var(--g-capa-h)*0.82)`.
+   * Ela custa caro: "Cheia" passaria a dizer 78vh no painel e desenhar 64vh na
+   * tela, só nesta capa, e o eixo mentiria para quem o lê. Aqui `--g-capa-h`
+   * mede o CABEÇALHO INTEIRO e a foto fica com o que sobra (`flex-1`) — o eixo
+   * continua querendo dizer "quanto da tela a capa ocupa", como nas outras seis.
+   *
+   * ── LIMITE CONHECIDO: `capaFixa` quase não tem efeito aqui ─────────────
+   *
+   * `grudada` vira `sticky top-0 z-0`, e um cabeçalho de 78vh mais o bloco de
+   * texto passa perto de 100vh. Sobra pouquíssimo para grudar. Não quebra nada
+   * — a capa rola e as fotos passam —, mas quem escolher "Fica no lugar" vai
+   * ver pouca diferença. Fica escrito para a próxima sessão não ler como bug.
+   */
+  if (aparencia.capa === "cartaz" && urlImagem) {
+    return (
+      <header
+        data-capa="cartaz"
+        className={`flex min-h-[var(--g-capa-h,78vh)] flex-col ${grudada}`}
+        style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
+        <img
+          src={urlImagem}
+          alt=""
+          fetchPriority="high"
+          style={foco}
+          /* `min-h-0` junto do `flex-1`: sem ele, a altura natural da imagem
+             vira o piso do item flex e a foto se recusa a encolher — o bloco de
+             texto é empurrado para fora do cabeçalho, que é o defeito que esta
+             capa existe para não ter. */
+          className="min-h-0 w-full flex-1 object-cover"
+        />
+        <div className={`px-6 py-10 sm:py-12 ${alinharTexto}`}>
+          <Rotulo />
+          <div className="mt-2">
+            <Titulo base={TITULO_GRANDE} />
+          </div>
+          <div className="mt-4">
+            <Legenda />
+          </div>
+          {/* Como na redonda e no arco: o embrulho sai junto, senão o `mt-6`
+              dele deixa um vão morto no pé da capa. */}
+          {!semAssinatura && (
+            <div className="mt-6">
+              <Estudio />
+            </div>
+          )}
         </div>
       </header>
     );
@@ -596,10 +674,25 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
             className="absolute inset-0 h-full w-full object-cover"
           />
         </div>
+        {/*
+          ── O ALINHAMENTO VALE NO COMPUTADOR TAMBÉM (28/09/2026) ────────────
+
+          Esta coluna tinha `md:text-left` cravado: no computador a dividida
+          era sempre à esquerda, qualquer que fosse o eixo. Só que a CAIXA do
+          título obedece ao eixo (`alinharBloco`), e com "Centralizado" ela ia
+          para o meio com o texto encostado na esquerda dela, enquanto o
+          rótulo e a data ficavam na borda — o título torto em relação ao
+          resto. Felipe, com o print da galeria da Juliana Josende: "na opção
+          centralizada ficou feio, só o título ficou no centro".
+
+          Agora o eixo manda nos três mecanismos, em todas as larguras, como
+          nas outras capas. Quem quer a dividida encostada à esquerda escolhe
+          "À esquerda" — que é o que a opção diz.
+        */}
         <div
-          className={`flex flex-col justify-center px-8 py-16 md:px-14 md:text-left ${alinharTexto}`}
+          className={`flex flex-col justify-center px-8 py-16 md:px-14 ${alinharTexto}`}
         >
-          <Estudio />
+          <Estudio className={aEsquerda ? "self-start" : "self-center"} />
           <div className="mt-6">
             <Rotulo />
             <Titulo base={TITULO_MEDIO} />

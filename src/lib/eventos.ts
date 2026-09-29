@@ -42,11 +42,39 @@ export const ACOES = {
   ASSINATURA_CANCELADA: "assinatura.cancelada",
   SENHA_TROCADA: "senha.trocada",
   CONTA_CRIADA: "conta.criada",
+  /* O teste abandonado (migração 045): os dois avisos e a limpeza. É o único
+   * lugar em que o SISTEMA apaga arquivo sem o fotógrafo ter pedido, e numa
+   * disputa a pergunta vai ser "fui avisado? quando?". */
+  AVISO_LIMPEZA_ENVIADO: "conta.aviso_limpeza",
+  ARQUIVOS_DO_TESTE_APAGADOS: "conta.arquivos_apagados",
+  /* Galeria criada por um programa, não por um clique no painel — hoje, o
+   * Atomatiza criando a galeria de um contrato pela chave de API. Entra na
+   * lista porque é ACESSO: a pergunta de disputa é "quem criou isto?", e a
+   * resposta precisa sobreviver à galeria. Criação pelo painel continua sem
+   * evento — registrar cada clique é telemetria, e telemetria não mora aqui. */
+  GALERIA_CRIADA_DE_FORA: "galeria.criada-de-fora",
   /* Consentimento para dado biométrico (LGPD art. 11): ligar é o aceite, e o
    * registro é a prova de quando; desligar apaga os vetores e o registro diz
    * quantos. Sem isto, "quando o estúdio consentiu?" não teria resposta. */
   ROSTOS_LIGADOS: "rostos.ligados",
   ROSTOS_DESLIGADOS: "rostos.desligados",
+  /* A foto da página inicial trocada pelo admin (migração 043). É a vitrine
+   * pública da plataforma: "quem pôs essa foto aí, e quando?" precisa de
+   * resposta, e a foto do lugar anterior é apagada do bucket na troca. */
+  HOME_FOTO_TROCADA: "home.foto.trocada",
+  HOME_FOTO_RESTAURADA: "home.foto.restaurada",
+  /* O preço da assinatura mudou por causa do combo com o Atomatiza (entrou,
+   * saiu ou trocou de faixa). É dinheiro mudando sem o estúdio apertar nada —
+   * "por que a minha mensalidade mudou?" precisa de resposta com data. */
+  COMBO_RECALCULADO: "assinatura.combo",
+  /* Um aviso do Asaas sobre a cobrança da DIFERENÇA de uma troca de plano
+   * (paga, vencida, cancelada, estornada). Ela não mexe no período pago —
+   * então, sem este registro, não sobraria rastro dela aqui. */
+  DIFERENCA_DA_TROCA: "assinatura.diferenca",
+  /* Um custo da sociedade criado, mudado ou apagado no caixa dos sócios
+   * (migração 047). A lista decide o resultado do mês que os três sócios
+   * leem — "quem mudou o custo do VPS?" precisa de resposta. */
+  CUSTO_DA_SOCIEDADE: "sociedade.custo",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque

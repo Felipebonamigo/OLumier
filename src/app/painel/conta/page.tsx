@@ -5,11 +5,13 @@ import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais } from "@/config/planos";
+import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza } from "@/config/combo";
 import {
   asaasConfigurado,
   asaasEmProducao,
   proximaCobranca,
   buscarAssinatura,
+  diferencaEmAberto,
 } from "@/lib/asaas";
 import { rotuloDoCartao } from "@/lib/cartao-salvo";
 import { conferirConfiguracao } from "@/config/socios";
@@ -19,12 +21,14 @@ import { PlanoConta } from "@/components/plano-conta";
 import { EditorMarca } from "@/components/editor-marca";
 import { TrocarSenha } from "@/components/trocar-senha";
 import { ChavesApi } from "@/components/chaves-api";
+import { CanalDeAvisos } from "@/components/canal-de-avisos";
 import { EditorEndereco } from "@/components/editor-endereco";
 import { GaleriasDaConta } from "@/components/galerias-da-conta";
 import { enderecosAntigos, LIMITE_TROCAS } from "@/lib/endereco";
 import { marca } from "@/config/marca";
 import { consultar } from "@/lib/db";
 import { listarChaves } from "@/lib/chaves-api";
+import { estadoDoCanal } from "@/lib/avisos";
 import { MINIMO_SENHA } from "@/lib/recuperacao";
 import { urlDeLeitura } from "@/lib/r2";
 
@@ -48,6 +52,7 @@ export default async function ContaPage() {
   const plano = planoPorId(tenant.plano_id);
   const uso = await usoPorEstado(tenantId);
   const chavesApi = await listarChaves(tenantId);
+  const canal = await estadoDoCanal(tenantId);
   const antigos = await enderecosAntigos(tenantId);
 
   /* Galerias da conta, com o peso de cada uma. O tamanho vem aqui porque é a
@@ -95,6 +100,14 @@ export default async function ContaPage() {
       ? await proximaCobranca(tenant.asaas_assinatura_id).catch(() => null)
       : null;
 
+  /* A fatura da DIFERENÇA de uma troca de plano, enquanto não for paga. Ela é
+   * avulsa, fora da assinatura — sem isto, quem paga por Pix só a veria no
+   * e-mail do Asaas. Ver `lib/troca-de-plano.ts`. */
+  const diferencaAberta =
+    asaasConfigurado() && tenant.asaas_cliente_id
+      ? await diferencaEmAberto(tenant.asaas_cliente_id).catch(() => null)
+      : null;
+
   /*
    * O cartão que o Asaas guardou, se guardou.
    *
@@ -114,6 +127,11 @@ export default async function ContaPage() {
   const { ok: splitOk, avisos: avisosSplit } = conferirConfiguracao();
 
   const situacao = SITUACOES[tenant.status] ?? { texto: tenant.status, cor: "text-texto-soft" };
+
+  /* O combo que a última conferência encontrou. É o que a assinatura cobra —
+   * a coluna só é gravada junto com o valor no Asaas (ver `lib/combo.ts`). */
+  const faixaDoCombo = ehFaixaAtomatiza(tenant.combo_atomatiza) ? tenant.combo_atomatiza : null;
+  const descontoDoCombo = plano ? descontoDaGaleriaCentavos(plano, faixaDoCombo) : 0;
   const situacaoEnvio = situacaoDoTenant(tenant, asaasConfigurado());
 
   return (
@@ -133,8 +151,15 @@ export default async function ContaPage() {
         <p className="mt-2 text-sm text-texto-soft">
           {plano ? (
             <>
-              {plano.nome} — <strong className="text-texto">{formatarReais(plano.precoCentavos)}</strong>
+              {plano.nome} —{" "}
+              <strong className="text-texto">{formatarReais(plano.precoCentavos - descontoDoCombo)}</strong>
               /mês
+              {descontoDoCombo > 0 && faixaDoCombo && (
+                <span className="mt-1 block text-xs text-ok">
+                  Combo com o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]}: {formatarReais(descontoDoCombo)} a
+                  menos por mês, enquanto as duas assinaturas estiverem em dia.
+                </span>
+              )}
             </>
           ) : (
             tenant.plano_id
@@ -145,6 +170,25 @@ export default async function ContaPage() {
           planoAtual={tenant.plano_id}
           temAssinatura={Boolean(tenant.asaas_assinatura_id)}
         />
+
+        {diferencaAberta && (
+          <div className="mt-4 rounded-lg border border-alerta/40 bg-alerta/10 px-4 py-3">
+            <p className="text-xs text-texto-soft">
+              Diferença da troca de plano · {formatarReais(Math.round(diferencaAberta.value * 100))} · vence em{" "}
+              {new Date(`${diferencaAberta.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}
+            </p>
+            {diferencaAberta.invoiceUrl && (
+              <a
+                href={diferencaAberta.invoiceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-block text-sm text-acento underline underline-offset-4"
+              >
+                Pagar a diferença ↗
+              </a>
+            )}
+          </div>
+        )}
 
         {cobranca ? (
           <div className="mt-4 rounded-lg border border-linha bg-void px-4 py-3">
@@ -274,6 +318,20 @@ export default async function ContaPage() {
           ultimo_uso_em: c.ultimo_uso_em ? c.ultimo_uso_em.toISOString() : null,
         }))}
       />
+
+      {/* Logo abaixo das chaves de API, e é o lugar certo: as duas respondem à
+          mesma pergunta — o que, de fora, alcança esta conta. Uma é a porta de
+          entrada; esta é a de saída. Só aparece para quem tem canal. */}
+      {canal && (
+        <CanalDeAvisos
+          canal={{
+            url: canal.url,
+            criadoEm: canal.criadoEm.toISOString(),
+            ultimoEnvioEm: canal.ultimoEnvioEm ? canal.ultimoEnvioEm.toISOString() : null,
+            ultimoErro: canal.ultimoErro,
+          }}
+        />
+      )}
 
       {/* O endereço saiu da lista de "dados" logo abaixo: ele deixou de ser um
           fato imutável da conta e virou algo que se troca (migração 025). */}

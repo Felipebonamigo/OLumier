@@ -4,13 +4,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   criarSecaoAction,
-  criarCapitulosSugeridosAction,
+  apagarTodosOsCapitulosAction,
   renomearSecaoAction,
   renomearGrupoSoltoAction,
   apagarSecaoAction,
   moverSecaoAction,
   reordenarSecoesAction,
   moverSoltasAction,
+  esvaziarSecaoAction,
   ordenarFotosDaSecaoAction,
 } from "@/app/painel/actions";
 import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
@@ -43,12 +44,21 @@ export function EditorSecoes({
   secoes,
   semCapitulo,
   grupoSolto,
+  sugestoes,
 }: {
   galeriaId: string;
   secoes: SecaoResumo[];
   semCapitulo: number;
   /** Como o fotógrafo chamou o grupo das soltas. Nulo = "Outras fotos". */
   grupoSolto: string | null;
+  /**
+   * Os momentos típicos de um casamento, para clicar um a um.
+   *
+   * Vem por propriedade e não por `import`: a lista mora em `lib/secoes.ts`,
+   * que é `server-only`. É o mesmo caminho que o assistente de galeria nova já
+   * usa (`galerias/nova/page.tsx` passa `capitulosSugeridos`).
+   */
+  sugestoes: readonly string[];
 }) {
   const [novo, setNovo] = useState("");
   const [erro, setErro] = useState<string | null>(null);
@@ -56,6 +66,8 @@ export function EditorSecoes({
   const [nomeEditado, setNomeEditado] = useState("");
   const [ocupado, iniciar] = useTransition();
   const [aviso, setAviso] = useState<string | null>(null);
+  /* O segundo tempo do "apagar todos": ver o comentário lá embaixo. */
+  const [confirmandoTudo, setConfirmandoTudo] = useState(false);
   const router = useRouter();
 
   /*
@@ -81,6 +93,12 @@ export function EditorSecoes({
   /* Há capítulo de verdade nesta galeria? Muda o nome, o recado e quais
      controles a linha das soltas oferece — ver a linha logo abaixo da lista. */
   const temCapitulos = secoes.length > 0;
+  /* Em minúsculas porque é assim que `criarSecao` compara — "Festa" e "festa"
+     são o mesmo capítulo para ela, e sugerir o que vai ser recusado é pior do
+     que não sugerir. */
+  const nomesCriados = new Set(secoes.map((s) => s.nome.toLowerCase()));
+  /* Quantas fotos mudariam de lugar se todos os capítulos fossem apagados. */
+  const fotosEmCapitulos = secoes.reduce((soma, s) => soma + s.total, 0);
 
   const lista = ordem
     ? (ordem.map((id) => secoes.find((s) => s.id === id)).filter(Boolean) as SecaoResumo[])
@@ -164,17 +182,23 @@ export function EditorSecoes({
         <p className="mx-auto mt-1 max-w-[42ch] text-xs text-texto-faint">
           Sem capítulos, a galeria mostra tudo numa sequência só — o que também funciona bem.
         </p>
-        <button
-          type="button"
-          disabled={ocupado}
-          onClick={() => executar(criarCapitulosSugeridosAction, {})}
-          className="mt-4 rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2 disabled:opacity-50"
-        >
-          Criar os capítulos de um casamento
-        </button>
-        <p className="mt-2 text-[11px] text-texto-faint">
-          Making Of · Cerimônia · Decoração · Recepção · Festa · Ensaio
-        </p>
+        {/*
+          ── AQUI HAVIA UM BOTÃO QUE CRIAVA SEIS DE UMA VEZ (saiu 29/09/2026) ──
+
+          Juan: "menor o botão de 'criar os capítulos de um casamento', porque
+          vi que clicaram errado e criaram vários capítulos sem querer".
+
+          Diminuir o botão só deixaria o acidente mais raro — e ele continuaria
+          custando seis exclusões à mão, porque não havia desfazer. Felipe
+          fechou pelo outro lado: "não crie todos os capítulos de uma vez,
+          deixe o usuário criar, se não ele precisará apagar".
+
+          Os seis nomes não sumiram: viraram sugestões clicáveis ao lado do
+          campo de criar, lá embaixo — um clique, um capítulo. Elas ficam LÁ e
+          não aqui de propósito, porque esta caixa some assim que existe o
+          primeiro capítulo, e quem acabou de criar "Making Of" ainda quer os
+          outros cinco à mão.
+        */}
       </div>
   ) : null;
 
@@ -355,6 +379,39 @@ export function EditorSecoes({
                     </select>
                     );
                   })()}
+                  {/*
+                    O CAMINHO DE VOLTA (28/09/2026).
+
+                    O grupo das soltas tem "mover todas para…" desde 04/09; o
+                    capítulo não tinha como devolver. Quem mandou a pasta errada
+                    no envio desfazia foto a foto — ou APAGAVA o capítulo, que é
+                    um botão vermelho com aviso de que não dá para desfazer,
+                    para uma intenção que era só reorganizar.
+
+                    Esvaziar não apaga o capítulo: ele fica ali, vazio, que é
+                    justamente o estado de quem vai remontar a divisão.
+                  */}
+                  {s.total > 0 && (
+                    <button
+                      type="button"
+                      disabled={ocupado}
+                      onClick={() => {
+                        const quantas = `${s.total} ${s.total === 1 ? "foto" : "fotos"}`;
+                        if (
+                          confirm(
+                            `Tirar as ${quantas} de “${s.nome}”?\n\n` +
+                              `Elas voltam para o grupo das fotos sem capítulo. ` +
+                              `O capítulo continua, vazio.`,
+                          )
+                        ) {
+                          executar(esvaziarSecaoAction, { secao_id: s.id });
+                        }
+                      }}
+                      className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"
+                    >
+                      tirar as fotos
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={ocupado}
@@ -679,6 +736,110 @@ export function EditorSecoes({
           Adicionar
         </button>
       </div>
+
+      {/*
+        ── AS SUGESTÕES, UMA A UMA (29/09/2026) ──────────────────────────────
+
+        Os seis momentos de um casamento continuam à mão, mas cada um é um
+        clique próprio. O pior que um clique errado faz agora é criar UM
+        capítulo vazio, que se apaga na linha dele.
+
+        Ficam coladas no campo de criar porque é a mesma decisão — "quero um
+        capítulo chamado assim" — e não um segundo lugar que faz a mesma coisa.
+        O campo é para o nome que só o fotógrafo sabe ("Saída da noiva"); as
+        fichas são para os nomes que se repetem em todo casamento.
+
+        A ficha some depois de criada: `criarSecao` recusa nome repetido, então
+        oferecer de novo seria oferecer um erro.
+      */}
+      {sugestoes.some((n) => !nomesCriados.has(n.toLowerCase())) && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-texto-faint">Sugestões:</span>
+          {sugestoes
+            .filter((n) => !nomesCriados.has(n.toLowerCase()))
+            .map((nome) => (
+              <button
+                key={nome}
+                type="button"
+                disabled={ocupado}
+                /* `aria-label` e não `title`: `title` não existe no toque, e é
+                   no celular que o Juan mexe nisso. */
+                aria-label={`Criar o capítulo ${nome}`}
+                onClick={() => executar(criarSecaoAction, { nome })}
+                /* `min-h-9` (36 px), e não os ~26 px que o texto pediria: no
+                   celular as fichas ficam lado a lado e errar a vizinha CRIA
+                   CAPÍTULO — é a reclamação do Juan de novo, em escala menor. */
+                className="inline-flex min-h-9 items-center rounded-full border border-linha px-3 text-xs text-texto-soft transition hover:border-linha-forte hover:bg-carbon-2 disabled:opacity-40"
+              >
+                + {nome}
+              </button>
+            ))}
+        </div>
+      )}
+
+      {/*
+        ── A SAÍDA DE QUEM JÁ CLICOU ERRADO ─────────────────────────────────
+
+        Felipe: "ou tenha a opção de apagar todos os capítulos". Fechar a porta
+        de entrada do acidente não conserta quem já está com seis capítulos
+        dentro — apagar um por um são seis confirmações e seis recarregamentos.
+
+        DOIS TEMPOS, e não um. Um clique só aqui seria trocar o acidente de
+        criar seis pelo acidente de apagar seis, que é pior: os capítulos
+        criados sem querer estão vazios, e os apagados sem querer podem estar
+        cheios. O segundo tempo diz o número e diz para onde as fotos vão —
+        nenhuma some, `secao_id` é `on delete set null` desde a migração 003.
+      */}
+      {temCapitulos &&
+        (confirmandoTudo ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2">
+            {/*
+              O NÚMERO DE FOTOS É O QUE SEPARA OS DOIS CASOS.
+
+              Capítulos vazios são o acidente que esta porta existe para
+              desfazer; capítulos cheios são trabalho de organização feito à
+              mão. A frase muda de tom entre um e outro porque quem lê precisa
+              saber em qual dos dois está antes de clicar.
+            */}
+            <span className="text-xs text-texto-soft">
+              Apagar {secoes.length} {secoes.length === 1 ? "capítulo" : "capítulos"}?{" "}
+              {fotosEmCapitulos === 0
+                ? secoes.length === 1
+                  ? "Ele está vazio, nenhuma foto é tocada."
+                  : "Estão todos vazios, nenhuma foto é tocada."
+                : fotosEmCapitulos === 1
+                  ? `A foto ${secoes.length === 1 ? "dele" : "deles"} não some — volta para “${nomeDoGrupoSolto(grupoSolto)}”.`
+                  : `As ${fotosEmCapitulos} fotos ${secoes.length === 1 ? "dele" : "deles"} não somem — voltam para “${nomeDoGrupoSolto(grupoSolto)}”.`}
+            </span>
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => {
+                executar(apagarTodosOsCapitulosAction, {});
+                setConfirmandoTudo(false);
+              }}
+              className="rounded-lg border border-alerta/60 px-3 py-1 text-xs text-alerta transition hover:bg-alerta/15 disabled:opacity-40"
+            >
+              Apagar todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmandoTudo(false)}
+              className="text-xs text-texto-soft underline underline-offset-4 transition hover:text-texto"
+            >
+              cancelar
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            disabled={ocupado}
+            onClick={() => setConfirmandoTudo(true)}
+            className="mt-3 text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
+          >
+            apagar todos os capítulos
+          </button>
+        ))}
 
       {/* Logo abaixo do campo, que é onde o olho está depois de clicar. */}
       {/* O aviso da ordenação: a ação deu certo e tem um recado. Cor de alerta

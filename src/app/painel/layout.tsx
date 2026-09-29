@@ -9,6 +9,11 @@ import { SeletorTema } from "@/components/seletor-tema";
 import { ehAdmin } from "@/config/admin";
 import { SECAO_SITE_NO_AR } from "@/config/site-do-estudio";
 import { sairAction } from "../(auth)/actions";
+import { precisaConfirmarEmail } from "@/lib/confirmacao-email";
+import { AvisoEmailPendente } from "@/components/aviso-email-pendente";
+import { marca } from "@/config/marca";
+import { SeletorPlataforma } from "@/components/seletor-plataforma";
+import { JANELA_ATOMATIZA, JANELA_GALERIA, LINK_ATOMATIZA, usaOAtomatiza } from "@/lib/ponte-atomatiza";
 
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
   /*
@@ -44,15 +49,40 @@ export default async function PainelLayout({ children }: { children: React.React
   const proporcao = !semLimite && quota > 0 ? Math.min(usado / quota, 1) : 0;
   const perto = proporcao >= 0.8;
 
+  /* Galeria e Atomatiza lado a lado, como abas — só para quem tem as duas
+     contas. Ler a coluna basta: quem a mantém é o Atomatiza, perguntando.
+     Ver `lib/ponte-atomatiza.ts`. */
+  const seletor = usaOAtomatiza(tenant) && {
+    linkAtomatiza: LINK_ATOMATIZA,
+    janelaGaleria: JANELA_GALERIA,
+    janelaAtomatiza: JANELA_ATOMATIZA,
+  };
+
   return (
     <div className="min-h-dvh">
       <header className="border-b border-linha">
+        {/* No celular o seletor vira a faixa do topo, em duas metades: ao lado
+            da marca ele empurraria a navegação para uma terceira linha. */}
+        {seletor && (
+          <div className="px-4 pt-3 sm:hidden">
+            <SeletorPlataforma {...seletor} largo />
+          </div>
+        )}
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-4 px-6 py-4">
           {/* Sem o descritor: aqui ele repetia o título da tela — ver
               `MarcaLockup`. */}
           <Link href="/painel">
             <MarcaLockup tamanho={40} descritor={false} />
           </Link>
+
+          {/* Colado na marca, e não dentro do <nav> da direita: trocar de
+              produto não é mais um item do menu da Galeria. */}
+          {seletor && (
+            <div className="hidden items-center gap-4 sm:flex">
+              <span aria-hidden className="h-[26px] w-px bg-linha-forte" />
+              <SeletorPlataforma {...seletor} />
+            </div>
+          )}
 
           <nav className="ml-auto flex items-center gap-1 text-sm">
             <Link
@@ -134,6 +164,10 @@ export default async function PainelLayout({ children }: { children: React.React
           )}
         </div>
       </header>
+
+      {precisaConfirmarEmail(tenant) && (
+        <AvisoEmailPendente email={tenant.email} whatsapp={marca.whatsappVisivel} />
+      )}
 
       {children}
     </div>

@@ -97,10 +97,44 @@ export function EnviarArquivos({
   }
 
   return (
-    <section className="mt-8">
+    <section aria-labelledby="titulo-envio" className="mt-8 rounded-xl border border-linha bg-carbon p-5">
+      {/*
+        ── A SEÇÃO SE APRESENTA (29/09/2026) ────────────────────────────────
+
+        Juan: "poderia estar mais claro a parte de enviar as fotos" e, logo
+        depois, "na parte de subir as fotos, deixar mais evidente que é uma
+        seção de UPLOAD".
+
+        Dava para ver no HTML: o bloco dos capítulos era um cartão com `<h2>` e
+        subtítulo, e este começava direto no seletor de capítulo — uma caixa
+        tracejada solta no meio do branco, sem nome. Quem varre a página não
+        encontra uma seção que não se apresenta.
+
+        O título NÃO repete a caixa: "Arraste a pasta do casamento aqui" é a
+        instrução do gesto; o `<h2>` é o nome da seção. A frase sobre o arquivo
+        ir direto para o armazenamento subiu para cá, e saiu de lá — dizer duas
+        vezes, a três centímetros de distância, é o que o Felipe chamou de feio
+        na outra tela.
+
+        O `aria-labelledby` não é enfeite: `<section>` sem nome acessível não é
+        landmark nenhuma, e "é uma seção de upload" ficaria verdade só para quem
+        enxerga. A única palavra "Enviar" da tela morava no menu lateral — que
+        some no celular.
+      */}
+      <h2 id="titulo-envio" className="text-sm font-semibold">
+        Enviar fotos
+      </h2>
+      <p className="mt-0.5 text-xs text-texto-faint">
+        Daqui as fotos e os vídeos vão direto do seu navegador para o armazenamento — sem passar
+        pelo nosso servidor.
+      </p>
+
       {secoes.length > 0 && (
-        <label className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-texto-soft">Enviar para o capítulo:</span>
+        <label className="mb-3 mt-4 flex flex-wrap items-center gap-2 text-sm">
+          {/* "Para" e não "Enviar para": com o `<h2>Enviar fotos</h2>` uma
+              linha acima, o verbo repetido é o eco que o Felipe chamou de feio.
+              Sob o título, o rótulo continua inequívoco. */}
+          <span className="text-texto-soft">Para o capítulo:</span>
           {/*
             LIVRE DURANTE O ENVIO (16/09/2026).
 
@@ -147,14 +181,13 @@ export function EnviarArquivos({
           setArrastando(false);
           conferirEEnviar(await arquivosDeArrasto(e.dataTransfer));
         }}
-        className={`rounded-xl border border-dashed px-6 py-12 text-center transition ${
-          arrastando ? "border-acento bg-acento/5" : "border-linha-forte bg-carbon"
+        className={`mt-4 rounded-xl border border-dashed px-6 py-12 text-center transition ${
+          arrastando ? "border-acento bg-acento/5" : "border-linha-forte bg-carbon-2"
         }`}
       >
         <p className="text-base font-medium">Arraste a pasta do casamento aqui</p>
         <p className="mx-auto mt-2 max-w-[46ch] text-sm text-texto-soft">
-          Pode ser a pasta inteira, com subpastas. Os arquivos vão direto do seu navegador para o
-          armazenamento — sem passar pelo nosso servidor.
+          Pode ser a pasta inteira, com subpastas.
         </p>
 
         <div className="mt-5 flex flex-wrap justify-center gap-2">
@@ -189,7 +222,28 @@ export function EnviarArquivos({
           id="escolher-arquivos"
           type="file"
           multiple
-          accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,video/mp4,video/quicktime,video/webm"
+          /*
+            ── LISTA FECHADA VIRA UM ARQUIVO POR VEZ NO IPHONE (29/09/2026) ──
+
+            Juan: "pelo celular, não estão conseguindo subir vários vídeos de
+            uma vez. Tem que ir um a um."
+
+            Aqui havia os nove mimes exatos. No iPhone, a lista fechada é o
+            caminho conhecido para o seletor de fotos entregar um arquivo por
+            vez; `image/*` e `video/*` são as formas que ele entende para abrir
+            a biblioteca inteira com seleção múltipla.
+
+            ⚠ Não confirmado num iPhone de verdade — não há um aqui. A
+            confirmação é do Juan, no aparelho dele.
+
+            Afrouxar aqui não afrouxa nada: quem decide o que ENTRA continua
+            sendo o servidor, que devolve 415 para o que não estiver em
+            `TIPOS_ACEITOS` (nove tipos exatos, presos por
+            `testar-poster-de-video.mjs`). O `accept` só muda o que o seletor
+            OFERECE — e oferecer a mais, com recusa clara depois, é melhor do
+            que oferecer de menos e não deixar escolher nada.
+          */
+          accept="image/*,video/*"
           className="hidden"
           onChange={(e) => {
             conferirEEnviar([...(e.target.files ?? [])].map(comCaminhoDoInput));

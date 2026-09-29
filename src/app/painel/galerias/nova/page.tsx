@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { urlDeLeitura } from "@/lib/r2";
+import { padraoDoEstudioLido } from "@/lib/aparencia-galeria";
+import { estilosDoEstudio } from "@/lib/estilos-do-estudio";
 import { CAPITULOS_SUGERIDOS } from "@/lib/secoes";
 import { LogoEstudio } from "@/components/logo-estudio";
 import { AssistenteNovaGaleria } from "./assistente";
@@ -65,6 +67,8 @@ export default async function NovaGaleriaPage() {
       */}
       <AssistenteNovaGaleria
         capitulosSugeridos={CAPITULOS_SUGERIDOS}
+        padraoDoEstudio={await padraoDoEstudioLido(tenantId)}
+        estilosDoEstudio={await estilosDoEstudio(tenantId)}
         slotLogo={
           <section className="rounded-xl border border-linha bg-carbon p-5">
             <LogoEstudio

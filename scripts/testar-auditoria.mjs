@@ -139,7 +139,7 @@ try {
     const vencidas = await galeriasVencidasNaLixeira();
     const alvo = vencidas.find((v) => v.id === galeriaId);
     if (!alvo) throw new Error("a galeria não entrou na limpeza");
-    await destruirGaleria(alvo.id, alvo.chaves);
+    await destruirGaleria(alvo.id);
 
     const { rows: existe } = await db.query("select 1 from galerias where id = $1", [galeriaId]);
     igual(existe.length, 0, "a galeria deveria ter sido destruída");
@@ -186,7 +186,11 @@ try {
   await etapa("lista em ordem, do mais recente para o mais antigo", async () => {
     const eventos = await eventosDoEstudio(tenantId);
     for (let i = 1; i < eventos.length; i++) {
-      if (eventos[i - 1].id < eventos[i].id) throw new Error("fora de ordem");
+      /* BigInt, não `<` direto: `id` é bigserial e o pg entrega bigint como
+       * STRING. A comparação de texto diz que "10" < "9", e este passo ficava
+       * verde por sorte enquanto os ids do banco não cruzavam uma casa decimal
+       * (9→10, 99→100) — aí quebrava sem ninguém ter mudado nada. */
+      if (BigInt(eventos[i - 1].id) < BigInt(eventos[i].id)) throw new Error("fora de ordem");
     }
     return `${eventos.length} evento(s)`;
   });
