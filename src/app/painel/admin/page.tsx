@@ -41,6 +41,36 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = "force-dynamic";
 
 /**
+ * ── O ÍNDICE DO TOPO (29/09/2026) ─────────────────────────────────────────
+ *
+ * Felipe, com um print da tabela de estúdios: "cadê a página dos sócios, que
+ * mostrava tudo?".
+ *
+ * Nada tinha sumido. A página inteira estava lá — os oito blocos ACIMA da
+ * tabela —, e ele estava rolado até o pé. Uma página de nove blocos que só se
+ * percorre rolando não mostra o que tem; ela esconde tudo menos onde o dedo
+ * parou.
+ *
+ * A ordem desta lista É a ordem da página, e os dois lados leem daqui: o índice
+ * mapeia a lista, e cada `<Bloco>` pega o seu `id` por posição. Um bloco novo
+ * sem entrada aqui não compila — e `testar-indice-do-admin.mjs` ainda confere,
+ * no HTML servido, que nenhum link cai no vazio e que nenhum bloco ficou de
+ * fora. Índice escrito à mão apodrece em silêncio: o link simplesmente não leva
+ * a lugar nenhum, e ninguém repara até precisar.
+ */
+const SECOES = [
+  { id: "dinheiro", nome: "Dinheiro" },
+  { id: "contas", nome: "Contas" },
+  { id: "espaco", nome: "Espaço" },
+  { id: "uso", nome: "Uso e entrega" },
+  { id: "trafego", nome: "Tráfego" },
+  { id: "meses", nome: "Doze meses" },
+  { id: "atencao", nome: "Precisa de atenção" },
+  { id: "estudios", nome: "Estúdios" },
+  { id: "eventos", nome: "Eventos" },
+] as const;
+
+/**
  * O PAINEL DE ADMINISTRAÇÃO.
  *
  * Uma página, três perguntas, nesta ordem — porque é a ordem em que elas
@@ -142,8 +172,26 @@ export default async function AdminPage() {
         </Link>
       </p>
 
+      {/* O índice. Âncoras de verdade (`<a href="#id">`), e não `<Link>`: o
+          destino é esta mesma página, e o roteador não tem nada a resolver. */}
+      <nav
+        aria-label="Seções desta página"
+        className="mt-5 flex flex-wrap gap-x-4 gap-y-2 border-y border-linha py-3"
+      >
+        {SECOES.map((s) => (
+          <a
+            key={s.id}
+            href={`#${s.id}`}
+            className="font-mono text-[11px] uppercase tracking-widest text-texto-faint transition hover:text-acento"
+          >
+            {s.nome}
+          </a>
+        ))}
+      </nav>
+
       {/* ── 1. DINHEIRO ───────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[0].id}
         titulo="Dinheiro"
         explicacao="Receita conta só quem está ativo. Custo conta todo mundo que ocupa disco, inclusive quem cancelou — o Backblaze cobra por byte guardado, não por situação."
       >
@@ -193,7 +241,7 @@ export default async function AdminPage() {
       </Bloco>
 
       {/* ── 2. CONTAS ─────────────────────────────────────────────────── */}
-      <Bloco titulo="Contas" explicacao="Quem existe hoje, e quem chegou agora.">
+      <Bloco id={SECOES[1].id} titulo="Contas" explicacao="Quem existe hoje, e quem chegou agora.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <Cartao rotulo="Estúdios" valor={r.estudios} nota={`+${r.novos30} em 30 dias`} />
           <Cartao rotulo="Pagando" valor={r.porStatus.ativo} tom="ok" />
@@ -223,6 +271,7 @@ export default async function AdminPage() {
 
       {/* ── 3. ESPAÇO ─────────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[2].id}
         titulo="Espaço"
         explicacao="O que está guardado agora, contra o que foi vendido. A quota de quem está em teste é o teto do período gratuito, não a do plano escolhido."
       >
@@ -251,6 +300,7 @@ export default async function AdminPage() {
 
       {/* ── 4. USO E ENTREGA ──────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[3].id}
         titulo="Uso e entrega"
         explicacao="Acessos dos últimos 30 dias. É a prova de que a entrega chegou ao cliente final — e de que o produto está sendo usado, não só contratado."
       >
@@ -267,6 +317,7 @@ export default async function AdminPage() {
 
       {/* ── 4b. TRÁFEGO E CUSTO DA ENTREGA ────────────────────────────── */}
       <Bloco
+        id={SECOES[4].id}
         titulo="Tráfego e custo da entrega"
         explicacao="O mês corrente. É a tela que responde se o desenho da entrega está custando o previsto — e o que fazer quando não estiver. Download avulso é estimativa pelo tamanho médio de uma mídia."
       >
@@ -361,6 +412,7 @@ export default async function AdminPage() {
 
       {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[5].id}
         titulo="Doze meses"
         explicacao="Cadastros e envio, mês a mês. A escala de cada série é o maior mês dela — as duas não se comparam entre si."
       >
@@ -405,6 +457,7 @@ export default async function AdminPage() {
 
       {/* ── 6. QUEM PRECISA DE ATENÇÃO ────────────────────────────────── */}
       <Bloco
+        id={SECOES[6].id}
         titulo="Precisa de atenção"
         explicacao="Cada linha é uma conversa que vale a pena ter esta semana."
       >
@@ -459,6 +512,7 @@ export default async function AdminPage() {
 
       {/* ── 7. TODOS OS ESTÚDIOS ──────────────────────────────────────── */}
       <Bloco
+        id={SECOES[7].id}
         titulo={`Estúdios (${estudios.length})`}
         explicacao="Clique num nome para a ficha completa."
       >
@@ -704,6 +758,7 @@ export default async function AdminPage() {
 
       {/* ── 8. AUDITORIA ──────────────────────────────────────────────── */}
       <Bloco
+        id={SECOES[8].id}
         titulo="Últimos eventos"
         explicacao="Os oito mais recentes. O log inteiro, com filtro por ação, estúdio e período, fica no histórico."
       >
