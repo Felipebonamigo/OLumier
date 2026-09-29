@@ -130,30 +130,52 @@ jobs:
       # que eles publicam em dl.min.io, que não passa por registro nenhum. Se
       # as duas falharem, o passo morre alto — nunca segue sem armazém, porque
       # aí treze suítes de arquivo passariam a pular em silêncio.
+      # ── DE ONDE VEM O MINIO, E POR QUE ISTO JÁ CUSTOU TRÊS RODADAS ────────
+      #
+      # O armazém é a única peça do CI que vem de fora do npm, e o fornecedor
+      # dela mudou de ideia três vezes em um mês:
+      #
+      #   1. Docker Hub (`minio/minio`) — fechado: o manifesto passou a
+      #      responder 401 mesmo com token anônimo emitido;
+      #   2. `quay.io/minio/minio:latest` — a tag `latest` deixou de existir;
+      #   3. o binário de `dl.min.io` — responde **410 Gone**, que é a maneira
+      #      de dizer "não volta".
+      #
+      # Por isso agora é uma LISTA de candidatos, cada um com a tag PINADA (foi
+      # uma tag móvel que sumiu, não a imagem), e o erro de cada tentativa vai
+      # para o log. Da última vez o `2>/dev/null` engoliu o motivo e a rodada
+      # só disse "quay.io indisponível" — diagnóstico nenhum, uma rodada a
+      # menos. Falhar é aceitável; falhar sem dizer por quê, não.
       - name: Subir o armazém (MinIO, que fala S3 como o R2)
         run: |
           set -euo pipefail
 
-          subiu=""
-          if docker pull -q quay.io/minio/minio:latest 2>/dev/null; then
-            docker run -d --name minio -p 9000:9000 \
-              -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
-              quay.io/minio/minio server /data
-            subiu="quay.io"
-          else
-            echo "quay.io indisponível; caindo para o binário de dl.min.io"
-            curl -fsSL -o /tmp/minio https://dl.min.io/server/minio/release/linux-amd64/minio
-            chmod +x /tmp/minio
-            mkdir -p /tmp/minio-dados
-            MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
-              /tmp/minio server /tmp/minio-dados --address 127.0.0.1:9000 \
-              > /tmp/minio.log 2>&1 &
-            subiu="binário"
-          fi
-          echo "armazém: $subiu"
+          CANDIDATOS="
+            quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+            quay.io/minio/minio:latest
+            docker.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+            docker.io/minio/minio:latest
+          "
 
-          # Espera responder antes de criar o bucket: os dois caminhos voltam
-          # na hora e o servidor leva alguns segundos.
+          imagem=""
+          for c in $CANDIDATOS; do
+            echo "--- tentando $c"
+            if docker pull -q "$c"; then imagem="$c"; break; fi
+          done
+
+          if [ -z "$imagem" ]; then
+            echo "::error::nenhuma fonte do MinIO respondeu — as tentativas e os erros estão acima."
+            echo "::error::se todas as imagens sumiram de vez, troque o armazém do CI (qualquer servidor S3 serve: o app fala com ele por R2_ENDPOINT)."
+            exit 1
+          fi
+          echo "armazém: $imagem"
+
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            "$imagem" server /data
+
+          # Espera responder antes de criar o bucket: o `docker run` volta na
+          # hora e o servidor leva alguns segundos.
           pronto=""
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:9000/minio/health/live >/dev/null; then
@@ -162,9 +184,8 @@ jobs:
             sleep 2
           done
           if [ -z "$pronto" ]; then
-            echo "::error::o armazém não respondeu em 60s (fonte: $subiu)"
-            tail -40 /tmp/minio.log 2>/dev/null || true
-            docker logs minio 2>/dev/null | tail -40 || true
+            echo "::error::o armazém não respondeu em 60s (imagem: $imagem)"
+            docker logs minio 2>&1 | tail -40 || true
             exit 1
           fi
           # A AWS CLI já vem no runner. Endereço explícito e caminho no path:
