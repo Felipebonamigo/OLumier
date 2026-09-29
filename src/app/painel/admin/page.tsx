@@ -19,6 +19,8 @@ import {
   mensalEquivalenteCentavos,
   custoMensalDoEstudioCentavos,
   custoDasCortesiasCentavos,
+  totaisDosEstudios,
+  SITUACOES,
 } from "@/lib/metricas-admin";
 import { planoPorId, formatarReais, cicloDe, GB } from "@/config/planos";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
@@ -96,6 +98,10 @@ export default async function AdminPage() {
 
   const vencendo = trialsVencendo(estudios, 7, agora);
   const vencidos = trialsVencidos(estudios, agora);
+  /* A linha de total da tabela lá embaixo. Calculada aqui, ao lado do resumo
+     do topo, porque as duas leem a MESMA lista — é o que garante que o total
+     de "Paga" e a "Receita/mês" do primeiro bloco não divirjam. */
+  const totais = totaisDosEstudios(estudios);
   const semDocumento = estudios.filter(
     (e) => !e.cpf_cnpj && !e.tem_assinatura && e.status !== "cancelado",
   );
@@ -473,7 +479,25 @@ export default async function AdminPage() {
                     "Custa por mês",
                     "Espaço",
                     "Conteúdo",
-                    "Entrega",
+                    /*
+                      ── DOIS NOMES QUE FALTAVAM (29/09/2026) ──────────────
+
+                      Felipe: "último acesso, última alteração também".
+
+                      O último acesso do CLIENTE já estava nesta tabela — mas
+                      debaixo de um cabeçalho chamado "Entrega", que não diz que
+                      ali mora uma data. Quem procura "quando isto foi aberto
+                      pela última vez" não encontra uma coluna que se chama
+                      outra coisa. Agora a coluna tem o nome do que ela guarda.
+
+                      A última alteração é nova, e é sobre o ESTÚDIO: o mais
+                      recente entre editar galeria, subir foto e mexer na conta
+                      (ver `ultima_alteracao` em `lib/admin.ts`). As duas juntas
+                      respondem a pergunta que a tabela existe para responder —
+                      esta conta está viva dos dois lados?
+                    */
+                    "Último acesso",
+                    "Última alteração",
                     "Entrou",
                   ].map((h) => (
                     <th
@@ -590,16 +614,89 @@ export default async function AdminPage() {
                           {e.acessos_30d} acesso{e.acessos_30d === 1 ? "" : "s"} em 30d
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs">
-                        {data(e.criado_em)}
+                      <td className="px-4 py-3 text-xs tabular-nums">
+                        {e.ultima_alteracao ? (
+                          data(e.ultima_alteracao)
+                        ) : (
+                          <span className="text-texto-faint">—</span>
+                        )}
                         <span className="block text-[11px] text-texto-faint">
                           {e.ultimo_envio ? `enviou ${data(e.ultimo_envio)}` : "nunca enviou"}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-xs">{data(e.criado_em)}</td>
                     </tr>
                   );
                 })}
               </tbody>
+              {/*
+                ── A LINHA DE TOTAL ────────────────────────────────────────
+
+                Felipe: "tenha uma linha com o 'total' de cada coluna".
+
+                Em `<tfoot>` e não na última linha do `<tbody>`: é o elemento
+                que existe para isto, o leitor de tela o anuncia como rodapé da
+                tabela, e ele não entra em nenhuma ordenação futura do corpo.
+
+                A aritmética mora em `totaisDosEstudios` (`lib/metricas-admin.ts`),
+                e não aqui, porque três colunas não somam do jeito óbvio — Paga
+                conta só quem está ativo, Custa conta todo mundo, e a quota de
+                quem é sem limite não pode entrar no total. `testar-totais-do-admin.mjs`
+                prende as três, com o estúdio sem limite e o cancelado com disco
+                cheio na mesma tabela.
+              */}
+              <tfoot>
+                <tr className="border-t-2 border-linha bg-carbon text-xs font-medium tabular-nums">
+                  <td className="px-4 py-3">
+                    {totais.estudios} estúdio{totais.estudios === 1 ? "" : "s"}
+                  </td>
+                  <td className="px-4 py-3 text-[11px] font-normal text-texto-faint">
+                    {SITUACOES.filter((s) => totais.porStatus[s] > 0)
+                      .map((s) => `${totais.porStatus[s]} ${s}`)
+                      .join(" · ") || "—"}
+                  </td>
+                  <td className="px-4 py-3 text-texto-faint">—</td>
+                  <td className="px-4 py-3 text-ok">{formatarReais(totais.pagaCentavos)}</td>
+                  <td className="px-4 py-3">{formatarReais(totais.custaCentavos)}</td>
+                  <td className="px-4 py-3 font-mono">
+                    {formatarBytes(totais.usadoBytes)}
+                    <span className="font-sans font-normal text-texto-faint">
+                      {" / "}
+                      {formatarBytes(totais.quotaBytes)}
+                    </span>
+                    {totais.semLimite > 0 && (
+                      <span className="mt-0.5 block font-sans text-[11px] font-normal text-texto-faint">
+                        + {totais.semLimite} sem limite
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {totais.galerias} galeria{totais.galerias === 1 ? "" : "s"}
+                    <span className="block text-[11px] font-normal text-texto-faint">
+                      {totais.publicadas} no ar · {totais.fotos.toLocaleString("pt-BR")} fotos ·{" "}
+                      {totais.videos} vídeos
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {totais.ultimoAcesso ? (
+                      data(totais.ultimoAcesso)
+                    ) : (
+                      <span className="font-normal text-texto-faint">nunca</span>
+                    )}
+                    <span className="block text-[11px] font-normal text-texto-faint">
+                      {totais.acessos30d} acesso{totais.acessos30d === 1 ? "" : "s"} em 30d
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {totais.ultimaAlteracao ? (
+                      data(totais.ultimaAlteracao)
+                    ) : (
+                      <span className="font-normal text-texto-faint">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-texto-faint">—</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
