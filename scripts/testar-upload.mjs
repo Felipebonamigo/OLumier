@@ -253,6 +253,56 @@ await etapa("remove o arquivo de teste", async () => {
 });
 
 /*
+ * ── O CAMINHO ALTERNATIVO (30/09/2026) ────────────────────────────────────
+ *
+ * A Alícia ficou com "0 de 38": o PUT do original para o B2 caía sempre na
+ * máquina dela. Depois de duas falhas no armazém, a fila solta a mídia e pede
+ * de novo com `alternativo`, e o original nasce no R2. O que isto prende é o
+ * lado do servidor: a linha diz `r2`, a URL é do R2, a confirmação lê de lá —
+ * e sem o pedido, o original continua no armazém principal.
+ */
+await etapa("sem pedir, o original vai para o armazém principal", async () => {
+  const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie },
+    body: JSON.stringify({ nome: "principal.png", mime: "image/png", bytes: png.length }),
+  });
+  const p = await r.json();
+  if (!r.ok) throw new Error(p.erro ?? `HTTP ${r.status}`);
+  const { rows } = await db.query("select armazem from medias where id = $1", [p.mediaId]);
+  await fetch(`${BASE}/api/medias/${p.mediaId}/confirmar`, { method: "DELETE", headers: { cookie } });
+  const esperado = process.env.ARQUIVOS_ENDPOINT ? "b2" : "r2";
+  if (rows[0].armazem !== esperado) throw new Error(`armazem ${rows[0].armazem}, esperava ${esperado}`);
+  return esperado;
+});
+
+await etapa("pedindo o alternativo, o original nasce no R2 e confirma de lá", async () => {
+  const r = await fetch(`${BASE}/api/galerias/${galeria.id}/upload`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", cookie },
+    body: JSON.stringify({ nome: "alternativo.png", mime: "image/png", bytes: png.length, alternativo: true }),
+  });
+  const p = await r.json();
+  if (!r.ok) throw new Error(p.erro ?? `HTTP ${r.status}`);
+  try {
+    const { rows } = await db.query("select armazem from medias where id = $1", [p.mediaId]);
+    if (rows[0].armazem !== "r2") throw new Error(`armazem ${rows[0].armazem}`);
+    if (process.env.ARQUIVOS_BUCKET && p.url.includes(process.env.ARQUIVOS_BUCKET)) {
+      throw new Error("a URL de envio aponta para o bucket do B2");
+    }
+    const put = await fetch(p.url, { method: "PUT", headers: { "Content-Type": "image/png" }, body: png });
+    if (!put.ok) throw new Error(`PUT HTTP ${put.status}`);
+    const c = await fetch(`${BASE}/api/medias/${p.mediaId}/confirmar`, { method: "POST", headers: { cookie } });
+    const cj = await c.json();
+    if (!c.ok) throw new Error(cj.erro ?? `confirmar HTTP ${c.status}`);
+    if (cj.bytes !== png.length) throw new Error(`bytes ${cj.bytes} ≠ ${png.length}`);
+    return "armazem r2 · confirmado";
+  } finally {
+    await fetch(`${BASE}/api/medias/${p.mediaId}/confirmar`, { method: "DELETE", headers: { cookie } });
+  }
+});
+
+/*
  * ── APAGAR TUDO DE UMA VEZ (05/09/2026) ───────────────────────────────────
  *
  * Juan: "botei as fotos aqui e fui pro design, daí parou de subir. Mas como

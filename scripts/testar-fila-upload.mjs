@@ -288,6 +288,49 @@ await etapa("sem rede nenhuma, a fila espera a rede voltar sem gastar tentativa"
 });
 
 /*
+ * ── O MOTIVO NA TELA (30/09/2026) ─────────────────────────────────────────
+ *
+ * A segunda foto da Alícia: "0 de 38" e três arquivos em "tentando de novo
+ * (4)…", sem dizer por quê. Duas coisas escondiam o motivo: a fila não
+ * repassava o erro da tentativa, e o erro marcado `definitivo` (sem espaço,
+ * assinatura vencida) era repetido do mesmo jeito — o `definitivo` era
+ * gravado e ninguém lia.
+ */
+await etapa("erro definitivo sai na primeira, sem gastar as outras tentativas", async () => {
+  let tentativas = 0;
+  try {
+    await mod.comRetentativa(async () => {
+      tentativas++;
+      throw mod.erroDefinitivo("Sem espaço no plano.");
+    }, undefined, RAPIDO);
+    throw new Error("deveria ter falhado");
+  } catch (e) {
+    if (e.message !== "Sem espaço no plano.") throw e;
+  }
+  if (tentativas !== 1) throw new Error(`tentou ${tentativas} vezes`);
+  return "1 tentativa";
+});
+
+await etapa("quem mostra o 'tentando de novo' recebe o motivo da falha", async () => {
+  const motivos = [];
+  let tentativas = 0;
+  await mod.comRetentativa(
+    async () => {
+      tentativas++;
+      if (tentativas === 1) throw new Error("conexão interrompida");
+      if (tentativas === 2) throw new Error("o armazenamento recusou (HTTP 403 · AccessDenied)");
+      return "ok";
+    },
+    (_, __, erro) => motivos.push(erro.message),
+    RAPIDO,
+  );
+  if (motivos.join(" | ") !== "conexão interrompida | o armazenamento recusou (HTTP 403 · AccessDenied)") {
+    throw new Error(motivos.join(" | "));
+  }
+  return motivos.join(" → ");
+});
+
+/*
  * ── PAUSAR, PARAR E NOMES REPETIDOS (05/09/2026) ──────────────────────────
  *
  * Três pedidos do Juan na manhã de 05/09, todos do mesmo episódio: ele soltou

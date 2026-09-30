@@ -19,6 +19,7 @@ import {
   PARALELOS,
   type ArquivoComCaminho,
   comRetentativa,
+  erroDefinitivo,
   emParaleloDeFila,
   manterAcordado,
   ordenarNaturalPorCaminho,
@@ -77,6 +78,10 @@ export interface ItemFila {
   tentativa: number;
   /** Esperando a rede voltar — a tentativa não está sendo gasta. */
   semRede?: boolean;
+  /** Por que a última tentativa falhou — aparece junto do "tentando de novo". */
+  motivo?: string;
+  /** O original foi pelo caminho alternativo (R2), porque o B2 não aceitou. */
+  alternativo?: boolean;
   erro?: string;
   /** Quantos rostos a busca por rosto guardou desta foto. */
   rostos?: number;
@@ -149,11 +154,16 @@ function enviarComProgresso(
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) aoProgredir(Math.round((e.loaded / e.total) * 100));
     });
-    xhr.addEventListener("load", () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`falha no envio (HTTP ${xhr.status})`)),
-    );
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      /* O armazém responde em XML com um código ("AccessDenied",
+         "SignatureDoesNotMatch", teto de armazenamento…). É esse código que
+         diz a nós o que houve — "HTTP 403" sozinho não diz. */
+      const codigo = /<Code>([^<]{1,80})<\/Code>/.exec(xhr.responseText ?? "")?.[1];
+      reject(new Error(`o armazenamento recusou (HTTP ${xhr.status}${codigo ? ` · ${codigo}` : ""})`));
+    });
+    /* Sem resposta nenhuma: a conexão caiu, ou a resposta veio sem permissão
+       de CORS e o navegador a escondeu. Daqui não dá para saber qual. */
     xhr.addEventListener("error", () => reject(new Error("conexão interrompida")));
     xhr.addEventListener("abort", () => reject(new Error("envio cancelado")));
     xhr.send(arquivo);
@@ -375,6 +385,16 @@ export function ProvedorDeEnvio({
       /* O tempo do envio do ORIGINAL na tentativa que deu certo — a parte que
          depende da rede. Ver `medidas`. */
       let envioMs: number | null = null;
+      /*
+       * O CAMINHO ALTERNATIVO (30/09/2026). A Alícia ficou com "0 de 38": o
+       * PUT do original para o B2 caía SEMPRE na máquina dela, com 675 fotos
+       * já enviadas antes. Depois de duas falhas no armazém, a mídia pendente é
+       * solta e o arquivo pede outra vaga, agora no R2 (ver a rota de upload).
+       * Uma vez só por arquivo: se o R2 também falhar, é a rede dela, e a
+       * retentativa segue como sempre.
+       */
+      let alternativo = false;
+      let falhasNoArmazem = 0;
 
       try {
         /* Fora da retentativa: um ZIP que não abre este arquivo não abre na
@@ -433,21 +453,21 @@ export function ProvedorDeEnvio({
                   /* E o lote é o que impede a base da posição de subir no meio
                      do envio. Ver `criarMediaPendente` e a migração 038. */
                   lote: tarefa.lote ?? undefined,
+                  alternativo: alternativo || undefined,
                 }),
               });
-              const corpo = await preparo.json();
+              const corpo = await preparo.json().catch(() => ({}));
               if (!preparo.ok) {
-                // Sem espaço, tipo recusado ou grande demais: insistir não resolve.
-                // Nem e-mail por confirmar (403): o que resolve é o clique no link.
-                if (
+                /* Sem espaço (507), tipo recusado, grande demais, e-mail por
+                   confirmar, assinatura vencida, galeria no cofre, sessão
+                   expirada: insistir não resolve, e a pessoa precisa ler o
+                   motivo AGORA, não depois de dois minutos de "tentando de
+                   novo". Só 408 e 429 (e o 5xx) valem outra tentativa. */
+                const definitivo =
                   preparo.status === 507 ||
-                  preparo.status === 415 ||
-                  preparo.status === 413 ||
-                  preparo.status === 403
-                ) {
-                  throw Object.assign(new Error(corpo.erro), { definitivo: true });
-                }
-                throw new Error(corpo.erro ?? "não foi possível preparar o envio");
+                  (preparo.status >= 400 && preparo.status < 500 && preparo.status !== 408 && preparo.status !== 429);
+                const mensagem = corpo.erro ?? `não foi possível preparar o envio (HTTP ${preparo.status})`;
+                throw definitivo ? erroDefinitivo(mensagem) : new Error(mensagem);
               }
               preparado = corpo;
             }
@@ -485,12 +505,25 @@ export function ProvedorDeEnvio({
                 atualizar(tarefa.item.id, { progresso: pct }),
               );
             } else {
-              await enviarComProgresso(
-                dados.url,
-                arquivo,
-                (pct) => atualizar(tarefa.item.id, { progresso: pct }),
-                dados.mime,
-              );
+              try {
+                await enviarComProgresso(
+                  dados.url,
+                  arquivo,
+                  (pct) => atualizar(tarefa.item.id, { progresso: pct }),
+                  dados.mime,
+                );
+              } catch (e) {
+                falhasNoArmazem++;
+                if (!alternativo && falhasNoArmazem >= 2) {
+                  /* Solta a vaga no armazém principal e a próxima tentativa
+                     pede outra no alternativo. */
+                  await fetch(`/api/medias/${dados.mediaId}/confirmar`, { method: "DELETE" }).catch(() => {});
+                  preparado = null;
+                  alternativo = true;
+                  atualizar(tarefa.item.id, { alternativo: true });
+                }
+                throw e;
+              }
             }
             envioMs = performance.now() - inicioDoEnvio;
             await derivadasSubindo;
@@ -525,11 +558,17 @@ export function ProvedorDeEnvio({
               }
             }
           },
-          (tentativa, semRede) =>
-            atualizar(tarefa.item.id, { tentativa, semRede, situacao: "esperando", progresso: 0 }),
+          (tentativa, semRede, erro) =>
+            atualizar(tarefa.item.id, {
+              tentativa,
+              semRede,
+              situacao: "esperando",
+              progresso: 0,
+              motivo: erro instanceof Error ? erro.message : undefined,
+            }),
         );
 
-        atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false });
+        atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false, motivo: undefined });
         anotar({ galeriaId: tarefa.galeriaId, bytes: arquivo.size, ms: envioMs, ok: true, erro: null });
       } catch (e) {
         /*
@@ -554,7 +593,9 @@ export function ProvedorDeEnvio({
           bytes: arquivo.size,
           ms: null,
           ok: false,
-          erro: e instanceof Error ? e.message : "falhou",
+          /* "também pelo R2" separa, no painel, a rede de quem envia (os dois
+             caminhos falharam) de um problema só do B2. */
+          erro: `${e instanceof Error ? e.message : "falhou"}${alternativo ? " (também pelo R2)" : ""}`,
         });
       }
     },
@@ -736,7 +777,7 @@ export function ProvedorDeEnvio({
         setFila((f) =>
           f.map((i) =>
             ids.has(i.id)
-              ? { ...i, situacao: "esperando", progresso: 0, tentativa: 0, semRede: false, erro: undefined }
+              ? { ...i, situacao: "esperando", progresso: 0, tentativa: 0, semRede: false, motivo: undefined, alternativo: false, erro: undefined }
               : i,
           ),
         );
@@ -931,12 +972,18 @@ function BarraDeEnvio({
                       </span>
                     ) : item.semRede ? (
                       <span className="text-alerta">sem internet — continua quando voltar</span>
-                    ) : item.tentativa > 0 ? (
-                      <span className="text-alerta">tentando de novo ({item.tentativa})…</span>
+                    ) : item.tentativa > 0 && item.situacao === "esperando" ? (
+                      <span className="text-alerta">
+                        tentando de novo ({item.tentativa})…
+                        {item.motivo && ` ${item.motivo}`}
+                        {item.alternativo && " · agora por outro caminho"}
+                      </span>
                     ) : item.situacao === "preparando" ? (
                       "preparando…"
                     ) : (
-                      `${item.progresso}% · ${formatarBytesCurto(item.bytes)}`
+                      `${item.progresso}% · ${formatarBytesCurto(item.bytes)}${
+                        item.tentativa > 0 ? ` · tentativa ${item.tentativa + 1}` : ""
+                      }${item.alternativo ? " · outro caminho" : ""}`
                     )}
                   </span>
                 </div>

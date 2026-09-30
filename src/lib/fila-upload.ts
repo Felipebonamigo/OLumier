@@ -29,6 +29,10 @@ export const PARALELOS = 3;
  *
  * Crescente de propósito: quando a internet oscila, insistir no mesmo instante
  * só piora. E sem conexão nenhuma a espera nem conta (ver `comRetentativa`).
+ *
+ * Paciência não bastou: horas depois ela estava em "0 de 38", com o envio ao
+ * B2 caindo em TODA tentativa — não era oscilação. Daí o caminho alternativo
+ * pelo R2 (`envio-em-curso.tsx`) e o motivo da falha na tela.
  */
 export const ESPERAS_ENTRE_TENTATIVAS = [2000, 5000, 15000, 30000, 60000] as const;
 /** Tentativas por arquivo antes de desistir. */
@@ -52,11 +56,19 @@ const aguardarRede = () =>
  * fila andando, não uma lista vermelha. `onLine` verdadeiro não garante
  * internet (só que há uma rede), então ali vale a espera crescente.
  *
+ * Erro marcado `definitivo` (sem espaço, tipo recusado, assinatura vencida)
+ * sai na hora: insistir não muda a resposta, e dois minutos de "tentando de
+ * novo" escondiam o motivo de quem estava olhando a tela.
+ *
+ * `aoTentarDeNovo` recebe o erro da tentativa que falhou, para a tela dizer
+ * POR QUE está tentando de novo — "tentando de novo (4)…" sozinho, na foto da
+ * Alícia, não dizia nada a ela nem a nós.
+ *
  * `esperas` existe para o teste não esperar dois minutos de verdade.
  */
 export async function comRetentativa<T>(
   tarefa: () => Promise<T>,
-  aoTentarDeNovo?: (tentativa: number, semRede: boolean) => void,
+  aoTentarDeNovo?: (tentativa: number, semRede: boolean, erro: unknown) => void,
   esperas: readonly number[] = ESPERAS_ENTRE_TENTATIVAS,
 ): Promise<T> {
   let ultimoErro: unknown;
@@ -66,21 +78,31 @@ export async function comRetentativa<T>(
       return await tarefa();
     } catch (e) {
       ultimoErro = e;
+      if (ehDefinitivo(e)) break;
       if (tentativa < tentativas) {
         if (semRede()) {
-          aoTentarDeNovo?.(tentativa, true);
+          aoTentarDeNovo?.(tentativa, true, e);
           await aguardarRede();
           /* A queda de rede não conta como tentativa: quem ficou sem Wi-Fi
              por dez minutos não pode chegar com o arquivo já condenado. */
           tentativa--;
           continue;
         }
-        aoTentarDeNovo?.(tentativa, false);
+        aoTentarDeNovo?.(tentativa, false, e);
         await espera(esperas[tentativa - 1]);
       }
     }
   }
   throw ultimoErro;
+}
+
+/** Erro que tentar de novo não resolve. Ver `comRetentativa`. */
+export function erroDefinitivo(mensagem: string): Error {
+  return Object.assign(new Error(mensagem), { definitivo: true });
+}
+
+function ehDefinitivo(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { definitivo?: unknown }).definitivo === true;
 }
 
 /**
