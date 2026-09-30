@@ -8,7 +8,7 @@
  * Duas travas, e as duas precisam abrir:
  *
  *   1. a CONTA foi liberada — o botão "Permitir Pixieset" na ficha do estúdio,
- *      no admin, que grava `tenants.pixieset_liberado_em` (migração 051);
+ *      no admin, que grava `tenants.pixieset_liberado_em` (migração 052);
  *
  *   2. o CONECTOR existe. Hoje não existe (ver docs/importacao.md): liberar
  *      uma conta agora só troca o recado da tela, e o formulário continua

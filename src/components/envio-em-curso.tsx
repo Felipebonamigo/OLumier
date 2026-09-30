@@ -374,6 +374,8 @@ export function ProvedorDeEnvio({
                   tiradaEm: tiradaEm?.toISOString(),
                   largura: derivadas?.largura,
                   altura: derivadas?.altura,
+                  /* Só vídeo: o cartão do episódio no formato Stream. */
+                  duracao: derivadas?.duracao,
                   /* A pasta manda: o capítulo lido do disco vence o seletor
                    * da tela, que é o palpite para arquivos soltos. */
                   secaoId: tarefa.secaoId,

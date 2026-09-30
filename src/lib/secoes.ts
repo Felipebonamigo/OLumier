@@ -25,6 +25,8 @@ export interface Secao {
   slug: string;
   ordem: number;
   total?: number;
+  /** A foto de frente da pasta (migração 052). Null = a primeira do capítulo. */
+  capa_media_id?: string | null;
 }
 
 /**
@@ -55,6 +57,33 @@ export async function listarSecoes(galeriaId: string) {
       order by s.ordem, s.criado_em`,
     [galeriaId],
   );
+}
+
+/**
+ * A capa da pasta: a foto que o fotógrafo apontou vira a frente do capítulo
+ * dela (migração 052).
+ *
+ * O capítulo sai DA FOTO, e não do pedido: é a foto que sabe onde está, e
+ * assim não há como apontar a foto da cerimônia para a pasta da festa. Foto
+ * solta (sem capítulo) não tem pasta para ser capa — devolve false.
+ *
+ * `tenant_id` na condição é a tranca de sempre: foto de outro estúdio não
+ * casa, e a resposta é a mesma de uma foto que não existe.
+ */
+export async function definirCapaDaPasta(
+  galeriaId: string,
+  tenantId: string,
+  mediaId: string,
+): Promise<boolean> {
+  const linhas = await consultar(
+    `update secoes s set capa_media_id = m.id
+       from medias m
+      where m.id = $1 and m.galeria_id = $2 and m.tenant_id = $3
+        and s.id = m.secao_id and s.galeria_id = m.galeria_id
+      returning s.id`,
+    [mediaId, galeriaId, tenantId],
+  );
+  return linhas.length > 0;
 }
 
 /** Confere que a galeria é do tenant antes de qualquer escrita em seção. */

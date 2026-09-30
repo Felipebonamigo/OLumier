@@ -15,7 +15,7 @@ export interface DadosCapa {
   estudio: string;
   /** Logo do estúdio; quando existe, substitui o nome em texto. */
   logoUrl?: string | null;
-  /** A medida do arquivo da logo (migração 051) — a proporção que a área usa. */
+  /** A medida do arquivo da logo (migração 052) — a proporção que a área usa. */
   logoLargura?: number | null;
   logoAltura?: number | null;
   urlImagem: string | null;

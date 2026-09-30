@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * O botão "Permitir Pixieset" do admin (migração 051). Uso:
+ * O botão "Permitir Pixieset" do admin (migração 052). Uso:
  *   node --env-file=.env.local --conditions=react-server --experimental-strip-types \
  *     --import ./scripts/registrar-ts.mjs scripts/testar-pixieset-liberado.mjs
  *

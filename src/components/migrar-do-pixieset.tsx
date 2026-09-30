@@ -32,7 +32,7 @@ import { CONECTOR_PIXIESET_PRONTO } from "@/config/pixieset";
  *
  * Felipe: "deixa desabilitado o botão de logar no pixieset por enquanto, para
  * todos, só vamos habilitar para os usuários que eu apontar". Quem libera é o
- * admin, no botão "Permitir Pixieset" da ficha do estúdio (migração 051); este
+ * admin, no botão "Permitir Pixieset" da ficha do estúdio (migração 052); este
  * componente só recebe se ESTA conta foi liberada.
  *
  * O formulário só acende com as duas travas abertas — conta liberada E

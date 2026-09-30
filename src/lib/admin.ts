@@ -39,7 +39,7 @@ export interface LinhaAdmin {
   ultimo_pagamento_em: Date | null;
   pago_ate: Date | null;
   senha_alterada_em: Date | null;
-  /** Liberado para o login do Pixieset (migração 051). */
+  /** Liberado para o login do Pixieset (migração 052). */
   pixieset_liberado_em: Date | null;
   quota_bytes: string;
   bytes_no_ar: string;

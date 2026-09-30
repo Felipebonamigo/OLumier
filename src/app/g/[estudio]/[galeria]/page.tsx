@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
+import Link from "next/link";
 import { marca } from "@/config/marca";
 import { CAMINHO_PUBLICO } from "@/proxy";
 import { COOKIE_PREVIA } from "@/config/previa";
@@ -43,6 +44,16 @@ import {
 import { FAMILIA_PROPRIA } from "@/lib/fonte-estudio";
 import { lerSite } from "@/lib/site-estudio";
 import { modoPeloUserAgent } from "@/lib/modo-de-entrega";
+import { enderecoNaGaleria } from "@/lib/endereco-na-galeria";
+import {
+  telaDaEntrega,
+  voltaDaGaleria,
+  tituloDoEpisodio,
+  type ConteudoParaFormato,
+} from "@/lib/formato-da-entrega";
+import { GaleriaPastas, VoltarAsPastas, type PastaDaEntrega } from "@/components/galeria-pastas";
+import { GaleriaStream, type FileiraDoStream } from "@/components/galeria-stream";
+import { AncoraDeChegada } from "@/components/ancora-de-chegada";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +83,9 @@ type Props = {
     capa?: string;
     cap?: string;
     fotos?: string;
+    /* `ver=galeria`: o "Ver as fotos" da entrega em stream. Ver
+       `lib/formato-da-entrega.ts`. */
+    ver?: string;
   }>;
 };
 
@@ -124,7 +138,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function GaleriaPublicaPage({ params, searchParams }: Props) {
   const { estudio, galeria: galeriaSlug } = await params;
-  const { previa, amostra, ap, cap, fotos } = await searchParams;
+  const { previa, amostra, ap, cap, fotos, ver } = await searchParams;
 
   /*
    * PRÉVIA DO DONO.
@@ -257,6 +271,51 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const todasAsMedias = await listarMediasPublicas(galeria.id);
 
   /*
+   * A APARÊNCIA QUE AINDA NÃO FOI PUBLICADA.
+   *
+   * O editor gravava a cada clique, e o motivo era esta linha: a prévia desenha
+   * a partir do BANCO, então mostrar a escolha exigia gravá-la antes. Quem
+   * estava experimentando publicava, sem querer, cada passo do caminho.
+   *
+   * Com `?ap=`, a escolha pendente viaja na URL e é desenhada sem tocar no
+   * banco — publicar volta a ser um ato. `lerAparencia` valida campo a campo,
+   * então JSON torto vira o padrão em vez de quebrar a página.
+   *
+   * SÓ PARA O DONO, e isso não é detalhe: sem a trava, qualquer pessoa com o
+   * link montaria a galeria alheia com outra aparência e mandaria o print para
+   * o casal, como se fosse o trabalho do fotógrafo.
+   */
+  let aparencia = lerAparencia(galeria.aparencia);
+
+  /*
+   * ── A PRÉVIA EM TELA CHEIA MOSTRA O RASCUNHO (16/09/2026) ───────────────
+   *
+   * Felipe: "quando trocar as variações da grade, ele não está salvando
+   * automaticamente. Eu clico em 'visualizar a galeria' e ele mostra o modo
+   * antigo, não o último selecionado."
+   *
+   * O rascunho ESTAVA gravando — em `aparencia_rascunho`, como o editor
+   * promete. O que faltava era esta linha: `?previa=1` lia `aparencia`, a
+   * publicada, e o botão devolvia fielmente a galeria de ontem. Da caixa do
+   * editor a escolha chegava pela URL (`?ap=`), então o defeito aparecia só no
+   * botão que abre em tela cheia — o lugar em que ele foi conferir.
+   *
+   * O rascunho vale MENOS que o `?ap=`, e a ordem importa: quem está com o
+   * editor aberto tem na tela uma escolha mais nova que a gravada, e é ela que
+   * a prévia deve desenhar.
+   */
+  if (ehDono && galeria.aparencia_rascunho) {
+    aparencia = lerAparencia(galeria.aparencia_rascunho);
+  }
+  if (ehDono && ap) {
+    try {
+      aparencia = lerAparencia(JSON.parse(ap));
+    } catch {
+      /* Parâmetro ilegível não derruba a prévia: vale o que está gravado. */
+    }
+  }
+
+  /*
    * ── A AMOSTRA DA PRÉVIA (31/08/2026) ─────────────────────────────────────
    *
    * A prévia do editor de aparência é esta mesma página num iframe de 460 px, e
@@ -311,6 +370,34 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * não paga nada por isto.
    */
   const capSecaoId = cap ? await secaoPeloApelido(galeria.id, cap) : undefined;
+
+  /*
+   * ── QUE TELA ESTA ENTREGA MOSTRA (30/09/2026) ────────────────────────────
+   *
+   * Galeria, pastas ou stream — o formato que o fotógrafo escolheu, corrigido
+   * pelo que a galeria de fato tem. A regra inteira mora em
+   * `lib/formato-da-entrega.ts`.
+   *
+   * Decide ANTES de assinar as miniaturas: as pastas e o stream não desenham a
+   * grade, e assinar 600 fotos para não mostrar nenhuma seria pagar a conta da
+   * galeria sem entregar a galeria.
+   */
+  const conteudo: ConteudoParaFormato = {
+    grupos: new Set(todasAsMedias.map((m) => m.secao_id ?? "")).size,
+    videos: todasAsMedias.filter((m) => m.tipo === "video").length,
+  };
+  const pedidoDaTela = {
+    capituloAberto: Boolean(capSecaoId),
+    recorte: pedidas.length > 0,
+    verGaleria: ver === "galeria",
+  };
+  const tela = telaDaEntrega(aparencia.formato, conteudo, pedidoDaTela);
+  const volta = voltaDaGaleria(aparencia.formato, conteudo, pedidoDaTela);
+  /* O que fica da consulta nos links que esta página monta: o que é do dono
+     (prévia, amostra, aparência pendente) e mais nada — ver `enderecoNaGaleria`. */
+  const consultaDoDono = new URLSearchParams(
+    Object.entries({ previa, amostra, ap }).filter((par): par is [string, string] => Boolean(par[1])),
+  ).toString();
 
   const fatia = escolhidas.size
     ? {
@@ -393,7 +480,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const VALIDADE = 6 * 3600;
 
   const itens: ItemGaleria[] = await Promise.all(
-    medias.map(async (m) => {
+    (tela === "galeria" ? medias : []).map(async (m) => {
       /* A miniatura sai do R2 (borda perto do Brasil, grid rápido). Quando a
        * derivada não existe, o fallback É o original e segue o armazém dele —
        * ver lib/armazem.ts. */
@@ -466,50 +553,6 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       })
     : null;
 
-  /*
-   * A APARÊNCIA QUE AINDA NÃO FOI PUBLICADA.
-   *
-   * O editor gravava a cada clique, e o motivo era esta linha: a prévia desenha
-   * a partir do BANCO, então mostrar a escolha exigia gravá-la antes. Quem
-   * estava experimentando publicava, sem querer, cada passo do caminho.
-   *
-   * Com `?ap=`, a escolha pendente viaja na URL e é desenhada sem tocar no
-   * banco — publicar volta a ser um ato. `lerAparencia` valida campo a campo,
-   * então JSON torto vira o padrão em vez de quebrar a página.
-   *
-   * SÓ PARA O DONO, e isso não é detalhe: sem a trava, qualquer pessoa com o
-   * link montaria a galeria alheia com outra aparência e mandaria o print para
-   * o casal, como se fosse o trabalho do fotógrafo.
-   */
-  let aparencia = lerAparencia(galeria.aparencia);
-
-  /*
-   * ── A PRÉVIA EM TELA CHEIA MOSTRA O RASCUNHO (16/09/2026) ───────────────
-   *
-   * Felipe: "quando trocar as variações da grade, ele não está salvando
-   * automaticamente. Eu clico em 'visualizar a galeria' e ele mostra o modo
-   * antigo, não o último selecionado."
-   *
-   * O rascunho ESTAVA gravando — em `aparencia_rascunho`, como o editor
-   * promete. O que faltava era esta linha: `?previa=1` lia `aparencia`, a
-   * publicada, e o botão devolvia fielmente a galeria de ontem. Da caixa do
-   * editor a escolha chegava pela URL (`?ap=`), então o defeito aparecia só no
-   * botão que abre em tela cheia — o lugar em que ele foi conferir.
-   *
-   * O rascunho vale MENOS que o `?ap=`, e a ordem importa: quem está com o
-   * editor aberto tem na tela uma escolha mais nova que a gravada, e é ela que
-   * a prévia deve desenhar.
-   */
-  if (ehDono && galeria.aparencia_rascunho) {
-    aparencia = lerAparencia(galeria.aparencia_rascunho);
-  }
-  if (ehDono && ap) {
-    try {
-      aparencia = lerAparencia(JSON.parse(ap));
-    } catch {
-      /* Parâmetro ilegível não derruba a prévia: vale o que está gravado. */
-    }
-  }
 
   /*
    * As favoritas DESTE visitante, lidas no servidor.
@@ -688,6 +731,132 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       ? { nomeEstudio: galeria.estudio_nome, contato: contatoEstudio }
       : null;
 
+  /*
+   * ── AS PASTAS E O STREAM (30/09/2026) ─────────────────────────────────────
+   *
+   * Os dois leem a GALERIA INTEIRA (`todasAsMedias`), e não a fatia: a pasta
+   * conta as fotos que tem, e o stream lista os vídeos de todos os capítulos.
+   * O que se assina é pouco e é só imagem — até três por pasta, um pôster por
+   * vídeo —, nunca o original: o filme é pedido à rota `urls` quando o play é
+   * apertado, pela mesma régua de acesso do visualizador.
+   */
+  type MediaPublica = (typeof todasAsMedias)[number];
+  /* A imagem de uma mídia, ou null. Vídeo só tem imagem quando tem pôster —
+     sem ele a "imagem" seria o próprio filme (ver `ItemGaleria.temPoster`). */
+  const imagemDa = (m: MediaPublica, grande: boolean): Promise<string> | null => {
+    if (m.tipo === "video") {
+      return m.chave_thumb ? urlDeLeitura(m.chave_thumb, VALIDADE) : null;
+    }
+    return urlDaDerivada(grande ? m.chave_preview : m.chave_thumb, m.chave, armazemDe(m.armazem), VALIDADE);
+  };
+  const temImagem = (m: MediaPublica) => m.tipo === "foto" || Boolean(m.chave_thumb);
+
+  /* Os grupos na ordem da galeria — as soltas primeiro, depois os capítulos
+     na ordem do painel —, a mesma de `capitulos` e do menu. */
+  const grupos: { id: string; apelido: string; nome: string; capaId: string | null; medias: MediaPublica[] }[] = [];
+  if (tela !== "galeria") {
+    const soltas = todasAsMedias.filter((m) => !m.secao_id);
+    if (soltas.length) {
+      grupos.push({
+        id: "sem-capitulo",
+        apelido: "sem-capitulo",
+        nome: nomeDoGrupoSolto(galeria.grupo_solto),
+        capaId: null,
+        medias: soltas,
+      });
+    }
+    for (const sec of secoes) {
+      const doGrupo = todasAsMedias.filter((m) => m.secao_id === sec.id);
+      if (doGrupo.length) {
+        grupos.push({ id: sec.id, apelido: sec.slug, nome: sec.nome, capaId: sec.capa_media_id ?? null, medias: doGrupo });
+      }
+    }
+  }
+
+  const pastas: PastaDaEntrega[] =
+    tela === "pastas"
+      ? await Promise.all(
+          grupos.map(async (g) => {
+            /* A capa escolhida, se ainda está NESTE capítulo e tem imagem; senão
+               a primeira foto; senão o primeiro vídeo com pôster. Ver a
+               migração 052 para por que a conferência é na leitura também. */
+            const escolhida = g.capaId ? g.medias.find((m) => m.id === g.capaId && temImagem(m)) : undefined;
+            const capaDaPasta =
+              escolhida ?? g.medias.find((m) => m.tipo === "foto") ?? g.medias.find(temImagem);
+            const atras = g.medias.filter((m) => m !== capaDaPasta && temImagem(m)).slice(0, 2);
+            const imagens = await Promise.all([
+              ...(capaDaPasta ? [imagemDa(capaDaPasta, true)] : []),
+              ...atras.map((m) => imagemDa(m, false)),
+            ]);
+            const fotosDaPasta = g.medias.filter((m) => m.tipo === "foto").length;
+            return {
+              id: g.id,
+              nome: g.nome,
+              /* `#conteudo` pula a capa: quem escolheu a pasta quer as fotos
+                 dela, e não a capa da galeria de novo. */
+              href: `${enderecoNaGaleria(enderecoBase, consultaDoDono, { cap: g.apelido })}#conteudo`,
+              fotos: fotosDaPasta,
+              videos: g.medias.length - fotosDaPasta,
+              imagens: imagens.filter((u): u is string => Boolean(u)),
+            };
+          }),
+        )
+      : [];
+
+  /* O "Ver as fotos" do stream e o "Voltar aos vídeos" da galeria que ele
+     abre. `ver` fica na consulta — e `enderecoNaGaleria` a preserva ao andar
+     entre capítulos, então a pessoa continua nas fotos. */
+  const comConsulta = (extra: Record<string, string>) => {
+    const q = new URLSearchParams(consultaDoDono);
+    for (const [k, v] of Object.entries(extra)) q.set(k, v);
+    const texto = q.toString();
+    return `${enderecoBase.replace(/\/+$/, "")}${texto ? `?${texto}` : ""}`;
+  };
+
+  let fileiras: FileiraDoStream[] = [];
+  let amostraDeFotos: string[] = [];
+  let fundoDoStream: string | null = null;
+  const fotosNaGaleria = todasAsMedias.filter((m) => m.tipo === "foto").length;
+  if (tela === "stream") {
+    let numero = 0;
+    const comVideo = grupos.filter((g) => g.medias.some((m) => m.tipo === "video"));
+    fileiras = await Promise.all(
+      comVideo.map(async (g) => ({
+        id: g.id,
+        /* Com uma fileira só, o nome do grupo das soltas ("Outras fotos")
+           não diz nada sobre vídeos: vira "Episódios". */
+        nome: comVideo.length === 1 && g.id === "sem-capitulo" ? "Episódios" : g.nome,
+        episodios: await Promise.all(
+          g.medias
+            .filter((m) => m.tipo === "video")
+            .map(async (m) => ({
+              id: m.id,
+              numero: ++numero,
+              titulo: tituloDoEpisodio(m.nome_original),
+              nomeDoArquivo: m.nome_original,
+              duracao: m.duracao_seg,
+              poster: m.chave_thumb ? await urlDeLeitura(m.chave_thumb, VALIDADE) : null,
+              bytes: Number(m.bytes),
+            })),
+        ),
+      })),
+    );
+    /* Uma amostra de fotos para a fileira delas — doze, a mesma medida da
+       prévia: o bastante para mostrar que existem, e o resto está a um clique. */
+    amostraDeFotos = (
+      await Promise.all(
+        todasAsMedias
+          .filter((m) => m.tipo === "foto")
+          .slice(0, 12)
+          .map((m) => imagemDa(m, false)),
+      )
+    ).filter((u): u is string => Boolean(u));
+    /* O fundo da tela de cinema: a capa da galeria quando há, senão o pôster
+       do primeiro episódio. O pôster tem 640 px — num monitor grande fica
+       macio, e por isso a capa vem antes. */
+    fundoDoStream = urlCapa ?? fileiras[0]?.episodios.find((e) => e.poster)?.poster ?? null;
+  }
+
   return (
     /*
      * O tema vive em variáveis CSS neste elemento. Assim a galeria pode ser
@@ -733,32 +902,64 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       {fonteDoEstudio && (
         <style>{`@font-face{font-family:"${FAMILIA_PROPRIA}";src:url("${fonteDoEstudio}");font-display:swap}`}</style>
       )}
+      {tela === "stream" ? (
+        /*
+          O STREAM TRAZ A PRÓPRIA CAPA: a tela de cinema É a capa — foto de
+          fundo, logo, título na letra da galeria e o botão de assistir. Duas
+          capas seguidas empurrariam os episódios para a segunda tela.
+        */
+        <GaleriaStream
+          galeriaId={galeria.id}
+          aparencia={aparencia}
+          titulo={galeria.titulo}
+          subtitulo={galeria.subtitulo}
+          dataFormatada={dataEvento}
+          estudio={galeria.estudio_nome}
+          logoUrl={urlLogo}
+          logoLargura={galeria.estudio_logo_largura}
+          logoAltura={galeria.estudio_logo_altura}
+          fundo={fundoDoStream}
+          focoX={galeria.capa_foco_x}
+          focoY={galeria.capa_foco_y}
+          fileiras={fileiras}
+          fotos={{
+            total: fotosNaGaleria,
+            amostra: amostraDeFotos,
+            href: `${comConsulta({ ver: "galeria" })}#conteudo`,
+          }}
+          permiteDownload={galeria.permite_download}
+          identificado={Boolean(eu)}
+        />
+      ) : (
+        <>
       {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
-      <GaleriaCapa
-        aparencia={aparencia}
-        dados={{
-          titulo: galeria.titulo,
-          subtitulo: galeria.subtitulo,
-          dataFormatada: dataEvento,
-          estudio: galeria.estudio_nome,
-          logoUrl: urlLogo,
-          logoLargura: galeria.estudio_logo_largura,
-          logoAltura: galeria.estudio_logo_altura,
-          urlImagem: urlCapa,
-          /*
-           * ESCOLHIDA, e não herdada.
-           *
-           * A capa jornal só mostra foto quando o fotógrafo apontou uma — o
-           * arquivo enviado ou a foto marcada. A terceira via desta página (a
-           * primeira foto da galeria, quando ninguém escolheu nada) NÃO conta:
-           * se contasse, toda galeria que hoje usa o preset Revista ganharia
-           * uma foto de capa da noite para o dia, incluindo as já entregues.
-           */
-          capaEscolhida: Boolean(galeria.capa_chave || galeria.capa_media_id),
-          focoX: galeria.capa_foco_x,
-          focoY: galeria.capa_foco_y,
-        }}
-      />
+        <GaleriaCapa
+          aparencia={aparencia}
+          dados={{
+            titulo: galeria.titulo,
+            subtitulo: galeria.subtitulo,
+            dataFormatada: dataEvento,
+            estudio: galeria.estudio_nome,
+            logoUrl: urlLogo,
+            logoLargura: galeria.estudio_logo_largura,
+            logoAltura: galeria.estudio_logo_altura,
+            urlImagem: urlCapa,
+            /*
+             * ESCOLHIDA, e não herdada.
+             *
+             * A capa jornal só mostra foto quando o fotógrafo apontou uma — o
+             * arquivo enviado ou a foto marcada. A terceira via desta página (a
+             * primeira foto da galeria, quando ninguém escolheu nada) NÃO conta:
+             * se contasse, toda galeria que hoje usa o preset Revista ganharia
+             * uma foto de capa da noite para o dia, incluindo as já entregues.
+             */
+            capaEscolhida: Boolean(galeria.capa_chave || galeria.capa_media_id),
+            focoX: galeria.capa_foco_x,
+            focoY: galeria.capa_foco_y,
+          }}
+        />
+        </>
+      )}
 
       {/*
         A GALERIA PASSA POR CIMA DA CAPA — quando a capa é fixa.
@@ -784,7 +985,41 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       */}
       <div className="relative z-10 pb-20" style={{ background: "var(--g-fundo)" }}>
       <div className="mx-auto max-w-[1500px] px-4 sm:px-6">
-        {itens.length === 0 && ehDono ? (
+        {/*
+          O CAMINHO DE VOLTA, quando esta galeria é um pedaço de outro formato:
+          dentro de uma pasta, ou nas fotos de uma entrega em stream. O
+          `id="conteudo"` é o alvo do link que abriu esta tela — ele pula a capa.
+        */}
+        {(volta || tela !== "galeria") && <AncoraDeChegada />}
+        {volta === "pastas" && (
+          <div id="conteudo" className="scroll-mt-4">
+            <VoltarAsPastas
+              href={`${comConsulta({})}#pastas`}
+              nome={capitulos.find((c) => c.id === capSecaoId)?.nome ?? null}
+              aparencia={aparencia}
+            />
+          </div>
+        )}
+        {volta === "stream" && (
+          <div id="conteudo" className="scroll-mt-4 pt-8">
+            <Link
+              href={comConsulta({})}
+              className="inline-block rounded-[var(--g-pilula,9999px)] px-4 py-2 text-sm transition hover:opacity-75"
+              style={{ border: "1px solid var(--g-linha)", color: "var(--g-suave)" }}
+            >
+              ← Voltar aos vídeos
+            </Link>
+          </div>
+        )}
+        {tela === "stream" ? null : tela === "pastas" ? (
+          <div id="pastas" className="scroll-mt-4">
+            <GaleriaPastas
+              pastas={pastas}
+              aparencia={aparencia}
+              permiteDownload={galeria.permite_download}
+            />
+          </div>
+        ) : itens.length === 0 && ehDono ? (
           /*
            * A prévia com a galeria vazia mostrava só "as fotos estão sendo
            * preparadas" — bem no momento em que o fotógrafo está escolhendo capa,

@@ -90,7 +90,7 @@ de logar no pixieset por enquanto, para todos, só vamos habilitar para os
 usuários que eu apontar" — e depois: "crie essa opção, para liberar, lá no
 admin". Quem libera é o botão **"Permitir Pixieset"** na ficha do estúdio
 (`/painel/admin/estudios/<id>`), que grava `tenants.pixieset_liberado_em`
-(migração 051). Só um admin (`ADMINS`) vê e aperta o botão, a ação confere o
+(migração 052). Só um admin (`ADMINS`) vê e aperta o botão, a ação confere o
 admin de novo, e cada liberação ou bloqueio vira evento na auditoria com quem
 fez. Nulo, que é o padrão, ninguém tem acesso. (Por algumas horas isto foi a
 variável `PIXIESET_LOGIN_LIBERADO`; nunca chegou a ser preenchida em produção.)

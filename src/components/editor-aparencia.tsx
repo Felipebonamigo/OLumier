@@ -16,7 +16,9 @@ import {
   proporcaoDaLogo,
   tamanhoLogoEquivalente,
   temPesoLeve,
+  comFormatoDe,
   type Aparencia,
+  type Formato,
   type ViewportPrevia,
 } from "@/config/aparencia";
 import {
@@ -420,6 +422,137 @@ function CoresProprias({ ap, mudar }: PecaProps) {
   );
 }
 
+/** O que a galeria tem hoje, contado pela página do Design. */
+export interface ConteudoDaGaleria {
+  /** Grupos com arquivo: cada capítulo com algo dentro, mais as soltas. */
+  grupos: number;
+  videos: number;
+  fotos: number;
+}
+
+/**
+ * O esquema de cada formato — uma tela em miniatura, e não um ícone.
+ *
+ * A estratégia de marca pede para DEMONSTRAR, não declarar (§9): "pastas" e
+ * "stream" escritos numa pastilha fazem a pessoa imaginar; o desenho da tela
+ * que o cliente vai ver responde antes de ela perguntar. A prévia ao lado
+ * mostra a galeria de verdade — isto é só o mapa para escolher.
+ */
+function EsquemaDoFormato({ formato }: { formato: Formato }) {
+  const bloco = "rounded-[2px] bg-texto-faint/30";
+  if (formato === "pastas") {
+    return (
+      <div className="grid h-full grid-cols-3 gap-1.5 p-2" aria-hidden>
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex flex-col gap-1">
+            <div className="relative flex-1">
+              <span className={`absolute inset-0 translate-x-[3px] -translate-y-[3px] ${bloco} opacity-50`} />
+              <span className="absolute inset-0 rounded-[2px] bg-texto-faint/60" />
+            </div>
+            <span className={`h-1 w-3/4 ${bloco}`} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (formato === "stream") {
+    return (
+      <div className="flex h-full flex-col gap-1 bg-void/60 p-2" aria-hidden>
+        <div className="relative flex-1 rounded-[2px] bg-texto-faint/40">
+          <span className="absolute bottom-1 left-1 h-1 w-6 rounded-full bg-acento" />
+        </div>
+        <div className="flex gap-1">
+          {[0, 1, 2, 3].map((i) => (
+            <span key={i} className={`h-3 flex-1 ${bloco} ${i === 3 ? "opacity-40" : ""}`} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="grid h-full grid-cols-4 gap-1 p-2" aria-hidden>
+      {Array.from({ length: 8 }, (_, i) => (
+        <span key={i} className={bloco} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * O grupo Formato: três cartões com o esquema da tela, e o aviso quando a
+ * galeria não tem com o que o formato trabalhar.
+ *
+ * O aviso NÃO bloqueia a escolha. O fotógrafo costuma decidir o formato antes
+ * de subir o casamento, e recusar "Stream" numa galeria ainda vazia seria
+ * errado. O que a tela faz é dizer, sem rodeio, o que o cliente vai ver HOJE:
+ * pastas com um grupo só e stream sem vídeo caem na galeria de sempre (ver
+ * `formatoEfetivo` em `lib/formato-da-entrega.ts`).
+ */
+function SeletorDeFormato({
+  ap,
+  mudar,
+  conteudo,
+}: PecaProps & { conteudo: ConteudoDaGaleria | null }) {
+  const aviso =
+    !conteudo
+      ? null
+      : ap.formato === "pastas" && conteudo.grupos < 2
+        ? "Esta galeria ainda não tem dois capítulos com fotos. Até ter, o cliente vê a galeria de sempre — crie os capítulos na aba Fotos (ou envie a pasta já separada em subpastas)."
+        : ap.formato === "stream" && conteudo.videos === 0
+          ? "Esta galeria ainda não tem vídeo. Até ter, o cliente vê a galeria de sempre."
+          : null;
+  return (
+    <>
+      <div>
+        <span className="block text-xs font-medium text-texto-soft">Como a entrega se organiza</span>
+        <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+          A cara (capa, letra, cor) continua a mesma nos três. Trocar de estilo não muda o formato.
+        </p>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {OPCOES.formato.map((op) => {
+          const ativo = ap.formato === op.id;
+          return (
+            <button
+              key={op.id}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => mudar({ ...ap, formato: op.id })}
+              className={`rounded-lg border p-3 text-left transition ${
+                ativo ? "border-acento bg-acento/5" : "border-linha hover:border-acento hover:bg-acento/5"
+              }`}
+            >
+              <div className="mb-2 h-20 overflow-hidden rounded-md border border-linha bg-carbon-2">
+                <EsquemaDoFormato formato={op.id} />
+              </div>
+              <span className="block text-sm font-medium">{op.nome}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">{op.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+      {aviso && (
+        <p className="rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2.5 text-xs text-alerta">
+          {aviso}
+        </p>
+      )}
+      {ap.formato === "pastas" && (
+        <p className="text-[11px] leading-snug text-texto-faint">
+          A capa de cada pasta é a primeira foto do capítulo. Para trocar, na aba Fotos passe o
+          mouse sobre a foto e clique em <strong>capa da pasta</strong>.
+        </p>
+      )}
+      {ap.formato === "stream" && (
+        <p className="text-[11px] leading-snug text-texto-faint">
+          Cada capítulo vira uma fileira de episódios, na ordem da aba Fotos. As fotos da entrega
+          continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio
+          — troque na aba Fotos se quiser outra.
+        </p>
+      )}
+    </>
+  );
+}
+
 /*
  * `keyof typeof OPCOES`, e não `keyof Aparencia`: desde as cores próprias a
  * aparência tem um campo (`cores`) que não é eixo de botões, e o tipo antigo
@@ -505,6 +638,9 @@ const GRUPOS = [
   /* "Estilos", e não mais "Estilos prontos": desde 26/09/2026 o primeiro
      cartão é o padrão do estúdio, que não é pronto nosso — é dele. */
   { id: "estilos", nome: "Estilos" },
+  /* Logo depois dos estilos: é a outra decisão grande — o estilo diz a cara,
+     o formato diz como a entrega se organiza. Ver `Formato`. */
+  { id: "formato", nome: "Formato" },
   { id: "capa", nome: "Capa" },
   { id: "tipografia", nome: "Tipografia" },
   { id: "cor", nome: "Cor" },
@@ -522,8 +658,13 @@ export function EditorAparencia({
   padraoDoEstudio = null,
   estilosDoEstudio = [],
   slotCapa,
+  conteudo = null,
   logo = null,
 }: {
+  /** O que a galeria tem hoje — só para o grupo Formato avisar quando a
+      escolha não tem com o que trabalhar (pastas sem capítulo, stream sem
+      vídeo). Null = não sabemos, e aí nada é dito. */
+  conteudo?: ConteudoDaGaleria | null;
   galeriaId: string;
   caminhoPublico: string;
   /** Resumo curto da capa GRAVADA. Muda quando ela muda, e é o que faz a
@@ -858,7 +999,7 @@ export function EditorAparencia({
               {padrao.aparencia ? (
                 <button
                   type="button"
-                  onClick={() => padrao.aparencia && mudar(padrao.aparencia)}
+                  onClick={() => padrao.aparencia && mudar(comFormatoDe(padrao.aparencia, ap))}
                   className={`rounded-lg border p-3 text-left transition ${
                     noPadrao
                       ? "border-acento bg-acento/5"
@@ -902,7 +1043,7 @@ export function EditorAparencia({
                       ativo ? "border-acento bg-acento/5" : "border-linha hover:border-acento"
                     }`}
                   >
-                    <button type="button" onClick={() => mudar(e.aparencia)} className="block w-full text-left">
+                    <button type="button" onClick={() => mudar(comFormatoDe(e.aparencia, ap))} className="block w-full text-left">
                       <AmostraDoPreset aparencia={e.aparencia} className="mb-2 h-20 w-full" />
                     </button>
                     {editando ? (
@@ -928,7 +1069,7 @@ export function EditorAparencia({
                         </button>
                       </form>
                     ) : (
-                      <button type="button" onClick={() => mudar(e.aparencia)} className="block w-full text-left">
+                      <button type="button" onClick={() => mudar(comFormatoDe(e.aparencia, ap))} className="block w-full text-left">
                         <span className="block truncate text-sm font-medium">{e.nome}</span>
                       </button>
                     )}
@@ -983,7 +1124,7 @@ export function EditorAparencia({
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => mudar(p.aparencia)}
+                    onClick={() => mudar(comFormatoDe(p.aparencia, ap))}
                     className={`rounded-lg border p-3 text-left transition ${
                       ativo
                         ? "border-acento bg-acento/5"
@@ -1015,6 +1156,9 @@ export function EditorAparencia({
                 );
               })}
             </div>
+          )}
+          {grupo === "formato" && (
+            <SeletorDeFormato ap={ap} mudar={mudar} conteudo={conteudo} />
           )}
           {grupo === "capa" && (
             <>

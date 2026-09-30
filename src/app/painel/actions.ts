@@ -65,6 +65,7 @@ import {
   renomearSecao,
   renomearGrupoSolto,
   ordenarFotosDaSecao,
+  definirCapaDaPasta,
   ORDENS_DAS_FOTOS,
   type OrdemDasFotos,
 } from "@/lib/secoes";
@@ -417,6 +418,20 @@ export async function definirCapaAction(form: FormData) {
   );
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * Define a foto de frente da pasta (capítulo) em que ela está — o formato
+ * Pastas mostra essa capa. Ver `definirCapaDaPasta`.
+ */
+export async function definirCapaDaPastaAction(form: FormData): Promise<{ ok: boolean }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const mediaId = String(form.get("media_id") ?? "");
+  if (!galeriaId || !mediaId) return { ok: false };
+  const ok = await definirCapaDaPasta(galeriaId, tenantId, mediaId);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  return { ok };
 }
 
 // --- seleção do álbum -------------------------------------------------------

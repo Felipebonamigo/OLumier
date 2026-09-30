@@ -26,7 +26,7 @@ export const TIPOS_LOGO: Record<string, string> = {
  */
 
 /**
- * A medida da logo que o navegador informa (migração 051). Vem do dono, sobre a
+ * A medida da logo que o navegador informa (migração 052). Vem do dono, sobre a
  * própria logo, e só serve para desenhá-la — mas entra num `integer` com
  * `check`, então lixo vira `null` aqui em vez de erro de banco lá.
  */

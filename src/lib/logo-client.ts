@@ -11,7 +11,7 @@
  * Aqui a margem sai no envio, no NAVEGADOR, como as derivadas das fotos
  * (`derivadas-client.ts`): o arquivo continua indo direto para o bucket, sem
  * passar pelo servidor. Aproveita a passada para medir a imagem — a capa
- * precisa da proporção para desenhar a logo pela área (migração 051).
+ * precisa da proporção para desenhar a logo pela área (migração 052).
  *
  * Roda no cliente; não importar em código de servidor. A regra de onde está o
  * desenho (`caixaDoDesenho`) é pura, e `scripts/testar-logo-sem-margem.mjs` a

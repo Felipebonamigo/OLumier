@@ -80,7 +80,7 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
    * armazém, e ela não tem o que fazer numa URL.
    */
   /* A logo do estúdio, para a barrinha de tamanho do editor. A medida pode
-     vir nula (logo anterior à migração 051): o editor mede e grava. */
+     vir nula (logo anterior à migração 052): o editor mede e grava. */
   const estudio = await consultarUm<{
     logo_chave: string | null;
     logo_largura: number | null;
@@ -102,6 +102,19 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
     )
     .digest("hex")
     .slice(0, 8);
+
+  /*
+   * O que a galeria tem, para o grupo Formato poder dizer "pastas sem capítulo
+   * vira galeria". Uma consulta de contagem, sem assinar nada — a aba continua
+   * sem carregar mídia.
+   */
+  const conteudo = await consultarUm<{ grupos: number; videos: number; fotos: number }>(
+    `select count(distinct coalesce(secao_id::text, '-'))::int as grupos,
+            count(*) filter (where tipo = 'video')::int as videos,
+            count(*) filter (where tipo = 'foto')::int as fotos
+       from medias where galeria_id = $1 and pronto`,
+    [galeria.id],
+  );
 
   return (
     <EditorAparencia
@@ -126,6 +139,7 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
          primeiro cartão de Estilos e deixa aplicá-lo nesta galeria. */
       padraoDoEstudio={await padraoDoEstudioLido(galeria.tenant_id)}
       estilosDoEstudio={await estilosDoEstudio(galeria.tenant_id)}
+      conteudo={conteudo}
       logo={logo}
     />
   );

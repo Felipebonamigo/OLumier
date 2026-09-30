@@ -76,7 +76,7 @@ export const ACOES = {
    * leem — "quem mudou o custo do VPS?" precisa de resposta. */
   CUSTO_DA_SOCIEDADE: "sociedade.custo",
   /* O admin liberou ou bloqueou o "Entrar com a conta do Pixieset" deste
-   * estúdio (migração 051). Liberar expõe o fotógrafo aos riscos que a tela
+   * estúdio (migração 052). Liberar expõe o fotógrafo aos riscos que a tela
    * descreve — "quem liberou, e quando?" precisa de resposta. */
   PIXIESET_LIBERADO: "pixieset.liberado",
   PIXIESET_BLOQUEADO: "pixieset.bloqueado",

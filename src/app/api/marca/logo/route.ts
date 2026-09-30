@@ -70,7 +70,7 @@ export async function PUT(request: NextRequest) {
   const chave = String(corpo.chave ?? "");
   /* A medida do arquivo que subiu, já sem margem (ver `lib/logo-client.ts`).
      Sem ela a logo continua valendo — a capa a trata como quadrada até o
-     editor medir. Ver a migração 051. */
+     editor medir. Ver a migração 052. */
   const medida = lerMedidaDaLogo(corpo.largura, corpo.altura);
   // A chave vem do navegador. Sem esta conferência, um pedido forjado apontaria
   // a logo deste estúdio para um objeto de outro — ou para qualquer chave do
@@ -118,7 +118,7 @@ export async function PUT(request: NextRequest) {
 }
 
 /**
- * A medida da logo que já estava lá antes da migração 051.
+ * A medida da logo que já estava lá antes da migração 052.
  *
  * O editor de design mede a imagem no navegador (quando ela não tem medida) e
  * manda para cá. Só grava onde a medida AINDA está vazia e a logo existe: a
