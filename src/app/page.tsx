@@ -25,6 +25,8 @@ import { TrocaIdentidade } from "@/components/home/troca-identidade";
 import { SelecaoDemo } from "@/components/home/selecao-demo";
 import { CofreDemo } from "@/components/home/cofre-demo";
 import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
+import { DESCONTO_DO_PACOTE } from "@/config/combo";
+import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
 
 /*
  * ── A HOME NOVA (26/09/2026) ───────────────────────────────────────────────
@@ -56,6 +58,12 @@ export const metadata: Metadata = {
 };
 
 const MENOR_ESPACO = ESPACOS[0];
+
+/* A faixa do desconto do combo, lida da tabela que o Asaas cobra: se o preço
+   mudar lá, a frase da home muda junto. */
+const DESCONTOS_DO_COMBO = Object.values(DESCONTO_DO_PACOTE).flatMap((linha) => Object.values(linha));
+const COMBO_MENOR = Math.min(...DESCONTOS_DO_COMBO);
+const COMBO_MAIOR = Math.max(...DESCONTOS_DO_COMBO);
 
 /* Os botões. Pílula, porque o dono vetou o retângulo seco; tinta, porque a
    cor da página vem das fotos (ver `.home` em globals.css). */
@@ -855,6 +863,43 @@ export default async function Home() {
             </div>
           </Revelar>
           <MontadorPlano comFilme={VIDEO_LIBERADO} explicarCofre={false} />
+        </div>
+
+        {/*
+          ── A ATOMATIZA, NA HORA DO PREÇO (30/09/2026) ──────────────────────
+
+          Juan: "adicionar na página inicial algo que envolva 'conheça também o
+          nosso sistema de gestão Atomatiza'". Mora aqui, embaixo dos planos,
+          porque o motivo concreto de conhecer é o desconto do combo — que
+          existe e já cobra no Asaas (`config/combo.ts`). Um bloco discreto, e
+          não uma seção: a estratégia pede personalidade própria para cada
+          marca, e a Galeria não pode virar vitrine da Atomatiza. O texto usa a
+          proposta da marca ("cadastrar menos vezes") em vez de uma lista de
+          funções que a home não tem como conferir.
+        */}
+        <div className="mx-auto mt-16 max-w-7xl px-4 sm:px-6 lg:mt-20">
+          <Revelar className="flex flex-col gap-6 rounded-3xl border border-[var(--h-linha)] bg-white p-6 sm:p-8 md:flex-row md:items-center md:justify-between md:gap-10">
+            <div className="max-w-2xl">
+              <p className={SOBRANCELHA}>Também de quem faz a Galeria Átomo</p>
+              <h3 className="home-titulo mt-3 text-2xl font-semibold text-[var(--h-tinta)] sm:text-3xl">
+                Conheça também a Atomatiza.
+              </h3>
+              <p className="mt-3 leading-relaxed text-[var(--h-tinta-2)]">
+                Gestão para estúdios de fotografia, feita para as partes da empresa conversarem
+                entre si: cadastrar menos vezes, procurar menos e enxergar melhor o próprio estúdio.
+                Quem assina as duas paga de {formatarReais(COMBO_MENOR)} a {formatarReais(COMBO_MAIOR)} a
+                menos por mês.
+              </p>
+            </div>
+            <a
+              href={URL_ATOMATIZA}
+              target="_blank"
+              rel="noopener"
+              className={`${CTA_SECUNDARIO} shrink-0 self-start md:self-auto`}
+            >
+              Conhecer a Atomatiza
+            </a>
+          </Revelar>
         </div>
       </section>
 
