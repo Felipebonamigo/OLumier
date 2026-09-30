@@ -18,7 +18,8 @@ import {
   temPesoLeve,
   comFormatoDe,
   type Aparencia,
-  type Formato,
+  type EstiloPastas,
+  type EstiloStream,
   type ViewportPrevia,
 } from "@/config/aparencia";
 import {
@@ -35,6 +36,7 @@ import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 import { medirLogo } from "@/lib/logo-client";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
+import { EsquemaDoEstilo, EsquemaDoFormato } from "@/components/esquema-do-formato";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -431,54 +433,6 @@ export interface ConteudoDaGaleria {
 }
 
 /**
- * O esquema de cada formato — uma tela em miniatura, e não um ícone.
- *
- * A estratégia de marca pede para DEMONSTRAR, não declarar (§9): "pastas" e
- * "stream" escritos numa pastilha fazem a pessoa imaginar; o desenho da tela
- * que o cliente vai ver responde antes de ela perguntar. A prévia ao lado
- * mostra a galeria de verdade — isto é só o mapa para escolher.
- */
-function EsquemaDoFormato({ formato }: { formato: Formato }) {
-  const bloco = "rounded-[2px] bg-texto-faint/30";
-  if (formato === "pastas") {
-    return (
-      <div className="grid h-full grid-cols-3 gap-1.5 p-2" aria-hidden>
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="flex flex-col gap-1">
-            <div className="relative flex-1">
-              <span className={`absolute inset-0 translate-x-[3px] -translate-y-[3px] ${bloco} opacity-50`} />
-              <span className="absolute inset-0 rounded-[2px] bg-texto-faint/60" />
-            </div>
-            <span className={`h-1 w-3/4 ${bloco}`} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (formato === "stream") {
-    return (
-      <div className="flex h-full flex-col gap-1 bg-void/60 p-2" aria-hidden>
-        <div className="relative flex-1 rounded-[2px] bg-texto-faint/40">
-          <span className="absolute bottom-1 left-1 h-1 w-6 rounded-full bg-acento" />
-        </div>
-        <div className="flex gap-1">
-          {[0, 1, 2, 3].map((i) => (
-            <span key={i} className={`h-3 flex-1 ${bloco} ${i === 3 ? "opacity-40" : ""}`} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="grid h-full grid-cols-4 gap-1 p-2" aria-hidden>
-      {Array.from({ length: 8 }, (_, i) => (
-        <span key={i} className={bloco} />
-      ))}
-    </div>
-  );
-}
-
-/**
  * O grupo Formato: três cartões com o esquema da tela, e o aviso quando a
  * galeria não tem com o que o formato trabalhar.
  *
@@ -536,6 +490,28 @@ function SeletorDeFormato({
           {aviso}
         </p>
       )}
+      {/*
+        O ESTILO DO FORMATO, logo abaixo dele (30/09/2026): "vamos pensar em
+        estilos para pastas e stream". Só aparece o do formato escolhido —
+        quatro cartões de pasta numa entrega em Stream seriam uma pergunta
+        sobre uma tela que ninguém vai ver. A prévia ao lado mostra a escolha.
+      */}
+      {ap.formato === "pastas" && (
+        <EstilosDoFormato
+          titulo="Estilo das pastas"
+          opcoes={OPCOES.estiloPastas}
+          atual={ap.estiloPastas}
+          escolher={(id) => mudar({ ...ap, estiloPastas: id })}
+        />
+      )}
+      {ap.formato === "stream" && (
+        <EstilosDoFormato
+          titulo="Estilo do stream"
+          opcoes={OPCOES.estiloStream}
+          atual={ap.estiloStream}
+          escolher={(id) => mudar({ ...ap, estiloStream: id })}
+        />
+      )}
       {ap.formato === "pastas" && (
         <p className="text-[11px] leading-snug text-texto-faint">
           A capa de cada pasta é a primeira foto do capítulo. Para trocar, na aba Fotos passe o
@@ -544,12 +520,53 @@ function SeletorDeFormato({
       )}
       {ap.formato === "stream" && (
         <p className="text-[11px] leading-snug text-texto-faint">
-          Cada capítulo vira uma fileira de episódios, na ordem da aba Fotos. As fotos da entrega
+          Cada capítulo vira um bloco de episódios — fileira, temporada ou seção, conforme o estilo —, na ordem da aba Fotos. As fotos da entrega
           continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio
           — troque na aba Fotos se quiser outra.
         </p>
       )}
     </>
+  );
+}
+
+/** Os cartões de estilo de um formato — esquema, nome e o que ele faz. */
+function EstilosDoFormato<T extends EstiloPastas | EstiloStream>({
+  titulo,
+  opcoes,
+  atual,
+  escolher,
+}: {
+  titulo: string;
+  opcoes: readonly { id: T; nome: string; desc: string }[];
+  atual: T;
+  escolher: (id: T) => void;
+}) {
+  return (
+    <div>
+      <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
+      <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {opcoes.map((op) => {
+          const ativo = atual === op.id;
+          return (
+            <button
+              key={op.id}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => escolher(op.id)}
+              className={`rounded-lg border p-2.5 text-left transition ${
+                ativo ? "border-acento bg-acento/5" : "border-linha hover:border-acento hover:bg-acento/5"
+              }`}
+            >
+              <span className="mb-2 block h-16 overflow-hidden rounded-md border border-linha bg-carbon-2">
+                <EsquemaDoEstilo estilo={op.id} />
+              </span>
+              <span className="block text-sm font-medium">{op.nome}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">{op.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -660,7 +677,11 @@ export function EditorAparencia({
   slotCapa,
   conteudo = null,
   logo = null,
+  formatosLiberados = false,
 }: {
+  /** A conta vê Pastas e Stream? Sem isso o grupo Formato não aparece —
+      ver `config/formatos-liberados.ts`. */
+  formatosLiberados?: boolean;
   /** O que a galeria tem hoje — só para o grupo Formato avisar quando a
       escolha não tem com o que trabalhar (pastas sem capítulo, stream sem
       vídeo). Null = não sabemos, e aí nada é dito. */
@@ -959,7 +980,7 @@ export function EditorAparencia({
             Editar
           </span>
           <ul className="-mx-1 mt-2 flex gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex-col sm:overflow-visible sm:px-0">
-            {GRUPOS.map((g) => {
+            {GRUPOS.filter((g) => g.id !== "formato" || formatosLiberados).map((g) => {
               const ativo = grupo === g.id;
               return (
                 <li key={g.id} className="shrink-0 sm:shrink">
@@ -1157,7 +1178,7 @@ export function EditorAparencia({
               })}
             </div>
           )}
-          {grupo === "formato" && (
+          {grupo === "formato" && formatosLiberados && (
             <SeletorDeFormato ap={ap} mudar={mudar} conteudo={conteudo} />
           )}
           {grupo === "capa" && (

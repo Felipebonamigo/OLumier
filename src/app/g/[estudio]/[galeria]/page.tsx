@@ -38,7 +38,7 @@ import { GaleriaCapa } from "@/components/galeria-capa";
 import {
   lerAparencia,
   AMOSTRA_PREVIA,
-  variaveisDoTema,
+  variaveisDaEntrega,
   variaveisDeForma,
   FONTES_TEXTO,
 } from "@/config/aparencia";
@@ -55,6 +55,7 @@ import {
 import { GaleriaPastas, VoltarAsPastas, type PastaDaEntrega } from "@/components/galeria-pastas";
 import { GaleriaStream, type FileiraDoStream } from "@/components/galeria-stream";
 import { AncoraDeChegada } from "@/components/ancora-de-chegada";
+import { aparenciaPermitida } from "@/lib/acesso-formatos";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -315,6 +316,10 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       /* Parâmetro ilegível não derruba a prévia: vale o que está gravado. */
     }
   }
+  /* Pastas e Stream só para contas liberadas (30/09/2026) — inclusive na
+     prévia do dono: o que ele não pode entregar, ele não deve ver pronto.
+     Galeria de sempre não consulta nada. Ver `config/formatos-liberados.ts`. */
+  aparencia = await aparenciaPermitida(aparencia, galeria.tenant_id);
 
   /*
    * ── A AMOSTRA DA PRÉVIA (31/08/2026) ─────────────────────────────────────
@@ -830,7 +835,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             const escolhida = g.capaId ? g.medias.find((m) => m.id === g.capaId && temImagem(m)) : undefined;
             const capaDaPasta =
               escolhida ?? g.medias.find((m) => m.tipo === "foto") ?? g.medias.find(temImagem);
-            const atras = g.medias.filter((m) => m !== capaDaPasta && temImagem(m)).slice(0, 2);
+            /* Três atrás da capa: a Pilha usa duas, o Índice e o Mosaico usam as
+               três. Miniatura, não visualizador — são imagens pequenas. */
+            const atras = g.medias.filter((m) => m !== capaDaPasta && temImagem(m)).slice(0, 3);
             const imagens = await Promise.all([
               ...(capaDaPasta ? [imagemDa(capaDaPasta, true)] : []),
               ...atras.map((m) => imagemDa(m, false)),
@@ -913,7 +920,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     <main
       className="min-h-dvh"
       style={{
-        ...variaveisDoTema(aparencia),
+        /* O tema, e a sala escura quando a entrega é o stream em Cinema —
+           ver `variaveisDaEntrega`. */
+        ...variaveisDaEntrega(aparencia, tela),
         ...variaveisDeForma(aparencia),
         background: "var(--g-fundo)",
         color: "var(--g-texto)",

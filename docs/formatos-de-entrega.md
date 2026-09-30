@@ -6,6 +6,22 @@ arquivos dentro) e uma outra forma de Stream (estilo Netflix), que vai passando
 os episódios — mais para vídeos, pois hoje nossa entrega de vídeos ainda é meio
 feia/pobre."*
 
+## Quem vê (30/09/2026)
+
+"Isso só ficará visível para sócios primeiramente (eu, Carol, Sirius)."
+Pastas e Stream aparecem só para a conta **liberada** na ficha do estúdio no
+Admin (botão "Liberar Pastas e Stream", `tenants.formatos_liberados_em`,
+migração 054) e para as contas de **admin** (`ADMINS`), que não precisam
+liberar a si mesmas. Regra em `src/config/formatos-liberados.ts`; abrir para
+todo mundo é trocar o corpo dela por `return true`.
+
+Sem liberação: o grupo Formato some do Design, a escolha some da criação, o
+"capa da pasta" some da aba Fotos, e a galeria pública desenha a galeria de
+sempre mesmo que a aparência gravada diga outra coisa (o servidor decide —
+`aparenciaPermitida`). A migração 054 já nasce liberando quem usou pastas ou
+stream no intervalo em que estiveram abertos, para nenhuma entrega mudar
+sozinha. Preso em `scripts/testar-formatos-liberados.mjs`.
+
 ## Estado
 
 | | Situação |
@@ -22,6 +38,12 @@ Aba **Design → Formato**, três cartões com o esquema da tela:
 - **Galeria** — o de sempre, e o padrão. Nenhuma galeria existente muda.
 - **Pastas** — a galeria abre com os capítulos como pastas; as fotos ficam dentro.
 - **Stream** — os vídeos numa tela de cinema, em fileiras, com próximo episódio.
+
+Também na **criação da galeria** (etapa 2. Estilo, acima dos estilos), com os
+mesmos cartões — pedido do Felipe em 30/09/2026: o formato é decisão que o
+fotógrafo já traz ao criar. A tela abre no formato do padrão do estúdio; o
+escolhido ali vence o do padrão (`aparenciaComFormato`). Escolhendo Pastas, a
+etapa de capítulos avisa enquanto houver menos de dois.
 
 O formato é um eixo da aparência (`formato` em `config/aparencia.ts`), então
 herda rascunho, prévia, publicar e o padrão do estúdio. **Estilo não mexe no
@@ -41,6 +63,31 @@ A regra mora em `lib/formato-da-entrega.ts` e está presa em
   antes de subir o casamento, e passa a valer sozinho quando o conteúdo chega.
 - Sempre abrem a galeria: um capítulo aberto (é entrar na pasta), a busca por
   rosto (`?fotos=`) e o "Ver as fotos" do stream (`?ver=galeria`).
+
+## Estilos de cada formato (30/09/2026)
+
+"Vamos pensar em estilos para pastas e stream" — e, no meio do trabalho: "um
+dos formatos pode ser igual Netflix, e outros parecidos com streamings". Cada
+formato ganhou desenhos próprios, escolhidos em **Design → Formato**, logo
+abaixo dos três cartões (eixos `estiloPastas` e `estiloStream`). Andam com o
+formato, não com o estilo: aplicar "Revista" não muda o desenho das pastas.
+
+| Pastas | |
+|---|---|
+| **Pilha** (padrão) | a capa e cópias atrás, em leque no hover |
+| **Capas** | cartaz: foto alta, nome escrito sobre ela (branco sobre véu, em qualquer tema) |
+| **Índice** | sumário: número e nome grandes na letra do título, tira de fotos ao lado |
+| **Mosaico** | folha de contato: capa e duas fotos, com "+N" do que falta ver |
+
+| Stream | inspiração | |
+|---|---|---|
+| **Cinema** (padrão) | plataformas de série | sala escura **sempre** (troca o tema claro pela `SALA_ESCURA`), capa em tela cheia à esquerda, botão branco, fileiras com o nome sobre o cartão |
+| **Episódios** | página de série | capa dividida, capítulos como temporadas em abas, lista de episódios |
+| **Vitrine** | lojas de filme mais limpas | título-manchete, destaque em cartão grande arredondado, grade de cartões largos; segue o tema |
+| **Mostra** | sites de festival | programa tipográfico em lista, a imagem aparece à direita no hover (no toque, miniatura na linha) |
+
+Os nomes na tela são nossos e neutros — nenhum cita serviço de streaming: a
+entrega é do fotógrafo e não pode anunciar a marca de ninguém.
 
 ## Pastas
 
