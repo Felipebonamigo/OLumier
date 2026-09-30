@@ -192,19 +192,37 @@ export function precoDoCicloComComboCentavos(
 }
 
 /**
+ * A MARCA DO PACOTE (30/09/2026, ver `docs/pacote.md`).
+ *
+ * As duas assinaturas criadas juntas pelo botão "Assinar o pacote" levam
+ * `· pacote` no fim da descrição, dos dois lados. A conferência do combo conta
+ * a assinatura marcada mesmo antes do primeiro pagamento — é o que faz o
+ * desconto valer desde a assinatura, como o Felipe decidiu —, enquanto ela
+ * não tiver cobrança vencida. Depois do primeiro pagamento a marca já não
+ * importa: a assinatura conta pela regra de sempre.
+ */
+export const MARCA_DO_PACOTE = " · pacote";
+export function ehDoPacote(descricao: string | null | undefined): boolean {
+  return /\bpacote\b/i.test(descricao ?? "");
+}
+
+/**
  * A descrição da assinatura da Galeria no Asaas.
  *
  * O tamanho tem de continuar legível por `gbDaDescricaoGaleria` — é o que o
- * Atomatiza lê para saber em que linha da tabela estamos.
+ * Atomatiza lê para saber em que linha da tabela estamos. `pacote` põe a marca
+ * no fim; quem reescreve a descrição (conferência, troca de plano) passa a
+ * marca que já estava lá, para ela não sumir no caminho.
  */
 export function descricaoDaAssinatura(
   marca: string,
   plano: Plano,
   ciclo: Ciclo,
   faixa: FaixaAtomatiza | null,
+  pacote = false,
 ): string {
   const combo = descontoDaGaleriaCentavos(plano, faixa) > 0 ? " · combo com o Atomatiza" : "";
-  return `${marca} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}${combo}`;
+  return `${marca} — ${plano.nome}${ciclo === "anual" ? " (anual)" : ""}${combo}${pacote ? MARCA_DO_PACOTE : ""}`;
 }
 
 /** O nome da faixa para a tela. */
@@ -216,4 +234,34 @@ export const NOME_DA_FAIXA: Record<FaixaAtomatiza, string> = {
 
 export function ehFaixaAtomatiza(v: unknown): v is FaixaAtomatiza {
   return v === "solo" || v === "equipe" || v === "estudio";
+}
+
+/** O que cada lado cobra por MÊS neste par, cheio e com o combo. */
+export interface PrecoDoPacote {
+  galeriaCheio: number;
+  galeria: number;
+  atomatizaCheio: number;
+  atomatiza: number;
+}
+
+/**
+ * A tabela da tela "monte o seu pacote" (`docs/pacote.md`): para o plano da
+ * Galeria, quanto sai cada faixa do Atomatiza junto, e quanto a Galeria sai
+ * com ela. Mensal, em centavos — o anual é dez mensalidades dos dois lados,
+ * desconto inclusive. O preço do Atomatiza é o de tabela: quem cobra é ele,
+ * e o valor que ele cria volta na resposta da ponte.
+ */
+export function precosDoPacote(plano: Plano): Record<FaixaAtomatiza, PrecoDoPacote> {
+  const linha = (faixa: FaixaAtomatiza): PrecoDoPacote => {
+    const galeria = descontoDaGaleriaCentavos(plano, faixa);
+    const cheioAtz = PRECO_DE_TABELA_ATOMATIZA[faixa];
+    const atz = planoEntraNoCombo(plano) ? divisaoDoDesconto(plano.quotaGb, faixa).atomatiza : 0;
+    return {
+      galeriaCheio: plano.precoCentavos,
+      galeria: plano.precoCentavos - galeria,
+      atomatizaCheio: cheioAtz,
+      atomatiza: cheioAtz - atz,
+    };
+  };
+  return { solo: linha("solo"), equipe: linha("equipe"), estudio: linha("estudio") };
 }

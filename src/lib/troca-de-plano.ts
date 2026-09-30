@@ -6,6 +6,7 @@ import { montarFatiasDaDiferenca } from "@/config/socios";
 import {
   descontoDaGaleriaCentavos,
   descricaoDaAssinatura,
+  ehDoPacote,
   precoDoCicloComComboCentavos,
   type FaixaAtomatiza,
 } from "@/config/combo";
@@ -180,7 +181,7 @@ export async function trocarPlano(
         planoId: plano.id,
         precoCentavos: cot.precoNovoCentavos,
         ciclo,
-        descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa),
+        descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa, ehDoPacote(assinatura.description)),
       });
     } catch (e) {
       return { erro: e instanceof Error ? e.message : "não consegui atualizar a assinatura" };
@@ -224,7 +225,9 @@ export async function trocarPlano(
             planoId: tenant.plano_id,
             precoCentavos: Math.round(Number(assinatura.value) * 100),
             ciclo,
-            descricao: assinatura.description ?? descricaoDaAssinatura(marca.nome, planoPorId(tenant.plano_id) ?? plano, ciclo, faixa),
+            descricao:
+              assinatura.description ??
+              descricaoDaAssinatura(marca.nome, planoPorId(tenant.plano_id) ?? plano, ciclo, faixa, ehDoPacote(assinatura.description)),
           }).catch((erroDaVolta) =>
             console.error(`[troca] estúdio ${tenant.id}: a diferença falhou E a assinatura não voltou ao valor antigo:`, erroDaVolta),
           );

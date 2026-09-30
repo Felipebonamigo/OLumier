@@ -6,7 +6,11 @@ import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais, cicloDe, precoDoCicloCentavos } from "@/config/planos";
-import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza } from "@/config/combo";
+import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza, planoEntraNoCombo, precosDoPacote } from "@/config/combo";
+import { situacaoNoAtomatiza } from "@/lib/pacote";
+import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
+import { AcrescentarAtomatiza } from "@/components/acrescentar-atomatiza";
+import type { OfertaDoPacote } from "@/components/assinatura-botao";
 import {
   asaasConfigurado,
   asaasEmProducao,
@@ -145,6 +149,19 @@ export default async function ContaPage() {
       : false;
   const situacaoEnvio = situacaoDoTenant(tenant, asaasConfigurado());
 
+  /* O PACOTE COM O ATOMATIZA (`docs/pacote.md`). Só com a cobrança ligada, um
+   * plano da grade e o CPF/CNPJ da conta — é por ele que a ponte pergunta. Sem
+   * resposta de lá (null), a oferta não aparece: sem saber se a conta existe,
+   * a tela prometeria o que talvez não cumpra. */
+  const atomatiza =
+    asaasConfigurado() && plano && planoEntraNoCombo(plano) && tenant.cpf_cnpj
+      ? await situacaoNoAtomatiza(tenant.cpf_cnpj)
+      : null;
+  const oferta: OfertaDoPacote | null =
+    atomatiza && plano
+      ? { precos: precosDoPacote(plano), atomatiza, email: tenant.email, urlAtomatiza: URL_ATOMATIZA }
+      : null;
+
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
       <h1 className="text-2xl font-bold tracking-tight">Conta</h1>
@@ -250,7 +267,12 @@ export default async function ContaPage() {
                `MESES_PAGOS_NO_ANO`, para não existir um segundo lugar guardando
                preço — e para o desconto na tela nunca discordar do cobrado. */
             precoMensalCentavos={plano?.precoCentavos ?? 0}
+            pacote={oferta}
           />
+        )}
+
+        {tenant.asaas_assinatura_id && oferta && !oferta.atomatiza.assinatura && (
+          <AcrescentarAtomatiza oferta={oferta} anual={cicloDe(tenant.ciclo_cobranca) === "anual"} />
         )}
 
         {/* Aviso só quando a cobrança está ligada mas o split não foi configurado:

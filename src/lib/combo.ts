@@ -9,6 +9,7 @@ import {
   planoEntraNoCombo,
   descontoDaGaleriaCentavos,
   descricaoDaAssinatura,
+  ehDoPacote,
   faixaDaDescricaoAtomatiza,
   precoDoCicloComComboCentavos,
   type FaixaAtomatiza,
@@ -114,12 +115,14 @@ export async function diagnosticarAtomatiza(documento: string, plano?: Plano): P
         vista.foraPorque = "a descrição não diz a faixa (solo, equipe ou estúdio)";
         continue;
       }
-      if (!(await temCobrancaPaga(a.id))) {
-        vista.foraPorque = "nenhuma cobrança paga ainda (teste ou primeira fatura em aberto)";
-        continue;
-      }
+      /* Vencida primeiro: vale também para o pacote, que conta antes do
+       * primeiro pagamento só enquanto não vence (`docs/pacote.md`). */
       if (await temCobrancaVencida(a.id)) {
         vista.foraPorque = "tem cobrança vencida";
+        continue;
+      }
+      if (!ehDoPacote(a.description) && !(await temCobrancaPaga(a.id))) {
+        vista.foraPorque = "nenhuma cobrança paga ainda (teste ou primeira fatura em aberto)";
         continue;
       }
       achadas.push(faixa);
@@ -209,7 +212,7 @@ export async function recalcularCombo(tenantId: string, motivo: string): Promise
       planoId: plano.id,
       precoCentavos: depois,
       ciclo,
-      descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa),
+      descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa, ehDoPacote(assinatura.description)),
       atualizarPendentes: depois < antes,
     });
     await registrarEvento({
