@@ -507,6 +507,22 @@ export async function buscarCliente(clienteId: string): Promise<ClienteDoDocumen
   return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`);
 }
 
+/**
+ * Troca o CPF/CNPJ do NOSSO cliente no Asaas. Só por `scripts/trocar-documento.mjs`:
+ * trocar de documento não é autoatendimento — é o que prende o teste grátis e o
+ * combo à pessoa. Recusa o cliente que não tem a nossa referência.
+ */
+export async function trocarDocumentoDoCliente(clienteId: string, documento: string): Promise<ClienteDoDocumento> {
+  const cliente = await buscarCliente(clienteId);
+  if (!cliente.externalReference?.startsWith(PREFIXO)) {
+    throw new Error(`o cliente ${clienteId} não é da Galeria (ref ${cliente.externalReference ?? "-"})`);
+  }
+  return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`, {
+    method: "POST",
+    body: JSON.stringify({ cpfCnpj: documento.replace(/\D/g, "") }),
+  });
+}
+
 export async function assinaturasDoCliente(clienteId: string): Promise<AssinaturaAsaas[]> {
   const r = await chamar<{ data?: AssinaturaAsaas[] }>(
     `/subscriptions?customer=${encodeURIComponent(clienteId)}&limit=100`,
