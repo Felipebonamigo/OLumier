@@ -90,15 +90,26 @@ export const PRECO_DE_TABELA_ATOMATIZA: Record<FaixaAtomatiza, number> = {
  * dois cedem a mesma porcentagem do próprio preço, e a receita do combo fica
  * na proporção dos dois pacotes.
  *
- * Com 5 TB (R$ 439,99) + Solo (R$ 59,90), o pacote cede R$ 29,99: R$ 26,40 da
- * Galeria e R$ 3,59 do Atomatiza, 6% de cada lado.
+ * ── O TB ADICIONAL FICA FORA (30/09/2026) ─────────────────────────────────
+ *
+ * Felipe: "no plano é no máximo 1 TB, depois é TB adicional — aí é separado".
+ * O pacote é o PLANO (até 1 TB) com o Atomatiza; cada tera acima entra na
+ * mesma fatura, mas no preço cheio (R$ 80) e fora da conta do desconto. Então
+ * a proporção usa o preço do plano até 1 TB, e não o da Galeria inteira: 5 TB
+ * + Solo se dividem como 1 TB + Solo (R$ 20,00 da Galeria e R$ 9,99 do
+ * Atomatiza), e os 4 TB a mais são da Galeria, inteiros. Antes, 5 TB + Solo
+ * dividiam por R$ 439,99 contra R$ 59,90 — o Atomatiza cedia só R$ 3,59, e o
+ * preço dele no pacote mudava com o tamanho da Galeria.
  */
+/** Onde o plano acaba e começa o TB adicional (`config/planos.ts`, `TB_ADICIONAL_CENTAVOS`). */
+export const TETO_DO_PLANO_GB = 1000;
+
 export function divisaoDoDesconto(
   gb: number,
   faixa: FaixaAtomatiza,
 ): { galeria: number; atomatiza: number; pacote: number } {
   const pacote = DESCONTO_DO_PACOTE[linhaDaGaleria(gb)][faixa];
-  const g = espacoValido(gb) ? precoDoEspacoCentavos(gb) : 0;
+  const g = espacoValido(gb) ? precoDoEspacoCentavos(Math.min(gb, TETO_DO_PLANO_GB)) : 0;
   const a = PRECO_DE_TABELA_ATOMATIZA[faixa];
   const galeria = g + a > 0 ? Math.round((pacote * g) / (g + a)) : 0;
   return { galeria, atomatiza: pacote - galeria, pacote };

@@ -175,38 +175,90 @@ export function AssinaturaBotao({
         o jeito mais rápido de a pessoa fechar a aba.
       */}
       {tamanhos.length > 0 && (
+        /* TRÊS PLANOS, E DEPOIS O TB ADICIONAL — o mesmo desenho do montador da
+           home. Felipe: "no plano é no máximo 1 TB, depois é TB adicional". O
+           adicional entra na mesma fatura, no preço cheio, fora do desconto do
+           pacote (`config/combo.ts`, `TETO_DO_PLANO_GB`). */
         <fieldset className="mt-5">
           <legend className="text-xs font-medium text-texto-soft">Tamanho da Galeria</legend>
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {tamanhos.map((t) => {
-              const marcada = planoId === t.planoId;
-              return (
-                <label
-                  key={t.planoId}
-                  className={`cursor-pointer rounded-xl border px-3 py-2 transition ${
-                    marcada ? "border-acento bg-carbon-2" : "border-linha hover:border-linha-forte"
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="tamanho"
-                      checked={marcada}
-                      onChange={() => {
-                        setPlanoId(t.planoId);
-                        setErro(null);
-                      }}
-                      className="h-4 w-4 accent-[color:var(--acento)]"
-                    />
-                    <span className="text-sm font-medium">{rotuloGb(t.gb)}</span>
-                  </span>
-                  <span className="mt-0.5 block text-xs tabular-nums text-texto-faint">
-                    {formatarReais(t.precoCentavos)}/mês
-                  </span>
-                </label>
-              );
-            })}
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {tamanhos
+              .filter((t) => t.gb <= 1000)
+              .map((t) => {
+                const marcada = t.gb === Math.min(tamanho?.gb ?? 0, 1000);
+                return (
+                  <label
+                    key={t.planoId}
+                    className={`cursor-pointer rounded-xl border px-3 py-2 transition ${
+                      marcada ? "border-acento bg-carbon-2" : "border-linha hover:border-linha-forte"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="tamanho"
+                        checked={marcada}
+                        onChange={() => {
+                          setPlanoId(t.planoId);
+                          setErro(null);
+                        }}
+                        className="h-4 w-4 accent-[color:var(--acento)]"
+                      />
+                      <span className="text-sm font-medium">{rotuloGb(t.gb)}</span>
+                    </span>
+                    <span className="mt-0.5 block text-xs tabular-nums text-texto-faint">
+                      {formatarReais(t.precoCentavos)}/mês
+                    </span>
+                  </label>
+                );
+              })}
           </div>
+          {(() => {
+            const adicionais = tamanho ? Math.max(0, (tamanho.gb - 1000) / 1000) : 0;
+            const irPara = (n: number) => {
+              const alvo = tamanhos.find((t) => t.gb === 1000 + n * 1000);
+              if (alvo) {
+                setPlanoId(alvo.planoId);
+                setErro(null);
+              }
+            };
+            const base = tamanhos.find((t) => t.gb === 1000);
+            const passo = tamanhos.find((t) => t.gb === 2000);
+            const porTera = base && passo ? passo.precoCentavos - base.precoCentavos : 0;
+            return (
+              <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-linha bg-void/60 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Precisa de mais que 1 TB?</p>
+                  <p className="mt-0.5 text-xs text-texto-faint">
+                    TB adicional: {formatarReais(porTera)} por mês cada, fora do desconto do pacote.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="Um TB adicional a menos"
+                    disabled={adicionais === 0}
+                    onClick={() => irPara(adicionais - 1)}
+                    className="h-8 w-8 rounded-lg border border-linha text-sm disabled:opacity-40"
+                  >
+                    −
+                  </button>
+                  <span className="min-w-[4.5rem] text-center text-sm tabular-nums">
+                    {adicionais === 0 ? "nenhum" : `+${adicionais} TB`}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Um TB adicional a mais"
+                    disabled={!tamanhos.some((t) => t.gb === 1000 + (adicionais + 1) * 1000)}
+                    onClick={() => irPara(adicionais + 1)}
+                    className="h-8 w-8 rounded-lg border border-linha text-sm disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </fieldset>
       )}
 

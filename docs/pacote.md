@@ -282,3 +282,4 @@ que a cobrança é do pacote (cada lado guarda do seu jeito). Responde
 - **Situação (`/api/ponte/situacao`):** conta em pacote responde a assinatura
   como sempre (status pelo banco), e ganha `"pacote": true` dentro de
   `assinatura`.
+- **TB adicional:** o desconto é calculado sobre o plano até 1 TB; cada tera acima entra na mesma fatura, no preço cheio (R$ 80), fora da divisão do desconto.
