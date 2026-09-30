@@ -20,8 +20,6 @@ import {
   buscarAssinatura,
   buscarCliente,
   clientesDoDocumento,
-  clientesDoEmail,
-  type ClienteDoDocumento,
   temCobrancaPaga,
   temCobrancaVencida,
 } from "@/lib/asaas";
@@ -35,7 +33,7 @@ import { ACOES, registrarEvento } from "@/lib/eventos";
  * `config/combo.ts`. Aqui fica o que depende de rede e de banco:
  *
  *   · `faixaDoAtomatiza` — o estúdio tem o Atomatiza? Pergunta ao Asaas, pelo
- *     CPF/CNPJ ou pelo e-mail (`clientesDaPessoa`). A conta é a mesma dos dois produtos, então não há segredo novo
+ *     CPF/CNPJ. A conta é a mesma dos dois produtos, então não há segredo novo
  *     nem chamada de um sistema para o outro: cada um olha a assinatura do
  *     outro onde ela realmente está.
  *   · `recalcularCombo` — põe a NOSSA assinatura no preço certo. Nunca mexe na
@@ -55,31 +53,7 @@ const soDigitos = (s: string) => s.replace(/\D/g, "");
 const ORDEM: FaixaAtomatiza[] = ["solo", "equipe", "estudio"];
 
 /**
- * Quem é a pessoa, para achar os cadastros dela no Asaas.
- *
- * Felipe, 30/09/2026: "temos que reconhecer quando é a mesma conta, pode ser
- * pelo e-mail também". Só o CPF/CNPJ deixava de fora quem assina o Atomatiza
- * com o CNPJ da empresa e a Galeria com o CPF — ou quem trocou o documento no
- * Perfil de lá depois de assinar, o que não chega ao cadastro do Asaas. Os dois
- * lados continuam exigindo documento válido para assinar; o e-mail é a segunda
- * ponte, não a troca da primeira.
- */
-export interface Pessoa {
-  documento?: string | null;
-  email?: string | null;
-}
-
-/** Os cadastros do Asaas desta pessoa: pelo CPF/CNPJ OU pelo e-mail, sem repetir. */
-async function clientesDaPessoa(pessoa: Pessoa): Promise<ClienteDoDocumento[]> {
-  const achados = new Map<string, ClienteDoDocumento>();
-  const doc = soDigitos(pessoa.documento ?? "");
-  if (doc) for (const c of await clientesDoDocumento(doc)) achados.set(c.id, c);
-  if (pessoa.email) for (const c of await clientesDoEmail(pessoa.email)) achados.set(c.id, c);
-  return [...achados.values()];
-}
-
-/**
- * A faixa do Atomatiza que esta pessoa assina e está em dia, ou null.
+ * A faixa do Atomatiza que este CPF/CNPJ assina e está em dia, ou null.
  *
  * Conta só a assinatura VIVA (ACTIVE, não apagada), que JÁ FOI PAGA ao menos
  * uma vez e está SEM cobrança vencida. Sem as duas últimas, bastaria abrir uma
@@ -92,8 +66,8 @@ async function clientesDaPessoa(pessoa: Pessoa): Promise<ClienteDoDocumento[]> {
  * inclusive o nosso. Quem diz de quem é a ASSINATURA é o `externalReference`
  * dela.
  */
-export async function faixaDoAtomatiza(pessoa: Pessoa, plano?: Plano): Promise<FaixaAtomatiza | null> {
-  return (await diagnosticarAtomatiza(pessoa, plano)).faixa;
+export async function faixaDoAtomatiza(documento: string, plano?: Plano): Promise<FaixaAtomatiza | null> {
+  return (await diagnosticarAtomatiza(documento, plano)).faixa;
 }
 
 /** O que a conferência viu numa assinatura do Atomatiza, e se ela conta. */
@@ -120,14 +94,13 @@ export interface DiagnosticoDoAtomatiza {
  * cópia das regras — duas cópias envelheceriam separadas, e o diagnóstico
  * passaria a dizer uma coisa enquanto o preço faz outra.
  */
-export async function diagnosticarAtomatiza(pessoa: Pessoa, plano?: Plano): Promise<DiagnosticoDoAtomatiza> {
-  if (!soDigitos(pessoa.documento ?? "") && !pessoa.email?.trim()) {
-    return { faixa: null, assinaturas: [], motivo: "o estúdio não tem CPF/CNPJ nem e-mail na conta daqui" };
-  }
+export async function diagnosticarAtomatiza(documento: string, plano?: Plano): Promise<DiagnosticoDoAtomatiza> {
+  const doc = soDigitos(documento);
+  if (!doc) return { faixa: null, assinaturas: [], motivo: "o estúdio não tem CPF/CNPJ na conta daqui" };
 
   const vistas: AssinaturaVistaDoAtomatiza[] = [];
   const achadas: FaixaAtomatiza[] = [];
-  for (const cliente of await clientesDaPessoa(pessoa)) {
+  for (const cliente of await clientesDoDocumento(doc)) {
     for (const a of await assinaturasDoCliente(cliente.id)) {
       if (!a.externalReference?.startsWith(PREFIXO_ATOMATIZA)) continue;
       const faixa = faixaDaDescricaoAtomatiza(a.description);
@@ -156,7 +129,7 @@ export async function diagnosticarAtomatiza(pessoa: Pessoa, plano?: Plano): Prom
   if (achadas.length === 0) {
     const motivo =
       vistas.length === 0
-        ? "nenhuma assinatura do Atomatiza com este CPF/CNPJ nem com este e-mail no Asaas"
+        ? "nenhuma assinatura do Atomatiza com este CPF/CNPJ no Asaas"
         : `a assinatura do Atomatiza ${vistas.map((v) => v.foraPorque).join("; ")}`;
     return { faixa: null, assinaturas: vistas, motivo };
   }
@@ -210,12 +183,12 @@ export interface ResultadoDoCombo {
 export async function recalcularCombo(tenantId: string, motivo: string): Promise<ResultadoDoCombo | null> {
   if (!asaasConfigurado()) return null;
   const tenant = await buscarTenantPorId(tenantId);
-  if (!tenant?.asaas_assinatura_id) return null;
+  if (!tenant?.asaas_assinatura_id || !tenant.cpf_cnpj) return null;
   const plano = planoPorId(tenant.plano_id);
   if (!plano) return null;
   const ciclo = cicloDe(tenant.ciclo_cobranca);
 
-  const faixa = await faixaDoAtomatiza({ documento: tenant.cpf_cnpj, email: tenant.email }, plano);
+  const faixa = await faixaDoAtomatiza(tenant.cpf_cnpj, plano);
   const assinatura = await buscarAssinatura(tenant.asaas_assinatura_id);
   if (assinatura.deleted || assinatura.status !== "ACTIVE") return null;
 
@@ -262,22 +235,19 @@ export async function recalcularCombo(tenantId: string, motivo: string): Promise
 
 /**
  * Um evento da assinatura do Atomatiza chegou no nosso webhook: confere o
- * combo de quem tem o mesmo CPF/CNPJ ou o mesmo e-mail aqui.
+ * combo de quem tem o mesmo CPF/CNPJ aqui.
  *
- * O estúdio é achado pelo documento (`cpf_cnpj`) e pelo e-mail da conta, e não
+ * O estúdio é achado pelo documento gravado na assinatura (`cpf_cnpj`), e não
  * pela referência do cliente — o cliente do evento pode ser o de lá.
  */
 export async function recalcularComboDoCliente(clienteAsaasId: string, motivo: string): Promise<number> {
   if (!asaasConfigurado()) return 0;
   const cliente = await buscarCliente(clienteAsaasId);
   const doc = soDigitos(cliente.cpfCnpj ?? "");
-  const email = (cliente.email ?? "").trim().toLowerCase();
-  if (!doc && !email.includes("@")) return 0;
+  if (!doc) return 0;
   const estudios = await consultar<{ id: string }>(
-    `select id from tenants
-      where asaas_assinatura_id is not null
-        and (($1 <> '' and cpf_cnpj = $1) or ($2 <> '' and lower(email) = $2))`,
-    [doc, email.includes("@") ? email : ""],
+    "select id from tenants where cpf_cnpj = $1 and asaas_assinatura_id is not null",
+    [doc],
   );
   for (const e of estudios) {
     try {
@@ -339,7 +309,7 @@ export async function diagnosticarCombo(tenantId: string): Promise<DiagnosticoDo
     if (!a.deleted) valorAtualCentavos = Math.round(Number(a.value) * 100);
   }
 
-  const atomatiza = await diagnosticarAtomatiza({ documento: tenant.cpf_cnpj, email: tenant.email }, plano);
+  const atomatiza = await diagnosticarAtomatiza(tenant.cpf_cnpj ?? "", plano);
   const desconto = descontoDaGaleriaCentavos(plano, atomatiza.faixa);
   let motivo = atomatiza.motivo;
   if (!motivo && !planoEntraNoCombo(plano)) motivo = `o plano ${plano.id} é da grade antiga e fica fora do combo`;

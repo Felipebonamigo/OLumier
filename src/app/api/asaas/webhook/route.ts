@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
   // Não é nosso (provavelmente do Atomatiza): confirma o recebimento e sai.
   if (!eventoEhNosso(referencia)) {
     // Do Atomatiza, o evento ainda serve para conferir o combo de quem tem o
-    // mesmo CPF/CNPJ ou e-mail aqui — depois da resposta, e sem nunca virar erro.
+    // mesmo CPF/CNPJ aqui — depois da resposta, e sem nunca virar erro.
     const cliente = corpo.payment?.customer ?? corpo.subscription?.customer;
     const doAtomatiza =
       referencia?.startsWith(PREFIXO_ATOMATIZA) || referencia?.startsWith(PREFIXO_DIFERENCA_ATOMATIZA);

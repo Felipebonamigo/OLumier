@@ -720,14 +720,13 @@ export async function criarAssinaturaAction(
 
     /*
      * O COMBO COM O ATOMATIZA (28/09/2026). Quem já assina o Atomatiza com o
-     * mesmo CPF/CNPJ ou o mesmo e-mail entra aqui com a parte do desconto da
-     * Galeria — a outra o Atomatiza aplica na assinatura de lá, quando esta
-     * for paga. Sem
+     * mesmo CPF/CNPJ entra aqui com a metade do desconto da Galeria — a outra
+     * metade o Atomatiza aplica na assinatura de lá, quando esta for paga. Sem
      * resposta do Asaas, a assinatura nasce no preço cheio e a conferência do
      * primeiro pagamento acerta: nunca travar a assinatura por causa do
      * desconto. Ver `lib/combo.ts`.
      */
-    const faixa = await faixaDoAtomatiza({ documento: doc, email: tenant.email }, plano).catch(() => null);
+    const faixa = await faixaDoAtomatiza(doc, plano).catch(() => null);
 
     /* O preço da fatura é o do CICLO: no anual são dez mensalidades cobradas de
      * uma vez. A grade continua guardando só o mensal — o anual é derivado,
