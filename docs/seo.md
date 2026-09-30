@@ -48,6 +48,9 @@ prontidão para buscadores de IA). O que depende do branch
   carrega.
 - **`/llms.txt`**: o resumo para buscador de IA, só com o que já é público.
 - **`www` → raiz** no próprio app (menos `/api`), como segunda camada do Caddy.
+- **Arquivo na raiz do endereço do estúdio** (`/llms.txt`, `/apple-touch-icon.png`,
+  `/wp-login.php`…) recebe 404 do proxy, sem passar pela rota de galeria. Antes,
+  cada sondagem de robô custava uma renderização com consulta ao banco.
 
 ## 3. O que depende de alguém — em ordem
 

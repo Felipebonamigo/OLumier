@@ -25,6 +25,10 @@ import { COOKIE_PREVIA, VALIDADE_PREVIA_S, baseDaGaleria } from "@/config/previa
 
 const NOME_COOKIE = "olumier_sessao";
 
+/** Um arquivo pedido na raiz do endereço do estúdio — ver "ARQUIVO NÃO É GALERIA". */
+const ARQUIVO_NA_RAIZ =
+  /^\/[^/]*\.(txt|xml|json|webmanifest|ico|png|jpe?g|gif|webp|avif|svg|php|env|js|css|map|html?)$/i;
+
 /*
  * O domínio base era escrito aqui à mão, e este arquivo era o único lugar que o
  * sabia — o porteiro do certificado tinha a própria cópia, tirada de
@@ -115,6 +119,26 @@ export async function proxy(request: NextRequest) {
     }
     if (pathname === "/sitemap.xml") {
       return NextResponse.rewrite(new URL(`/e/${estudio}/mapa-do-site`, request.url));
+    }
+
+    /*
+     * ARQUIVO NÃO É GALERIA (30/09/2026).
+     *
+     * Robô pede arquivo o tempo todo — `/llms.txt`, `/apple-touch-icon.png`,
+     * `/ads.txt`, e as sondagens de sempre (`/wp-login.php`, `/.env`). Cada um
+     * era lido como o endereço curto de uma galeria e pagava uma renderização
+     * inteira da rota, com consulta ao banco, para devolver 404.
+     *
+     * Endereço de galeria nunca tem extensão: todo slug sai de `gerarSlug`, que
+     * só deixa letra, número e hífen. A lista de extensões é fechada, e não
+     * "qualquer ponto", para uma galeria antiga de antes dessa regra continuar
+     * abrindo — só o que é inequivocamente arquivo para aqui.
+     */
+    if (!interna && ARQUIVO_NA_RAIZ.test(pathname)) {
+      return new NextResponse("Não encontrado\n", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
     }
 
     if (!interna) {

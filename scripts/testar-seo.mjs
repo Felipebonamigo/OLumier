@@ -506,6 +506,23 @@ await etapa("o /icon.svg do endereço do estúdio não passa pela rota de galeri
   }
 });
 
+await etapa("arquivo pedido no endereço do estúdio não vira galeria", async () => {
+  /*
+   * `/llms.txt`, `/apple-touch-icon.png`, `/wp-login.php`: robô pede isso o
+   * tempo todo, e cada pedido era lido como uma galeria — renderização inteira
+   * e consulta ao banco para devolver 404. O 404 agora sai do proxy, em texto;
+   * a página de 404 em HTML é a prova de que ele passou pela rota de galeria.
+   */
+  for (const caminho of ["/llms.txt", "/apple-touch-icon.png", "/wp-login.php"]) {
+    const r = await pegarComo(caminho, hostEstudio);
+    if (r.status !== 404) throw new Error(`${caminho} veio HTTP ${r.status}`);
+    if (r.tipo.includes("text/html")) throw new Error(`${caminho} passou pela rota de galeria`);
+  }
+  /* E o endereço curto de uma galeria de verdade continua abrindo. */
+  const galeria = await pegarComo(`/${g.gslug}`, hostEstudio);
+  if (galeria.status !== 200) throw new Error(`a galeria veio HTTP ${galeria.status}`);
+});
+
 const vitrine = (await pegarComo("/", hostEstudio)).corpo;
 
 await etapa("a aba da vitrine é do estúdio: o nome dele, e nunca o nosso ícone", () => {
