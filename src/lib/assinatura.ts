@@ -29,6 +29,7 @@
 
 import { CARENCIA_POS_TRIAL_DIAS } from "@/config/trial";
 import { FUSO } from "@/config/fuso";
+import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 import { dataDoAsaas } from "@/config/troca-de-plano";
 
 export type MotivoBloqueio = "trial_vencido" | "inadimplente" | "cancelado";
@@ -53,10 +54,18 @@ const RECADOS: Record<MotivoBloqueio, string> = {
     "Seu teste grátis terminou. Ative a assinatura em Conta para voltar a enviar arquivos. " +
     "As galerias já publicadas ficam no ar por mais 15 dias — depois disso saem do ar, e os arquivos continuam guardados. " +
     "Sem assinatura, eles são apagados 60 dias depois do fim do teste, sempre com dois avisos por e-mail antes. Assinar até lá devolve tudo.",
+  /* Os dois abaixo prometiam galeria no ar sem prazo. Desde 30/09/2026 a
+   * conta encerrada guarda por `RETENCAO_POR_EXTENSO` depois do fim do período
+   * pago (`lib/contas-encerradas.ts`), e recado que esconde o prazo é o que o
+   * fotógrafo descobre no dia em que o cliente dele liga. */
   inadimplente:
-    "Há uma cobrança em aberto. Assim que o pagamento for confirmado, o envio volta automaticamente — as galerias já publicadas continuam no ar.",
+    "Há uma cobrança em aberto. Assim que o pagamento for confirmado, o envio volta automaticamente. " +
+    `As galerias já publicadas continuam no ar por até ${RETENCAO_POR_EXTENSO} depois do fim do período pago; ` +
+    "se a pendência passar disso, os arquivos são apagados — sempre com avisos por e-mail antes.",
   cancelado:
-    "Sua assinatura foi cancelada. Ative de novo em Conta para voltar a enviar arquivos — as galerias já publicadas continuam no ar.",
+    "Sua assinatura foi cancelada. Ative de novo em Conta para voltar a enviar arquivos. " +
+    `As galerias já publicadas ficam no ar por ${RETENCAO_POR_EXTENSO} depois do fim do período pago; ` +
+    "depois disso os arquivos são apagados, sempre com avisos por e-mail antes. Reativar até lá mantém tudo.",
 };
 
 /** Só o que a regra precisa — assim serve para Tenant e para um caso de teste. */
@@ -136,7 +145,7 @@ export function situacaoDoTenant(tenant: ContaParaAvaliar, cobrancaLigada: boole
     if (fim && fim.getTime() > Date.now()) {
       return {
         podeEnviar: true,
-        aviso: `Assinatura cancelada. Você continua enviando arquivos até ${porExtenso(fim)}, que é o fim do período já pago. Depois disso as galerias publicadas seguem no ar, mas o envio para.`,
+        aviso: `Assinatura cancelada. Você continua enviando arquivos até ${porExtenso(fim)}, que é o fim do período já pago. Depois disso o envio para, e as galerias publicadas seguem no ar por mais ${RETENCAO_POR_EXTENSO} — antes de apagar qualquer coisa, avisamos por e-mail.`,
       };
     }
     return { podeEnviar: false, motivo: "cancelado", recado: RECADOS.cancelado };

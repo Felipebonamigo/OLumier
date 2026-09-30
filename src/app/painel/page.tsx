@@ -68,12 +68,23 @@ export default async function PainelPage({
             <p className="mt-1 text-sm text-texto-soft">Nenhuma galeria ainda.</p>
           )}
         </div>
-        <Link
-          href="/painel/galerias/nova"
-          className="rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto"
-        >
-          Nova galeria
-        </Link>
+        {/* Importar fica AO LADO e menor: é o caminho de quem chega com o
+            acervo de outro lugar — várias galerias de uma vez —, não o do dia a
+            dia. Ver `lib/importacao.ts`. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/painel/importar"
+            className="rounded-lg border border-linha-forte px-4 py-2.5 text-sm transition hover:bg-carbon-2"
+          >
+            Importar várias
+          </Link>
+          <Link
+            href="/painel/galerias/nova"
+            className="rounded-lg bg-acento px-4 py-2.5 text-sm font-semibold text-void transition hover:bg-acento-alto"
+          >
+            Nova galeria
+          </Link>
+        </div>
       </div>
 
       {vazioDeVerdade ? (
@@ -89,6 +100,13 @@ export default async function PainelPage({
           >
             Nova galeria
           </Link>
+          <p className="mt-4 text-sm text-texto-soft">
+            Já tem galerias em outro lugar?{" "}
+            <Link href="/painel/importar" className="underline underline-offset-4 hover:text-texto">
+              Importe várias de uma vez
+            </Link>
+            .
+          </p>
         </div>
       ) : (
         <ListaGalerias

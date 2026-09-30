@@ -265,7 +265,10 @@ await etapa("o envio manda a data do EXIF no pedido", async () => {
   if (!/tiradaEm:\s*tiradaEm\?\.toISOString\(\)/.test(envio)) {
     throw new Error("o corpo do /upload não leva `tiradaEm` — a coluna ficaria nula em tudo");
   }
-  if (!/dataDaFoto\(tarefa\.arquivo\)/.test(envio)) {
+  /* `arquivo`, e não mais `tarefa.arquivo`, desde a importação (30/09/2026):
+     o que vem de dentro de um ZIP é aberto antes, e o EXIF é lido do arquivo
+     aberto — o mesmo que sobe. */
+  if (!/dataDaFoto\(arquivo\)/.test(envio)) {
     throw new Error("o envio não lê mais o EXIF");
   }
   return "lido e enviado";

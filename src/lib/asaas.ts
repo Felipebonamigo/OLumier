@@ -52,6 +52,24 @@ function base(): string {
 
 export const asaasConfigurado = () => Boolean(process.env.ASAAS_API_KEY);
 
+/**
+ * A chave, sem o escape do `$`.
+ *
+ * No servidor a chave mora no `.env.production` escrita `\$aact_…`: o Next lê
+ * `$palavra` como variável e, sem a barra, a chave chegava vazia ao app (ver
+ * `docs/ligar-cobranca.md`, passo 3). Só que os scripts do servidor carregam o
+ * mesmo arquivo com `node --env-file`, que NÃO expande nada e entrega a barra
+ * junto — e o Asaas responde "A chave de API fornecida é inválida". Foi o que
+ * derrubou a primeira `scripts/conferir-pagamentos.mjs` em 30/09/2026.
+ *
+ * Chave do Asaas não tem barra invertida, então tirar `\` de antes de um `$` só
+ * desfaz o escape: o app (que já recebe sem barra) não muda, e os scripts
+ * passam a mandar a chave de verdade.
+ */
+export function chaveDoAsaas(): string | undefined {
+  return process.env.ASAAS_API_KEY?.replace(/\\\$/g, "$");
+}
+
 export const asaasEmProducao = () => process.env.ASAAS_AMBIENTE === "producao";
 
 /**
@@ -69,7 +87,7 @@ function segmento(id: string): string {
 }
 
 async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
-  const chave = process.env.ASAAS_API_KEY;
+  const chave = chaveDoAsaas();
   if (!chave) throw new Error("ASAAS_API_KEY não configurada");
 
   const r = await fetch(`${base()}${caminho}`, {
@@ -117,6 +135,109 @@ async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> 
     throw new Error(`Asaas: ${detalhe}`);
   }
   return dados as T;
+}
+
+/*
+ * ── A CARTEIRA DA PRÓPRIA CONTA NÃO VAI NO SPLIT (29/09/2026) ────────────
+ *
+ * Uma cliente de verdade tentou assinar e leu, em vermelho, embaixo do
+ * botão: "Asaas: Não é permitido split para sua própria carteira." A conta
+ * que cobra é a mesma do Atomatiza, e uma das `ASAAS_CARTEIRA_*` aponta para
+ * a carteira DELA. O Asaas recusa a cobrança inteira por causa dessa linha, e
+ * nenhuma assinatura nascia.
+ *
+ * A linha não faz falta: o que não vai no split fica na conta que cobrou, que
+ * é exatamente onde essa fatia ia parar. Então a carteira da conta é
+ * perguntada ao próprio Asaas (`GET /wallets`) e tirada do split nas três
+ * chamadas que o mandam — em vez de depender de alguém lembrar de apagar a
+ * variável certa no servidor.
+ *
+ * Se a pergunta falhar — a chave precisa da permissão ACCOUNT_INFO:READ para
+ * isso, e a do Atomatiza pode não ter —, `comSplit` descobre do outro jeito:
+ * tenta sem cada carteira até o Asaas aceitar (30/09/2026, ver lá).
+ */
+/* Guardada por endereço da API — e não pela chave: trocar a chave em produção
+   é trocar o `.env`, que reinicia o processo e esvazia isto de qualquer jeito.
+   O endereço é o que muda dentro de um processo, nos testes. */
+const carteiraDaConta = new Map<string, string>();
+
+async function carteiraPropria(): Promise<string | null> {
+  const conta = base();
+  const guardada = carteiraDaConta.get(conta);
+  if (guardada) return guardada;
+  try {
+    const r = await chamar<{ data?: { id?: string }[] }>("/wallets");
+    const id = r.data?.[0]?.id?.trim().toLowerCase() || null;
+    if (id) carteiraDaConta.set(conta, id);
+    else console.warn("[asaas] GET /wallets não trouxe a carteira da conta");
+    return id;
+  } catch (e) {
+    /* Sem isto a falha era muda: a cobrança seguia e só o cliente via o erro. */
+    console.warn(`[asaas] não consegui ler a carteira da conta: ${(e as Error).message}`);
+    return null;
+  }
+}
+
+function normalizada(carteira: string): string {
+  return carteira.trim().toLowerCase();
+}
+
+/** As fatias sem a da própria conta. Pura, para o teste cobrir sem rede. */
+export function semACarteiraDaConta(fatias: FatiaSocio[], propria: string | null): FatiaSocio[] {
+  if (!propria) return fatias;
+  return fatias.filter((f) => normalizada(f.carteira) !== propria);
+}
+
+type FatiaAsaas = ReturnType<typeof montarFatiaAsaas>;
+
+/** A recusa que o Asaas dá quando a carteira da conta está no split. */
+export function recusaPelaPropriaCarteira(e: unknown): boolean {
+  return e instanceof Error && /pr[oó]pria carteira/i.test(e.message);
+}
+
+/**
+ * Manda uma chamada que leva split — e, se o Asaas ainda recusar pela
+ * carteira da própria conta, descobre qual é.
+ *
+ * ── POR QUE A SEGUNDA LINHA DE DEFESA (30/09/2026) ───────────────────────
+ *
+ * A primeira (`GET /wallets`) depende de a chave poder ler os dados da conta.
+ * Se não puder, a pergunta falha, o split vai inteiro e a cliente lê de novo
+ * a mesma frase vermelha. Aqui a recusa vira a resposta: tenta de novo sem
+ * uma carteira de cada vez, e a que faz o Asaas aceitar é a da conta — fica
+ * guardada, e as próximas cobranças já saem certas de primeira.
+ *
+ * Tentar de novo é seguro porque recusa de validação não cria nada: nem
+ * assinatura, nem cobrança, nem troca de valor. Qualquer OUTRO erro sobe na
+ * hora, sem nova tentativa — só esta recusa, que a gente sabe o que quer
+ * dizer, é repetida.
+ */
+async function comSplit<T>(
+  fatias: FatiaSocio[],
+  enviar: (split: FatiaAsaas[]) => Promise<T>,
+): Promise<T> {
+  const conta = base();
+  const aMandar = semACarteiraDaConta(fatias, await carteiraPropria());
+  try {
+    return await enviar(aMandar.map((f) => montarFatiaAsaas(f)));
+  } catch (e) {
+    if (!recusaPelaPropriaCarteira(e)) throw e;
+    let ultima = e;
+    for (const suspeita of new Set(aMandar.map((f) => normalizada(f.carteira)))) {
+      try {
+        const r = await enviar(
+          aMandar.filter((f) => normalizada(f.carteira) !== suspeita).map((f) => montarFatiaAsaas(f)),
+        );
+        carteiraDaConta.set(conta, suspeita);
+        console.warn(`[asaas] a carteira da conta termina em …${suspeita.slice(-4)}; fica fora do split`);
+        return r;
+      } catch (e2) {
+        if (!recusaPelaPropriaCarteira(e2)) throw e2;
+        ultima = e2;
+      }
+    }
+    throw ultima;
+  }
 }
 
 // --- cliente ----------------------------------------------------------------
@@ -233,7 +354,7 @@ export async function criarAssinatura(dados: {
 
   const fatias = montarFatias(dados.planoId, dados.precoCentavos, dados.ciclo);
 
-  return chamar<AssinaturaAsaas>("/subscriptions", {
+  return comSplit(fatias, (split) => chamar<AssinaturaAsaas>("/subscriptions", {
     method: "POST",
     body: JSON.stringify({
       customer: dados.clienteAsaasId,
@@ -262,9 +383,9 @@ export async function criarAssinatura(dados: {
       cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
       description: dados.descricao,
       externalReference: referencia,
-      split: fatias.map((f) => montarFatiaAsaas(f)),
+      split,
     }),
-  });
+  }));
 }
 
 /**
@@ -299,15 +420,15 @@ export async function atualizarAssinatura(dados: {
    * dinheiro dos outros onze. */
   const fatias = montarFatias(dados.planoId, dados.precoCentavos, dados.ciclo);
 
-  return chamar<AssinaturaAsaas>(`/subscriptions/${dados.assinaturaId}`, {
+  return comSplit(fatias, (split) => chamar<AssinaturaAsaas>(`/subscriptions/${dados.assinaturaId}`, {
     method: "PUT",
     body: JSON.stringify({
       value: dados.precoCentavos / 100,
       description: dados.descricao,
       updatePendingPayments: dados.atualizarPendentes ?? true,
-      split: fatias.map((f) => montarFatiaAsaas(f)),
+      split,
     }),
-  });
+  }));
 }
 
 // --- combo com o Atomatiza (28/09/2026) ------------------------------------
@@ -323,6 +444,57 @@ export interface ClienteDoDocumento {
   deleted?: boolean;
 }
 
+/**
+ * Os clientes da conta com este e-mail — só para diagnóstico
+ * (`scripts/conferir-combo.mjs`). O combo liga as contas pelo CPF/CNPJ; quando
+ * não liga, o e-mail costuma achar o cadastro do Atomatiza feito com OUTRO
+ * documento (o CNPJ da empresa lá, o CPF aqui).
+ */
+export async function clientesDoEmail(email: string): Promise<(ClienteDoDocumento & { name?: string; email?: string })[]> {
+  const r = await chamar<{ data?: (ClienteDoDocumento & { name?: string; email?: string })[] }>(
+    `/customers?email=${encodeURIComponent(email)}&limit=100`,
+  );
+  return (r.data ?? []).filter((c) => !c.deleted);
+}
+
+/** Todas as cobranças de um cliente — avulsas e de assinatura —, só para diagnóstico. */
+export async function cobrancasDoCliente(clienteId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  subscription?: string | null;
+  externalReference?: string | null;
+  description?: string | null;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    subscription?: string | null; externalReference?: string | null; description?: string | null;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/payments?customer=${encodeURIComponent(clienteId)}&limit=100`);
+  return r.data ?? [];
+}
+
+/** Todas as cobranças de uma assinatura, com situação — só para diagnóstico. */
+export async function cobrancasDaAssinatura(assinaturaId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/subscriptions/${segmento(assinaturaId)}/payments?limit=100`);
+  return r.data ?? [];
+}
+
 /** Os clientes da conta com este CPF/CNPJ — o nosso e o do Atomatiza. */
 export async function clientesDoDocumento(documento: string): Promise<ClienteDoDocumento[]> {
   const r = await chamar<{ data?: ClienteDoDocumento[] }>(
@@ -333,6 +505,22 @@ export async function clientesDoDocumento(documento: string): Promise<ClienteDoD
 
 export async function buscarCliente(clienteId: string): Promise<ClienteDoDocumento> {
   return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`);
+}
+
+/**
+ * Troca o CPF/CNPJ do NOSSO cliente no Asaas. Só por `scripts/trocar-documento.mjs`:
+ * trocar de documento não é autoatendimento — é o que prende o teste grátis e o
+ * combo à pessoa. Recusa o cliente que não tem a nossa referência.
+ */
+export async function trocarDocumentoDoCliente(clienteId: string, documento: string): Promise<ClienteDoDocumento> {
+  const cliente = await buscarCliente(clienteId);
+  if (!cliente.externalReference?.startsWith(PREFIXO)) {
+    throw new Error(`o cliente ${clienteId} não é da Galeria (ref ${cliente.externalReference ?? "-"})`);
+  }
+  return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`, {
+    method: "POST",
+    body: JSON.stringify({ cpfCnpj: documento.replace(/\D/g, "") }),
+  });
 }
 
 export async function assinaturasDoCliente(clienteId: string): Promise<AssinaturaAsaas[]> {
@@ -365,6 +553,49 @@ export async function temCobrancaPaga(assinaturaId: string): Promise<boolean> {
     `/subscriptions/${segmento(assinaturaId)}/payments?limit=100`,
   );
   return (r.data ?? []).some((c) => PAGAS.has(c.status ?? ""));
+}
+
+/**
+ * A cobrança que pagou o período em curso: a paga mais recente da assinatura.
+ *
+ * É dela que sai o valor da devolução ao cancelar (`config/devolucao.ts`) e o
+ * id que a pessoa estorna no painel do Asaas. "Mais recente" pela data em que
+ * o dinheiro foi confirmado, com o vencimento de reserva — a lista do Asaas não
+ * promete ordem.
+ */
+export async function ultimaCobrancaPaga(
+  assinaturaId: string,
+): Promise<{
+  id: string;
+  centavos: number;
+  confirmedDate: string | null;
+  clientPaymentDate: string | null;
+  paymentDate: string | null;
+} | null> {
+  const r = await chamar<{
+    data?: {
+      id: string;
+      status?: string;
+      value?: number;
+      confirmedDate?: string | null;
+      clientPaymentDate?: string | null;
+      paymentDate?: string | null;
+      dueDate?: string | null;
+    }[];
+  }>(`/subscriptions/${segmento(assinaturaId)}/payments?limit=100`);
+  const pagas = (r.data ?? []).filter((c) => PAGAS.has(c.status ?? ""));
+  if (pagas.length === 0) return null;
+  const quando = (c: (typeof pagas)[number]) => c.confirmedDate ?? c.paymentDate ?? c.dueDate ?? "";
+  const ultima = pagas.reduce((a, b) => (quando(b) > quando(a) ? b : a));
+  return {
+    id: ultima.id,
+    centavos: Math.round((ultima.value ?? 0) * 100),
+    // As datas vão junto para a conferência de pagamentos perdidos contar o
+    // período do mesmo jeito que o webhook (`pagoAteDepoisDoAviso`).
+    confirmedDate: ultima.confirmedDate ?? null,
+    clientPaymentDate: ultima.clientPaymentDate ?? null,
+    paymentDate: ultima.paymentDate ?? null,
+  };
 }
 
 export async function cancelarAssinatura(assinaturaId: string) {
@@ -458,7 +689,7 @@ export async function criarCobrancaAvulsa(dados: {
   fatias: FatiaSocio[];
   cartao?: { token: string; ip: string } | null;
 }): Promise<CobrancaAsaas> {
-  return chamar<CobrancaAsaas>("/payments", {
+  return comSplit(dados.fatias, (split) => chamar<CobrancaAsaas>("/payments", {
     method: "POST",
     body: JSON.stringify({
       customer: dados.clienteAsaasId,
@@ -468,9 +699,9 @@ export async function criarCobrancaAvulsa(dados: {
       description: dados.descricao,
       externalReference: dados.referencia,
       ...(dados.cartao ? { creditCardToken: dados.cartao.token, remoteIp: dados.cartao.ip } : {}),
-      split: dados.fatias.length ? dados.fatias.map((f) => montarFatiaAsaas(f)) : undefined,
+      split: split.length ? split : undefined,
     }),
-  });
+  }));
 }
 
 /** A fatura de diferença que ainda espera pagamento, se houver — para a Conta. */

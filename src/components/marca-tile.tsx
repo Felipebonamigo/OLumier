@@ -49,7 +49,16 @@ const ELETRONS = [
   [10.66, 31.7],
 ] as const;
 
-export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
+export function MarcaSimbolo({
+  tamanho = 40,
+  completo = false,
+}: {
+  tamanho?: number;
+  /** O desenho inteiro mesmo abaixo de 28px. Para onde a marca aparece ao
+   *  lado do nome e precisa ser reconhecida como a do site — o seletor de
+   *  plataforma, a 22px. No favicon e no selo de 16px, continua a miúda. */
+  completo?: boolean;
+}) {
   /*
    * ── DUAS VERSÕES, E O MOTIVO ──────────────────────────────────────────
    * Três órbitas + seis lâminas + três elétrons são vinte e poucos traços. A
@@ -60,7 +69,7 @@ export function MarcaSimbolo({ tamanho = 40 }: { tamanho?: number }) {
    * diafragma sem lâmina, e o núcleo âmbar. A silhueta continua a mesma, então
    * as duas se reconhecem como a mesma marca.
    */
-  const miudo = tamanho < 28;
+  const miudo = tamanho < 28 && !completo;
 
   /*
    * ── O FURO NO LUGAR DO DISCO ──────────────────────────────────────────

@@ -1,0 +1,15 @@
+[Unit]
+Description=Fotonio - conta os pagamentos do Asaas que o webhook perdeu
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/fotonio
+# Rede embaixo do webhook do Asaas (30/09/2026, o pagamento da Bia Zac que
+# nao chegou). Cobranca ja contada nao muda nada: rodar de hora em hora e
+# seguro. Ver src/lib/pagamentos-perdidos.ts.
+ExecStart=/usr/local/bin/node --env-file=/opt/fotonio/.env.production \
+  --experimental-strip-types --import /opt/fotonio/scripts/registrar-ts.mjs \
+  /opt/fotonio/scripts/conferir-pagamentos.mjs --acertar
+StandardOutput=append:/var/log/fotonio-pagamentos.log
+StandardError=append:/var/log/fotonio-pagamentos.log

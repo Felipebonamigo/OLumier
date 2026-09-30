@@ -193,13 +193,17 @@ await etapa("uma tarefa que falha PARA a fila, sem deixar trabalhador solto", as
   return `parou em ${iniciadas} de ${itens.length}, nada em voo`;
 });
 
+/* Esperas de 1 ms: a regra é a mesma, e a suíte não espera os dois minutos de
+   verdade. A paciência de verdade é conferida pela etapa dela, mais abaixo. */
+const RAPIDO = mod.ESPERAS_ENTRE_TENTATIVAS.map(() => 1);
+
 await etapa("tenta de novo e vence na segunda", async () => {
   let tentativas = 0;
   const r = await mod.comRetentativa(async () => {
     tentativas++;
     if (tentativas < 2) throw new Error("rede caiu");
     return "ok";
-  });
+  }, undefined, RAPIDO);
   if (r !== "ok" || tentativas !== 2) throw new Error(`resultado ${r} em ${tentativas} tentativas`);
   return "2 tentativas";
 });
@@ -211,13 +215,119 @@ await etapa("desiste depois do limite, sem travar a fila", async () => {
     await mod.comRetentativa(async () => {
       tentativas++;
       throw new Error("servidor fora");
-    });
+    }, undefined, RAPIDO);
     throw new Error("deveria ter falhado");
   } catch (e) {
     if (e.message !== "servidor fora") throw e;
   }
   if (tentativas !== mod.TENTATIVAS) throw new Error(`tentou ${tentativas}`);
-  return `${tentativas} tentativas em ${((Date.now() - t0) / 1000).toFixed(1)}s (espera crescente)`;
+  return `${tentativas} tentativas em ${((Date.now() - t0) / 1000).toFixed(1)}s`;
+});
+
+/*
+ * ── A PACIÊNCIA (30/09/2026) ──────────────────────────────────────────────
+ *
+ * A Alícia viu arquivos desistirem juntos em "conexão interrompida". Eram três
+ * tentativas em quatro segundos: um Wi-Fi que some por cinco matava a fila.
+ */
+await etapa("a paciência por arquivo passa de um minuto, e cresce a cada vez", () => {
+  const e = mod.ESPERAS_ENTRE_TENTATIVAS;
+  const total = e.reduce((a, b) => a + b, 0);
+  if (total < 60_000) throw new Error(`só ${total / 1000}s de espera somada`);
+  for (let i = 1; i < e.length; i++) {
+    if (e[i] <= e[i - 1]) throw new Error(`a espera ${i + 1} não cresceu`);
+  }
+  return `${mod.TENTATIVAS} tentativas, ${Math.round(total / 1000)}s de espera somada`;
+});
+
+await etapa("sem rede nenhuma, a fila espera a rede voltar sem gastar tentativa", async () => {
+  const navegadorOriginal = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const janelaOriginal = globalThis.window;
+  let online = true;
+  let quedas = 0;
+  Object.defineProperty(globalThis, "navigator", {
+    value: { get onLine() { return online; } },
+    configurable: true,
+  });
+  /* A rede "volta" 5 ms depois de a fila começar a esperar por ela. */
+  globalThis.window = {
+    addEventListener: (evento, fn) => {
+      if (evento !== "online") return;
+      setTimeout(() => {
+        online = true;
+        fn();
+      }, 5);
+    },
+  };
+  try {
+    let tentativas = 0;
+    const avisos = [];
+    /* Só DUAS tentativas contando — e três quedas de rede no caminho. */
+    const r = await mod.comRetentativa(
+      async () => {
+        tentativas++;
+        if (tentativas <= 3) {
+          online = false;
+          quedas++;
+          throw new Error("conexão interrompida");
+        }
+        return "ok";
+      },
+      (_, semRede) => avisos.push(semRede),
+      [1],
+    );
+    if (r !== "ok") throw new Error(`veio ${r}`);
+    if (!avisos.every(Boolean)) throw new Error("não avisou que estava sem rede");
+    return `${quedas} quedas de rede com 2 tentativas de limite — e chegou`;
+  } finally {
+    if (navegadorOriginal) Object.defineProperty(globalThis, "navigator", navegadorOriginal);
+    else delete globalThis.navigator;
+    if (janelaOriginal === undefined) delete globalThis.window;
+    else globalThis.window = janelaOriginal;
+  }
+});
+
+/*
+ * ── O MOTIVO NA TELA (30/09/2026) ─────────────────────────────────────────
+ *
+ * A segunda foto da Alícia: "0 de 38" e três arquivos em "tentando de novo
+ * (4)…", sem dizer por quê. Duas coisas escondiam o motivo: a fila não
+ * repassava o erro da tentativa, e o erro marcado `definitivo` (sem espaço,
+ * assinatura vencida) era repetido do mesmo jeito — o `definitivo` era
+ * gravado e ninguém lia.
+ */
+await etapa("erro definitivo sai na primeira, sem gastar as outras tentativas", async () => {
+  let tentativas = 0;
+  try {
+    await mod.comRetentativa(async () => {
+      tentativas++;
+      throw mod.erroDefinitivo("Sem espaço no plano.");
+    }, undefined, RAPIDO);
+    throw new Error("deveria ter falhado");
+  } catch (e) {
+    if (e.message !== "Sem espaço no plano.") throw e;
+  }
+  if (tentativas !== 1) throw new Error(`tentou ${tentativas} vezes`);
+  return "1 tentativa";
+});
+
+await etapa("quem mostra o 'tentando de novo' recebe o motivo da falha", async () => {
+  const motivos = [];
+  let tentativas = 0;
+  await mod.comRetentativa(
+    async () => {
+      tentativas++;
+      if (tentativas === 1) throw new Error("conexão interrompida");
+      if (tentativas === 2) throw new Error("o armazenamento recusou (HTTP 403 · AccessDenied)");
+      return "ok";
+    },
+    (_, __, erro) => motivos.push(erro.message),
+    RAPIDO,
+  );
+  if (motivos.join(" | ") !== "conexão interrompida | o armazenamento recusou (HTTP 403 · AccessDenied)") {
+    throw new Error(motivos.join(" | "));
+  }
+  return motivos.join(" → ");
 });
 
 /*

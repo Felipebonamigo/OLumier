@@ -5,7 +5,9 @@ import { eventoEhNosso, tenantDaReferencia, tipoDaReferencia } from "@/lib/asaas
 import { efeitoDoEvento, pagoAteDepoisDoAviso, type DatasDaCobranca } from "@/lib/assinatura";
 import { PREFIXO_ATOMATIZA, PREFIXO_DIFERENCA_ATOMATIZA } from "@/config/combo";
 import { recalcularCombo, recalcularComboDoCliente } from "@/lib/combo";
+import { avisarPagamento } from "@/lib/aviso-de-pagamento";
 import { aplicarEventoDaDiferenca } from "@/lib/troca-de-plano";
+import { marcarDevolucaoFeita } from "@/lib/devolucao";
 
 /**
  * Webhook do Asaas: é assim que sabemos que o cliente pagou (ou deixou de pagar).
@@ -113,6 +115,19 @@ export async function POST(request: NextRequest) {
   const efeito = efeitoDoEvento(evento);
 
   /*
+   * A DEVOLUÇÃO pedida ao cancelar (`lib/devolucao.ts`) é estornada à mão no
+   * painel do Asaas; é este aviso que fecha a pendência. O parcial não tem
+   * efeito sobre a conta (`efeitoDoEvento` não o conhece): o período já tinha
+   * acabado no cancelamento, e um estorno parcial feito por outro motivo não
+   * pode derrubar o acesso de ninguém.
+   */
+  if ((evento === "PAYMENT_REFUNDED" || evento === "PAYMENT_PARTIALLY_REFUNDED") && corpo.payment?.id) {
+    if (await marcarDevolucaoFeita(corpo.payment.id)) {
+      console.log(`[asaas] devolução da cobrança ${corpo.payment.id} feita → estúdio ${tenantId}`);
+    }
+  }
+
+  /*
    * A DIFERENÇA DE UMA TROCA DE PLANO não é mensalidade: não renova o período
    * pago. Sem este desvio, pagar R$ 20 de diferença cairia no "pagou" abaixo e
    * daria um mês — ou um ano, no anual — de serviço a partir de hoje. Ver
@@ -169,11 +184,19 @@ export async function POST(request: NextRequest) {
     );
     // Cada pagamento nosso também confere o combo. É a rede de segurança: se um
     // aviso do Atomatiza se perdeu, o preço se acerta a cada ciclo.
-    after(() =>
-      recalcularCombo(tenantId, evento).catch((erro) =>
+    /* Primeiro o combo, depois o e-mail: o aviso mostra o valor já acertado.
+       E o e-mail sai mesmo se o combo falhar — ele diz que não conferiu. Ver
+       `lib/aviso-de-pagamento.ts`. `pago_ate` nulo antes deste aviso = é o
+       primeiro pagamento do estúdio. */
+    const primeiro = !tenant.pago_ate;
+    after(async () => {
+      await recalcularCombo(tenantId, evento).catch((erro) =>
         console.error(`[combo] ${evento} do estúdio ${tenantId}:`, erro),
-      ),
-    );
+      );
+      await avisarPagamento(tenantId, { valor: corpo.payment?.value ?? null, evento, primeiro }).catch((erro) =>
+        console.error(`[aviso-de-pagamento] ${evento} do estúdio ${tenantId}:`, erro),
+      );
+    });
   } else if (efeito === "atrasou") {
     /*
      * Inadimplente NÃO derruba as galerias no ato: o cliente final do fotógrafo
@@ -195,8 +218,13 @@ export async function POST(request: NextRequest) {
   } else if (efeito === "estornou") {
     // Aqui o dinheiro VOLTOU. Manter o período seria deixar o disco correndo
     // por nossa conta para quem pediu reembolso ou abriu chargeback.
+    //
+    // O período acaba AGORA, e não vira nulo (até 30/09/2026 virava): para o
+    // envio é a mesma coisa — `cancelado` com o fim no passado não envia —,
+    // mas é deste fim que a conta encerrada conta os três meses até apagar
+    // (`lib/contas-encerradas.ts`). Nulo, o relógio não teria de onde partir.
     await consultar(
-      `update tenants set status = 'cancelado', pago_ate = null, atualizado_em = now()
+      `update tenants set status = 'cancelado', pago_ate = least(pago_ate, now()), atualizado_em = now()
         where id = $1`,
       [tenantId],
     );

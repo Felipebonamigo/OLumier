@@ -13,6 +13,8 @@ import { resumoDeTrafego } from "@/lib/metricas-entrega";
 import { listarCustos } from "@/lib/custos-da-sociedade";
 import { custoFixoDaGaleriaCentavos } from "@/lib/custos-da-sociedade-regras";
 import { zipRemotoConfigurado } from "@/lib/zip-remoto";
+import { velocidadeReal } from "@/lib/velocidade";
+import { formatarVelocidade } from "@/lib/velocidade-regras";
 import {
   resumoDaPlataforma,
   trialsVencendo,
@@ -26,6 +28,12 @@ import {
 } from "@/lib/metricas-admin";
 import { planoPorId, formatarReais, cicloDe, GB } from "@/config/planos";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
+import {
+  COLUNAS_DOS_ESTUDIOS,
+  enderecoDaOrdem,
+  lerOrdem,
+  ordenarEstudios,
+} from "@/lib/ordem-dos-estudios";
 import {
   Cartao,
   Bloco,
@@ -66,6 +74,7 @@ const SECOES = [
   { id: "espaco", nome: "Espaço" },
   { id: "uso", nome: "Uso e entrega" },
   { id: "trafego", nome: "Tráfego" },
+  { id: "velocidade", nome: "Velocidade" },
   { id: "meses", nome: "Doze meses" },
   { id: "atencao", nome: "Precisa de atenção" },
   { id: "estudios", nome: "Estúdios" },
@@ -89,10 +98,14 @@ const SECOES = [
  * acidente esperando o dia cansado. O que precisar mudar, muda pelo caminho
  * normal — que deixa rastro na auditoria com o nome de quem fez.
  */
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ordem?: string | string[]; sentido?: string | string[] }>;
+}) {
   await exigirAdmin();
 
-  const [estudios, meses, entrega, somasDeZip, eventos, custos] = await Promise.all([
+  const [estudios, meses, entrega, somasDeZip, eventos, custos, velocidade] = await Promise.all([
     panoramaDosEstudios(),
     crescimentoMensal(12),
     entregaRecente(30),
@@ -108,7 +121,16 @@ export default async function AdminPage() {
     /* O custo fixo sai da lista do caixa dos sócios (migração 047), a mesma
        que eles editam lá. Sem a tabela, vale o de `config/custos-fixos.ts`. */
     listarCustos().catch(() => null),
+    /* A velocidade real de download e de envio, e as falhas do envio. Ver
+       `lib/velocidade.ts`. Sem a tabela nova (migração 053), o bloco se cala
+       em vez de derrubar a página. */
+    velocidadeReal().catch(() => null),
   ]);
+
+  /* Só a TABELA muda de ordem; os totais e as listas de cima leem `estudios`.
+     Ver `lib/ordem-dos-estudios.ts`. */
+  const ordem = lerOrdem(await searchParams);
+  const naTabela = ordenarEstudios(estudios, ordem);
 
   const agora = new Date();
   const r = resumoDaPlataforma(
@@ -349,7 +371,7 @@ export default async function AdminPage() {
           <Cartao
             rotulo="ZIPs entregues"
             valor={somasDeZip.servidosServidorN + somasDeZip.servidosVpsN}
-            nota={`${porcento(trafego.fracaoDoCache)} dos completos saíram do disco · ${somasDeZip.abortadosN} caíram no meio`}
+            nota={`${porcento(trafego.fracaoDoCache)} dos completos saíram do disco · ${somasDeZip.quedasN} caíram · ${somasDeZip.abortadosN - somasDeZip.quedasN} retomados`}
             tom="ok"
           />
           <Cartao
@@ -422,9 +444,78 @@ export default async function AdminPage() {
         </div>
       </Bloco>
 
-      {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
+      {/* ── 4c. VELOCIDADE REAL (30/09/2026) ──────────────────────────────
+          Felipe: "temos que ter velocidade e funcionar". Numa manhã chegaram
+          um download a 270–470 KB/s e um envio caindo, e os dois só apareceram
+          porque alguém mandou foto. Aqui a velocidade que os clientes de fato
+          tiveram, e as desistências do envio antes da reclamação. */}
       <Bloco
         id={SECOES[5].id}
+        titulo="Velocidade real"
+        explicacao="Medida em cada download de ZIP (30 dias) e em cada foto enviada (7 dias). A mediana é o caso típico; os 10% mais lentos são quem reclama."
+      >
+        {!velocidade ? (
+          <p className="text-sm text-texto-faint">Sem medidas ainda.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Cartao
+                rotulo="Download do ZIP pronto"
+                valor={velocidade.downloadDoDisco ? formatarVelocidade(velocidade.downloadDoDisco.mediana) : "—"}
+                nota={
+                  velocidade.downloadDoDisco
+                    ? `10% abaixo de ${formatarVelocidade(velocidade.downloadDoDisco.p10)} · ${velocidade.downloadDoDisco.n} download${velocidade.downloadDoDisco.n === 1 ? "" : "s"}`
+                    : "nenhum ZIP saiu do disco no período"
+                }
+              />
+              <Cartao
+                rotulo="Download montando"
+                valor={velocidade.downloadMontando ? formatarVelocidade(velocidade.downloadMontando.mediana) : "—"}
+                nota={
+                  velocidade.downloadMontando
+                    ? `o primeiro de cada galeria · ${velocidade.downloadMontando.n} download${velocidade.downloadMontando.n === 1 ? "" : "s"}`
+                    : "nenhum ZIP montado no período"
+                }
+              />
+              <Cartao
+                rotulo="Envio de fotos"
+                valor={velocidade.envio ? formatarVelocidade(velocidade.envio.mediana) : "—"}
+                nota={
+                  velocidade.envio
+                    ? `por arquivo, 3 ao mesmo tempo · 10% abaixo de ${formatarVelocidade(velocidade.envio.p10)}`
+                    : "medindo desde 30/09/2026"
+                }
+              />
+              <Cartao
+                rotulo="Envios que desistiram"
+                valor={velocidade.falhas.n}
+                nota={
+                  velocidade.falhas.n
+                    ? `em ${velocidade.falhas.estudios} estúdio${velocidade.falhas.estudios === 1 ? "" : "s"}, 7 dias`
+                    : "nenhum em 7 dias"
+                }
+                tom={velocidade.falhas.n > 0 ? "erro" : "ok"}
+              />
+            </div>
+            {velocidade.falhas.ultimas.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs">
+                {velocidade.falhas.ultimas.map((f, i) => (
+                  <li key={i} className="flex flex-wrap gap-x-2 text-texto-soft">
+                    <span className="font-medium text-texto">{f.estudio}</span>
+                    <span className="text-erro">{f.erro ?? "falhou"}</span>
+                    <span className="text-texto-faint">{f.navegador ?? "—"}</span>
+                    <span className="text-texto-faint">{dataHora(f.quando)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </Bloco>
+
+      {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
+      <Bloco
+        id={SECOES[6].id}
         titulo="Doze meses"
         explicacao="Cadastros e envio, mês a mês. A escala de cada série é o maior mês dela — as duas não se comparam entre si."
       >
@@ -469,7 +560,7 @@ export default async function AdminPage() {
 
       {/* ── 6. QUEM PRECISA DE ATENÇÃO ────────────────────────────────── */}
       <Bloco
-        id={SECOES[6].id}
+        id={SECOES[7].id}
         titulo="Precisa de atenção"
         explicacao="Cada linha é uma conversa que vale a pena ter esta semana."
       >
@@ -524,7 +615,7 @@ export default async function AdminPage() {
 
       {/* ── 7. TODOS OS ESTÚDIOS ──────────────────────────────────────── */}
       <Bloco
-        id={SECOES[7].id}
+        id={SECOES[8].id}
         titulo={`Estúdios (${estudios.length})`}
         explicacao="Clique num nome para a ficha completa."
       >
@@ -537,15 +628,14 @@ export default async function AdminPage() {
             <table className="w-full min-w-[1000px] text-sm">
               <thead>
                 <tr className="border-b border-linha bg-carbon text-left">
-                  {[
-                    "Estúdio",
-                    "Situação",
-                    "Plano",
-                    "Paga",
-                    "Custa por mês",
-                    "Espaço",
-                    "Conteúdo",
-                    /*
+                  {/*
+                    ── OS CABEÇALHOS ORDENAM (30/09/2026) ─────────────────
+                    Felipe: "permita ordenar essa lista pelas colunas". Cada
+                    título é um link para a mesma página na ordem dele; clicar
+                    de novo inverte. As colunas e o que cada uma ordena moram
+                    em `lib/ordem-dos-estudios.ts`.
+                  */}
+                  {/*
                       ── DOIS NOMES QUE FALTAVAM (29/09/2026) ──────────────
 
                       Felipe: "último acesso, última alteração também".
@@ -561,8 +651,7 @@ export default async function AdminPage() {
                       (ver `ultima_alteracao` em `lib/admin.ts`). As duas juntas
                       respondem a pergunta que a tabela existe para responder —
                       esta conta está viva dos dois lados?
-                    */
-                    /*
+
                       ── AS DATAS AGRUPADAS POR QUEM AGIU (29/09/2026) ──────
 
                       Eram duas colunas com nome de MOMENTO ("Último acesso",
@@ -575,22 +664,31 @@ export default async function AdminPage() {
                       acessos de 30 dias com o cliente, a última alteração com o
                       estúdio, que é quem altera. A tabela não cresceu e as três
                       perguntas continuam respondidas.
-                    */
-                    "Cliente abriu",
-                    "Estúdio entrou",
-                    "Entrou",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-texto-faint"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  */}
+                  {COLUNAS_DOS_ESTUDIOS.map((c) => {
+                    const ativa = ordem.coluna === c.id;
+                    return (
+                      <th
+                        key={c.id}
+                        aria-sort={ativa ? (ordem.sentido === "asc" ? "ascending" : "descending") : undefined}
+                        className="px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-texto-faint"
+                      >
+                        <Link
+                          href={enderecoDaOrdem(ordem, c.id)}
+                          className={`inline-flex items-center gap-1 transition hover:text-texto ${ativa ? "text-texto" : ""}`}
+                        >
+                          {c.titulo}
+                          <span aria-hidden="true" className={ativa ? "" : "opacity-0"}>
+                            {ativa && ordem.sentido === "asc" ? "↑" : "↓"}
+                          </span>
+                        </Link>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {estudios.map((e) => {
+                {naTabela.map((e) => {
                   const plano = planoPorId(e.plano_id);
                   const ciclo = cicloDe(e.ciclo_cobranca);
                   const noAr = BigInt(e.bytes_no_ar);
@@ -801,7 +899,7 @@ export default async function AdminPage() {
 
       {/* ── 8. AUDITORIA ──────────────────────────────────────────────── */}
       <Bloco
-        id={SECOES[8].id}
+        id={SECOES[9].id}
         titulo="Últimos eventos"
         explicacao="Os oito mais recentes. O log inteiro, com filtro por ação, estúdio e período, fica no histórico."
       >

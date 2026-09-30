@@ -5,7 +5,7 @@ import { sessaoAtual } from "@/lib/auth";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
-import { planoPorId, formatarReais } from "@/config/planos";
+import { planoPorId, formatarReais, cicloDe, precoDoCicloCentavos } from "@/config/planos";
 import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza } from "@/config/combo";
 import {
   asaasConfigurado,
@@ -32,6 +32,7 @@ import { listarChaves } from "@/lib/chaves-api";
 import { estadoDoCanal } from "@/lib/avisos";
 import { MINIMO_SENHA } from "@/lib/recuperacao";
 import { urlDeLeitura } from "@/lib/r2";
+import { dataPrometidaParaApagar } from "@/lib/contas-encerradas";
 
 export const metadata: Metadata = { title: "Conta" };
 export const dynamic = "force-dynamic";
@@ -95,6 +96,8 @@ export default async function ContaPage() {
         )
       : null;
 
+  const apagarEm = dataPrometidaParaApagar(tenant);
+
   // Só consulta o Asaas se houver assinatura — evita chamada externa à toa.
   const cobranca =
     asaasConfigurado() && tenant.asaas_assinatura_id
@@ -133,6 +136,13 @@ export default async function ContaPage() {
    * a coluna só é gravada junto com o valor no Asaas (ver `lib/combo.ts`). */
   const faixaDoCombo = ehFaixaAtomatiza(tenant.combo_atomatiza) ? tenant.combo_atomatiza : null;
   const descontoDoCombo = plano ? descontoDaGaleriaCentavos(plano, faixaDoCombo) : 0;
+  /* A próxima fatura já sai com o desconto? Compara com o preço cheio do
+   * ciclo: a fatura emitida antes do combo entrar pode ainda estar no cheio
+   * (subir não mexe na fatura emitida; baixar mexe — ver `recalcularCombo`). */
+  const faturaComCombo =
+    descontoDoCombo > 0 && plano && cobranca
+      ? Math.round(cobranca.value * 100) < precoDoCicloCentavos(plano.precoCentavos, cicloDe(tenant.ciclo_cobranca))
+      : false;
   const situacaoEnvio = situacaoDoTenant(tenant, asaasConfigurado());
 
   return (
@@ -153,19 +163,34 @@ export default async function ContaPage() {
           {plano ? (
             <>
               {plano.nome} —{" "}
+              {descontoDoCombo > 0 && (
+                <>
+                  <s className="text-texto-faint">{formatarReais(plano.precoCentavos)}</s>{" "}
+                </>
+              )}
               <strong className="text-texto">{formatarReais(plano.precoCentavos - descontoDoCombo)}</strong>
               /mês
-              {descontoDoCombo > 0 && faixaDoCombo && (
-                <span className="mt-1 block text-xs text-ok">
-                  Combo com o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]}: {formatarReais(descontoDoCombo)} a
-                  menos por mês, enquanto as duas assinaturas estiverem em dia.
-                </span>
-              )}
             </>
           ) : (
             tenant.plano_id
           )}
         </p>
+
+        {/* O DESCONTO DO COMBO, explicado (30/09/2026 — Felipe: "mostre em tela
+            também, explicando que tem o desconto por ter assinatura do
+            Atomatiza"). Uma linha verde miúda passava despercebida, e quem
+            paga precisa saber por que o valor é outro — e o que o mantém. */}
+        {plano && descontoDoCombo > 0 && faixaDoCombo && (
+          <div className="mt-3 rounded-lg border border-ok/40 bg-ok/10 px-4 py-3">
+            <p className="text-sm font-medium text-ok">Desconto do combo com o Atomatiza</p>
+            <p className="mt-1 text-xs text-texto-soft">
+              Você também assina o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]} com o mesmo CPF/CNPJ, então a Galeria sai
+              por {formatarReais(plano.precoCentavos - descontoDoCombo)} em vez de {formatarReais(plano.precoCentavos)}:{" "}
+              {formatarReais(descontoDoCombo)} a menos por mês. O Atomatiza aplica a parte dele do desconto na
+              assinatura de lá. Vale enquanto as duas assinaturas estiverem em dia.
+            </p>
+          </div>
+        )}
 
         <PlanoConta
           planoAtual={tenant.plano_id}
@@ -197,6 +222,7 @@ export default async function ContaPage() {
               Próxima cobrança em{" "}
               {new Date(cobranca.dueDate).toLocaleDateString("pt-BR", { timeZone: FUSO })} ·{" "}
               {formatarReais(Math.round(cobranca.value * 100))}
+              {faturaComCombo && <span className="text-ok"> · já com o desconto do combo</span>}
             </p>
             {/* A promessa só aparece quando dá para mostrar EM QUAL cartão —
                 prometer "automático" sem provar faria quem paga por Pix parar
@@ -258,6 +284,25 @@ export default async function ContaPage() {
             dentro de `!podeEnviar`, e um aviso enfiado lá nunca apareceria.
             Cor de aviso, não de erro: nada está errado, só tem data para
             acabar. */}
+        {/* A data que o último aviso prometeu, quando a conta encerrada já
+            entrou no calendário de exclusão. Está nos e-mails; aqui é para
+            quem abre o painel antes de abrir o e-mail. */}
+        {apagarEm && (
+          <p
+            role="status"
+            className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta"
+          >
+            Os arquivos desta conta serão apagados em{" "}
+            {apagarEm.toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+              timeZone: "America/Sao_Paulo",
+            })}
+            . Reativar a assinatura antes dessa data mantém tudo como está.
+          </p>
+        )}
+
         {situacaoEnvio.aviso && (
           <p
             role="status"

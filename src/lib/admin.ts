@@ -39,6 +39,8 @@ export interface LinhaAdmin {
   ultimo_pagamento_em: Date | null;
   pago_ate: Date | null;
   senha_alterada_em: Date | null;
+  /** Liberado para o login do Pixieset (migração 052). */
+  pixieset_liberado_em: Date | null;
   quota_bytes: string;
   bytes_no_ar: string;
   bytes_no_cofre: string;
@@ -98,6 +100,7 @@ export async function panoramaDosEstudios(): Promise<LinhaAdmin[]> {
       (t.asaas_assinatura_id is not null) as tem_assinatura,
       t.asaas_cliente_id, t.asaas_assinatura_id,
       t.assinatura_criada_em, t.ultimo_pagamento_em, t.pago_ate, t.senha_alterada_em,
+      t.pixieset_liberado_em,
       t.quota_bytes,
       coalesce((
         select sum(m.bytes) from medias m
@@ -247,6 +250,8 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
     abortados_n: number;
     abortados_bytes: string;
     abortados_vps_bytes: string;
+    quedas_n: number;
+    trechos_bytes: string;
     servidos_nao_tudo_n: number;
     guardaveis_n: number;
     guardaveis_cache_n: number;
@@ -265,6 +270,8 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
        count(*) filter (where evento = 'abortado')::int                             as abortados_n,
        coalesce(sum(bytes) filter (where evento = 'abortado'), 0)                   as abortados_bytes,
        coalesce(sum(bytes) filter (where evento = 'abortado' and origem = 'vps'), 0) as abortados_vps_bytes,
+       count(*) filter (where evento = 'abortado' and not retomado)::int            as quedas_n,
+       coalesce(sum(bytes) filter (where evento = 'trecho'), 0)                     as trechos_bytes,
        count(*) filter (where evento = 'servido' and tipo <> 'tudo')::int           as servidos_nao_tudo_n,
        count(*) filter (where evento = 'servido' and origem = 'servidor'
                           and tipo in ('tudo','capitulo'))::int                    as guardaveis_n,
@@ -307,7 +314,8 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
   const z = zip ?? {
     montados_n: 0, montados_bytes: "0", servidos_servidor_n: 0, servidos_servidor_bytes: "0",
     do_cache_n: 0, do_cache_bytes: "0", servidos_vps_n: 0, servidos_vps_bytes: "0",
-    abortados_n: 0, abortados_bytes: "0", abortados_vps_bytes: "0", servidos_nao_tudo_n: 0,
+    abortados_n: 0, abortados_bytes: "0", abortados_vps_bytes: "0", quedas_n: 0, trechos_bytes: "0",
+    servidos_nao_tudo_n: 0,
     guardaveis_n: 0, guardaveis_cache_n: 0, despejos_n: 0, despejos_bytes: "0",
   };
   return {
@@ -322,6 +330,8 @@ export async function entregaDeZipDoMes(): Promise<SomasDeEntrega> {
     abortadosN: z.abortados_n,
     abortadosBytes: Number(z.abortados_bytes),
     abortadosVpsBytes: Number(z.abortados_vps_bytes),
+    quedasN: z.quedas_n,
+    trechosBytes: Number(z.trechos_bytes),
     /* Os 'baixou' de ZIP de capítulo/favoritas/recorte também viram acesso
        (ver registrarEntregaDeZip); saem da conta para não contar duas vezes. */
     avulsosN: Math.max(0, (acessos?.baixou ?? 0) - z.servidos_nao_tudo_n),

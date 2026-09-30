@@ -22,6 +22,8 @@
 #   4. /etc/fotonio-zip.env — pergunta o que falta, nunca sobrescreve o que existe
 #   5. a unidade systemd, ligada e no ar
 #   6. Caddy com TLS automático na frente, se houver um domínio
+#   7. a rede para download longe e grande (BBR, buffers, sem HTTP/3) —
+#      ver ops/ajustar-rede-zip.sh
 #
 # Rodar de novo é seguro: cada passo confere antes de fazer.
 set -euo pipefail
@@ -164,6 +166,9 @@ EOF
   fi
   echo "   https://$DOMINIO → 127.0.0.1:3400 (o DNS precisa apontar para cá, nuvem cinza)"
 fi
+
+echo "── 7. Rede para download longe ──────────────────────────────────────"
+bash "$DESTINO/ops/ajustar-rede-zip.sh"
 
 echo
 echo "Pronto. No app, defina:"

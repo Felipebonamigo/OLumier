@@ -56,3 +56,26 @@ export function hashDeIp(ip: string): string {
     .digest("hex")
     .slice(0, 32);
 }
+
+/**
+ * O e-mail, pseudonimizado — para o registro de auditoria, que é imutável.
+ *
+ * ── POR QUE (30/09/2026) ──────────────────────────────────────────────────
+ * `conta.criada` e `aviso_limpeza.enviado` gravavam o e-mail cru em `eventos`,
+ * e `eventos` recusa update e delete (migração 014). A Política de Privacidade
+ * dizia que ali não entrava e-mail. Não dava para cumprir um pedido de exclusão
+ * nem manter a frase verdadeira.
+ *
+ * O e-mail importa como PROVA: "o aviso de exclusão foi mandado para qual
+ * endereço?". O hash responde do mesmo jeito que o do IP — quem tem o segredo e
+ * o endereço alegado confere se bate — sem guardar o endereço. Normalizado
+ * antes (espaços e maiúsculas), porque "Oi@x.com " e "oi@x.com" são a mesma
+ * caixa e precisam dar o mesmo hash. O prefixo separa os dois espaços de hash:
+ * um e-mail nunca colide com um IP.
+ */
+export function hashDeEmail(email: string): string {
+  return createHash("sha256")
+    .update(`${segredo()}email:${email.trim().toLowerCase()}`)
+    .digest("hex")
+    .slice(0, 32);
+}

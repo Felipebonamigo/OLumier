@@ -27,6 +27,12 @@ export interface Derivadas {
   largura: number; // do original, para a grade reservar o espaço certo
   altura: number;
   /**
+   * Só vídeo: a duração em segundos, lida do mesmo `<video>` que tira o
+   * pôster — de graça, porque os metadados já estavam abertos. É o que o
+   * formato Stream mostra no cartão do episódio (30/09/2026).
+   */
+  duracao?: number;
+  /**
    * A medição dos rostos, JÁ EM ANDAMENTO. Só existe com a busca por rosto
    * ligada. É uma promessa, e não o resultado, de propósito: ela roda na placa
    * de vídeo enquanto o arquivo sobe pela rede — esperar aqui somaria um
@@ -224,7 +230,9 @@ export function quadroTemImagem(dados: Uint8ClampedArray): boolean {
   return variacao > TOLERANCIA_CHAPADO;
 }
 
-async function quadroDoVideo(arquivo: File): Promise<ImageBitmap | null> {
+async function quadroDoVideo(
+  arquivo: File,
+): Promise<{ bitmap: ImageBitmap; duracao: number | undefined } | null> {
   const url = URL.createObjectURL(arquivo);
   const v = document.createElement("video");
   v.preload = "metadata";
@@ -257,7 +265,8 @@ async function quadroDoVideo(arquivo: File): Promise<ImageBitmap | null> {
       });
 
     await pronto("loadedmetadata");
-    const duracao = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : 2;
+    const duracaoReal = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : undefined;
+    const duracao = duracaoReal ?? 2;
 
     /*
      * ── O QUADRO SAI DE UM CANVAS, E NÃO DO <video> (29/09/2026) ──────────
@@ -303,7 +312,7 @@ async function quadroDoVideo(arquivo: File): Promise<ImageBitmap | null> {
       ctxAmostra.drawImage(tela, 0, 0, 32, 32);
       if (!quadroTemImagem(ctxAmostra.getImageData(0, 0, 32, 32).data)) continue;
 
-      return await createImageBitmap(tela);
+      return { bitmap: await createImageBitmap(tela), duracao: duracaoReal };
     }
     /* Nenhum dos pontos deu imagem. Devolver null é melhor do que devolver o
        vazio: sem miniatura a galeria cai no original, e o fotógrafo pode
@@ -361,14 +370,16 @@ export async function gerarDerivadas(
   if (!reconhecido) return null;
 
   if (reconhecido.tipo === "video") {
-    const bitmap = await quadroDoVideo(arquivo);
-    if (!bitmap) return null;
+    const quadro = await quadroDoVideo(arquivo);
+    if (!quadro) return null;
+    const { bitmap, duracao } = quadro;
     try {
       return {
         thumb: await redimensionar(bitmap, TAMANHO_THUMB, QUALIDADE_THUMB),
         preview: null,
         largura: bitmap.width,
         altura: bitmap.height,
+        duracao,
       };
     } catch {
       return null;

@@ -25,6 +25,19 @@ export const TIPOS_LOGO: Record<string, string> = {
  * Aceitar depois é fácil; tirar de uma conta que já enviou, não.
  */
 
+/**
+ * A medida da logo que o navegador informa (migração 052). Vem do dono, sobre a
+ * própria logo, e só serve para desenhá-la — mas entra num `integer` com
+ * `check`, então lixo vira `null` aqui em vez de erro de banco lá.
+ */
+export function lerMedidaDaLogo(largura: unknown, altura: unknown): { largura: number; altura: number } | null {
+  const l = Math.round(Number(largura));
+  const a = Math.round(Number(altura));
+  if (!Number.isFinite(l) || !Number.isFinite(a)) return null;
+  if (l < 1 || a < 1 || l > 20000 || a > 20000) return null;
+  return { largura: l, altura: a };
+}
+
 /** 2 MB. Logo é marca, não fotografia — acima disso é original mal exportado. */
 export const LIMITE_LOGO = 2 * 1024 * 1024;
 

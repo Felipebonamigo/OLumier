@@ -202,7 +202,15 @@ await etapa("o painel diz 'sem limite', não um número absurdo", () => {
 
 await etapa("o admin mostra o custo de cada conta, e o que cobrar por fora", () => {
   const admin = readFileSync(new URL("../src/app/painel/admin/page.tsx", import.meta.url), "utf8");
-  if (!/Custa por mês/.test(admin) || !/custoMensalDoEstudioCentavos\(/.test(admin)) {
+  /* Os títulos das colunas moram em `lib/ordem-dos-estudios.ts` desde que a
+     tabela passou a ordenar por coluna (30/09/2026); a célula continua na
+     página, e a coluna só existe se as duas partes existirem. */
+  const colunas = readFileSync(new URL("../src/lib/ordem-dos-estudios.ts", import.meta.url), "utf8");
+  if (
+    !/"Custa por mês"/.test(colunas) ||
+    !/COLUNAS_DOS_ESTUDIOS\.map/.test(admin) ||
+    !/custoMensalDoEstudioCentavos\(/.test(admin)
+  ) {
     throw new Error("a tabela de estúdios não tem a coluna de custo");
   }
   if (!/a cobrar por fora/.test(admin) || !/custoDasCortesiasCentavos\(/.test(admin)) {

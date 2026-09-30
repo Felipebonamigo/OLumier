@@ -5,9 +5,18 @@ import { FUSO } from "@/config/fuso";
 import { useRouter } from "next/navigation";
 import { formatarReais, planoPorId, type Plano } from "@/config/planos";
 import { MontadorPlano } from "@/components/montador-plano";
-import { trocarPlanoAction, cancelarAssinaturaAction, cotarTrocaDePlanoAction } from "@/app/painel/actions";
+import {
+  trocarPlanoAction,
+  cancelarAssinaturaAction,
+  cotarCancelamentoAction,
+  cotarTrocaDePlanoAction,
+} from "@/app/painel/actions";
+import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 
 type Cotacao = Exclude<Awaited<ReturnType<typeof cotarTrocaDePlanoAction>>, { erro: string }>;
+type CotacaoDoCancelamento = Exclude<Awaited<ReturnType<typeof cotarCancelamentoAction>>, { erro: string }>;
+
+const dia = (iso: string) => new Date(iso).toLocaleDateString("pt-BR");
 
 /**
  * O texto da confirmação — o que vai acontecer com o dinheiro, antes do clique.
@@ -51,6 +60,7 @@ export function PlanoConta({
   const [erro, setErro] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [urlDaDiferenca, setUrlDaDiferenca] = useState<string | null>(null);
+  const [cancelamento, setCancelamento] = useState<CotacaoDoCancelamento | null>(null);
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
   const atual = planoPorId(planoAtual);
@@ -76,17 +86,32 @@ export function PlanoConta({
       }
     });
 
-  const cancelar = () =>
+  /* Cancelar abre um painel, e não um `confirm()`: com devolução, há duas
+   * saídas legítimas (receber o dinheiro e sair hoje, ou usar até o fim), e a
+   * pessoa precisa ver o valor antes de escolher. */
+  const abrirCancelamento = () =>
     iniciar(async () => {
       setErro(null);
       setOk(null);
-      const r = await cancelarAssinaturaAction();
+      const c = await cotarCancelamentoAction();
+      if ("erro" in c) setErro(c.erro);
+      else setCancelamento(c);
+    });
+
+  const cancelar = (devolverCentavos: number | null) =>
+    iniciar(async () => {
+      setErro(null);
+      setOk(null);
+      const r = await cancelarAssinaturaAction(devolverCentavos);
       if (r?.erro) setErro(r.erro);
       else {
         setOk(r?.ok ?? null);
+        setCancelamento(null);
         router.refresh();
       }
     });
+
+  const pagoAteFuturo = cancelamento?.usoAte ?? null;
 
   return (
     <div className="mt-4">
@@ -150,20 +175,75 @@ export function PlanoConta({
           <button
             type="button"
             disabled={ocupado}
-            onClick={() => {
-              if (
-                confirm(
-                  "Cancelar a assinatura?\n\nSuas galerias já publicadas continuam no ar e nada é apagado. Você deixa de conseguir enviar arquivos novos.",
-                )
-              ) {
-                cancelar();
-              }
-            }}
+            onClick={abrirCancelamento}
             className="text-xs text-texto-faint underline underline-offset-4 hover:text-erro disabled:opacity-50"
           >
             Cancelar assinatura
           </button>
         </>
+      )}
+
+      {cancelamento && (
+        <div className="mt-3 rounded-lg border border-linha bg-void p-3 text-xs leading-relaxed text-texto-soft">
+          <div className="flex items-baseline justify-between">
+            <span className="font-medium text-texto">Cancelar a assinatura</span>
+            <button
+              type="button"
+              onClick={() => setCancelamento(null)}
+              className="text-texto-faint hover:text-texto-soft"
+            >
+              voltar
+            </button>
+          </div>
+
+          {cancelamento.devolverCentavos > 0 ? (
+            <p className="mt-2">
+              {cancelamento.regra === "arrependimento"
+                ? "Você está dentro dos 7 dias do pagamento, então pode receber tudo de volta: "
+                : `Você já usou ${cancelamento.mesesUsados} ${cancelamento.mesesUsados === 1 ? "mês" : "meses"} do período. Pode receber de volta o que pagou menos esses meses, cada um pelo preço mensal: `}
+              <strong className="text-texto">{formatarReais(cancelamento.devolverCentavos)}</strong>. Com a
+              devolução, o período acaba hoje e o dinheiro volta em até {cancelamento.prazoDaDevolucao}, pelo
+              mesmo meio de pagamento.
+              {pagoAteFuturo && ` Sem ela, você continua enviando até ${dia(pagoAteFuturo)}.`}
+            </p>
+          ) : (
+            <p className="mt-2">
+              {pagoAteFuturo
+                ? `Você continua enviando arquivos até ${dia(pagoAteFuturo)}, que é o fim do período já pago. Não há valor a devolver neste período.`
+                : "Você deixa de conseguir enviar arquivos novos."}
+            </p>
+          )}
+
+          <p className="mt-2">
+            Depois do fim do período, as galerias publicadas ficam no ar por mais {RETENCAO_POR_EXTENSO}. Antes
+            de apagar qualquer arquivo, avisamos por e-mail — e reativar até lá mantém tudo.
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {cancelamento.devolverCentavos > 0 && (
+              <button
+                type="button"
+                disabled={ocupado}
+                onClick={() => cancelar(cancelamento.devolverCentavos)}
+                className="rounded-full border border-erro/50 px-4 py-1.5 font-medium text-erro disabled:opacity-50"
+              >
+                Cancelar e receber {formatarReais(cancelamento.devolverCentavos)}
+              </button>
+            )}
+            {(cancelamento.devolverCentavos === 0 || pagoAteFuturo) && (
+              <button
+                type="button"
+                disabled={ocupado}
+                onClick={() => cancelar(null)}
+                className="rounded-full border border-linha px-4 py-1.5 text-texto-soft hover:text-erro disabled:opacity-50"
+              >
+                {cancelamento.devolverCentavos > 0 && pagoAteFuturo
+                  ? `Cancelar e usar até ${dia(pagoAteFuturo)}`
+                  : "Confirmar o cancelamento"}
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       {erro && (

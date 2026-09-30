@@ -33,7 +33,7 @@ import { faixaDoAtomatiza } from "@/lib/combo";
 import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
-import { planoPorId, cicloDe } from "@/config/planos";
+import { planoPorId, cicloDe, formatarReais } from "@/config/planos";
 import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
 import {
@@ -46,6 +46,8 @@ import { conferirDocumento, soDigitos } from "@/lib/documento";
 import { documentoEmUso } from "@/lib/cadastro";
 import { enviarConfirmacao } from "@/lib/confirmacao-email";
 import { situacaoDoTenant } from "@/lib/assinatura";
+import { anotarDevolucao, cotarCancelamento, PRAZO_DA_DEVOLUCAO } from "@/lib/devolucao";
+import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
 import { lerSite, normalizarInstagram, normalizarWhatsapp } from "@/lib/site-estudio";
 import { MINIMO_SENHA, trocarSenha } from "@/lib/senha";
@@ -65,6 +67,7 @@ import {
   renomearSecao,
   renomearGrupoSolto,
   ordenarFotosDaSecao,
+  definirCapaDaPasta,
   ORDENS_DAS_FOTOS,
   type OrdemDasFotos,
 } from "@/lib/secoes";
@@ -417,6 +420,20 @@ export async function definirCapaAction(form: FormData) {
   );
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * Define a foto de frente da pasta (capítulo) em que ela está — o formato
+ * Pastas mostra essa capa. Ver `definirCapaDaPasta`.
+ */
+export async function definirCapaDaPastaAction(form: FormData): Promise<{ ok: boolean }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const mediaId = String(form.get("media_id") ?? "");
+  if (!galeriaId || !mediaId) return { ok: false };
+  const ok = await definirCapaDaPasta(galeriaId, tenantId, mediaId);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  return { ok };
 }
 
 // --- seleção do álbum -------------------------------------------------------
@@ -811,29 +828,94 @@ export async function cotarTrocaDePlanoAction(novoPlanoId: string): Promise<
 }
 
 /**
+ * Quanto voltaria se a conta cancelasse agora — para a tela explicar ANTES de
+ * a pessoa confirmar. A regra é `config/devolucao.ts`.
+ */
+export async function cotarCancelamentoAction(): Promise<
+  | { erro: string }
+  | {
+      regra: "arrependimento" | "proporcional" | "nada";
+      devolverCentavos: number;
+      mesesUsados: number;
+      /** O fim do período pago, só se ainda estiver no futuro. */
+      usoAte: string | null;
+      prazoDaDevolucao: string;
+    }
+> {
+  const tenantId = await exigirTenant();
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { erro: "Conta não encontrada." };
+  if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+  try {
+    const c = await cotarCancelamento(tenant);
+    return {
+      regra: c.regra,
+      devolverCentavos: c.devolverCentavos,
+      mesesUsados: c.mesesUsados,
+      usoAte:
+        tenant.pago_ate && new Date(tenant.pago_ate).getTime() > Date.now()
+          ? new Date(tenant.pago_ate).toISOString()
+          : null,
+      prazoDaDevolucao: PRAZO_DA_DEVOLUCAO,
+    };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "não consegui consultar o Asaas" };
+  }
+}
+
+/**
  * Cancela a assinatura.
  *
  * O `cancelarAssinatura` existia no código desde o início e nunca foi chamado
  * por ninguém — não havia como cancelar pelo painel, só escrevendo para o
  * suporte. Os Termos prometem "cancele quando quiser"; agora é verdade.
  *
- * Cancelar para a RENOVAÇÃO, não o acesso. O UPDATE abaixo NÃO toca em
- * `pago_ate` de propósito: quem pagou doze meses e cancela no segundo continua
- * enviando até o fim do período, porque o dinheiro daqueles dez meses ficou
- * conosco. Até 26/08/2026 o envio parava no mesmo instante — dinheiro recebido,
- * serviço não entregue. `scripts/testar-periodo-pago.mjs` vigia essa linha.
+ * Duas saídas, e quem escolhe é a pessoa (30/09/2026):
  *
- * O conteúdo NÃO é apagado: o estúdio deixa de poder enviar coisa nova quando o
- * período acaba, e o que já foi entregue continua no ar. Apagar foto de
- * casamento por causa de um cancelamento seria punir o casal por uma decisão do
- * fotógrafo.
+ * · SEM devolução — cancelar para a RENOVAÇÃO, não o acesso. `pago_ate` fica
+ *   de pé: quem pagou doze meses e cancela no segundo continua enviando até o
+ *   fim do período. Até 26/08/2026 o envio parava no mesmo instante — dinheiro
+ *   recebido, serviço não entregue. `scripts/testar-periodo-pago.mjs` vigia.
+ *
+ * · COM devolução — quando `config/devolucao.ts` diz que sobra dinheiro (até 7
+ *   dias, tudo; depois, o pago menos os meses começados). O dinheiro volta e o
+ *   período acaba HOJE: `pago_ate` vira agora. Os dois juntos seriam pagar de
+ *   volta um serviço que continua sendo prestado.
+ *
+ * `devolverCentavos` é o valor que a TELA mostrou. A cotação é refeita aqui, e
+ * se o número mudou no meio do caminho (virou o dia, virou o mês), nada
+ * acontece e a pessoa confirma de novo — ninguém aceita um valor e recebe
+ * outro.
+ *
+ * O conteúdo NÃO é apagado agora. A conta encerrada guarda tudo no ar por
+ * `RETENCAO_POR_EXTENSO` depois do fim do período, com avisos por e-mail
+ * antes de apagar (`lib/contas-encerradas.ts`).
  */
-export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: string } | void> {
+export async function cancelarAssinaturaAction(
+  devolverCentavos: number | null = null,
+): Promise<{ erro?: string; ok?: string } | void> {
   const tenantId = await exigirTenant();
 
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return { erro: "Conta não encontrada." };
   if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+
+  let devolucao: Awaited<ReturnType<typeof cotarCancelamento>> | null = null;
+  if (devolverCentavos !== null) {
+    try {
+      devolucao = await cotarCancelamento(tenant);
+    } catch (e) {
+      return { erro: e instanceof Error ? e.message : "não consegui consultar o Asaas" };
+    }
+    if (devolucao.devolverCentavos <= 0 || devolucao.regra === "nada" || !devolucao.cobrancaId) {
+      return { erro: "Não há valor a devolver neste período. Nada foi cancelado — confira de novo." };
+    }
+    if (devolucao.devolverCentavos !== devolverCentavos) {
+      return {
+        erro: `O valor da devolução mudou para ${formatarReais(devolucao.devolverCentavos)}. Nada foi cancelado — confira e confirme de novo.`,
+      };
+    }
+  }
 
   try {
     await cancelarAssinatura(tenant.asaas_assinatura_id);
@@ -843,9 +925,11 @@ export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: 
 
   await consultar(
     `update tenants
-        set status = 'cancelado', asaas_assinatura_id = null, combo_atomatiza = null, atualizado_em = now()
+        set status = 'cancelado', asaas_assinatura_id = null, combo_atomatiza = null,
+            pago_ate = case when $2 then least(pago_ate, now()) else pago_ate end,
+            atualizado_em = now()
       where id = $1`,
-    [tenantId],
+    [tenantId, devolucao !== null],
   );
 
   await registrarEvento({
@@ -861,11 +945,45 @@ export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: 
       /* Guardado porque é a resposta de uma reclamação previsível — "cancelei e
        * fui cortado na hora". Sem isto, o banco depois só mostra o status. */
       periodoPagoAte: tenant.pago_ate,
+      comDevolucao: devolucao !== null,
     },
     ip: await ipDaRequisicao(),
   });
 
   revalidatePath("/painel/conta");
+
+  if (devolucao && devolucao.cobrancaId && devolucao.regra !== "nada") {
+    await anotarDevolucao({
+      tenantId,
+      estudio: tenant.nome_estudio,
+      cobrancaId: devolucao.cobrancaId,
+      centavos: devolucao.devolverCentavos,
+      regra: devolucao.regra,
+    });
+    await registrarEvento({
+      tenantId,
+      estudio: tenant.nome_estudio,
+      ator: "estudio",
+      acao: ACOES.DEVOLUCAO_PEDIDA,
+      alvoTipo: "conta",
+      alvoId: tenantId,
+      detalhe: {
+        cobranca: devolucao.cobrancaId,
+        centavos: devolucao.devolverCentavos,
+        regra: devolucao.regra,
+        mesesUsados: devolucao.mesesUsados,
+        mesCentavos: devolucao.mesCentavos,
+        periodo: { inicio: devolucao.inicio?.toISOString() ?? null, fim: devolucao.fim?.toISOString() ?? null },
+      },
+      ip: await ipDaRequisicao(),
+    });
+    return {
+      ok:
+        `Assinatura cancelada. ${formatarReais(devolucao.devolverCentavos)} voltam para você em até ${PRAZO_DA_DEVOLUCAO}, ` +
+        `pelo mesmo meio de pagamento. As galerias publicadas ficam no ar por mais ${RETENCAO_POR_EXTENSO}; ` +
+        "antes de apagar qualquer coisa, avisamos por e-mail.",
+    };
+  }
 
   /* O recado diz até quando, e a data vem do banco, não de uma promessa: quem
    * cancelou no meio de um anual precisa saber que os meses pagos não sumiram. */
@@ -874,7 +992,9 @@ export async function cancelarAssinaturaAction(): Promise<{ erro?: string; ok?: 
     true,
   );
   if (restante.aviso) return { ok: restante.aviso };
-  return { ok: "Assinatura cancelada. Suas galerias publicadas continuam no ar." };
+  return {
+    ok: `Assinatura cancelada. Suas galerias publicadas ficam no ar por mais ${RETENCAO_POR_EXTENSO}; antes de apagar qualquer coisa, avisamos por e-mail.`,
+  };
 }
 
 // --- cofre ----------------------------------------------------------------

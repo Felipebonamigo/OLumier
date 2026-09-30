@@ -1,0 +1,11 @@
+[Unit]
+Description=Confere de hora em hora os pagamentos que o webhook do Asaas perdeu
+
+[Timer]
+OnCalendar=hourly
+# Se o servidor estava desligado na hora, roda assim que voltar.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

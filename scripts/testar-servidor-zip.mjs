@@ -284,6 +284,25 @@ await etapa("retomar de onde parou: Range devolve 206 com o pedaço certo", asyn
   igual(status, 206, "status");
   igual(cabecalhos.get("content-range"), `bytes ${de}-${zipTudo.length - 1}/${zipTudo.length}`, "content-range");
   igual(corpo.equals(zipTudo.subarray(de)), true, "os bytes do fim");
+  /* Chegou ao último byte: é a entrega que o download retomado completou. */
+  await ate(() => relatos.some((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido" && r.bytes === zipTudo.length - de));
+});
+
+await etapa("pedaço do meio (acelerador de download) é 'trecho', não entrega", async () => {
+  /* Até 29/09/2026 todo Range que terminava virava 'servido' — e cada um, um
+     "baixou tudo" na Atividade do fotógrafo. */
+  const servidosAntes = relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length;
+  const { status, corpo } = await baixar(tokenTudo, { Range: "bytes=0-99999" });
+  igual(status, 206, "status");
+  igual(corpo.equals(zipTudo.subarray(0, 100_000)), true, "os bytes do começo");
+  await ate(() => relatos.some((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "trecho"));
+  const trecho = relatos.find((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "trecho");
+  igual(trecho.bytes, 100_000, "bytes do trecho");
+  igual(
+    relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length,
+    servidosAntes,
+    "nenhum 'servido' a mais",
+  );
 });
 
 await etapa("apagado do cache e montado de novo, o ZIP sai idêntico byte a byte", async () => {

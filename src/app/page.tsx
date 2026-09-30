@@ -24,6 +24,7 @@ import { HeroGalerias } from "@/components/home/hero-galerias";
 import { TrocaIdentidade } from "@/components/home/troca-identidade";
 import { SelecaoDemo } from "@/components/home/selecao-demo";
 import { CofreDemo } from "@/components/home/cofre-demo";
+import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 
 /*
  * ── A HOME NOVA (26/09/2026) ───────────────────────────────────────────────
@@ -86,8 +87,8 @@ function combinacao(i: Identidade) {
 /*
  * A FAQ — a ordem é a do briefing (§19), e cada resposta foi conferida contra o
  * comportamento real: a lixeira segura 30 dias porque `PRAZO_LIXEIRA_DIAS`
- * diz 30, cancelar não apaga entrega porque `cancelarAssinaturaAction` não
- * apaga, e o domínio próprio responde conforme o interruptor dele.
+ * diz 30, cancelar não apaga entrega na hora porque a conta encerrada guarda
+ * por `RETENCAO_POR_EXTENSO` (`lib/contas-encerradas.ts`), e o domínio próprio responde conforme o interruptor dele.
  *
  * <details>/<summary> nativos: abrem sem JavaScript e entram no Ctrl+F.
  */
@@ -183,8 +184,9 @@ const FAQ: { pergunta: string; resposta: React.ReactNode }[] = [
     pergunta: "Posso cancelar quando quiser?",
     resposta: (
       <>
-        Pode, pelo próprio painel. O que você já entregou continua no ar; o que para é o envio de
-        coisa nova.
+        Pode, pelo próprio painel. Até 7 dias depois de pagar, o dinheiro volta inteiro. O que você
+        já entregou continua no ar por mais {RETENCAO_POR_EXTENSO} depois do fim do período pago, e
+        avisamos por e-mail antes de apagar qualquer arquivo.
       </>
     ),
   },

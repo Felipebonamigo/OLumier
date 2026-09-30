@@ -82,7 +82,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   const quem = await videoDoEstudio(id);
   if (quem.erro) return quem.erro;
 
-  let corpo: { largura?: number; altura?: number } = {};
+  let corpo: { largura?: number; altura?: number; duracao?: number } = {};
   try {
     corpo = await request.json();
   } catch {
@@ -111,7 +111,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ erro: "A capa precisa ser uma imagem." }, { status: 400 });
   }
 
-  await definirMiniatura(id, quem.tenantId!, chave, corpo.largura, corpo.altura);
+  /* Mesma régua da rota de envio: arredondada, com teto de um dia, e só
+     quando é número de verdade — capa escolhida de uma imagem não traz. */
+  const duracao = Number(corpo.duracao);
+  const duracaoSeg =
+    Number.isFinite(duracao) && duracao > 0 ? Math.min(86400, Math.round(duracao)) : null;
+  await definirMiniatura(id, quem.tenantId!, chave, corpo.largura, corpo.altura, duracaoSeg);
   revalidatePath(`/painel/galerias/${quem.media!.galeria_id}`);
   return NextResponse.json({ ok: true });
 }
