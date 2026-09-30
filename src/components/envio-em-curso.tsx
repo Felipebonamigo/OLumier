@@ -26,6 +26,7 @@ import {
   tamanhoDe,
 } from "@/lib/fila-upload";
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
+import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio } from "@/lib/velocidade-regras";
 import { garantirSecoesAction } from "@/app/painel/actions";
 
 /**
@@ -290,6 +291,38 @@ export function ProvedorDeEnvio({
    * então reenviar é devolvê-la à fila, na mesma ordem de antes.
    */
   const falhas = useRef(new Map<string, Tarefa>());
+  /*
+   * A MEDIDA DE CADA ARQUIVO (30/09/2026, migração 053).
+   *
+   * Felipe: "temos que ter velocidade e funcionar". O envio vai direto para o
+   * armazém, e o servidor não via nem a velocidade nem as desistências — da
+   * Alícia soubemos por foto. Cada arquivo que termina vira uma medida; elas
+   * vão juntas, de tempos em tempos, e o painel de administração mostra.
+   * Mandar e esquecer: falhar aqui não pode atrapalhar envio nenhum.
+   */
+  const medidas = useRef<MedidaDeEnvio[]>([]);
+  const enviarMedidas = useCallback(() => {
+    if (medidas.current.length === 0) return;
+    const lote = medidas.current.splice(0, LOTE_MAXIMO_DE_MEDIDAS);
+    fetch("/api/envio/medidas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ medidas: lote }),
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+  const anotar = useCallback(
+    (m: MedidaDeEnvio) => {
+      medidas.current.push(m);
+      if (medidas.current.length >= 25) enviarMedidas();
+    },
+    [enviarMedidas],
+  );
+  /* Quem fecha a aba no meio ainda manda o que já mediu. */
+  useEffect(() => {
+    window.addEventListener("pagehide", enviarMedidas);
+    return () => window.removeEventListener("pagehide", enviarMedidas);
+  }, [enviarMedidas]);
   const trabalhandoRef = useRef(false);
   /*
    * A ORDEM continua de onde parou entre lotes.
@@ -339,6 +372,9 @@ export function ProvedorDeEnvio({
       );
       let preparado: Preparo | null = null;
       let arquivo = tarefa.arquivo;
+      /* O tempo do envio do ORIGINAL na tentativa que deu certo — a parte que
+         depende da rede. Ver `medidas`. */
+      let envioMs: number | null = null;
 
       try {
         /* Fora da retentativa: um ZIP que não abre este arquivo não abre na
@@ -443,6 +479,7 @@ export function ProvedorDeEnvio({
               : Promise.resolve();
 
             // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
+            const inicioDoEnvio = performance.now();
             if (dados.emPartes) {
               await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
                 atualizar(tarefa.item.id, { progresso: pct }),
@@ -455,6 +492,7 @@ export function ProvedorDeEnvio({
                 dados.mime,
               );
             }
+            envioMs = performance.now() - inicioDoEnvio;
             await derivadasSubindo;
 
             // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
@@ -492,6 +530,7 @@ export function ProvedorDeEnvio({
         );
 
         atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false });
+        anotar({ galeriaId: tarefa.galeriaId, bytes: arquivo.size, ms: envioMs, ok: true, erro: null });
       } catch (e) {
         /*
          * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
@@ -510,9 +549,16 @@ export function ProvedorDeEnvio({
           erro: e instanceof Error ? e.message : "falhou",
         });
         falhas.current.set(tarefa.item.id, tarefa);
+        anotar({
+          galeriaId: tarefa.galeriaId,
+          bytes: arquivo.size,
+          ms: null,
+          ok: false,
+          erro: e instanceof Error ? e.message : "falhou",
+        });
       }
     },
-    [],
+    [anotar],
   );
 
   const trabalhar = useCallback(async () => {
@@ -530,6 +576,7 @@ export function ProvedorDeEnvio({
       async () => (paradoRef.current ? "parar" : pausadoRef.current ? "esperar" : "seguir"),
     );
     soltar();
+    enviarMedidas();
 
     trabalhandoRef.current = false;
     setRodando(false);
@@ -551,7 +598,7 @@ export function ProvedorDeEnvio({
       );
     }
     router.refresh();
-  }, [enviarUm, router]);
+  }, [enviarUm, enviarMedidas, router]);
 
   const enfileirar = useCallback(
     async (brutos: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => {

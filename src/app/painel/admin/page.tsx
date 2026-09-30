@@ -13,6 +13,8 @@ import { resumoDeTrafego } from "@/lib/metricas-entrega";
 import { listarCustos } from "@/lib/custos-da-sociedade";
 import { custoFixoDaGaleriaCentavos } from "@/lib/custos-da-sociedade-regras";
 import { zipRemotoConfigurado } from "@/lib/zip-remoto";
+import { velocidadeReal } from "@/lib/velocidade";
+import { formatarVelocidade } from "@/lib/velocidade-regras";
 import {
   resumoDaPlataforma,
   trialsVencendo,
@@ -72,6 +74,7 @@ const SECOES = [
   { id: "espaco", nome: "Espaço" },
   { id: "uso", nome: "Uso e entrega" },
   { id: "trafego", nome: "Tráfego" },
+  { id: "velocidade", nome: "Velocidade" },
   { id: "meses", nome: "Doze meses" },
   { id: "atencao", nome: "Precisa de atenção" },
   { id: "estudios", nome: "Estúdios" },
@@ -102,7 +105,7 @@ export default async function AdminPage({
 }) {
   await exigirAdmin();
 
-  const [estudios, meses, entrega, somasDeZip, eventos, custos] = await Promise.all([
+  const [estudios, meses, entrega, somasDeZip, eventos, custos, velocidade] = await Promise.all([
     panoramaDosEstudios(),
     crescimentoMensal(12),
     entregaRecente(30),
@@ -118,6 +121,10 @@ export default async function AdminPage({
     /* O custo fixo sai da lista do caixa dos sócios (migração 047), a mesma
        que eles editam lá. Sem a tabela, vale o de `config/custos-fixos.ts`. */
     listarCustos().catch(() => null),
+    /* A velocidade real de download e de envio, e as falhas do envio. Ver
+       `lib/velocidade.ts`. Sem a tabela nova (migração 053), o bloco se cala
+       em vez de derrubar a página. */
+    velocidadeReal().catch(() => null),
   ]);
 
   /* Só a TABELA muda de ordem; os totais e as listas de cima leem `estudios`.
@@ -437,9 +444,78 @@ export default async function AdminPage({
         </div>
       </Bloco>
 
-      {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
+      {/* ── 4c. VELOCIDADE REAL (30/09/2026) ──────────────────────────────
+          Felipe: "temos que ter velocidade e funcionar". Numa manhã chegaram
+          um download a 270–470 KB/s e um envio caindo, e os dois só apareceram
+          porque alguém mandou foto. Aqui a velocidade que os clientes de fato
+          tiveram, e as desistências do envio antes da reclamação. */}
       <Bloco
         id={SECOES[5].id}
+        titulo="Velocidade real"
+        explicacao="Medida em cada download de ZIP (30 dias) e em cada foto enviada (7 dias). A mediana é o caso típico; os 10% mais lentos são quem reclama."
+      >
+        {!velocidade ? (
+          <p className="text-sm text-texto-faint">Sem medidas ainda.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Cartao
+                rotulo="Download do ZIP pronto"
+                valor={velocidade.downloadDoDisco ? formatarVelocidade(velocidade.downloadDoDisco.mediana) : "—"}
+                nota={
+                  velocidade.downloadDoDisco
+                    ? `10% abaixo de ${formatarVelocidade(velocidade.downloadDoDisco.p10)} · ${velocidade.downloadDoDisco.n} download${velocidade.downloadDoDisco.n === 1 ? "" : "s"}`
+                    : "nenhum ZIP saiu do disco no período"
+                }
+              />
+              <Cartao
+                rotulo="Download montando"
+                valor={velocidade.downloadMontando ? formatarVelocidade(velocidade.downloadMontando.mediana) : "—"}
+                nota={
+                  velocidade.downloadMontando
+                    ? `o primeiro de cada galeria · ${velocidade.downloadMontando.n} download${velocidade.downloadMontando.n === 1 ? "" : "s"}`
+                    : "nenhum ZIP montado no período"
+                }
+              />
+              <Cartao
+                rotulo="Envio de fotos"
+                valor={velocidade.envio ? formatarVelocidade(velocidade.envio.mediana) : "—"}
+                nota={
+                  velocidade.envio
+                    ? `por arquivo, 3 ao mesmo tempo · 10% abaixo de ${formatarVelocidade(velocidade.envio.p10)}`
+                    : "medindo desde 30/09/2026"
+                }
+              />
+              <Cartao
+                rotulo="Envios que desistiram"
+                valor={velocidade.falhas.n}
+                nota={
+                  velocidade.falhas.n
+                    ? `em ${velocidade.falhas.estudios} estúdio${velocidade.falhas.estudios === 1 ? "" : "s"}, 7 dias`
+                    : "nenhum em 7 dias"
+                }
+                tom={velocidade.falhas.n > 0 ? "erro" : "ok"}
+              />
+            </div>
+            {velocidade.falhas.ultimas.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs">
+                {velocidade.falhas.ultimas.map((f, i) => (
+                  <li key={i} className="flex flex-wrap gap-x-2 text-texto-soft">
+                    <span className="font-medium text-texto">{f.estudio}</span>
+                    <span className="text-erro">{f.erro ?? "falhou"}</span>
+                    <span className="text-texto-faint">{f.navegador ?? "—"}</span>
+                    <span className="text-texto-faint">{dataHora(f.quando)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
+        )}
+      </Bloco>
+
+      {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
+      <Bloco
+        id={SECOES[6].id}
         titulo="Doze meses"
         explicacao="Cadastros e envio, mês a mês. A escala de cada série é o maior mês dela — as duas não se comparam entre si."
       >
@@ -484,7 +560,7 @@ export default async function AdminPage({
 
       {/* ── 6. QUEM PRECISA DE ATENÇÃO ────────────────────────────────── */}
       <Bloco
-        id={SECOES[6].id}
+        id={SECOES[7].id}
         titulo="Precisa de atenção"
         explicacao="Cada linha é uma conversa que vale a pena ter esta semana."
       >
@@ -539,7 +615,7 @@ export default async function AdminPage({
 
       {/* ── 7. TODOS OS ESTÚDIOS ──────────────────────────────────────── */}
       <Bloco
-        id={SECOES[7].id}
+        id={SECOES[8].id}
         titulo={`Estúdios (${estudios.length})`}
         explicacao="Clique num nome para a ficha completa."
       >
@@ -823,7 +899,7 @@ export default async function AdminPage({
 
       {/* ── 8. AUDITORIA ──────────────────────────────────────────────── */}
       <Bloco
-        id={SECOES[8].id}
+        id={SECOES[9].id}
         titulo="Últimos eventos"
         explicacao="Os oito mais recentes. O log inteiro, com filtro por ação, estúdio e período, fica no histórico."
       >
