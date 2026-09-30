@@ -1237,8 +1237,98 @@ function Player({
   const [pedindoNome, setPedindoNome] = useState(false);
   const [baixando, setBaixando] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
+  const tela = useRef<HTMLDivElement>(null);
   const ultimoGravado = useRef(0);
   const registrouPlay = useRef(false);
+
+  /*
+   * ── OS CONTROLES SÃO NOSSOS (30/09/2026) ──────────────────────────────
+   *
+   * Juan, testando no iPhone: "o layout dos vídeos tá bugado, não aparece os
+   * menus de botão e dá o start sozinho. Não consigo diminuir o volume do
+   * áudio também."
+   *
+   * Eram os controles nativos num `<video>` do tamanho da tela inteira. No
+   * iPhone o Safari desenha a barra dele no pé do ELEMENTO — embaixo da
+   * barra do navegador, longe da imagem, que fica no meio com faixas pretas —
+   * e a esconde enquanto toca. E os controles nativos do iPhone não têm
+   * volume nenhum: lá o volume é só o botão do aparelho.
+   *
+   * Agora a barra é desenhada aqui: play, tempo, a linha do filme, som, tela
+   * cheia. Aparece parada, some sozinha 3 s depois de o filme andar sem
+   * ninguém mexer, e volta ao toque ou ao mouse. A tela mede `100dvh`, então
+   * o pé fica acima da barra do Safari.
+   *
+   * VOLUME: o slider só aparece onde o navegador obedece a ele. No iPhone
+   * `video.volume` é somente leitura (regra da Apple, não nossa), e um slider
+   * que não faz nada é pior que nenhum — lá fica o botão de mudo, que
+   * funciona, e o volume do aparelho.
+   *
+   * NÃO COMEÇA SOZINHO ao abrir: o filme abre parado no pôster, com o play
+   * grande no meio. Começa sozinho só o PRÓXIMO episódio, quando a pessoa já
+   * estava assistindo e deixou a contagem correr (ou apertou "Assistir agora").
+   */
+  const [rodando, setRodando] = useState(false);
+  const [tempo, setTempo] = useState(0);
+  const [duracao, setDuracao] = useState(0);
+  const [mudo, setMudo] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [esperando, setEsperando] = useState(false);
+  const [visiveis, setVisiveis] = useState(true);
+  const [volumeObedece, setVolumeObedece] = useState(false);
+  const seguirTocando = useRef(false);
+  const esconder = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ultimoToque = useRef<string>("mouse");
+
+  /* O navegador deixa mudar o volume? No iPhone, não — ver acima. */
+  useEffect(() => {
+    const teste = document.createElement("video");
+    teste.volume = 0.5;
+    /* eslint-disable-next-line react-hooks/set-state-in-effect --
+       Pergunta ao navegador, que só existe depois de montar. */
+    setVolumeObedece(teste.volume === 0.5);
+  }, []);
+
+  const mostrarControles = useCallback(() => {
+    setVisiveis(true);
+    if (esconder.current) clearTimeout(esconder.current);
+    esconder.current = setTimeout(() => {
+      if (video.current && !video.current.paused) setVisiveis(false);
+    }, 3000);
+  }, []);
+  useEffect(() => () => void (esconder.current && clearTimeout(esconder.current)), []);
+
+  const alternar = useCallback(() => {
+    const v = video.current;
+    if (!v) return;
+    if (v.paused) void v.play().catch(() => {});
+    else v.pause();
+    mostrarControles();
+  }, [mostrarControles]);
+
+  const andarNoFilme = useCallback(
+    (segundos: number) => {
+      const v = video.current;
+      if (!v || !Number.isFinite(v.duration)) return;
+      v.currentTime = Math.min(Math.max(0, v.currentTime + segundos), v.duration);
+      mostrarControles();
+    },
+    [mostrarControles],
+  );
+
+  const telaCheia = useCallback(() => {
+    const el = tela.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
+    const v = video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    /* iPhone não põe um elemento qualquer em tela cheia, só o vídeo — e com
+       os controles da Apple, que lá são os certos. */
+    if (el?.requestFullscreen) void el.requestFullscreen().catch(() => v?.webkitEnterFullscreen?.());
+    else if (el?.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else v?.webkitEnterFullscreen?.();
+  }, []);
 
   /* O endereço do filme, pedido a cada episódio. */
   useEffect(() => {
@@ -1249,6 +1339,10 @@ function Player({
     setSrc(null);
     setErro(null);
     setContagem(null);
+    setRodando(false);
+    setTempo(0);
+    setDuracao(0);
+    setVisiveis(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     registrouPlay.current = false;
     ultimoGravado.current = 0;
@@ -1300,6 +1394,7 @@ function Player({
     (outro: EpisodioDoStream | null) => {
       if (!outro) return;
       guardar(true);
+      seguirTocando.current = true;
       trocar(outro.id);
     },
     [guardar, trocar],
@@ -1313,10 +1408,26 @@ function Player({
       if (e.key === "Escape") sair();
       else if (e.shiftKey && e.key.toLowerCase() === "n") irPara(proximo);
       else if (e.shiftKey && e.key.toLowerCase() === "p") irPara(anterior);
+      else {
+        /* Com o foco num botão ou na linha do filme, espaço e setas são
+           deles — senão o espaço tocaria e pausaria no mesmo aperto. */
+        const alvo = e.target as HTMLElement | null;
+        if (alvo && /^(BUTTON|INPUT|A)$/.test(alvo.tagName)) return;
+        const tecla = e.key.toLowerCase();
+        if (tecla === " " || tecla === "k") {
+          e.preventDefault();
+          alternar();
+        } else if (e.key === "ArrowRight") andarNoFilme(10);
+        else if (e.key === "ArrowLeft") andarNoFilme(-10);
+        else if (tecla === "m" && video.current) {
+          video.current.muted = !video.current.muted;
+          mostrarControles();
+        } else if (tecla === "f") telaCheia();
+      }
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
-  }, [anterior, irPara, pedindoNome, proximo, sair]);
+  }, [alternar, andarNoFilme, anterior, irPara, mostrarControles, pedindoNome, proximo, sair, telaCheia]);
 
   /* A contagem do próximo: um segundo por vez, e ao chegar a zero, troca. */
   useEffect(() => {
@@ -1368,12 +1479,22 @@ function Player({
 
   return (
     <div
+      ref={tela}
       role="dialog"
       aria-modal="true"
       aria-label={ep.titulo}
-      className="fixed inset-0 z-[60] flex flex-col bg-black text-white"
+      /* `100dvh`, e não `inset-0` sozinho: no iPhone o pé da tela fixa fica
+         embaixo da barra do Safari, e era lá que os controles moravam. */
+      className={`fixed inset-x-0 top-0 z-[60] flex h-[100dvh] flex-col bg-black text-white ${visiveis ? "" : "cursor-none"}`}
+      onPointerMove={(e) => {
+        if (e.pointerType === "mouse") mostrarControles();
+      }}
     >
-      <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-4 pb-10 pt-4 sm:px-6">
+      <div
+        className={`absolute inset-x-0 top-0 z-10 flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))] transition-opacity duration-300 sm:px-6 ${
+          visiveis ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
         <button
           type="button"
           onClick={sair}
@@ -1420,54 +1541,139 @@ function Player({
         )}
       </div>
 
-      <div className="relative grid min-h-0 flex-1 place-items-center">
+      <div className="relative min-h-0 flex-1">
         {src ? (
-          <video
-            key={ep.id}
-            ref={video}
-            src={src}
-            /* Mesma razão do visualizador (16/09/2026): autoplay com som pode
-               ser recusado; com pôster, a tela abre no quadro do filme e o
-               play fica evidente, em vez de um retângulo preto. */
-            poster={ep.poster ?? undefined}
-            controls
-            autoPlay
-            playsInline
-            preload="metadata"
-            className="h-full max-h-full w-full max-w-full object-contain"
-            onLoadedMetadata={(e) => {
-              const v = e.currentTarget;
-              const marca = lerProgresso(galeriaId)[ep.id];
-              const desde = marca ? pontoDeRetomada(marca.t, v.duration) : 0;
-              if (desde > 0) v.currentTime = desde;
-            }}
-            onPlay={() => {
-              setContagem(null);
-              if (registrouPlay.current) return;
-              registrouPlay.current = true;
-              fetch(`/api/g/${galeriaId}/acesso`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ acao: "assistiu", mediaId: ep.id }),
-                keepalive: true,
-              }).catch(() => {});
-            }}
-            onTimeUpdate={() => guardar()}
-            onPause={() => guardar(true)}
-            onEnded={() => {
-              guardar(true);
-              if (proximo) setContagem(ESPERA_DO_PROXIMO);
-            }}
-          />
+          <>
+            <video
+              key={ep.id}
+              ref={video}
+              src={src}
+              /* Sem `controls` e sem `autoPlay`: ver "os controles são
+                 nossos", acima. O pôster segura a tela até o play. */
+              poster={ep.poster ?? undefined}
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 h-full w-full object-contain"
+              onPointerDown={(e) => {
+                ultimoToque.current = e.pointerType;
+              }}
+              onClick={() => {
+                /* No toque, o primeiro toque só mostra os controles — como
+                   em qualquer player de celular. No mouse, clicar pausa. */
+                if (ultimoToque.current !== "mouse" && !visiveis) mostrarControles();
+                else alternar();
+              }}
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                setDuracao(v.duration);
+                setMudo(v.muted);
+                setVolume(v.volume);
+                const marca = lerProgresso(galeriaId)[ep.id];
+                const desde = marca ? pontoDeRetomada(marca.t, v.duration) : 0;
+                if (desde > 0) v.currentTime = desde;
+                setTempo(v.currentTime);
+                if (seguirTocando.current) {
+                  seguirTocando.current = false;
+                  void v.play().catch(() => {});
+                }
+              }}
+              onPlay={() => {
+                setRodando(true);
+                setContagem(null);
+                mostrarControles();
+                if (registrouPlay.current) return;
+                registrouPlay.current = true;
+                fetch(`/api/g/${galeriaId}/acesso`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ acao: "assistiu", mediaId: ep.id }),
+                  keepalive: true,
+                }).catch(() => {});
+              }}
+              onTimeUpdate={(e) => {
+                setTempo(e.currentTarget.currentTime);
+                guardar();
+              }}
+              onDurationChange={(e) => setDuracao(e.currentTarget.duration)}
+              onVolumeChange={(e) => {
+                setMudo(e.currentTarget.muted);
+                setVolume(e.currentTarget.volume);
+              }}
+              onWaiting={() => setEsperando(true)}
+              onPlaying={() => setEsperando(false)}
+              onCanPlay={() => setEsperando(false)}
+              onPause={() => {
+                setRodando(false);
+                setVisiveis(true);
+                guardar(true);
+              }}
+              onEnded={() => {
+                setRodando(false);
+                setVisiveis(true);
+                guardar(true);
+                if (proximo) setContagem(ESPERA_DO_PROXIMO);
+              }}
+            />
+
+            {/* O play grande no meio, parado — é o que diz "aperte aqui". */}
+            {!rodando && contagem === null && (
+              <button
+                type="button"
+                onClick={alternar}
+                aria-label="Tocar"
+                className="absolute left-1/2 top-1/2 z-10 grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-black shadow-2xl transition hover:scale-105 motion-reduce:transition-none"
+              >
+                <IconePlay className="ml-1 h-7 w-7" />
+              </button>
+            )}
+            {esperando && rodando && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 animate-spin rounded-full border-2 border-white/25 border-t-white"
+              />
+            )}
+
+            <BarraDoPlayer
+              visiveis={visiveis}
+              rodando={rodando}
+              tempo={tempo}
+              duracao={duracao}
+              mudo={mudo}
+              volume={volume}
+              volumeObedece={volumeObedece}
+              alternar={alternar}
+              buscar={(t) => {
+                if (video.current) video.current.currentTime = t;
+                setTempo(t);
+                mostrarControles();
+              }}
+              alternarMudo={() => {
+                const v = video.current;
+                if (!v) return;
+                v.muted = !v.muted;
+                if (!v.muted && v.volume === 0) v.volume = 1;
+                mostrarControles();
+              }}
+              mudarVolume={(n) => {
+                const v = video.current;
+                if (!v) return;
+                v.volume = n;
+                v.muted = n === 0;
+                mostrarControles();
+              }}
+              telaCheia={telaCheia}
+              proximo={proximo ? () => irPara(proximo) : null}
+            />
+          </>
         ) : erro ? (
-          <p className="max-w-sm px-6 text-center text-sm text-white/75">{erro}</p>
+          <p className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/75">{erro}</p>
         ) : (
-          <span className="text-sm text-white/60">preparando o vídeo…</span>
+          <span className="absolute inset-0 grid place-items-center text-sm text-white/60">preparando o vídeo…</span>
         )}
 
         {/* ── O PRÓXIMO EPISÓDIO ──────────────────────────────────────── */}
         {contagem !== null && proximo && (
-          <div className="absolute bottom-20 right-4 z-10 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl bg-neutral-900/95 shadow-2xl ring-1 ring-white/10 sm:right-8">
+          <div className="absolute bottom-28 right-4 z-20 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl bg-neutral-900/95 shadow-2xl ring-1 ring-white/10 sm:right-8">
             <div className="flex gap-3 p-3">
               <span className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-md bg-white/10">
                 {proximo.poster && (
@@ -1523,6 +1729,123 @@ function Player({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * A barra de baixo do player: play, tempo, a linha do filme, som e tela
+ * cheia. Ver "os controles são nossos", no `Player`.
+ */
+function BarraDoPlayer({
+  visiveis,
+  rodando,
+  tempo,
+  duracao,
+  mudo,
+  volume,
+  volumeObedece,
+  alternar,
+  buscar,
+  alternarMudo,
+  mudarVolume,
+  telaCheia,
+  proximo,
+}: {
+  visiveis: boolean;
+  rodando: boolean;
+  tempo: number;
+  duracao: number;
+  mudo: boolean;
+  volume: number;
+  volumeObedece: boolean;
+  alternar: () => void;
+  buscar: (t: number) => void;
+  alternarMudo: () => void;
+  mudarVolume: (n: number) => void;
+  telaCheia: () => void;
+  proximo: (() => void) | null;
+}) {
+  const total = Number.isFinite(duracao) && duracao > 0 ? duracao : 0;
+  const somZerado = mudo || volume === 0;
+  const BOTAO = "grid h-11 w-11 shrink-0 place-items-center rounded-full transition hover:bg-white/10";
+  return (
+    <div
+      className={`absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-12 transition-opacity duration-300 sm:px-6 ${
+        visiveis ? "opacity-100" : "pointer-events-none opacity-0"
+      }`}
+    >
+      <input
+        type="range"
+        min={0}
+        max={total || 1}
+        step={0.1}
+        value={Math.min(tempo, total || 1)}
+        disabled={!total}
+        onChange={(e) => buscar(Number(e.target.value))}
+        aria-label="Linha do filme"
+        aria-valuetext={`${relogio(tempo)} de ${relogio(total)}`}
+        className="linha-do-filme block w-full"
+        style={{ ["--andou" as string]: `${total ? (tempo / total) * 100 : 0}%` }}
+      />
+      <div className="mt-1 flex items-center gap-1">
+        <button type="button" onClick={alternar} aria-label={rodando ? "Pausar" : "Tocar"} className={BOTAO}>
+          {rodando ? (
+            <svg viewBox="0 0 12 14" aria-hidden className="h-4 w-4" fill="currentColor">
+              <rect x="0.5" y="0.5" width="3.8" height="13" rx="1" />
+              <rect x="7.7" y="0.5" width="3.8" height="13" rx="1" />
+            </svg>
+          ) : (
+            <IconePlay className="ml-0.5 h-4 w-4" />
+          )}
+        </button>
+        {proximo && (
+          <button type="button" onClick={proximo} aria-label="Próximo vídeo" className={BOTAO}>
+            <svg viewBox="0 0 14 14" aria-hidden className="h-4 w-4" fill="currentColor">
+              <path d="M0 1.2v11.6c0 .6.7 1 1.2.6L9.6 7.6c.4-.3.4-.9 0-1.2L1.2.6C.7.3 0 .6 0 1.2z" />
+              <rect x="10.8" y="0.8" width="2.6" height="12.4" rx="1" />
+            </svg>
+          </button>
+        )}
+        <div className="group/som flex items-center">
+          <button type="button" onClick={alternarMudo} aria-label={somZerado ? "Ligar o som" : "Tirar o som"} className={BOTAO}>
+            <svg viewBox="0 0 20 16" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 5.5h3L9.5 2v12L5 10.5H2z" fill="currentColor" stroke="none" />
+              {somZerado ? (
+                <path d="M13.5 5.5l5 5m0-5l-5 5" />
+              ) : (
+                <>
+                  <path d="M13 5.2a4 4 0 0 1 0 5.6" />
+                  {volume > 0.5 && <path d="M15.6 2.8a7.4 7.4 0 0 1 0 10.4" />}
+                </>
+              )}
+            </svg>
+          </button>
+          {/* Só onde o navegador obedece — no iPhone o volume é do aparelho. */}
+          {volumeObedece && (
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={mudo ? 0 : volume}
+              onChange={(e) => mudarVolume(Number(e.target.value))}
+              aria-label="Volume"
+              className="linha-do-filme w-20 sm:w-24"
+              style={{ ["--andou" as string]: `${(mudo ? 0 : volume) * 100}%` }}
+            />
+          )}
+        </div>
+        <span className="ml-2 text-xs tabular-nums text-white/80">
+          {relogio(tempo)}
+          {total > 0 && <span className="text-white/50"> / {relogio(total)}</span>}
+        </span>
+        <button type="button" onClick={telaCheia} aria-label="Tela cheia" className={`${BOTAO} ml-auto`}>
+          <svg viewBox="0 0 16 16" aria-hidden className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

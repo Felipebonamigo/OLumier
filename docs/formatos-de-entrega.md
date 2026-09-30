@@ -157,6 +157,18 @@ o que foi feito segue a descrição dele, não a página.
 | Capa no Stream | **Capa do stream: a do estilo / a do grupo Capa.** Com a do grupo Capa, a página desenha a capa escolhida (convite, arco, imersa…) e o stream começa embaixo, com uma barra de "Assistir". Escolher um desenho no grupo Capa com a entrega em Stream já passa para essa opção — clicar em "Convite" e ver o Convite. | eixo `capaStream` |
 | Capa de cada pasta | **Capa de cada pasta** no Design → Formato: o cartão de cada capítulo com a capa de hoje; "trocar" abre as fotos dele (60 por vez). O botão da aba Fotos continua existindo. | `lib/entrega-no-design.ts` |
 
+**Player (segundo recado, no mesmo dia):** *"o layout dos vídeos tá bugado,
+não aparece os menus de botão e dá o start sozinho. Não consigo diminuir o
+volume do áudio também."* Eram os controles nativos num `<video>` do tamanho
+da tela: no iPhone o Safari os desenha no pé do elemento, embaixo da barra do
+navegador, e os controles nativos do iPhone não têm volume. Agora o player tem
+controles próprios — play/pausa, linha do filme, tempo, som, próximo e tela
+cheia —, numa tela de `100dvh`; somem 3 s depois de o filme andar e voltam ao
+toque ou ao mouse. **Abre parado**, com o play grande no meio; só o próximo
+episódio começa sozinho. O slider de volume aparece onde o navegador obedece —
+**no iPhone o volume é só o do aparelho** (regra da Apple); lá fica o botão de
+mudo. Teclado: espaço/K, setas ±10 s, M, F, Esc, Shift+N/P.
+
 Os eixos novos são **estrutura** (`EIXOS_DA_ESTRUTURA`): andam com o formato,
 não com o estilo, e não tiram a galeria do "meu padrão". O padrão de cada um é
 o Stream como estava — ninguém que já usa vê mudança sem mexer, exceto o "E1",

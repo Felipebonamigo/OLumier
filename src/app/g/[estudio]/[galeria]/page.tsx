@@ -1035,11 +1035,14 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             O STREAM COM A CAPA DO GRUPO CAPA (Juan, 30/09/2026: "corrigir os
             formatos de CAPA quando o formato de entrega foi o STREAM"). A sala
             começa embaixo, sem a capa dela. `id="fotos"` é o alvo do "Ver os
-            vídeos" das capas que têm chamada; a camada com fundo é a mesma que
-            cobre a capa fixa na galeria de fotos.
+            vídeos" das capas que têm chamada; a camada com fundo cobre a capa
+            fixa. `relative` SEM `z-index`: vir depois da capa no documento já
+            a põe por cima, e um `z-10` aqui criaria um contexto de
+            empilhamento que prenderia o player (`fixed`, z-60) embaixo do
+            rodapé.
           */}
           {tela === "stream" && (
-            <div id="fotos" className="relative z-10 scroll-mt-4" style={{ background: "var(--g-fundo)" }}>
+            <div id="fotos" className="relative scroll-mt-4" style={{ background: "var(--g-fundo)" }}>
               {streamDaEntrega}
             </div>
           )}
