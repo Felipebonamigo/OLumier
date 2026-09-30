@@ -360,6 +360,41 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const escolhidas = new Set(pedidas);
 
   /*
+   * ── COM CAPÍTULO, A GALERIA ABRE NO PRIMEIRO (30/09/2026) ──────────────
+   *
+   * Juan, sobre a galeria de uma storymaker: "assim que abre a galeria ele tá
+   * aparecendo todos os capítulos. Os vídeos dela estão separados em 3
+   * capítulos, mas assim que abre aparece tudo junto, deveria mostrar apenas o
+   * do capítulo".
+   *
+   * O corte por capítulo já valia em qualquer tamanho desde 21/09 — o que
+   * faltava era o PADRÃO. Sem `?cap=`, `fatiarGaleria` recebia `undefined` e
+   * devolvia a galeria inteira; acima de 600 itens a barra escolhia o primeiro
+   * capítulo por conta, e abaixo não. O produto mudava de natureza entre 599 e
+   * 601 itens, e quem tem 8 vídeos caía no lado errado: três capítulos
+   * empilhados viram uma tira alta, e o capítulo deixa de significar alguma
+   * coisa.
+   *
+   * Decisão do Felipe em 30/09: o mesmo comportamento em qualquer tamanho.
+   *
+   * ── AS TRÊS RESSALVAS ─────────────────────────────────────────────────
+   *
+   * 1. Só quando há capítulo COM FOTO. Abrir num capítulo vazio entregaria uma
+   *    galeria que parece não ter nada — pior do que o que se está consertando.
+   * 2. Nunca sobre uma BUSCA (`?fotos=`). A busca por rosto e o "ver só as
+   *    favoritas" respondem sobre a galeria inteira; prendê-las ao capítulo de
+   *    abertura devolveria um subconjunto silencioso, e o convidado veria 1 de
+   *    3 acreditando que são todas.
+   * 3. Nunca na amostra da prévia, que é outro corte e menor.
+   *
+   * `scripts/testar-abre-no-primeiro-capitulo.mjs` prende as três.
+   */
+  const secoes = await listarSecoes(galeria.id);
+  const primeiroComFoto = secoes.find((s) => (s.total ?? 0) > 0)?.id ?? null;
+  const capPadrao =
+    !cap && !amostrando && escolhidas.size === 0 ? primeiroComFoto : null;
+
+  /*
    * ── O `?cap=` ACEITA O APELIDO E O ID (16/09/2026) ─────────────────────
    *
    * O link de hoje leva `cap=cerimonia`; o de ontem leva o UUID da seção. Os
@@ -421,7 +456,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        * parâmetro é que seria o problema — o cliente conta quantas fotos já tem
        * para pedir as próximas, e ele nasceria contando errado.
        */
-      fatiarGaleria(todasAsMedias, capSecaoId, FOTOS_POR_TELA);
+      fatiarGaleria(todasAsMedias, capSecaoId ?? capPadrao, FOTOS_POR_TELA);
 
   const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : fatia.itens;
 
@@ -454,7 +489,19 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const enderecoBase =
     (await headers()).get(CAMINHO_PUBLICO) ?? `/g/${estudio}/${galeriaSlug}`;
 
-  const soUmCapitulo = !amostrando && Boolean(capSecaoId);
+  /*
+   * O capítulo PADRÃO conta aqui também (30/09/2026).
+   *
+   * Sem isto, `pedacoDaGaleria` ficava falso na galeria pequena que passou a
+   * abrir no primeiro capítulo — e o que decide se um capítulo SEM foto
+   * carregada continua na barra é justamente ele. O efeito foi imediato no
+   * teste: abrindo a galeria, "Cerimônia" e "Festa" sumiam das pastilhas e a
+   * pessoa ficava PRESA no primeiro capítulo, sem caminho de volta.
+   *
+   * É a mesma razão pela qual a galeria fatiada já mantinha as seções vazias e
+   * escondidas: o menu precisa enxergar o capítulo antes de a foto dele chegar.
+   */
+  const soUmCapitulo = !amostrando && Boolean(capSecaoId ?? capPadrao);
   const pedacoDaGaleria = fatiada || soUmCapitulo;
 
   /*
@@ -583,7 +630,6 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * lightbox continua percorrendo a galeria INTEIRA de ponta a ponta, mesmo
    * quem abriu uma foto no meio da "Festa" chega no "Making Of" pela seta.
    */
-  const secoes = await listarSecoes(galeria.id);
   const indicePorId = new Map(medias.map((m, i) => [m.id, i]));
 
   const semCapitulo = medias
