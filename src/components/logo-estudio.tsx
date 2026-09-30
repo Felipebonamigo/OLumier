@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Erro } from "@/components/form-ui";
 import { FUNDO_ESCURO, LIMITE_LOGO, TIPOS_LOGO, recusaDaLogo } from "@/lib/marca-estudio";
+import { prepararLogo } from "@/lib/logo-client";
 
 /**
  * Enviar, ver e tirar a logo do estúdio.
@@ -33,37 +34,43 @@ export function LogoEstudio({
   const arquivoRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
-  async function enviarLogo(arquivo: File) {
-    // A mesma regra do servidor, aplicada aqui só para a resposta ser imediata:
-    // quem manda um arquivo de 8 MB merece saber antes de esperar o envio.
-    const recusa = recusaDaLogo(arquivo.type, arquivo.size);
-    if (recusa) {
-      setErroLogo(recusa);
+  async function enviarLogo(escolhido: File) {
+    // O tipo é conferido antes de abrir a imagem; o TAMANHO, depois de cortar
+    // a margem — um PNG de 3 MB com prancheta sobrando pode caber no limite
+    // sem ela. A mesma regra do servidor, aplicada aqui só para a resposta ser
+    // imediata.
+    if (!TIPOS_LOGO[escolhido.type]) {
+      setErroLogo(recusaDaLogo(escolhido.type, escolhido.size));
       return;
     }
 
     setErroLogo(null);
     setEnviando(true);
     try {
+      /* A margem vazia sai aqui, e a medida sai junto — ver `lib/logo-client.ts`. */
+      const logo = await prepararLogo(escolhido);
+      const recusa = recusaDaLogo(logo.mime, logo.arquivo.size);
+      if (recusa) throw new Error(recusa);
+
       const pedido = await fetch("/api/marca/logo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mime: arquivo.type, bytes: arquivo.size }),
+        body: JSON.stringify({ mime: logo.mime, bytes: logo.arquivo.size }),
       });
       const dados = await pedido.json();
       if (!pedido.ok) throw new Error(dados.erro ?? "Não foi possível enviar.");
 
       const put = await fetch(dados.url, {
         method: "PUT",
-        headers: { "Content-Type": arquivo.type },
-        body: arquivo,
+        headers: { "Content-Type": logo.mime },
+        body: logo.arquivo,
       });
       if (!put.ok) throw new Error("O envio para o armazenamento falhou.");
 
       const confirma = await fetch("/api/marca/logo", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chave: dados.chave }),
+        body: JSON.stringify({ chave: dados.chave, largura: logo.largura, altura: logo.altura }),
       });
       const fim = await confirma.json();
       if (!confirma.ok) throw new Error(fim.erro ?? "Não foi possível confirmar.");
@@ -126,7 +133,8 @@ export function LogoEstudio({
           />
           <span className="text-[11px] text-texto-faint">
             PNG, JPG ou WEBP, até {Math.round(LIMITE_LOGO / 1024 / 1024)} MB. Fundo transparente
-            (PNG) fica melhor nos temas escuros.
+            (PNG) fica melhor nos temas escuros. A margem vazia em volta é cortada sozinha, e o
+            tamanho na capa se ajusta no Design da galeria.
           </span>
           {urlLogo && (
             <button

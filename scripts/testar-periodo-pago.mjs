@@ -300,10 +300,24 @@ await etapa("o UPDATE do cancelamento não escreve em pago_ate", () => {
   const atualiza = corpo.indexOf("update tenants");
   if (atualiza < 0) throw new Error("o cancelamento não atualiza mais o tenant — leia a ação");
   const comando = corpo.slice(atualiza, corpo.indexOf("`", atualiza));
-  if (/pago_ate/.test(comando)) {
+  /*
+   * UMA exceção, desde 30/09/2026: o cancelamento COM DEVOLUÇÃO acaba o
+   * período hoje — o dinheiro volta, e o serviço não pode continuar junto
+   * (`config/devolucao.ts`). A etapa aceita exatamente essa forma, e confere
+   * que a chave dela é a devolução: qualquer outra escrita em pago_ate, ou
+   * essa mesma ligada a outra condição, é o defeito antigo de volta.
+   */
+  const semAExcecao = comando.replace(
+    /pago_ate = case when \$2 then least\(pago_ate, now\(\)\) else pago_ate end/,
+    "",
+  );
+  if (/pago_ate/.test(semAExcecao)) {
     throw new Error("o cancelamento voltou a mexer em pago_ate — o período pago some de novo");
   }
-  return "o período sobrevive ao cancelamento";
+  if (semAExcecao !== comando && !/\[tenantId, devolucao !== null\]/.test(corpo)) {
+    throw new Error("o fim antecipado do período não está mais preso à devolução");
+  }
+  return "o período sobrevive ao cancelamento sem devolução";
 });
 
 await etapa("o webhook conta o período pelo CICLO do estúdio, não por um literal", () => {

@@ -268,6 +268,77 @@ export type LinhasTitulo = "auto" | "uma" | "duas" | "tres";
  */
 export const TAMANHO_TITULO = { min: 60, max: 180, passo: 5, padrao: 100 } as const;
 
+/**
+ * ── O TAMANHO DA LOGO VIROU BARRINHA (30/09/2026) ────────────────────────
+ *
+ * Um fotógrafo, pelo Felipe: "só apanhei pra posicionar a logo. Ou achava
+ * muito grande ou muito pequena. Aí tinha que diminuir a própria imagem da
+ * logo antes de subir pra plataforma. Seria interessante um modo de nós mesmo
+ * definirmos o tamanho, em vez de já ter ali (pequeno, médio, grande)."
+ *
+ * Três defeitos juntos, e nenhum era dele:
+ *
+ *   1. SÓ A ALTURA era controlada (`alturaLogoPx`): na mesma opção, uma logo
+ *      horizontal comprida ficava enorme e uma quadrada ficava pequena.
+ *   2. Os degraus pulavam 55% de um para o outro, e a altura era só TETO —
+ *      imagem menor que ele ficava do tamanho dela. Encolher o arquivo era o
+ *      único meio-termo que existia.
+ *   3. A margem vazia do arquivo contava como logo (ver `lib/logo-client.ts`,
+ *      que agora a corta no envio).
+ *
+ * `tamanhoLogo` é a porcentagem de um LADO DE REFERÊNCIA (`base`, a antiga
+ * "Média"), aplicado à ÁREA da logo e não à altura: 100% é a área de um
+ * quadrado de 88 px, qualquer que seja o formato. Uma logo 4:1 fica com
+ * 44 × 176; uma quadrada, 88 × 88 — o mesmo peso na capa.
+ *
+ * `null` é a regra antiga, pela altura do eixo `logo`, e é o que toda galeria
+ * entregue tem: ninguém muda de cara sem mexer na barrinha.
+ */
+export const TAMANHO_LOGO = { min: 25, max: 300, passo: 5, base: 88 } as const;
+
+/* Proporções absurdas (uma linha de 20:1) não viram logo de 4 px de altura. */
+const PROPORCAO_LOGO = { min: 0.25, max: 8 } as const;
+
+/** Largura ÷ altura da logo, aparada; sem medida conhecida, trata como quadrada. */
+export function proporcaoDaLogo(largura?: number | null, altura?: number | null): number {
+  if (!largura || !altura || largura <= 0 || altura <= 0) return 1;
+  return Math.min(PROPORCAO_LOGO.max, Math.max(PROPORCAO_LOGO.min, largura / altura));
+}
+
+/**
+ * Como a capa desenha a logo.
+ *
+ *   `null`              — sem logo (eixo em "nenhuma");
+ *   `{ tetoAltura }`    — a regra antiga: altura máxima, sem ampliar;
+ *   `{ altura }`        — a nova: altura exata, que junto da proporção dá a
+ *                         área escolhida na barrinha.
+ */
+export function medidaDaLogo(
+  ap: Pick<Aparencia, "logo" | "tamanhoLogo">,
+  proporcao: number,
+): { tetoAltura: number } | { altura: number } | null {
+  if (ap.logo === "nenhuma") return null;
+  if (ap.tamanhoLogo === null) return { tetoAltura: alturaLogoPx(ap.logo) };
+  const lado = (TAMANHO_LOGO.base * ap.tamanhoLogo) / 100;
+  return { altura: Math.round(lado / Math.sqrt(proporcao)) };
+}
+
+/**
+ * Onde a barrinha começa numa galeria que ainda está na regra antiga: a
+ * porcentagem que desenha EXATAMENTE a logo de hoje. Mexer um passo muda um
+ * passo — sem pulo na hora em que a pessoa encosta no controle.
+ */
+export function tamanhoLogoEquivalente(logo: TamanhoLogo, proporcao: number): number {
+  const lado = alturaLogoPx(logo === "nenhuma" ? APARENCIA_PADRAO.logo : logo) * Math.sqrt(proporcao);
+  return lerTamanhoLogo((lado / TAMANHO_LOGO.base) * 100) ?? 100;
+}
+
+function lerTamanhoLogo(bruto: unknown): number | null {
+  if (typeof bruto !== "number" || !Number.isFinite(bruto)) return null;
+  const dentro = Math.min(TAMANHO_LOGO.max, Math.max(TAMANHO_LOGO.min, bruto));
+  return Math.round(dentro / TAMANHO_LOGO.passo) * TAMANHO_LOGO.passo;
+}
+
 
 /**
  * Como o link da galeria aparece no WhatsApp.
@@ -290,6 +361,38 @@ export const TAMANHO_TITULO = { min: 60, max: 180, passo: 5, padrao: 100 } as co
  * ao cartão com fundo e nome — retângulo vazio não é opção.
  */
 export type CartaoDoLink = "sobreposto" | "foto";
+
+/**
+ * O FORMATO DA ENTREGA — como o trabalho chega, antes de como ele se parece.
+ *
+ * Os outros eixos mudam a CARA da galeria; este muda a ESTRUTURA. Nasceu em
+ * 30/09/2026 de duas conversas do mesmo dia:
+ *
+ *   pastas   "a forma de entregar em pastas, com capa na pasta e os arquivos
+ *            dentro". O fotógrafo já organiza o casamento em capítulos (desde
+ *            `lib/capitulos-pasta.ts` eles saem da própria pasta do disco);
+ *            aqui a galeria abre mostrando esses capítulos como pastas, cada
+ *            uma com a sua capa, e só depois as fotos de dentro.
+ *   stream   "estilo Netflix, que vai passando os episódios — mais para
+ *            vídeos". A entrega de vídeo dentro da grade de fotos era um
+ *            ladrilho com um triângulo; para quem entrega filme, o filme é o
+ *            trabalho, e ele pede tela de cinema, fileiras e "próximo".
+ *
+ * `galeria` é o que toda entrega foi até hoje, e continua sendo o padrão: nada
+ * que já está no ar muda de estrutura sozinho.
+ *
+ * ── POR QUE MORA NA APARÊNCIA, E NÃO NUMA COLUNA DA GALERIA ─────────────────
+ *
+ * Porque herda de graça tudo o que a aparência já resolveu: rascunho que grava
+ * sozinho, prévia fiel, publicar como ato, padrão do estúdio (um filmmaker que
+ * salva o Stream como padrão tem toda galeria nova nascendo Stream). Uma coluna
+ * própria precisaria de cada uma dessas peças de novo.
+ *
+ * O que ele NÃO faz é andar junto com os estilos: estilo é cara, formato é
+ * estrutura. Aplicar "Revista" numa entrega em Stream troca a letra e a cor e
+ * deixa o Stream onde está — ver `comFormatoDe` e `mesmaAparencia`.
+ */
+export type Formato = "galeria" | "pastas" | "stream";
 
 /**
  * Quantas fotos a prévia do editor desenha.
@@ -404,6 +507,8 @@ export interface Aparencia {
   capaFixa: CapaFixa;
   /** Porcentagem do tamanho próprio da capa: 100 é o de sempre. Ver `TAMANHO_TITULO`. */
   tamanhoTitulo: number;
+  /** Porcentagem da área de referência da logo, ou `null` para a regra antiga. Ver `TAMANHO_LOGO`. */
+  tamanhoLogo: number | null;
   /**
    * O QUE é o evento, antes de dizer de QUEM ele é.
    *
@@ -421,6 +526,8 @@ export interface Aparencia {
    */
   rotulo: string;
   cartao: CartaoDoLink;
+  /** Galeria, pastas ou stream. Ver `Formato`. */
+  formato: Formato;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
 }
@@ -477,12 +584,16 @@ export const APARENCIA_PADRAO: Aparencia = {
      a ser medida na fonte certa. Ver `LinhasTitulo`. */
   linhasTitulo: "auto",
   tamanhoTitulo: TAMANHO_TITULO.padrao,
+  /* `null` é a regra de sempre, pela altura do eixo `logo`. Ver `TAMANHO_LOGO`. */
+  tamanhoLogo: null,
   /* `rola` é o que toda capa faz desde sempre. Ver `CapaFixa`. */
   capaFixa: "rola",
   /* `sobreposto` é o cartão de sempre. Ver o comentário de `CartaoDoLink`:
      o modo limpo é escolha, não correção. */
   cartao: "sobreposto",
   rotulo: "",
+  /* `galeria` é a estrutura de toda entrega até 30/09/2026. Ver `Formato`. */
+  formato: "galeria",
 };
 
 /**
@@ -611,6 +722,9 @@ export function lerAparencia(bruto: unknown): Aparencia {
      * e a galeria continuaria em 103 — a prévia mentindo por dois por cento.
      */
     tamanhoTitulo: lerTamanhoTitulo(o.tamanhoTitulo),
+    /* O mesmo acerto da barrinha do título; o que não é número é a regra
+       antiga (`null`), e não um tamanho inventado. */
+    tamanhoLogo: lerTamanhoLogo(o.tamanhoLogo),
     /*
      * O rótulo é TEXTO LIVRE, e por isso não passa por `valida` — não há lista
      * de valores certos para "aniversário de 15 anos". O que existe é um teto:
@@ -622,6 +736,7 @@ export function lerAparencia(bruto: unknown): Aparencia {
      */
     rotulo: typeof o.rotulo === "string" ? o.rotulo.trim().slice(0, 40) : APARENCIA_PADRAO.rotulo,
     cartao: valida(o.cartao, OPCOES.cartao.map((x) => x.id), APARENCIA_PADRAO.cartao),
+    formato: valida(o.formato, OPCOES.formato.map((x) => x.id), APARENCIA_PADRAO.formato),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
        "sujo/publicado" do editor iguais ao que eram. */
@@ -878,6 +993,13 @@ export const OPCOES = {
     { id: "centro", nome: "Centralizado", desc: "Tudo no eixo do meio" },
     { id: "esquerda", nome: "À esquerda", desc: "Tudo encostado na mesma linha" },
   ],
+  /* Os textos dizem o que o CLIENTE encontra ao abrir o link — é a pergunta que
+     o fotógrafo faz ao escolher, e não "como funciona por dentro". */
+  formato: [
+    { id: "galeria", nome: "Galeria", desc: "Tudo numa rolagem só, capítulo depois de capítulo" },
+    { id: "pastas", nome: "Pastas", desc: "Cada capítulo vira uma pasta com capa; as fotos ficam dentro" },
+    { id: "stream", nome: "Stream", desc: "Os vídeos em tela de cinema, com fileiras e próximo episódio" },
+  ],
 } as const;
 
 // --- presets ------------------------------------------------------------------
@@ -929,19 +1051,19 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Banca de jornal: fundo claro, letra grande e tudo de canto vivo.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Terrosa, manuscrita e de cantos macios. Clima de ateliê.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     /*
@@ -977,13 +1099,13 @@ export const PRESETS: Preset[] = [
     id: "marfim",
     nome: "Marfim",
     desc: "Creme e manuscrita, fotos rentes. É o desenho da nossa página inicial.",
-    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho e de canto vivo.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     /*
@@ -1000,7 +1122,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -1023,25 +1145,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, foto em arco e cantos bem macios. Clima de papel timbrado.",
-    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto, destaques grandes e canto vivo, como editorial de moda.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro, com a foto grande e limpa.",
-    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco, muito espaço e cantos arredondados. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, capaFixa: "rola" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
   },
 ];
 
@@ -1069,6 +1191,7 @@ export function presetEquivalente(a: Aparencia): string | null {
     x.grade === y.grade && x.densidade === y.densidade && x.logo === y.logo &&
     x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento && x.rotulo === y.rotulo && x.cartao === y.cartao &&
     x.linhasTitulo === y.linhasTitulo && x.tamanhoTitulo === y.tamanhoTitulo &&
+    x.tamanhoLogo === y.tamanhoLogo &&
     x.capaFixa === y.capaFixa;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
@@ -1083,8 +1206,30 @@ export function presetEquivalente(a: Aparencia): string | null {
  * das chaves não decidir nada — o editor espalha objetos, e `{...ap, cores}`
  * põe a cor no fim de um e no meio do outro.
  */
+/*
+ * O FORMATO FICA FORA DA COMPARAÇÃO (30/09/2026): estilo é cara, formato é
+ * estrutura (ver `Formato`). Uma entrega em Stream com a cara exata do padrão
+ * do estúdio ESTÁ no padrão — e o cartão dele tem de dizer isso.
+ */
 export function mesmaAparencia(a: unknown, b: unknown): boolean {
-  return JSON.stringify(lerAparencia(a)) === JSON.stringify(lerAparencia(b));
+  const semFormato = (x: unknown) => {
+    const { formato: _formato, ...resto } = lerAparencia(x);
+    void _formato;
+    return JSON.stringify(resto);
+  };
+  return semFormato(a) === semFormato(b);
+}
+
+/**
+ * Um estilo (preset, estilo salvo ou padrão do estúdio) aplicado sobre uma
+ * entrega: a cara vem do estilo, a ESTRUTURA fica a da entrega.
+ *
+ * Sem isto, escolher "Revista" numa galeria em Stream a devolveria para a
+ * rolagem de fotos — o fotógrafo trocaria a fonte e perderia o formato sem
+ * nem ter olhado para ele.
+ */
+export function comFormatoDe(estilo: Aparencia, atual: Aparencia): Aparencia {
+  return { ...estilo, formato: atual.formato };
 }
 
 // --- tradução para CSS --------------------------------------------------------

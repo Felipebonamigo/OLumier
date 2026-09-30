@@ -585,3 +585,54 @@ html[data-js] .revelar[data-visivel] {
     transform: translateX(-50%);
   }
 }
+
+/* ── ENTREGA EM PASTAS E EM STREAM (30/09/2026) ─────────────────────────────
+   As pastas chegam uma depois da outra, como cópias postas na mesa; o atraso
+   de cada uma vem do `--i` que `galeria-pastas.tsx` põe nela. Quem pediu
+   menos movimento recebe tudo parado. */
+.pasta-entra {
+  animation: pasta-entra 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+@keyframes pasta-entra {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* As fileiras do stream rolam de lado sem mostrar a barra: a rolagem é pelo
+   dedo, pela roda com shift ou pelas setas da própria fileira. */
+.fileira-sem-barra {
+  scrollbar-width: none;
+}
+.fileira-sem-barra::-webkit-scrollbar {
+  display: none;
+}
+
+/* A contagem do próximo episódio: a borda do botão se enche no tempo da
+   espera. `--espera` vem do componente, para a animação e o relógio do
+   JavaScript contarem o mesmo tempo. */
+@keyframes stream-enche {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.stream-enche {
+  transform-origin: left;
+  animation: stream-enche var(--espera, 8s) linear both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pasta-entra,
+  .stream-enche {
+    animation: none;
+  }
+}

@@ -142,7 +142,11 @@ console.log("\nrelato");
 await etapa("relato bem formado passa; qualquer campo torto reprova", () => {
   const bom = { pedidoId: ID, evento: "servido", bytes: 10, doCache: true, duracaoMs: 5 };
   igual(relatoValido(bom), true, "bom");
+  for (const evento of ["montado", "abortado", "despejo", "trecho"]) {
+    igual(relatoValido({ ...bom, evento }), true, `evento ${evento}`);
+  }
   igual(relatoValido({ ...bom, evento: "clicou" }), false, "evento");
+  igual(relatoValido({ ...bom, evento: 1 }), false, "evento número");
   igual(relatoValido({ ...bom, bytes: -1 }), false, "bytes negativos");
   igual(relatoValido({ ...bom, bytes: "10" }), false, "bytes string");
   igual(relatoValido({ ...bom, pedidoId: "x" }), false, "id");

@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
+import { VERSOES_LEGAIS, dataPorExtenso, operadorPorExtenso } from "@/config/documentos-legais";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 import { metadadosDaCasa } from "@/lib/metadados";
+import { PRAZO_DA_DEVOLUCAO } from "@/lib/devolucao";
+import { DIAS_DE_ARREPENDIMENTO } from "@/config/devolucao";
+import { AVISOS_ANTES_DE_APAGAR, RETENCAO_POR_EXTENSO, TOTAL_DE_AVISOS } from "@/config/retencao";
 
 export const metadata: Metadata = metadadosDaCasa({
   titulo: "Termos de Uso",
@@ -10,10 +14,12 @@ export const metadata: Metadata = metadadosDaCasa({
   caminho: "/termos",
 });
 
-/* A data é do TEXTO, não do arquivo: mexeu na regra, muda aqui. Termo que diz
- * ter sido atualizado em agosto e fala de coisa decidida depois é desonesto — e
- * é o tipo de detalhe que ninguém confere e todo mundo repara. */
-const ATUALIZADO_EM = "29 de setembro de 2026";
+/* A data é do TEXTO, não do arquivo: mexeu na regra, muda a versão em
+ * `config/documentos-legais.ts`. Termo que diz ter sido atualizado em agosto e
+ * fala de coisa decidida depois é desonesto — e é o tipo de detalhe que ninguém
+ * confere e todo mundo repara. A mesma versão vai gravada no evento
+ * `conta.criada`, como a que a pessoa aceitou. */
+const ATUALIZADO_EM = dataPorExtenso(VERSOES_LEGAIS.termos);
 
 export default function TermosPage() {
   return (
@@ -23,7 +29,7 @@ export default function TermosPage() {
 
       <p>
         Estes termos valem entre você (o <strong>fotógrafo</strong> que contrata) e a {marca.nome},
-        operado por Felipe Carboni Bonamigo. Ao criar uma conta, você concorda com eles.
+        operado por {operadorPorExtenso()}. Ao criar uma conta, você concorda com eles.
       </p>
 
       <h2>O que o serviço faz — e o que ele não é</h2>
@@ -60,7 +66,9 @@ export default function TermosPage() {
         <li>Você é responsável por manter sua senha em segredo e pelo que acontece na sua conta.</li>
         <li>Uma conta é de um estúdio. Compartilhar acesso é por sua conta e risco.</li>
         <li>
-          Você pode encerrar quando quiser, chamando no{" "}
+          Você cancela a assinatura quando quiser, sozinho, em <strong>Conta</strong>, no painel
+          (veja em Pagamento o que acontece com o dinheiro e com os arquivos). Para encerrar a conta
+          e apagar os dados na hora, chame no{" "}
           <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a>.
         </li>
       </ul>
@@ -133,18 +141,77 @@ export default function TermosPage() {
           Diminuiu: o que já foi pago não volta, e o preço menor vale a partir da próxima fatura.
         </li>
         <li>Preços podem mudar, com aviso de pelo menos 30 dias por e-mail.</li>
-        <li>Cancelou, vale até o fim do período já pago.</li>
+      </ul>
+
+      {/*
+        CANCELAMENTO E DEVOLUÇÃO — decisão do Felipe, 30/09/2026. Até então os
+        Termos diziam só "cancelou, vale até o fim do período já pago", e nada
+        sobre dinheiro de volta: o anual cancelado no 2º mês ficava sem regra,
+        e sem o prazo de arrependimento que a lei dá a toda compra pela
+        internet. Os números saem de `config/devolucao.ts`, a mesma regra que a
+        tela de Conta usa para calcular.
+      */}
+      <h3>Cancelamento e devolução</h3>
+      <ul>
+        <li>
+          Você cancela quando quiser, em <strong>Conta</strong>, no painel. A tela mostra o valor
+          da devolução, se houver, antes de você confirmar.
+        </li>
+        <li>
+          <strong>Até {DIAS_DE_ARREPENDIMENTO} dias depois de um pagamento</strong>, mensal ou
+          anual, você pode receber tudo de volta.
+        </li>
+        <li>
+          <strong>No anual, depois disso</strong>, você pode receber o que pagou menos os meses já
+          começados, cada um pelo preço mensal que o anual implica: um décimo do valor pago, já que
+          o anual cobra dez meses por doze. Por exemplo, num anual de R$ 1.000 cancelado no terceiro
+          mês, três meses custam R$ 300 e voltam R$ 700. Do décimo mês em diante não sobra valor a
+          devolver.
+        </li>
+        <li>
+          No mensal, depois dos {DIAS_DE_ARREPENDIMENTO} dias, o mês começado é o mês inteiro: não
+          há devolução, e o acesso continua até o fim do mês.
+        </li>
+        <li>
+          Com a devolução, o período pago acaba no dia do cancelamento, e o dinheiro volta pelo
+          mesmo meio de pagamento em até {PRAZO_DA_DEVOLUCAO}. Sem pedir devolução, você continua
+          usando até o fim do período já pago.
+        </li>
+        <li>
+          A diferença paga numa troca de plano no meio do período é tratada à parte: fale com a
+          gente pelo <a href={marca.whatsappLink}>WhatsApp</a>.
+        </li>
       </ul>
 
       <h3>Se o pagamento atrasar</h3>
       <p>
         Enquanto houver cobrança em aberto, você não consegue enviar arquivos novos. As galerias já
         publicadas <strong>continuam no ar</strong>: o casal que recebeu o link não tem nada a ver
-        com a pendência, e não vamos tirar as fotos do casamento dele do ar para cobrar você.
+        com a pendência, e não vamos tirar as fotos do casamento dele do ar para cobrar você. Se a
+        pendência passar de {RETENCAO_POR_EXTENSO} do fim do período pago, vale a regra abaixo.
+      </p>
+
+      {/*
+        O PRAZO DA CONTA ENCERRADA — decisão do Felipe, 30/09/2026: "3 meses,
+        mas colocando vários avisos". Antes, nada apagava a conta cancelada e
+        nenhum texto dizia até quando ela ficava. Números de
+        `config/retencao.ts`, os mesmos que a rotina diária usa
+        (`lib/contas-encerradas.ts`).
+      */}
+      <h3>Depois do fim da assinatura</h3>
+      <p>
+        Com a assinatura cancelada, ou com o pagamento em atraso, as galerias continuam no ar por{" "}
+        <strong>{RETENCAO_POR_EXTENSO} depois do fim do período pago</strong>. Antes de apagar
+        qualquer coisa, avisamos por e-mail {TOTAL_DE_AVISOS} vezes: no dia em que o período acaba,
+        e a {AVISOS_ANTES_DE_APAGAR.slice(0, -1).join(", ")} e {AVISOS_ANTES_DE_APAGAR.at(-1)}{" "}
+        {AVISOS_ANTES_DE_APAGAR.at(-1) === 1 ? "dia" : "dias"} da data. Se um aviso atrasar, a data
+        muda para garantir essa antecedência.
       </p>
       <p>
-        Se a inadimplência se estender por muito tempo, entramos em contato antes de qualquer medida
-        que afete o conteúdo. Nada é apagado sem aviso.
+        Reativar a assinatura até lá mantém tudo como está. Na data, as galerias saem do ar e os
+        arquivos são apagados. A conta continua existindo, e você pode assinar de novo quando
+        quiser. Antes da data, baixe o que quiser guardar pelo link de cada galeria, com o download
+        ligado.
       </p>
 
       {/*

@@ -39,10 +39,21 @@ export interface SomasDeEntrega {
   /** ZIPs entregues pelo VPS (o caminho de reserva). */
   servidosVpsN: number;
   servidosVpsBytes: number;
-  /** Downloads que caíram no meio, e o que chegou a sair. */
+  /**
+   * Conexões de ZIP que fecharam antes do fim, e o que chegou a sair. Conta
+   * TRÁFEGO: inclui a conexão que o navegador fechou para abrir outra.
+   */
   abortadosN: number;
   abortadosBytes: number;
   abortadosVpsBytes: number;
+  /**
+   * Dos abortados, os que ninguém completou depois — nem retomando, nem
+   * clicando de novo (migração 050). É a queda de verdade, e é o que o aviso
+   * olha.
+   */
+  quedasN: number;
+  /** Pedaços de Range que terminaram sem chegar ao fim do arquivo: tráfego, não entrega. */
+  trechosBytes: number;
   /** Downloads de foto avulsa e em lote no celular (acessos 'baixou' fora do ZIP). */
   avulsosN: number;
   /** Tamanho médio de uma mídia, para estimar os bytes dos avulsos. */
@@ -132,7 +143,7 @@ export function resumoDeTrafego(
   const custoExcedenteB2Centavos = Math.round(cambio(gbDe(excedenteB2Bytes) * EXCEDENTE_B2_CENTAVOS_GB));
 
   const trafegoServidorBytes =
-    somas.servidosServidorBytes + (somas.abortadosBytes - somas.abortadosVpsBytes);
+    somas.servidosServidorBytes + somas.trechosBytes + (somas.abortadosBytes - somas.abortadosVpsBytes);
   const excedenteServidorBytes = Math.max(0, trafegoServidorBytes - FRANQUIA_SERVIDOR_ZIP_BYTES);
   const custoExcedenteServidorCentavos = Math.round(
     cambio(gbDe(excedenteServidorBytes) * EXCEDENTE_SERVIDOR_ZIP_CENTAVOS_GB),
@@ -231,11 +242,19 @@ export function resumoDeTrafego(
     });
   }
 
+  /*
+   * Só a QUEDA DE VERDADE (29/09/2026). Até aqui o aviso contava toda conexão
+   * fechada antes do fim, e o navegador fecha conexão sem que o download caia:
+   * o Chrome do Android reabre o link no gerenciador do sistema, o "Retomar"
+   * pede o resto numa conexão nova. Com isso o painel dizia "13 de 21
+   * caíram" num mês em que a maior parte, provavelmente, chegou.
+   */
   const entregues = somas.servidosServidorN + somas.servidosVpsN;
-  if (entregues + somas.abortadosN >= 10 && somas.abortadosN > (entregues + somas.abortadosN) * 0.3) {
+  const tentativas = entregues + somas.quedasN;
+  if (tentativas >= 10 && somas.quedasN > tentativas * 0.3) {
     avisos.push({
       nivel: "alerta",
-      texto: `${somas.abortadosN} de ${entregues + somas.abortadosN} downloads de ZIP caíram no meio. Com retomada isso não custa de novo, mas vale olhar se é deploy derrubando (origem VPS) ou conexão do cliente.`,
+      texto: `${somas.quedasN} de ${tentativas} downloads de ZIP caíram e ninguém completou depois (retomadas e novos cliques já descontados). Vale olhar se é o app reiniciando no deploy (origem VPS) ou a conexão do cliente.`,
     });
   }
 

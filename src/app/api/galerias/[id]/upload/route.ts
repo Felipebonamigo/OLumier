@@ -91,6 +91,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     secaoId?: string;
     largura?: number;
     altura?: number;
+    duracao?: number;
     indice?: number;
     lote?: string;
   };
@@ -246,6 +247,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     tiradaEm: dataValida(corpo.tiradaEm),
     largura: Number(corpo.largura) || null,
     altura: Number(corpo.altura) || null,
+    /* Duração do vídeo, lida no navegador junto do pôster. Arredondada e com
+       teto de um dia: é um número de tela, e um valor absurdo aqui só
+       desenharia um cartão absurdo — não pode derrubar o envio. */
+    duracaoSeg:
+      tipo === "video" && Number.isFinite(Number(corpo.duracao)) && Number(corpo.duracao) > 0
+        ? Math.min(86400, Math.round(Number(corpo.duracao)))
+        : null,
     secaoId,
     // Posição na lista que o fotógrafo ordenou — ver criarMediaPendente.
     indice: Number.isInteger(corpo.indice) ? corpo.indice : undefined,

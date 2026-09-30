@@ -121,7 +121,9 @@ Três coisas que um concorrente vizinho não copia de graça:
 
 - a divisão da receita entre os três sócios (50/25/25 é proposta, não acordo
   fechado);
-- revisão jurídica dos Termos de Uso e da Política de Privacidade;
+- revisão jurídica dos Termos de Uso e da Política de Privacidade — incluindo
+  a regra de devolução (`src/config/devolucao.ts`) e o prazo da conta
+  encerrada (`src/config/retencao.ts`), escritas em 30/09/2026;
 - nenhum estúdio pagante ainda usa a faixa de 10 TB: o preço de R$ 799 sai do
   modelo de custo (R$ 330 de custo teto, R$ 432 de reserva) e da curva de
   desconto por volume, não de venda observada. Primeira venda no topo da grade
@@ -170,11 +172,15 @@ originou, a marca e o símbolo, e a documentação de operação em `docs/`.
    baixar, favoritar, compartilhar — precisa funcionar sem cadastro, sem senha e
    sem aplicativo.
 2. **Nada é apagado sem alguém pedir e nomear.** Vencimento manda para o cofre;
-   não destrói. Quem apaga é o dono do arquivo. **Uma exceção, com data:** os
-   arquivos do teste grátis que termina sem assinatura são apagados 60 dias
-   depois do fim do teste, com dois avisos por e-mail antes (decisão do Felipe,
-   28/09/2026 — `src/lib/testes-abandonados.ts`). Sem e-mail ligado, não há
-   aviso, e sem aviso nada é apagado.
+   não destrói. Quem apaga é o dono do arquivo. **Duas exceções, com data:**
+   - os arquivos do teste grátis que termina sem assinatura são apagados 60
+     dias depois do fim do teste, com dois avisos por e-mail antes (decisão do
+     Felipe, 28/09/2026 — `src/lib/testes-abandonados.ts`);
+   - os arquivos da conta cancelada ou inadimplente são apagados 3 meses depois
+     do fim do período pago, com quatro avisos por e-mail antes (decisão do
+     Felipe, 30/09/2026 — `src/lib/contas-encerradas.ts`).
+
+   Sem e-mail ligado, não há aviso, e sem aviso nada é apagado.
 3. **A marca da tela é a do estúdio.** Quando a nossa aparece na frente da dele,
    o produto errou.
 4. **Prometer menos do que se cumpre.** Restauração ensaiada em vez de "backup
