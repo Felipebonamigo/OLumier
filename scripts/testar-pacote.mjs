@@ -394,15 +394,15 @@ try {
       5000,
     );
     const por = Object.fromEntries(r.map((f) => [f.carteira.toLowerCase(), f]));
-    // comum: 20×100/150 + 10×50/150 = 13,33 + 3,33 = 16,66
-    igual([por.wal_comum.percentual, por.wal_a.percentual, por.wal_g.centavos, por.wal_g.percentual], [16.66, 10, 500, undefined], "partes");
+    // comum: 20×100/150 + 10×50/150 = 13,33 + 3,33 = 16,6666 (quatro casas, para baixo)
+    igual([por.wal_comum.percentual, por.wal_a.percentual, por.wal_g.centavos, por.wal_g.percentual], [16.6666, 10, 500, undefined], "partes");
     igual(r.length, 3, "sem carteira repetida");
   });
 
   await etapa("fixo e percentual na mesma carteira viram um percentual só, nunca passando do total", () => {
     const r = Pac.juntarSplit([{ carteira: "w", centavos: 1500 }], 10000, [{ walletId: "w", percentual: 50 }], 5000);
-    // 1500/15000 = 10% + 50×5000/15000 = 16,66% → 26,66%
-    igual(r, [{ carteira: "w", centavos: 0, percentual: 26.66 }], "parte");
+    // 1500/15000 = 10% + 50×5000/15000 = 16,6666% → 26,6666%
+    igual(r, [{ carteira: "w", centavos: 0, percentual: 26.6666 }], "parte");
   });
 
   console.log("\nA ponte — preparar e vincular (o Atomatiza cria a fatura):\n");
@@ -486,7 +486,7 @@ try {
     if (c.description !== `Pacote ${marca.nome} 1 TB + Atomatiza Solo · pacote`) throw new Error(`descrição: ${c.description}`);
     const partes = Object.fromEntries((c.split ?? []).map((f) => [f.walletId, f]));
     // 30% dos 51,34 do Atomatiza = 10,18% do total de 151,33.
-    igual(partes.wal_socio_atz?.percentualValue, 10.17, "parte do sócio de lá, em % do total");
+    igual(partes.wal_socio_atz?.percentualValue, 10.1777, "parte do sócio de lá, em % do total");
     const prep = atz.pedidos.find((x) => x.caminho === "/api/ponte/pacote/preparar")?.corpo;
     igual([prep?.plano, prep?.parceiro, prep?.forma, prep?.documento], [{ faixa: "solo" }, { gb: 1000 }, "cartao", DOC_C], "preparar lá");
     const vin = atz.pedidos.find((x) => x.caminho === "/api/ponte/pacote/vincular")?.corpo;

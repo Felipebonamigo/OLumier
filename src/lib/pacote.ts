@@ -427,8 +427,9 @@ export interface ParteDoParceiro {
  * percentual de cada lado é reescalado pela fatia dele no total, e o fixo
  * continua fixo. A mesma carteira nos dois lados vira uma parte só — o Asaas
  * não aceita a carteira repetida: percentuais somam; fixo com percentual vira
- * tudo percentual (o fixo como % do total bruto). Duas casas decimais, para
- * baixo: a sobra de arredondamento fica na conta principal, nunca passa de 100.
+ * tudo percentual (o fixo como % do total bruto). Quatro casas decimais (o
+ * máximo do Asaas, e o mesmo do Atomatiza), para baixo: a sobra de
+ * arredondamento fica na conta principal, nunca passa de 100.
  */
 export function juntarSplit(
   nossas: FatiaParaOAsaas[],
@@ -455,11 +456,11 @@ export function juntarSplit(
     if (typeof p.percentual === "number") somar(p.walletId, (p.percentual * valorDelesCentavos) / total, 0);
     else if (typeof p.fixoCentavos === "number") somar(p.walletId, 0, p.fixoCentavos);
   }
-  const duasCasas = (n: number) => Math.floor(n * 100) / 100;
+  const quatroCasas = (n: number) => Math.floor(n * 10_000 + 1e-9) / 10_000;
   return [...porCarteira.values()]
     .map((c) =>
       c.pct > 0
-        ? { carteira: c.carteira, centavos: 0, percentual: duasCasas(c.pct + (c.fixo * 100) / total) }
+        ? { carteira: c.carteira, centavos: 0, percentual: quatroCasas(c.pct + (c.fixo * 100) / total) }
         : { carteira: c.carteira, centavos: c.fixo },
     )
     .filter((c) => (c.percentual ?? 0) > 0 || c.centavos > 0);
