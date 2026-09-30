@@ -38,7 +38,7 @@ delete process.env.ASAAS_AMBIENTE;
 /* ── O Asaas de mentira ─────────────────────────────────────────────────── */
 
 const estado = {
-  clientes: [], // { id, cpfCnpj, externalReference, deleted? }
+  clientes: [], // { id, cpfCnpj, email?, externalReference, deleted? }
   assinaturas: [], // { id, customer, status, value, cycle, description, externalReference, deleted? }
   vencidas: new Set(), // ids de assinatura com cobrança OVERDUE
   pagas: new Set(), // ids de assinatura com alguma cobrança RECEIVED
@@ -69,6 +69,15 @@ const servidor = createServer((req, res) => {
 
     if (p === "/customers") {
       const doc = url.searchParams.get("cpfCnpj");
+      /* O filtro de e-mail do Asaas de mentira é FROUXO de propósito (contém,
+       * sem caixa): o de verdade não promete ser exato, e quem compara de fato
+       * é `clientesDoEmail`. */
+      const email = url.searchParams.get("email");
+      if (email !== null) {
+        return responder(200, {
+          data: estado.clientes.filter((c) => (c.email ?? "").toLowerCase().includes(email.toLowerCase())),
+        });
+      }
       return responder(200, { data: estado.clientes.filter((c) => c.cpfCnpj === doc) });
     }
     let m = /^\/customers\/([^/]+)$/.exec(p);
@@ -266,56 +275,78 @@ try {
 
   await etapa("sem Atomatiza, não há combo", async () => {
     reset();
-    igual(await faixaDoAtomatiza(DOC), null, "faixa");
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "faixa");
   });
 
   await etapa("o Atomatiza vivo e em dia dá a faixa dele — no cliente de lá ou no nosso", async () => {
     reset();
     atomatiza("equipe");
-    igual(await faixaDoAtomatiza(DOC), "equipe", "cliente de lá");
+    igual(await faixaDoAtomatiza({ documento: DOC }), "equipe", "cliente de lá");
     reset();
     atomatiza("estudio", { customer: "cus_nosso" });
-    igual(await faixaDoAtomatiza("123.456.789-09"), "estudio", "cliente nosso, documento com pontuação");
+    igual(await faixaDoAtomatiza({ documento: "123.456.789-09" }), "estudio", "cliente nosso, documento com pontuação");
   });
 
   await etapa("atrasado, inativo ou apagado não conta", async () => {
     reset();
     const a = atomatiza("equipe");
     estado.vencidas.add(a.id);
-    igual(await faixaDoAtomatiza(DOC), null, "com cobrança vencida");
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "com cobrança vencida");
     reset();
     atomatiza("equipe", { status: "INACTIVE" });
-    igual(await faixaDoAtomatiza(DOC), null, "inativa");
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "inativa");
     reset();
     atomatiza("equipe", { deleted: true });
-    igual(await faixaDoAtomatiza(DOC), null, "apagada");
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "apagada");
   });
 
   await etapa("assinatura do Atomatiza que nunca foi paga não dá combo", async () => {
     reset();
     atomatiza("equipe", {}, { paga: false });
-    igual(await faixaDoAtomatiza(DOC), null, "sem pagamento");
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "sem pagamento");
   });
 
   await etapa("só conta assinatura com a referência do Atomatiza", async () => {
     reset();
     atomatiza("equipe", { externalReference: "olumier:qualquer" });
-    igual(await faixaDoAtomatiza(DOC), null, "referência nossa");
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "referência nossa");
     reset();
     atomatiza("equipe", { externalReference: null });
-    igual(await faixaDoAtomatiza(DOC), null, "sem referência");
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "sem referência");
+  });
+
+  /* 30/09/2026 — a Bia Zac: "temos que reconhecer quando é a mesma conta, pode
+   * ser pelo e-mail também". O cadastro do Atomatiza com OUTRO documento (o CNPJ
+   * da empresa lá, o CPF aqui) é achado pelo e-mail. */
+  await etapa("o Atomatiza com outro documento é achado pelo e-mail — exato, sem caixa", async () => {
+    reset();
+    estado.clientes.push({ id: "cus_atz_cnpj", cpfCnpj: "11222333000181", email: "Bia@Estudio.com", externalReference: "atz:studio:2" });
+    atomatiza("solo", { customer: "cus_atz_cnpj" });
+    igual(await faixaDoAtomatiza({ documento: DOC }), null, "só pelo documento, não acha");
+    igual(await faixaDoAtomatiza({ documento: DOC, email: " bia@estudio.com " }), "solo", "pelo e-mail");
+    igual(await faixaDoAtomatiza({ email: "bia@estudio.com" }), "solo", "sem documento, só o e-mail");
+    igual(await faixaDoAtomatiza({ documento: DOC, email: "ia@estudio.com" }), null, "e-mail parecido não é o mesmo");
+    igual(await faixaDoAtomatiza({ documento: DOC, email: "sem-arroba" }), null, "texto que não é e-mail");
+    igual(await faixaDoAtomatiza({}), null, "sem nada");
+  });
+
+  await etapa("o mesmo cadastro achado pelos dois caminhos conta uma vez só", async () => {
+    reset();
+    estado.clientes[1].email = "bia@estudio.com";
+    atomatiza("equipe");
+    igual(await faixaDoAtomatiza({ documento: DOC, email: "bia@estudio.com" }), "equipe", "faixa");
   });
 
   await etapa("com duas faixas vivas, vale a de desconto menor PARA O PLANO", async () => {
     reset();
     atomatiza("estudio");
     atomatiza("solo");
-    igual(await faixaDoAtomatiza(DOC), "solo", "sem o plano, a ordem");
+    igual(await faixaDoAtomatiza({ documento: DOC }), "solo", "sem o plano, a ordem");
     reset();
     atomatiza("solo");
     atomatiza("equipe");
     // 250 GB: Solo daria R$ 9,09 à Galeria, Equipe R$ 7,14 — vale o Equipe.
-    igual(await faixaDoAtomatiza(DOC, planoPorId("g:foto:250")), "equipe", "250 GB");
+    igual(await faixaDoAtomatiza({ documento: DOC }, planoPorId("g:foto:250")), "equipe", "250 GB");
   });
 
   /* O estúdio da rodada, com assinatura na nossa ponta. */
@@ -447,6 +478,17 @@ try {
     );
     igual(await recalcularComboDoCliente("cus_atz", "PAYMENT_CONFIRMED"), 1, "estúdios conferidos");
     igual(escritas.map((e) => e.caminho), ["/subscriptions/sub_nossa"], "escritas");
+  });
+
+  await etapa("evento do Atomatiza com outro documento acha o estúdio pelo e-mail", async () => {
+    reset();
+    const email = (await db.query("select email from tenants where id = $1", [t.id])).rows[0].email;
+    estado.clientes.push({ id: "cus_atz_cnpj", cpfCnpj: "11222333000181", email: email.toUpperCase(), externalReference: "atz:studio:2" });
+    atomatiza("equipe", { customer: "cus_atz_cnpj" });
+    nossa(79.99);
+    await prepararEstudio("g:foto:500");
+    igual(await recalcularComboDoCliente("cus_atz_cnpj", "PAYMENT_CONFIRMED"), 1, "estúdios conferidos");
+    igual(escritas.map((e) => [e.caminho, e.corpo.value]), [["/subscriptions/sub_nossa", 65.87]], "escritas");
   });
 
   await etapa("id de cliente forjado não vira outra rota da conta", async () => {

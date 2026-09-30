@@ -434,27 +434,34 @@ export async function atualizarAssinatura(dados: {
 // --- combo com o Atomatiza (28/09/2026) ------------------------------------
 //
 // A conta do Asaas é a mesma dos dois produtos, e é por ela que um enxerga a
-// assinatura do outro: o mesmo CPF/CNPJ, um cliente de cada lado. Ver
-// `lib/combo.ts`.
+// assinatura do outro: o mesmo CPF/CNPJ OU o mesmo e-mail, um cliente de cada
+// lado. Ver `lib/combo.ts`.
 
 export interface ClienteDoDocumento {
   id: string;
+  name?: string | null;
+  email?: string | null;
   cpfCnpj?: string | null;
   externalReference?: string | null;
   deleted?: boolean;
 }
 
 /**
- * Os clientes da conta com este e-mail — só para diagnóstico
- * (`scripts/conferir-combo.mjs`). O combo liga as contas pelo CPF/CNPJ; quando
- * não liga, o e-mail costuma achar o cadastro do Atomatiza feito com OUTRO
- * documento (o CNPJ da empresa lá, o CPF aqui).
+ * Os clientes da conta com este e-mail.
+ *
+ * O combo liga as contas pelo CPF/CNPJ OU pelo e-mail (30/09/2026): a mesma
+ * pessoa pode ter o cadastro do Atomatiza com o CNPJ da empresa e o daqui com o
+ * CPF, ou ter trocado o documento no Perfil de lá depois de assinar. A
+ * comparação final é feita aqui, sem caixa e sem espaço: o filtro do Asaas não
+ * promete ser exato, e e-mail parecido não é a mesma pessoa.
  */
-export async function clientesDoEmail(email: string): Promise<(ClienteDoDocumento & { name?: string; email?: string })[]> {
-  const r = await chamar<{ data?: (ClienteDoDocumento & { name?: string; email?: string })[] }>(
-    `/customers?email=${encodeURIComponent(email)}&limit=100`,
+export async function clientesDoEmail(email: string): Promise<ClienteDoDocumento[]> {
+  const alvo = email.trim().toLowerCase();
+  if (!alvo.includes("@")) return [];
+  const r = await chamar<{ data?: ClienteDoDocumento[] }>(
+    `/customers?email=${encodeURIComponent(alvo)}&limit=100`,
   );
-  return (r.data ?? []).filter((c) => !c.deleted);
+  return (r.data ?? []).filter((c) => !c.deleted && (c.email ?? "").trim().toLowerCase() === alvo);
 }
 
 /** Todas as cobranças de um cliente — avulsas e de assinatura —, só para diagnóstico. */
