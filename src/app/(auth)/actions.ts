@@ -153,8 +153,16 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
    * a tabela `tenants` — lá só existe o estado de hoje.
    *
    * É também a contagem do limite por IP (`cadastrosRecentesDoIp`).
+   *
+   * E é o registro do ACEITE: a frase acima do botão diz que criar a conta é
+   * aceitar os Termos e a Privacidade, e `aceitou` grava QUAIS versões. Os
+   * Termos mudam; sem isto, numa disputa, não haveria como dizer que texto esta
+   * pessoa aceitou. O e-mail vai em hash — o registro é imutável, e e-mail cru
+   * aqui não teria como ser apagado (ver `hashDeEmail`).
    */
   const { registrarEvento, ACOES } = await import("@/lib/eventos");
+  const { hashDeEmail } = await import("@/lib/ip");
+  const { VERSOES_LEGAIS } = await import("@/config/documentos-legais");
   await registrarEvento({
     tenantId: tenant.id,
     estudio: nomeEstudio,
@@ -162,7 +170,11 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
     acao: ACOES.CONTA_CRIADA,
     alvoTipo: "conta",
     alvoId: tenant.id,
-    detalhe: { plano: planoId, email },
+    detalhe: {
+      plano: planoId,
+      email_hash: hashDeEmail(email),
+      aceitou: { termos: VERSOES_LEGAIS.termos, privacidade: VERSOES_LEGAIS.privacidade },
+    },
     ip,
   });
 

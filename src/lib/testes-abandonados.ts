@@ -6,6 +6,7 @@ import { apagarArquivosDasMedias } from "./armazem";
 import { apagarObjetos } from "./r2";
 import { formatarBytes } from "./tenants";
 import { registrarEvento, ACOES } from "./eventos";
+import { hashDeEmail } from "./ip";
 import { marca } from "@/config/marca";
 
 /**
@@ -425,7 +426,9 @@ export async function rodarLimpezaDeTestes(opcoes: {
       acao: ACOES.AVISO_LIMPEZA_ENVIADO,
       alvoTipo: "conta",
       alvoId: c.id,
-      detalhe: { final, apagar_em: passo.apagarEm.toISOString(), para: c.email },
+      /* O destinatário vai em hash: é a prova de PARA ONDE o aviso foi, num
+       * registro que não se apaga (ver `hashDeEmail`). */
+      detalhe: { final, apagar_em: passo.apagarEm.toISOString(), para_hash: hashDeEmail(c.email) },
     });
     if (final) resumo.avisosFinais++;
     else resumo.avisos++;

@@ -1,13 +1,29 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { marca } from "@/config/marca";
+import { VERSOES_LEGAIS, dataPorExtenso } from "@/config/documentos-legais";
 
 export const metadata: Metadata = {
   title: "Política de Privacidade",
   description: `Como a ${marca.nome} trata dados pessoais.`,
 };
 
-/** Data da última revisão do texto — precisa mudar junto com o conteúdo. */
-const ATUALIZADO_EM = "28 de setembro de 2026";
+/**
+ * Data da última revisão do texto — precisa mudar junto com o conteúdo. Mora em
+ * `config/documentos-legais.ts` porque o cadastro grava a mesma versão como a
+ * que a pessoa aceitou.
+ *
+ * ── CORREÇÃO DE 30/09/2026 ────────────────────────────────────────────────
+ * Esta página ainda prometia "segunda cópia de todos os arquivos num provedor
+ * diferente", um mês depois de o espelho ter sido cancelado (27/08/2026, ver
+ * `scripts/testar-sem-espelho.mjs`). /seguranca e os Termos já diziam a
+ * verdade — "seus originais têm UMA cópia" — e esta dizia o contrário. Em
+ * disputa por arquivo perdido, é esta a frase que o outro lado cita.
+ *
+ * Também dizia que o registro de atividade não guarda e-mail nem nome, e ele
+ * guardava os dois. `scripts/testar-textos-legais.mjs` segura as duas coisas.
+ */
+const ATUALIZADO_EM = dataPorExtenso(VERSOES_LEGAIS.privacidade);
 
 export default function PrivacidadePage() {
   return (
@@ -53,6 +69,7 @@ export default function PrivacidadePage() {
       </p>
       <ul>
         <li>qual ação, quando, e se partiu de você ou de uma rotina automática do sistema;</li>
+        <li>o nome do estúdio, como estava no momento da ação;</li>
         <li>
           o que é preciso para o registro continuar fazendo sentido depois — por exemplo, o nome da
           galeria apagada e quantos arquivos ela tinha;
@@ -72,8 +89,11 @@ export default function PrivacidadePage() {
         Esse registro <strong>não pode ser alterado nem apagado</strong>, nem por nós: o banco de
         dados recusa qualquer tentativa. É o que faz dele um registro confiável em vez de um
         rascunho. Por isso ele <strong>sobrevive ao encerramento da conta</strong> — a base legal é
-        o exercício regular de direitos (art. 7º, VI e art. 16, I da LGPD), e não guardamos ali
-        nome, e-mail, senha, documento nem qualquer conteúdo de foto.
+        o exercício regular de direitos (art. 7º, VI e art. 16, I da LGPD). Senha, CPF ou CNPJ e
+        conteúdo de foto nunca entram nele. O <strong>e-mail</strong>, quando precisa constar —
+        para provar para qual endereço um aviso foi mandado —, entra só{" "}
+        <strong>em forma de hash</strong>, como o IP: dá para conferir se um endereço bate, mas não
+        dá para ler o endereço.
       </p>
 
       <h2>Dados dos visitantes das galerias</h2>
@@ -121,12 +141,12 @@ export default function PrivacidadePage() {
       <h2>Com quem os dados são compartilhados</h2>
       <ul>
         <li>
-          <strong>Cloudflare</strong> — armazena os arquivos e responde pelo DNS.
+          <strong>Backblaze</strong> — guarda os arquivos originais e, num espaço separado, o
+          backup cifrado do banco de dados.
         </li>
         <li>
-          <strong>Backblaze</strong> — guarda a segunda cópia dos arquivos e o backup do banco,
-          ambos cifrados. É um provedor separado da Cloudflare de propósito: perder um não pode
-          significar perder os dois.
+          <strong>Cloudflare</strong> — guarda as miniaturas e prévias que fazem a galeria abrir
+          rápido, e responde pelo DNS.
         </li>
         <li>
           <strong>Asaas</strong> — processa os pagamentos. Recebe nome, e-mail e CPF/CNPJ de quem
@@ -151,18 +171,18 @@ export default function PrivacidadePage() {
         <li>
           <strong>Ao apagar uma galeria</strong>, ela vai para a lixeira e fica{" "}
           <strong>30 dias</strong> lá — nada é removido do armazenamento nesse período, e você pode
-          restaurar tudo com um clique. Passado o prazo, os arquivos são apagados de vez do
-          armazenamento principal.
+          restaurar tudo com um clique. Passado o prazo, os arquivos são apagados de vez — não
+          existe outra cópia deles do nosso lado.
         </li>
         <li>
-          <strong>A cópia de segurança demora mais.</strong> Todo arquivo enviado ganha uma segunda
-          cópia num provedor diferente, para o caso de perdermos o armazenamento principal. Essa
-          cópia é protegida contra exclusão por 30 dias, então ela sobrevive por algum tempo à
-          exclusão da galeria. Para apagá-la antes disso, peça pelo e-mail acima.
+          <strong>Os dados de cadastro também estão no backup diário do banco</strong> (as fotos
+          não). Esse backup é travado contra exclusão por 30 dias, numa modalidade que nós
+          conseguimos destravar: um pedido de exclusão alcança o backup também.
         </li>
         <li>
-          <strong>Ao encerrar a conta</strong>, os dados são apagados mediante pedido pelo e-mail
-          acima — com a exceção do registro de atividade descrito acima, que é imutável por desenho.
+          <strong>Ao encerrar a conta</strong>, os dados são apagados mediante pedido pelo{" "}
+          <a href={marca.whatsappLink}>WhatsApp</a> — com a exceção do registro de atividade
+          descrito acima, que é imutável por desenho.
         </li>
       </ul>
 
@@ -186,10 +206,11 @@ export default function PrivacidadePage() {
         por link assinado de validade curta.
       </p>
       <p>
-        Contra perda de dado, três camadas: <strong>backup diário</strong> do banco, cifrado e com
-        cópia fora do servidor; <strong>segunda cópia de todos os arquivos</strong> num provedor
-        diferente do principal, protegida contra exclusão; e a <strong>lixeira de 30 dias</strong>,
-        que dá tempo de desfazer um apagar por engano.
+        Contra perda de dado: <strong>backup diário</strong> do banco, cifrado e com cópia fora do
+        servidor, e a <strong>lixeira de 30 dias</strong>, que dá tempo de desfazer um apagar por
+        engano. Os <strong>arquivos originais têm uma cópia só</strong>, em armazenamento
+        profissional — não mantemos uma segunda cópia deles em outra empresa. Os detalhes estão na
+        página de <Link href="/seguranca">segurança</Link>.
       </p>
       <p>
         Nenhum sistema é perfeito, e nós não fingimos que o nosso é. A {marca.nome} é serviço de

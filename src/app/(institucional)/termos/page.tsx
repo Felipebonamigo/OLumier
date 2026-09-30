@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
+import { VERSOES_LEGAIS, dataPorExtenso } from "@/config/documentos-legais";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 
 export const metadata: Metadata = {
@@ -8,10 +9,12 @@ export const metadata: Metadata = {
   description: `Regras de uso da ${marca.nome}.`,
 };
 
-/* A data é do TEXTO, não do arquivo: mexeu na regra, muda aqui. Termo que diz
- * ter sido atualizado em agosto e fala de coisa decidida depois é desonesto — e
- * é o tipo de detalhe que ninguém confere e todo mundo repara. */
-const ATUALIZADO_EM = "29 de setembro de 2026";
+/* A data é do TEXTO, não do arquivo: mexeu na regra, muda a versão em
+ * `config/documentos-legais.ts`. Termo que diz ter sido atualizado em agosto e
+ * fala de coisa decidida depois é desonesto — e é o tipo de detalhe que ninguém
+ * confere e todo mundo repara. A mesma versão vai gravada no evento
+ * `conta.criada`, como a que a pessoa aceitou. */
+const ATUALIZADO_EM = dataPorExtenso(VERSOES_LEGAIS.termos);
 
 export default function TermosPage() {
   return (
@@ -58,7 +61,8 @@ export default function TermosPage() {
         <li>Você é responsável por manter sua senha em segredo e pelo que acontece na sua conta.</li>
         <li>Uma conta é de um estúdio. Compartilhar acesso é por sua conta e risco.</li>
         <li>
-          Você pode encerrar quando quiser, chamando no{" "}
+          Você cancela a assinatura quando quiser, sozinho, em <strong>Conta</strong>, no painel.
+          Para encerrar a conta e apagar os dados, chame no{" "}
           <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a>.
         </li>
       </ul>
