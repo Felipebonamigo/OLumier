@@ -8,6 +8,7 @@ import { usoPorEstado } from "@/lib/cofre";
 import { planoPorId, formatarReais, cicloDe, precoDoCicloCentavos, ESPACOS, montar, type Segmento } from "@/config/planos";
 import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza, planoEntraNoCombo, precosDoPacote } from "@/config/combo";
 import { situacaoNoAtomatiza } from "@/lib/pacote";
+import { RECADO_DO_PACOTE } from "@/lib/troca-de-plano";
 import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
 import { AcrescentarAtomatiza } from "@/components/acrescentar-atomatiza";
 import type { OfertaDoPacote, Tamanho } from "@/components/assinatura-botao";
@@ -209,7 +210,20 @@ export default async function ContaPage() {
             também, explicando que tem o desconto por ter assinatura do
             Atomatiza"). Uma linha verde miúda passava despercebida, e quem
             paga precisa saber por que o valor é outro — e o que o mantém. */}
-        {plano && descontoDoCombo > 0 && faixaDoCombo && (
+        {/* A FATURA ÚNICA DO PACOTE (`docs/pacote.md`): a próxima cobrança
+            mostra o total dos dois, e o quadro diz de onde ele vem. */}
+        {plano && faixaDoCombo && tenant.pacote_atomatiza_id && (
+          <div className="mt-3 rounded-lg border border-ok/40 bg-ok/10 px-4 py-3">
+            <p className="text-sm font-medium text-ok">Pacote com o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]}</p>
+            <p className="mt-1 text-xs text-texto-soft">
+              Uma fatura só com os dois produtos. A Galeria sai por{" "}
+              {formatarReais(plano.precoCentavos - descontoDoCombo)} em vez de {formatarReais(plano.precoCentavos)} por
+              mês, e o Atomatiza também tem o desconto dele. A parte de cada produto é separada no pagamento.
+            </p>
+          </div>
+        )}
+
+        {plano && descontoDoCombo > 0 && faixaDoCombo && !tenant.pacote_atomatiza_id && (
           <div className="mt-3 rounded-lg border border-ok/40 bg-ok/10 px-4 py-3">
             <p className="text-sm font-medium text-ok">Desconto do combo com o Atomatiza</p>
             <p className="mt-1 text-xs text-texto-soft">
@@ -221,10 +235,11 @@ export default async function ContaPage() {
           </div>
         )}
 
-        <PlanoConta
-          planoAtual={tenant.plano_id}
-          temAssinatura={Boolean(tenant.asaas_assinatura_id)}
-        />
+        {tenant.pacote_atomatiza_id ? (
+          <p className="mt-3 text-xs text-texto-faint">{RECADO_DO_PACOTE}</p>
+        ) : (
+          <PlanoConta planoAtual={tenant.plano_id} temAssinatura={Boolean(tenant.asaas_assinatura_id)} />
+        )}
 
         {diferencaAberta && (
           <div className="mt-4 rounded-lg border border-alerta/40 bg-alerta/10 px-4 py-3">
@@ -251,7 +266,11 @@ export default async function ContaPage() {
               Próxima cobrança em{" "}
               {new Date(cobranca.dueDate).toLocaleDateString("pt-BR", { timeZone: FUSO })} ·{" "}
               {formatarReais(Math.round(cobranca.value * 100))}
-              {faturaComCombo && <span className="text-ok"> · já com o desconto do combo</span>}
+              {tenant.pacote_atomatiza_id ? (
+                <span className="text-ok"> · pacote Galeria + Atomatiza</span>
+              ) : (
+                faturaComCombo && <span className="text-ok"> · já com o desconto do combo</span>
+              )}
             </p>
             {/* A promessa só aparece quando dá para mostrar EM QUAL cartão —
                 prometer "automático" sem provar faria quem paga por Pix parar

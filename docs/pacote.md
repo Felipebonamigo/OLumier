@@ -169,3 +169,116 @@ A assinatura do outro conta quando:
 - a descrição diz o plano (faixa / gigas);
 - não tem cobrança vencida;
 - **e** já foi paga ao menos uma vez **ou** tem a marca `· pacote`.
+
+---
+
+# Fatura única (30/09/2026, à noite) — SUBSTITUI "A ordem de quem chama"
+
+> Juan, com gente assinando: "a cobrança tá indo separada, uma no boleto e
+> outra no cartão". Felipe: "tem que permitir assinar juntos, e o Asaas ou o
+> sistema fazer a separação depois que ele pagar".
+
+O botão "Assinar o pacote" passa a criar **UMA assinatura no Asaas**, com uma
+fatura por ciclo (um cartão, um Pix, um boleto). A separação é o split da
+própria assinatura: a parte dos sócios de cada produto já sai dela no
+pagamento. Cada sistema fica sabendo do pagamento pelo webhook, como sempre
+(a conta do Asaas é a mesma, os dois recebem todos os eventos).
+
+"Acrescentar o outro" (quem já assina um) continua como estava: duas
+assinaturas, regra de sempre.
+
+## Quem cria
+
+Quem está com a pessoa na tela (**O**, de origem). O outro (**P**, parceiro)
+prepara a conta dele e diz quanto cobra e como divide; O cria a assinatura
+única no próprio cliente do Asaas e avisa P.
+
+## A referência e a descrição
+
+- `externalReference`: `pacote:<id da conta na Galeria>:<id do estúdio no Atomatiza>`
+  (os dois UUIDs). É por ela que cada webhook acha a própria conta: a Galeria
+  lê o 2º pedaço, o Atomatiza o 3º.
+- `description`: `Pacote Galeria Átomo 1 TB + Atomatiza Solo · pacote`
+  (o tamanho como `gbDaDescricaoGaleria` lê, a faixa como `plano solo` NÃO é
+  exigida aqui — o pacote se lê pela referência).
+
+## A ponte — duas rotas novas (mesma porta e mesmos 503/401/400 de sempre)
+
+### `POST /api/ponte/pacote/preparar`
+
+Pedido: o mesmo corpo de `/api/ponte/assinar` (documento, email, nome, plano
+DE P, ciclo, forma, vencimento, parceiro = plano de O, aceitouTermos), sem
+`pacote`.
+
+P aplica as MESMAS regras de conta de `/api/ponte/assinar` (conta pelo
+documento com o mesmo e-mail; `conta_de_outro_email`, `email_em_uso`,
+`ja_assina`, `combinado`, aceite obrigatório para criar, convite de senha na
+conta nova) e põe a conta no plano pedido — mas **não cria assinatura**.
+
+Resposta 200:
+
+```json
+{
+  "ok": true,
+  "contaId": "uuid da conta/estúdio em P",
+  "contaNova": true,
+  "valorCentavos": 4991,
+  "nome": "Atomatiza Solo",
+  "split": [
+    { "walletId": "…", "percentual": 30 },
+    { "walletId": "…", "fixoCentavos": 1234 }
+  ]
+}
+```
+
+- `valorCentavos`: o preço de P NO CICLO, já com o combo do `parceiro`
+  (anual = dez mensalidades com o desconto de dez meses).
+- `nome`: como P aparece na descrição ("Atomatiza Solo", "Galeria Átomo 1 TB").
+- `split`: as partes de P para ESSE valor, como P as mandaria numa assinatura
+  só dele. `percentual` é % do valor de P (não do total); `fixoCentavos` é
+  valor exato. Sem sócios configurados → `[]`.
+
+### `POST /api/ponte/pacote/vincular`
+
+Pedido: `{ "documento", "contaId", "assinaturaId", "clienteId", "valorCentavos", "ciclo" }`.
+
+P grava na conta `contaId` (conferindo que o documento é o dela): o id da
+assinatura, o cliente do Asaas, o ciclo, o plano preparado, status
+"pendente" — exatamente o que gravaria numa assinatura dele — e a marca de
+que a cobrança é do pacote (cada lado guarda do seu jeito). Responde
+`{ "ok": true }`. Repetir com o mesmo `assinaturaId` é ok (idempotente).
+
+## A ordem de O
+
+1. Confere o próprio lado (documento, plano, sem assinatura viva).
+2. `preparar` em P. Recusou → nada foi criado; a tela mostra o `erro`.
+3. Cria a assinatura única: cliente do Asaas de O, valor = o de O (com o combo
+   da faixa/tamanho de P) + `valorCentavos` de P, ciclo, vencimento de O,
+   forma escolhida, a descrição e a referência acima, e o split:
+   - as partes de O para o valor de O, como sempre;
+   - as partes de P: `fixoCentavos` vai como `fixedValue`; `percentual` vira
+     `percentual × valorDeP ÷ total` (% do TOTAL, que é o que o Asaas aplica);
+   - a mesma carteira nos dois lados vira UMA parte: percentuais somados; se
+     um lado é fixo e o outro percentual, o fixo entra como
+     `fixo ÷ total × 100` somado ao percentual.
+4. Grava a assinatura na própria conta (como a assinatura de sempre, com a
+   marca de pacote).
+5. `vincular` em P. Falhou → O CANCELA a assinatura única no Asaas, limpa a
+   própria conta e mostra o erro: nunca fica uma fatura cobrando por um produto
+   que não sabe dela.
+
+## Depois
+
+- **Webhook:** evento com referência `pacote:` → cada lado acha a própria conta
+  pelo seu pedaço da referência e aplica o MESMO efeito que daria à própria
+  assinatura (pagou, atrasou, cancelou, estornou). O e-mail 'pagou' do pacote
+  sai só da Galeria; o Atomatiza não manda o dele para `pacote:`.
+- **Combo:** a conferência (`recalcularCombo`) NÃO mexe em assinatura de
+  pacote: o preço já é o do combo. O diagnóstico diz "pacote".
+- **Mudar de plano / cancelar um produto só:** por enquanto, pelo WhatsApp.
+  As duas telas trocam o botão por esse recado quando a assinatura é de
+  pacote. (Cancelar o pacote inteiro também vai pelo WhatsApp nesta primeira
+  versão — a devolução de um e de outro precisa de conta à mão.)
+- **Situação (`/api/ponte/situacao`):** conta em pacote responde a assinatura
+  como sempre (status pelo banco), e ganha `"pacote": true` dentro de
+  `assinatura`.

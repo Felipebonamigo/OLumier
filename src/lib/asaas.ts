@@ -13,7 +13,10 @@ import type { PagamentoDoAsaas } from "./caixa-dos-socios";
  * para o próprio Asaas aplicar sobre o líquido. O porquê inteiro está em
  * `montarFatias` e em `scripts/testar-split.mjs`.
  */
-function montarFatiaAsaas(f: FatiaSocio) {
+/** O que o split precisa de uma fatia: a carteira e quanto (fixo ou %). */
+export type FatiaParaOAsaas = Pick<FatiaSocio, "carteira" | "centavos" | "percentual">;
+
+function montarFatiaAsaas(f: FatiaParaOAsaas) {
   return f.percentual !== undefined
     ? { walletId: f.carteira, percentualValue: f.percentual }
     : { walletId: f.carteira, fixedValue: f.centavos / 100 };
@@ -183,7 +186,7 @@ function normalizada(carteira: string): string {
 }
 
 /** As fatias sem a da própria conta. Pura, para o teste cobrir sem rede. */
-export function semACarteiraDaConta(fatias: FatiaSocio[], propria: string | null): FatiaSocio[] {
+export function semACarteiraDaConta<F extends FatiaParaOAsaas>(fatias: F[], propria: string | null): F[] {
   if (!propria) return fatias;
   return fatias.filter((f) => normalizada(f.carteira) !== propria);
 }
@@ -213,7 +216,7 @@ export function recusaPelaPropriaCarteira(e: unknown): boolean {
  * dizer, é repetida.
  */
 async function comSplit<T>(
-  fatias: FatiaSocio[],
+  fatias: FatiaParaOAsaas[],
   enviar: (split: FatiaAsaas[]) => Promise<T>,
 ): Promise<T> {
   const conta = base();
@@ -610,6 +613,46 @@ export async function ultimaCobrancaPaga(
   };
 }
 
+/**
+ * A assinatura ÚNICA do pacote (`docs/pacote.md`, "Fatura única"): uma
+ * fatura por ciclo com a Galeria e o Atomatiza juntos. O split já vem montado
+ * (`juntarSplit`, em `lib/pacote.ts`): as partes dos sócios dos dois produtos.
+ * Procura antes de criar pela referência, como `criarAssinatura`.
+ */
+export async function criarAssinaturaDoPacote(dados: {
+  clienteAsaasId: string;
+  tenantId: string;
+  estudioAtomatizaId: string;
+  /** O TOTAL do ciclo: a nossa parte e a do Atomatiza. */
+  precoCentavos: number;
+  ciclo: Ciclo;
+  descricao: string;
+  primeiroVencimento: Date;
+  forma: FormaAssinatura;
+  fatias: FatiaParaOAsaas[];
+}): Promise<AssinaturaAsaas> {
+  const referencia = referenciaDoPacote(dados.tenantId, dados.estudioAtomatizaId);
+  const existentes = await chamar<{ data: AssinaturaAsaas[] }>(
+    `/subscriptions?externalReference=${encodeURIComponent(referencia)}`,
+  );
+  const viva = existentes.data?.find((a) => a.status === "ACTIVE" && !a.deleted);
+  if (viva) return viva;
+
+  return comSplit(dados.fatias, (split) => chamar<AssinaturaAsaas>("/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: dados.clienteAsaasId,
+      billingType: dados.forma,
+      value: dados.precoCentavos / 100,
+      nextDueDate: dados.primeiroVencimento.toISOString().slice(0, 10),
+      cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
+      description: dados.descricao,
+      externalReference: referencia,
+      split,
+    }),
+  }));
+}
+
 export async function cancelarAssinatura(assinaturaId: string) {
   return chamar(`/subscriptions/${assinaturaId}`, { method: "DELETE" });
 }
@@ -626,9 +669,21 @@ export async function proximaCobranca(assinaturaId: string) {
   return r.data?.[0] ?? null;
 }
 
+/**
+ * A FATURA ÚNICA DO PACOTE (`docs/pacote.md`): `pacote:<conta aqui>:<estúdio
+ * no Atomatiza>`. É dos dois produtos ao mesmo tempo — os dois webhooks a
+ * tratam, cada um pela sua parte da referência.
+ */
+export const PREFIXO_PACOTE = "pacote:";
+export const referenciaDoPacote = (tenantId: string, estudioAtomatizaId: string) =>
+  `${PREFIXO_PACOTE}${tenantId}:${estudioAtomatizaId}`;
+export function ehDoPacoteUnico(referenciaExterna: string | null | undefined): boolean {
+  return Boolean(referenciaExterna?.startsWith(PREFIXO_PACOTE));
+}
+
 /** true se o evento do webhook pertence à Galeria Átomo (a conta é dividida com o Atomatiza). */
 export function eventoEhNosso(referenciaExterna: string | null | undefined): boolean {
-  return Boolean(referenciaExterna?.startsWith(PREFIXO));
+  return Boolean(referenciaExterna?.startsWith(PREFIXO) || ehDoPacoteUnico(referenciaExterna));
 }
 
 /**
@@ -640,6 +695,7 @@ export function eventoEhNosso(referenciaExterna: string | null | undefined): boo
  * dois-pontos.
  */
 export function tenantDaReferencia(referenciaExterna: string): string {
+  if (ehDoPacoteUnico(referenciaExterna)) return referenciaExterna.slice(PREFIXO_PACOTE.length).split(":")[0];
   return referenciaExterna.slice(PREFIXO.length).split(":")[0];
 }
 
@@ -650,6 +706,7 @@ export function tenantDaReferencia(referenciaExterna: string): string {
  * mês (ou um ano, no anual) inteiro de serviço a partir daquele dia.
  */
 export function tipoDaReferencia(referenciaExterna: string): "assinatura" | "diferenca" {
+  if (ehDoPacoteUnico(referenciaExterna)) return "assinatura";
   return referenciaExterna.slice(PREFIXO.length).split(":")[1] === "diferenca" ? "diferenca" : "assinatura";
 }
 

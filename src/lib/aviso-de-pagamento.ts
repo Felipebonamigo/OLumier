@@ -2,6 +2,8 @@ import "server-only";
 import { administradores } from "@/config/admin";
 import { enviarEmail, moldura } from "@/lib/email";
 import { diagnosticarCombo, type DiagnosticoDoCombo } from "@/lib/combo";
+import { planoPorId } from "@/config/planos";
+import { precoDoCicloComComboCentavos } from "@/config/combo";
 
 /**
  * O E-MAIL "FULANO PAGOU" PARA QUEM TOCA A PLATAFORMA.
@@ -61,16 +63,42 @@ export async function avisarPagamento(
 
   const oque = pagamento.primeiro ? "pagou pela primeira vez" : "renovou";
   const valor = pagamento.valor !== null ? reais(Math.round(pagamento.valor * 100)) : "valor não informado";
-  const assunto = `${d.estudio} ${oque} a Galeria Átomo — ${valor}${d.faixa ? " · combo" : ""}`;
 
-  const linhas: [string, string][] = [
-    ["Estúdio", d.estudio],
-    ["E-mail", d.email],
-    ["Plano", `${d.planoId} · ${d.ciclo}`],
-    ["Pagamento", `${valor} (${pagamento.evento})`],
-    ["Combo com o Atomatiza", linhaDoCombo(d)],
-    ["Assinatura", linhaDoValor(d)],
-  ];
+  /* O PACOTE NUMA FATURA SÓ (Felipe, 30/09/2026: "quando assinar os 2 juntos,
+   * o e-mail tem que ser diferente"). O pagamento é dos dois produtos, e o
+   * e-mail diz quanto é de cada um — o Atomatiza não manda o dele para esta
+   * fatura (`docs/pacote.md`). */
+  const plano = planoPorId(d.planoId);
+  const partes =
+    d.pacote && d.faixa && plano && pagamento.valor !== null
+      ? (() => {
+          const galeria = precoDoCicloComComboCentavos(plano, d.ciclo, d.faixa);
+          return { galeria, atomatiza: Math.round(pagamento.valor * 100) - galeria };
+        })()
+      : null;
+
+  const assunto = partes
+    ? `${d.estudio} ${oque} o pacote Galeria Átomo + Atomatiza — ${valor}`
+    : `${d.estudio} ${oque} a Galeria Átomo — ${valor}${d.faixa ? " · combo" : ""}`;
+
+  const linhas: [string, string][] = partes
+    ? [
+        ["Estúdio", d.estudio],
+        ["E-mail", d.email],
+        ["Pacote", `Galeria ${d.planoId} + Atomatiza ${d.faixa} · ${d.ciclo} — uma fatura só`],
+        ["Pagamento", `${valor} (${pagamento.evento})`],
+        ["Parte da Galeria", reais(partes.galeria)],
+        ["Parte do Atomatiza", reais(partes.atomatiza)],
+        ["Divisão", "O split da fatura já mandou a parte dos sócios de cada produto."],
+      ]
+    : [
+        ["Estúdio", d.estudio],
+        ["E-mail", d.email],
+        ["Plano", `${d.planoId} · ${d.ciclo}`],
+        ["Pagamento", `${valor} (${pagamento.evento})`],
+        ["Combo com o Atomatiza", linhaDoCombo(d)],
+        ["Assinatura", linhaDoValor(d)],
+      ];
 
   const texto = linhas.map(([k, v]) => `${k}: ${v}`).join("\n");
   const html = moldura(

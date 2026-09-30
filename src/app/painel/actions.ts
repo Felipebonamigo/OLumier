@@ -32,7 +32,7 @@ import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 import { assinarTenant, escolherPlanoAntesDeAssinar } from "@/lib/assinar";
 import { assinarPacote, acrescentarAtomatiza } from "@/lib/pacote";
 import { ehFaixaAtomatiza } from "@/config/combo";
-import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
+import { cotarTroca, trocarPlano, RECADO_DO_PACOTE } from "@/lib/troca-de-plano";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
 import { planoPorId, cicloDe, formatarReais } from "@/config/planos";
@@ -864,6 +864,7 @@ export async function cotarCancelamentoAction(): Promise<
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return { erro: "Conta não encontrada." };
   if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+  if (tenant.pacote_atomatiza_id) return { erro: RECADO_DO_PACOTE };
   try {
     const c = await cotarCancelamento(tenant);
     return {
@@ -917,6 +918,7 @@ export async function cancelarAssinaturaAction(
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return { erro: "Conta não encontrada." };
   if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+  if (tenant.pacote_atomatiza_id) return { erro: RECADO_DO_PACOTE };
 
   let devolucao: Awaited<ReturnType<typeof cotarCancelamento>> | null = null;
   if (devolverCentavos !== null) {

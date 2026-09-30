@@ -102,6 +102,11 @@ const servidorAsaas = createServer((req, res) => {
     if (m) {
       const a = asaas.assinaturas.find((x) => x.id === m[1]);
       if (!a) return responder(404, {});
+      if (req.method === "DELETE") {
+        asaas.escritas.push({ caminho: p, metodo: "DELETE" });
+        a.deleted = true;
+        return responder(200, { deleted: true, id: a.id });
+      }
       if (req.method !== "GET") {
         asaas.escritas.push({ caminho: p, corpo: dados });
         if (dados.value !== undefined) a.value = dados.value;
@@ -118,7 +123,8 @@ process.env.ASAAS_API = `http://127.0.0.1:${servidorAsaas.address().port}`;
 /* ── O Atomatiza de mentira: responde a ponte e cria a assinatura de lá no
  *    mesmo Asaas, como o de verdade faria. ─────────────────────────────── */
 
-const atz = { pedidos: [], resposta: null };
+const atz = { pedidos: [], resposta: null, vinculo: null };
+const ESTUDIO_ATZ = "7a1f0c2e-1111-4222-8333-944455556666";
 const servidorAtz = createServer((req, res) => {
   let corpo = "";
   req.on("data", (p) => (corpo += p));
@@ -131,6 +137,25 @@ const servidorAtz = createServer((req, res) => {
     if (req.headers.authorization !== `Bearer ${SEGREDO}`) return responder(401, { erro: "não autorizado" });
     atz.pedidos.push({ caminho: req.url, corpo: dados });
     if (req.url === "/api/ponte/situacao") return responder(200, { conta: false, emailMascarado: null, assinatura: null });
+    if (req.url === "/api/ponte/pacote/preparar") {
+      if (atz.resposta) return responder(atz.resposta.status, atz.resposta.corpo);
+      return responder(200, {
+        ok: true,
+        contaId: ESTUDIO_ATZ,
+        contaNova: true,
+        valorCentavos: 5134,
+        nome: `Atomatiza ${dados.plano.faixa === "solo" ? "Solo" : "Equipe"}`,
+        /* Uma carteira só de lá e uma que os dois produtos dividem. */
+        split: [
+          { walletId: "wal_socio_atz", percentual: 30 },
+          { walletId: "wal_comum", percentual: 10 },
+        ],
+      });
+    }
+    if (req.url === "/api/ponte/pacote/vincular") {
+      if (atz.vinculo) return responder(atz.vinculo.status, atz.vinculo.corpo);
+      return responder(200, { ok: true });
+    }
     if (atz.resposta) return responder(atz.resposta.status, atz.resposta.corpo);
     const cliente = { id: novoId("cus"), cpfCnpj: dados.documento, externalReference: "atz:sub:st-1" };
     asaas.clientes.push(cliente);
@@ -157,6 +182,11 @@ const { faixaDoAtomatiza } = await import("../src/lib/combo.ts");
 const { NextRequest } = await import("next/server");
 const rotaSituacao = await import("../src/app/api/ponte/situacao/route.ts");
 const rotaAssinar = await import("../src/app/api/ponte/assinar/route.ts");
+const rotaPreparar = await import("../src/app/api/ponte/pacote/preparar/route.ts");
+const rotaVincular = await import("../src/app/api/ponte/pacote/vincular/route.ts");
+const A = await import("../src/lib/asaas.ts");
+const { recalcularCombo } = await import("../src/lib/combo.ts");
+const { trocarPlano } = await import("../src/lib/troca-de-plano.ts");
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
@@ -347,57 +377,154 @@ try {
     igual(await tenantDoDoc(DOC_B), null, "conta");
   });
 
-  console.log("\nO botão \"Assinar o pacote\":\n");
+  console.log("\nO split da fatura única:\n");
 
-  await etapa("a nossa nasce no cheio, a de lá é pedida, e a nossa baixa quando a de lá existe", async () => {
-    const { rows } = await db.query(
-      `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes, cpf_cnpj, status)
-       values ($1, $2, $3, 'x', 'g:foto:500', $4, $5, 'trial') returning id`,
-      [`pacote-origem-${MARCA}`, "Estúdio Origem", `origem-${MARCA}@teste.local`, String(500 * 1024 ** 3), DOC_C],
+  await etapa("cada lado reescalado pela sua fatia do total, e a carteira comum numa parte só", () => {
+    // Galeria 100 com 20% para "comum" e R$ 5 fixos para "g"; Atomatiza 50 com 30% "a" e 10% "comum".
+    const r = Pac.juntarSplit(
+      [
+        { carteira: "wal_comum", centavos: 0, percentual: 20 },
+        { carteira: "wal_g", centavos: 500 },
+      ],
+      10000,
+      [
+        { walletId: "wal_a", percentual: 30 },
+        { walletId: "WAL_COMUM", percentual: 10 },
+      ],
+      5000,
     );
-    criados.push(rows[0].id);
-    atz.pedidos.length = 0;
-    const r = await Pac.assinarPacote(rows[0].id, {
-      faixa: "solo",
-      ciclo: "mensal",
-      forma: "cartao",
-      documento: DOC_C,
-      aceitouTermos: true,
-    });
-    igual(r.ok, true, "resultado");
-    const criacao = asaas.escritas.find((e) => e.caminho === "/subscriptions");
-    igual(criacao?.corpo.value, 79.99, "a nossa nasceu no cheio");
-    const p = atz.pedidos.find((x) => x.caminho === "/api/ponte/assinar")?.corpo;
-    igual([p?.plano, p?.parceiro, p?.pacote, p?.forma, p?.documento], [{ faixa: "solo" }, { gb: 500 }, true, "cartao", DOC_C], "pedido a lá");
-    const t = (await db.query("select asaas_assinatura_id, combo_atomatiza from tenants where id = $1", [rows[0].id])).rows[0];
-    const nossa = asaas.assinaturas.find((a) => a.id === t.asaas_assinatura_id);
-    igual([nossa.value, t.combo_atomatiza], [68.56, "solo"], "a nossa baixou");
-    if (!C.ehDoPacote(nossa.description)) throw new Error(`a marca sumiu na conferência: ${nossa.description}`);
-    const baixa = asaas.escritas.find((e) => e.caminho === `/subscriptions/${nossa.id}`);
-    igual(baixa?.corpo.updatePendingPayments, true, "a fatura emitida baixou junto");
+    const por = Object.fromEntries(r.map((f) => [f.carteira.toLowerCase(), f]));
+    // comum: 20×100/150 + 10×50/150 = 13,33 + 3,33 = 16,66
+    igual([por.wal_comum.percentual, por.wal_a.percentual, por.wal_g.centavos, por.wal_g.percentual], [16.66, 10, 500, undefined], "partes");
+    igual(r.length, 3, "sem carteira repetida");
   });
 
-  await etapa("o Atomatiza recusou: a nossa fica no cheio, e a tela sabe que ela nasceu", async () => {
+  await etapa("fixo e percentual na mesma carteira viram um percentual só, nunca passando do total", () => {
+    const r = Pac.juntarSplit([{ carteira: "w", centavos: 1500 }], 10000, [{ walletId: "w", percentual: 50 }], 5000);
+    // 1500/15000 = 10% + 50×5000/15000 = 16,66% → 26,66%
+    igual(r, [{ carteira: "w", centavos: 0, percentual: 26.66 }], "parte");
+  });
+
+  console.log("\nA ponte — preparar e vincular (o Atomatiza cria a fatura):\n");
+
+  const DOC_P = "86288366757";
+  await db.query("delete from tenants where cpf_cnpj = $1 and email like '%@teste.local'", [DOC_P]);
+
+  await etapa("preparar cria a conta, põe no plano e responde preço e divisão, sem assinatura", async () => {
+    const r = await chamar(rotaPreparar, "/api/ponte/pacote/preparar", {
+      ...pedido({ documento: DOC_P, email: `prep-${MARCA}@teste.local`, plano: { gb: 1000 } }),
+      pacote: undefined,
+    });
+    igual([r.status, r.corpo.ok, r.corpo.contaNova, r.corpo.valorCentavos, r.corpo.nome], [200, true, true, 9999, "Galeria Átomo 1 TB"], "resposta");
+    if (!Array.isArray(r.corpo.split)) throw new Error("sem split");
+    const t = await tenantDoDoc(DOC_P);
+    criados.push(t.id);
+    igual([t.id, t.plano_id, t.asaas_assinatura_id], [r.corpo.contaId, "g:foto:1000", null], "conta");
+    return "1 TB + Solo: R$ 99,99 daqui";
+  });
+
+  await etapa("vincular confere a referência da assinatura no Asaas antes de gravar", async () => {
+    const t = await tenantDoDoc(DOC_P);
+    const alheia = { id: novoId("sub"), status: "ACTIVE", value: 149.9, externalReference: `pacote:${criados[0]}:${ESTUDIO_ATZ}`, description: "Pacote X + Atomatiza Solo · pacote" };
+    asaas.assinaturas.push(alheia);
+    const r = await chamar(rotaVincular, "/api/ponte/pacote/vincular", { documento: DOC_P, contaId: t.id, assinaturaId: alheia.id, clienteId: "cus_x", ciclo: "mensal" });
+    igual(r.status, 400, "assinatura de outra conta");
+
+    const certa = { id: novoId("sub"), status: "ACTIVE", value: 149.9, customer: "cus_atz", externalReference: `pacote:${t.id}:${ESTUDIO_ATZ}`, description: "Pacote Galeria Átomo 1 TB + Atomatiza Solo · pacote" };
+    asaas.assinaturas.push(certa);
+    const ok = await chamar(rotaVincular, "/api/ponte/pacote/vincular", { documento: DOC_P, contaId: t.id, assinaturaId: certa.id, clienteId: "cus_atz", ciclo: "mensal" });
+    igual(ok.status, 200, "vínculo");
+    const depois = await tenantDoDoc(DOC_P);
+    igual([depois.asaas_assinatura_id, depois.pacote_atomatiza_id, depois.combo_atomatiza], [certa.id, ESTUDIO_ATZ, "solo"], "gravado");
+    const de_novo = await chamar(rotaVincular, "/api/ponte/pacote/vincular", { documento: DOC_P, contaId: t.id, assinaturaId: certa.id, clienteId: "cus_atz", ciclo: "mensal" });
+    igual(de_novo.status, 200, "idempotente");
+  });
+
+  await etapa("a situação diz que a assinatura é do pacote", async () => {
+    const r = await chamar(rotaSituacao, "/api/ponte/situacao", { documento: DOC_P });
+    igual(r.corpo.assinatura?.pacote, true, "pacote");
+  });
+
+  await etapa("a conferência do combo não mexe na fatura única", async () => {
+    const t = await tenantDoDoc(DOC_P);
+    const r = await recalcularCombo(t.id, "teste");
+    igual([r?.mudou, asaas.escritas.length], [false, 0], "mudou / escritas");
+  });
+
+  await etapa("mudar de plano e cancelar vão pelo WhatsApp", async () => {
+    const t = await tenantDoDoc(DOC_P);
+    const r = await trocarPlano(t.id, "g:foto:2000", { ip: null });
+    if (!r.erro?.includes("WhatsApp")) throw new Error(`troca: ${JSON.stringify(r)}`);
+  });
+
+  await etapa("o webhook reconhece a fatura única como desta conta", () => {
+    const ref = `pacote:${criados[0]}:${ESTUDIO_ATZ}`;
+    igual([A.eventoEhNosso(ref), A.tenantDaReferencia(ref), A.tipoDaReferencia(ref)], [true, criados[0], "assinatura"], "referência");
+  });
+
+  console.log("\nO botão \"Assinar o pacote\" (a Galeria cria a fatura):\n");
+
+  const origem = async (slug, doc, planoId) => {
     const { rows } = await db.query(
       `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes, cpf_cnpj, status)
-       values ($1, $2, $3, 'x', 'g:foto:250', $4, $5, 'trial') returning id`,
-      [`pacote-recusa-${MARCA}`, "Estúdio Recusa", `recusa-${MARCA}@teste.local`, String(250 * 1024 ** 3), DOC_B],
+       values ($1, $2, $3, 'x', $4, $5, $6, 'trial') returning id`,
+      [`${slug}-${MARCA}`, "Estúdio Origem", `${slug}-${MARCA}@teste.local`, planoId, String(1024 ** 4), doc],
     );
     criados.push(rows[0].id);
-    /* O DOC_B tem um Atomatiza pago de uma etapa acima: fora, para a nossa
-     * nascer no cheio de verdade. */
+    return rows[0].id;
+  };
+
+  await etapa("uma assinatura só, com o total, a referência dos dois e o split dos dois produtos", async () => {
+    const id = await origem("pacote-origem", DOC_C, "g:foto:1000");
+    atz.pedidos.length = 0;
+    const r = await Pac.assinarPacote(id, { faixa: "solo", ciclo: "mensal", forma: "cartao", documento: DOC_C, aceitouTermos: true });
+    igual([r.ok, r.totalCentavos], [true, 9999 + 5134], "resultado");
+    const criadas = asaas.escritas.filter((e) => e.caminho === "/subscriptions");
+    igual(criadas.length, 1, "uma assinatura só");
+    const c = criadas[0].corpo;
+    igual([c.value, c.billingType, c.externalReference], [151.33, "CREDIT_CARD", `pacote:${id}:${ESTUDIO_ATZ}`], "assinatura");
+    if (c.description !== `Pacote ${marca.nome} 1 TB + Atomatiza Solo · pacote`) throw new Error(`descrição: ${c.description}`);
+    const partes = Object.fromEntries((c.split ?? []).map((f) => [f.walletId, f]));
+    // 30% dos 51,34 do Atomatiza = 10,18% do total de 151,33.
+    igual(partes.wal_socio_atz?.percentualValue, 10.17, "parte do sócio de lá, em % do total");
+    const prep = atz.pedidos.find((x) => x.caminho === "/api/ponte/pacote/preparar")?.corpo;
+    igual([prep?.plano, prep?.parceiro, prep?.forma, prep?.documento], [{ faixa: "solo" }, { gb: 1000 }, "cartao", DOC_C], "preparar lá");
+    const vin = atz.pedidos.find((x) => x.caminho === "/api/ponte/pacote/vincular")?.corpo;
+    igual([vin?.contaId, vin?.valorCentavos], [ESTUDIO_ATZ, 5134], "vincular lá");
+    const t = (await db.query("select asaas_assinatura_id, pacote_atomatiza_id, combo_atomatiza from tenants where id = $1", [id])).rows[0];
+    igual([Boolean(t.asaas_assinatura_id), t.pacote_atomatiza_id, t.combo_atomatiza], [true, ESTUDIO_ATZ, "solo"], "gravado aqui");
+    return "R$ 99,99 + R$ 51,34 = R$ 151,33, uma fatura";
+  });
+
+  await etapa("o Atomatiza recusou no preparar: nada é criado", async () => {
     asaas.clientes = asaas.clientes.filter((c) => c.cpfCnpj !== DOC_B);
+    const id = await origem("pacote-recusa", DOC_B, "g:foto:250");
     atz.resposta = { status: 409, corpo: { erro: "Este CPF/CNPJ já tem conta no Atomatiza com outro e-mail.", codigo: "conta_de_outro_email" } };
     try {
-      const r = await Pac.assinarPacote(rows[0].id, { faixa: "equipe", ciclo: "mensal", forma: "fatura", documento: DOC_B, aceitouTermos: true });
-      igual([r.ok, r.galeriaAssinada], [false, true], "resultado");
+      const antes = asaas.assinaturas.length;
+      const r = await Pac.assinarPacote(id, { faixa: "equipe", ciclo: "mensal", forma: "fatura", documento: DOC_B, aceitouTermos: true });
+      igual([r.ok, r.galeriaAssinada], [false, false], "resultado");
       if (!r.erro.includes("outro e-mail")) throw new Error(`erro: ${r.erro}`);
-      const t = (await db.query("select asaas_assinatura_id from tenants where id = $1", [rows[0].id])).rows[0];
-      const sub = asaas.assinaturas.find((a) => a.id === t.asaas_assinatura_id);
-      igual(sub?.value, 49.99, "cheio");
-      if (C.ehDoPacote(sub?.description)) throw new Error(`a marca ficou sem o outro lado: ${sub?.description}`);
+      igual(asaas.assinaturas.length, antes, "nenhuma assinatura");
     } finally {
       atz.resposta = null;
+    }
+  });
+
+  await etapa("o Atomatiza não gravou o vínculo: a fatura única é cancelada e a conta limpa", async () => {
+    const DOC_D = "39053344705";
+    await db.query("delete from tenants where cpf_cnpj = $1 and email like '%@teste.local'", [DOC_D]);
+    const id = await origem("pacote-vinculo", DOC_D, "g:foto:500");
+    atz.vinculo = { status: 500, corpo: { erro: "banco fora" } };
+    try {
+      const r = await Pac.assinarPacote(id, { faixa: "solo", ciclo: "mensal", forma: "cartao", documento: DOC_D, aceitouTermos: true });
+      igual(r.ok, false, "resultado");
+      const t = (await db.query("select asaas_assinatura_id, pacote_atomatiza_id from tenants where id = $1", [id])).rows[0];
+      igual([t.asaas_assinatura_id, t.pacote_atomatiza_id], [null, null], "conta limpa");
+      const apagou = asaas.escritas.some((e) => e.metodo === "DELETE");
+      if (!apagou) throw new Error("a assinatura única não foi cancelada");
+    } finally {
+      atz.vinculo = null;
     }
   });
 } finally {

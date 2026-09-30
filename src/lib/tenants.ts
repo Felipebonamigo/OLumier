@@ -45,6 +45,8 @@ export interface Tenant {
    * Liga o seletor de plataforma no painel. Ver `lib/ponte-atomatiza.ts`.
    */
   atomatiza_visto_em: Date | null;
+  /** Estúdio do Atomatiza da fatura única do pacote; nulo fora dele. Ver docs/pacote.md. */
+  pacote_atomatiza_id: string | null;
   /**
    * O maior plano já pago no período corrente — a base da diferença quando o
    * estúdio aumenta o plano. Nulo = vale o plano atual. Ver

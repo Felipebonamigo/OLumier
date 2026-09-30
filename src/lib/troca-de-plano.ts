@@ -110,7 +110,14 @@ export type ResultadoDaTroca =
     };
 
 /** Recusas que não dependem de dinheiro: plano que não existe, o mesmo plano, espaço que não cabe. */
+/** O que a tela diz a quem está na fatura única e quer mudar ou cancelar. */
+export const RECADO_DO_PACOTE =
+  `Sua assinatura é o pacote com o Atomatiza, numa fatura só. Para mudar o plano ou cancelar, fale com a gente pelo WhatsApp ${marca.whatsappVisivel} — ajustamos os dois lados juntos.`;
+
 async function conferirTroca(tenant: Tenant, plano: Plano): Promise<string | null> {
+  /* A FATURA ÚNICA DO PACOTE (`docs/pacote.md`) é dos dois produtos: trocar o
+   * plano daqui mexeria na cobrança do Atomatiza junto. Por enquanto, à mão. */
+  if (tenant.pacote_atomatiza_id) return RECADO_DO_PACOTE;
   if (tenant.plano_id === plano.id) return "Você já está neste plano.";
   /*
    * Uma quota só: o que está no ar e o que está arquivado somam. Antes eram

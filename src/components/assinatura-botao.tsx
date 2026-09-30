@@ -453,8 +453,12 @@ function MonteOPacote({
             {sufixo}
           </p>
           <p className="mt-1.5">
-            São duas assinaturas, com o mesmo vencimento e a mesma forma de pagamento, e o desconto vale desde já.
-            Se uma delas vencer sem pagamento, a outra volta ao preço cheio no ciclo seguinte.
+            Uma fatura só com os dois:{" "}
+            <strong className="text-texto tabular-nums">
+              {formatarReais((escolhido.galeria + escolhido.atomatiza) * fator)}
+              {sufixo}
+            </strong>
+            , no mesmo cartão ou no mesmo Pix/boleto. A parte de cada produto é separada no pagamento.
           </p>
           <p className="mt-1.5">
             {atomatiza.conta

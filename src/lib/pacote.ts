@@ -2,13 +2,28 @@ import "server-only";
 import { consultar, consultarUm } from "@/lib/db";
 import { marca } from "@/config/marca";
 import { cicloDe, espacoValido, idDaMontagem, planoPorId, type Ciclo } from "@/config/planos";
-import { ehFaixaAtomatiza, MARCA_DO_PACOTE, type FaixaAtomatiza } from "@/config/combo";
-import { buscarAssinatura, trocarDescricaoDaAssinatura } from "@/lib/asaas";
+import {
+  ehFaixaAtomatiza,
+  MARCA_DO_PACOTE,
+  planoEntraNoCombo,
+  precoDoCicloComComboCentavos,
+  type FaixaAtomatiza,
+} from "@/config/combo";
+import { montarFatias } from "@/config/socios";
+import {
+  asaasConfigurado,
+  buscarAssinatura,
+  cancelarAssinatura,
+  criarAssinaturaDoPacote,
+  ehDoPacoteUnico,
+  garantirCliente,
+  type FatiaParaOAsaas,
+} from "@/lib/asaas";
+import { documentoEmUso } from "@/lib/cadastro";
 import { ESCOLHA_CARTAO, formaDaAssinatura } from "@/config/forma-assinatura";
 import { VERSOES_LEGAIS } from "@/config/documentos-legais";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
-import { assinarTenant } from "@/lib/assinar";
-import { recalcularCombo } from "@/lib/combo";
+import { assinarTenant, vencimentoDoTeste } from "@/lib/assinar";
 import { buscarTenantPorId, criarTenant, emailJaUsado } from "@/lib/tenants";
 import { trocarPlano } from "@/lib/troca-de-plano";
 import { criarPedido } from "@/lib/recuperacao";
@@ -47,6 +62,8 @@ export interface SituacaoNaPonte {
     status: StatusNaPonte;
     plano: { gb?: number; faixa?: FaixaAtomatiza };
     ciclo: Ciclo;
+    /** A assinatura é a fatura única do pacote (`docs/pacote.md`). */
+    pacote?: boolean;
   };
 }
 
@@ -64,7 +81,7 @@ export interface PedidoDeAssinatura {
   aceitouTermos: boolean;
 }
 
-export type CodigoDaPonte = "conta_de_outro_email" | "email_em_uso" | "ja_assina";
+export type CodigoDaPonte = "conta_de_outro_email" | "email_em_uso" | "ja_assina" | "combinado";
 
 export type RespostaDeAssinatura =
   | { ok: true; contaNova: boolean; valorCentavos: number; faturaUrl: string | null }
@@ -101,11 +118,12 @@ interface ContaNaPonte {
   ciclo_cobranca: string | null;
   asaas_assinatura_id: string | null;
   pago_ate: Date | null;
+  pacote_atomatiza_id: string | null;
 }
 
 async function contaDoDocumento(documento: string): Promise<ContaNaPonte | null> {
   return consultarUm<ContaNaPonte>(
-    `select id, email, status, plano_id, ciclo_cobranca, asaas_assinatura_id, pago_ate
+    `select id, email, status, plano_id, ciclo_cobranca, asaas_assinatura_id, pago_ate, pacote_atomatiza_id
        from tenants where cpf_cnpj = $1
       order by criado_em limit 1`,
     [documento],
@@ -124,7 +142,12 @@ export async function situacaoDaConta(documentoBruto: unknown): Promise<Situacao
     const status: StatusNaPonte =
       t.status === "inadimplente" ? "atrasada" : t.status === "ativo" && t.pago_ate ? "ativa" : "pendente";
     const gb = gbDoPlano(t.plano_id);
-    assinatura = { status, plano: gb ? { gb } : {}, ciclo: cicloDe(t.ciclo_cobranca) };
+    assinatura = {
+      status,
+      plano: gb ? { gb } : {},
+      ciclo: cicloDe(t.ciclo_cobranca),
+      ...(t.pacote_atomatiza_id ? { pacote: true } : {}),
+    };
   }
   return { conta: true, emailMascarado: mascararEmail(t.email), assinatura };
 }
@@ -174,7 +197,16 @@ export function lerPedido(corpo: unknown): PedidoDeAssinatura | string {
  * O Atomatiza pede a assinatura daqui (`docs/pacote.md`, "Regras de quem
  * recebe"). O preço sai sempre da NOSSA tabela: do pedido, só vem QUAL plano.
  */
-export async function receberAssinatura(pedido: PedidoDeAssinatura): Promise<RespostaDeAssinatura> {
+type Recusa = { ok: false; status: number; erro: string; codigo?: CodigoDaPonte };
+
+/**
+ * A conta daqui para um pedido da ponte — a mesma regra para `assinar` e para
+ * `pacote/preparar`: achada pelo documento e com o mesmo e-mail, ou criada (sem
+ * senha, com o aceite e o convite), já no plano pedido e SEM assinatura.
+ */
+async function prepararContaDaPonte(
+  pedido: PedidoDeAssinatura,
+): Promise<{ ok: true; conta: ContaNaPonte; contaNova: boolean; planoId: string } | Recusa> {
   const planoId = idDaMontagem({ segmento: "foto", espacoGb: pedido.plano.gb! });
   let conta = await contaDoDocumento(pedido.documento);
   let contaNova = false;
@@ -247,6 +279,13 @@ export async function receberAssinatura(pedido: PedidoDeAssinatura): Promise<Res
   /* Quem chegou pela ponte usa o Atomatiza: o seletor de plataforma aparece na
    * hora, sem esperar a próxima visita ao painel de lá. */
   await consultar("update tenants set atomatiza_visto_em = now() where id = $1", [conta.id]);
+  return { ok: true, conta, contaNova, planoId };
+}
+
+export async function receberAssinatura(pedido: PedidoDeAssinatura): Promise<RespostaDeAssinatura> {
+  const preparada = await prepararContaDaPonte(pedido);
+  if (!preparada.ok) return preparada;
+  const { conta, contaNova } = preparada;
 
   const r = await assinarTenant(conta.id, {
     documento: pedido.documento,
@@ -367,84 +406,280 @@ export interface EscolhaDoPacote {
 }
 
 export type ResultadoDoPacote =
-  | { ok: true; atomatiza: { contaNova: boolean; valorCentavos: number } }
+  | { ok: true; atomatiza: { contaNova: boolean; valorCentavos: number }; totalCentavos: number }
   | { ok: false; erro: string; galeriaAssinada: boolean };
 
+// --- a fatura única (`docs/pacote.md`, "Fatura única") -----------------------
+
+/** Uma parte do split do OUTRO produto: % do valor DELE, ou valor exato. */
+export interface ParteDoParceiro {
+  walletId: string;
+  percentual?: number;
+  fixoCentavos?: number;
+}
+
 /**
- * "Assinar o pacote" (`docs/pacote.md`, "A ordem de quem chama"):
+ * O split da fatura única: as partes dos sócios dos DOIS produtos numa
+ * cobrança só (Felipe: "uma cobrança que depois divida a porcentagem correta
+ * para cada sistema e para cada sócio").
  *
- *   1. a assinatura daqui, com a marca e no preço de sempre;
- *   2. a do Atomatiza, pela ponte, já com o combo;
- *   3. deu certo → a conferência do combo daqui acha a de lá e baixa a nossa
- *      (fatura emitida inclusive). Deu errado → a nossa fica no preço cheio,
- *      que é o certo sem o outro, e a tela diz o que houve.
+ * Cada lado pensa em % do SEU valor; o Asaas aplica o % sobre o TOTAL. Então o
+ * percentual de cada lado é reescalado pela fatia dele no total, e o fixo
+ * continua fixo. A mesma carteira nos dois lados vira uma parte só — o Asaas
+ * não aceita a carteira repetida: percentuais somam; fixo com percentual vira
+ * tudo percentual (o fixo como % do total bruto). Duas casas decimais, para
+ * baixo: a sobra de arredondamento fica na conta principal, nunca passa de 100.
+ */
+export function juntarSplit(
+  nossas: FatiaParaOAsaas[],
+  nossoValorCentavos: number,
+  delas: ParteDoParceiro[],
+  valorDelesCentavos: number,
+): FatiaParaOAsaas[] {
+  const total = nossoValorCentavos + valorDelesCentavos;
+  if (total <= 0) return [];
+  const porCarteira = new Map<string, { carteira: string; pct: number; fixo: number }>();
+  const somar = (carteira: string, pct: number, fixo: number) => {
+    const chave = carteira.trim().toLowerCase();
+    const atual = porCarteira.get(chave) ?? { carteira: carteira.trim(), pct: 0, fixo: 0 };
+    atual.pct += pct;
+    atual.fixo += fixo;
+    porCarteira.set(chave, atual);
+  };
+  for (const f of nossas) {
+    if (f.percentual !== undefined) somar(f.carteira, (f.percentual * nossoValorCentavos) / total, 0);
+    else somar(f.carteira, 0, f.centavos);
+  }
+  for (const p of delas) {
+    if (!p.walletId) continue;
+    if (typeof p.percentual === "number") somar(p.walletId, (p.percentual * valorDelesCentavos) / total, 0);
+    else if (typeof p.fixoCentavos === "number") somar(p.walletId, 0, p.fixoCentavos);
+  }
+  const duasCasas = (n: number) => Math.floor(n * 100) / 100;
+  return [...porCarteira.values()]
+    .map((c) =>
+      c.pct > 0
+        ? { carteira: c.carteira, centavos: 0, percentual: duasCasas(c.pct + (c.fixo * 100) / total) }
+        : { carteira: c.carteira, centavos: c.fixo },
+    )
+    .filter((c) => (c.percentual ?? 0) > 0 || c.centavos > 0);
+}
+
+/** "1 TB", "500 GB" — como a descrição e o e-mail mostram. */
+const rotuloGb = (gb: number) => (gb >= 1000 ? `${gb / 1000} TB` : `${gb} GB`);
+
+export interface Preparado {
+  ok: true;
+  contaId: string;
+  contaNova: boolean;
+  valorCentavos: number;
+  nome: string;
+  split: ParteDoParceiro[];
+}
+
+/** Parceiro: o Atomatiza vai criar a fatura única; aqui só a conta e o preço. */
+export async function prepararPacote(pedido: PedidoDeAssinatura): Promise<Preparado | Recusa> {
+  const faixa = pedido.parceiro.faixa;
+  if (!faixa) return { ok: false, status: 400, erro: "Faixa do Atomatiza inválida." };
+  const preparada = await prepararContaDaPonte(pedido);
+  if (!preparada.ok) return preparada;
+  const plano = planoPorId(preparada.planoId)!;
+  const valorCentavos = precoDoCicloComComboCentavos(plano, pedido.ciclo, faixa);
+  const split: ParteDoParceiro[] = montarFatias(plano.id, valorCentavos, pedido.ciclo).map((f) =>
+    f.percentual !== undefined
+      ? { walletId: f.carteira, percentual: f.percentual }
+      : { walletId: f.carteira, fixoCentavos: f.centavos },
+  );
+  return {
+    ok: true,
+    contaId: preparada.conta.id,
+    contaNova: preparada.contaNova,
+    valorCentavos,
+    nome: `Galeria Átomo ${rotuloGb(pedido.plano.gb!)}`,
+    split,
+  };
+}
+
+/**
+ * Parceiro: a fatura única nasceu lá; grava aqui. Não confia no pedido: lê a
+ * assinatura no Asaas e confere que a referência dela é `pacote:<esta conta>:…`
+ * — senão qualquer id de assinatura viraria "pago" nesta conta.
+ */
+export async function vincularPacote(corpo: unknown): Promise<{ ok: true } | Recusa> {
+  const c = (corpo ?? {}) as Record<string, unknown>;
+  const documento = soDigitos(String(c.documento ?? ""));
+  const contaId = String(c.contaId ?? "");
+  const assinaturaId = String(c.assinaturaId ?? "");
+  const clienteId = String(c.clienteId ?? "");
+  if (!documento || !/^[0-9a-f-]{36}$/i.test(contaId) || !assinaturaId) {
+    return { ok: false, status: 400, erro: "Pedido de vínculo incompleto." };
+  }
+  const t = await consultarUm<{ id: string; cpf_cnpj: string | null; asaas_assinatura_id: string | null }>(
+    "select id, cpf_cnpj, asaas_assinatura_id from tenants where id = $1",
+    [contaId],
+  );
+  if (!t || t.cpf_cnpj !== documento) return { ok: false, status: 400, erro: "Conta e documento não conferem." };
+  if (t.asaas_assinatura_id === assinaturaId) return { ok: true };
+  if (t.asaas_assinatura_id) {
+    return { ok: false, status: 409, codigo: "ja_assina", erro: "Esta conta da Galeria Átomo já tem assinatura." };
+  }
+
+  const a = await buscarAssinatura(assinaturaId);
+  const [, daGaleria, doAtomatiza] = (a.externalReference ?? "").split(":");
+  if (!ehDoPacoteUnico(a.externalReference) || daGaleria !== contaId || !doAtomatiza || a.deleted) {
+    return { ok: false, status: 400, erro: "A assinatura não é o pacote desta conta." };
+  }
+  const faixa = faixaDoNomeDoPacote(a.description);
+  await consultar(
+    `update tenants
+        set asaas_cliente_id = $1, asaas_assinatura_id = $2, ciclo_cobranca = $3, combo_atomatiza = $4,
+            pacote_atomatiza_id = $5, assinatura_criada_em = now(), atualizado_em = now()
+      where id = $6`,
+    [clienteId || a.customer || null, assinaturaId, cicloDe(c.ciclo), faixa, doAtomatiza, contaId],
+  );
+  return { ok: true };
+}
+
+/** A faixa do Atomatiza na descrição da fatura única ("… + Atomatiza Solo · pacote"). */
+export function faixaDoNomeDoPacote(descricao: string | null | undefined): FaixaAtomatiza | null {
+  const m = /Atomatiza\s+(Solo|Equipe|Est[uú]dio)/i.exec(descricao ?? "");
+  if (!m) return null;
+  const f = m[1].toLowerCase();
+  return f === "solo" ? "solo" : f === "equipe" ? "equipe" : "estudio";
+}
+
+async function prepararNoAtomatiza(pedido: Omit<PedidoDeAssinatura, "pacote">): Promise<Preparado | Recusa> {
+  const r = await chamarAtomatiza("/api/ponte/pacote/preparar", pedido, 15_000);
+  if (!r) return { ok: false, status: 503, erro: "O Atomatiza não respondeu." };
+  const j = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+  if (r.ok && j?.ok === true && typeof j.contaId === "string" && Number(j.valorCentavos) > 0) {
+    return {
+      ok: true,
+      contaId: j.contaId,
+      contaNova: j.contaNova === true,
+      valorCentavos: Math.round(Number(j.valorCentavos)),
+      nome: typeof j.nome === "string" ? j.nome.slice(0, 60) : "Atomatiza",
+      split: Array.isArray(j.split) ? (j.split as ParteDoParceiro[]) : [],
+    };
+  }
+  return {
+    ok: false,
+    status: r.status,
+    erro: typeof j?.erro === "string" ? j.erro : `O Atomatiza recusou (HTTP ${r.status}).`,
+    codigo: (j?.codigo as CodigoDaPonte | undefined) ?? undefined,
+  };
+}
+
+async function vincularNoAtomatiza(pedido: {
+  documento: string;
+  contaId: string;
+  assinaturaId: string;
+  clienteId: string;
+  valorCentavos: number;
+  ciclo: Ciclo;
+}): Promise<{ ok: true } | Recusa> {
+  const r = await chamarAtomatiza("/api/ponte/pacote/vincular", pedido, 15_000);
+  if (!r) return { ok: false, status: 503, erro: "O Atomatiza não respondeu." };
+  const j = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+  if (r.ok && j?.ok === true) return { ok: true };
+  return { ok: false, status: r.status, erro: typeof j?.erro === "string" ? j.erro : `O Atomatiza recusou (HTTP ${r.status}).` };
+}
+
+/**
+ * "Assinar o pacote" — a Galeria é quem cria a fatura única (`docs/pacote.md`,
+ * "A ordem de O"):
+ *
+ *   1. confere o lado daqui;
+ *   2. o Atomatiza prepara a conta de lá e diz quanto cobra e como divide;
+ *   3. UMA assinatura, no nosso cliente do Asaas, com o total e o split dos
+ *      dois produtos;
+ *   4. grava aqui;
+ *   5. o Atomatiza grava lá. Falhou → a assinatura é cancelada e nada fica
+ *      cobrando por um produto que não sabe dela.
  */
 export async function assinarPacote(tenantId: string, escolha: EscolhaDoPacote): Promise<ResultadoDoPacote> {
+  const falha = (erro: string): ResultadoDoPacote => ({ ok: false, erro, galeriaAssinada: false });
+  if (!asaasConfigurado()) return falha("A cobrança ainda não foi ligada.");
   const tenant = await buscarTenantPorId(tenantId);
-  if (!tenant) return { ok: false, erro: "Conta não encontrada.", galeriaAssinada: false };
+  if (!tenant) return falha("Conta não encontrada.");
+  if (tenant.asaas_assinatura_id) return falha("Esta conta já tem assinatura.");
+  const plano = planoPorId(tenant.plano_id);
   const gb = gbDoPlano(tenant.plano_id);
-  if (!gb || !espacoValido(gb)) {
-    return { ok: false, erro: "O plano desta conta não entra no pacote. Escolha um tamanho da grade.", galeriaAssinada: false };
+  if (!plano || !gb || !espacoValido(gb) || !planoEntraNoCombo(plano)) {
+    return falha("O plano desta conta não entra no pacote. Escolha um tamanho da grade.");
   }
+
+  const documento = soDigitos(escolha.documento || tenant.cpf_cnpj || "");
+  const problema = conferirDocumento(documento);
+  if (problema) return falha(problema);
+  if (await documentoEmUso(documento, tenantId)) {
+    return falha(`Esse CPF/CNPJ já está em outra conta. Fale com a gente pelo WhatsApp ${marca.whatsappVisivel} para juntar as duas.`);
+  }
+
   const forma = formaDaAssinatura(escolha.forma);
-
-  const nossa = await assinarTenant(tenantId, {
-    documento: escolha.documento,
-    ciclo: escolha.ciclo,
-    forma,
-    pacote: true,
-  });
-  if (!nossa.ok) return { ok: false, erro: nossa.erro, galeriaAssinada: false };
-
-  const depois = await buscarTenantPorId(tenantId);
-  const deLa = await assinarNoAtomatiza({
-    documento: depois?.cpf_cnpj ?? soDigitos(escolha.documento),
+  const vencimento = vencimentoDoTeste(tenant.trial_ate);
+  const deLa = await prepararNoAtomatiza({
+    documento,
     email: tenant.email,
     nome: tenant.nome_estudio,
     plano: { faixa: escolha.faixa },
     ciclo: escolha.ciclo,
     forma: forma === "CREDIT_CARD" ? "cartao" : "fatura",
-    vencimento: nossa.vencimento.toISOString().slice(0, 10),
-    pacote: true,
+    vencimento: vencimento.toISOString().slice(0, 10),
     parceiro: { gb },
     aceitouTermos: escolha.aceitouTermos,
   });
+  if (!deLa.ok) return falha(deLa.erro);
 
-  /* A conferência roda nos dois casos: um "não respondeu" pode ter sido uma
-   * assinatura que nasceu lá e cuja resposta se perdeu no caminho. */
-  const conferir = () =>
-    recalcularCombo(tenantId, "pacote").catch((e) =>
-      console.error(`[pacote] estúdio ${tenantId}: a conferência do combo falhou:`, e),
-    );
+  const cliente = await garantirCliente({ tenantId, nome: tenant.nome_estudio, email: tenant.email, cpfCnpj: documento });
+  await consultar("update tenants set cpf_cnpj = $1, atualizado_em = now() where id = $2", [documento, tenantId]);
 
-  if (!deLa.ok && deLa.codigo !== "ja_assina") {
-    /* Sem o outro lado, a marca sai: ela faria o Atomatiza contar a nossa
-     * assinatura ainda não paga se a pessoa o assinasse separado depois — e
-     * separado a regra é a de sempre (`docs/pacote.md`). */
-    await tirarAMarca(nossa.assinaturaId).catch((e) =>
-      console.error(`[pacote] estúdio ${tenantId}: não consegui tirar a marca do pacote:`, e),
+  const nosso = precoDoCicloComComboCentavos(plano, escolha.ciclo, escolha.faixa);
+  const total = nosso + deLa.valorCentavos;
+  const fatias = juntarSplit(montarFatias(plano.id, nosso, escolha.ciclo), nosso, deLa.split, deLa.valorCentavos);
+  const assinatura = await criarAssinaturaDoPacote({
+    clienteAsaasId: cliente.id,
+    tenantId,
+    estudioAtomatizaId: deLa.contaId,
+    precoCentavos: total,
+    ciclo: escolha.ciclo,
+    descricao: `Pacote ${marca.nome} ${rotuloGb(gb)} + ${deLa.nome}${MARCA_DO_PACOTE}`,
+    primeiroVencimento: vencimento,
+    forma,
+    fatias,
+  });
+
+  await consultar(
+    `update tenants
+        set asaas_cliente_id = $1, asaas_assinatura_id = $2, ciclo_cobranca = $3, combo_atomatiza = $4,
+            pacote_atomatiza_id = $5, atomatiza_visto_em = now(), assinatura_criada_em = now(), atualizado_em = now()
+      where id = $6`,
+    [cliente.id, assinatura.id, escolha.ciclo, escolha.faixa, deLa.contaId, tenantId],
+  );
+
+  const vinculo = await vincularNoAtomatiza({
+    documento,
+    contaId: deLa.contaId,
+    assinaturaId: assinatura.id,
+    clienteId: cliente.id,
+    valorCentavos: deLa.valorCentavos,
+    ciclo: escolha.ciclo,
+  });
+  if (!vinculo.ok) {
+    await cancelarAssinatura(assinatura.id).catch((e) =>
+      console.error(`[pacote] estúdio ${tenantId}: o vínculo falhou E a assinatura ${assinatura.id} não foi cancelada:`, e),
     );
-    await conferir();
-    return {
-      ok: false,
-      galeriaAssinada: true,
-      erro: `A assinatura da Galeria foi criada, mas a do Atomatiza não: ${deLa.erro} Ela ficou no preço cheio; quando o Atomatiza for assinado, o desconto entra.`,
-    };
+    await consultar(
+      `update tenants
+          set asaas_assinatura_id = null, combo_atomatiza = null, pacote_atomatiza_id = null,
+              assinatura_criada_em = null, atualizado_em = now()
+        where id = $1`,
+      [tenantId],
+    );
+    return falha(`O Atomatiza não confirmou o pacote (${vinculo.erro}). Nada foi cobrado — tente de novo em instantes.`);
   }
 
-  await conferir();
-  return {
-    ok: true,
-    atomatiza: deLa.ok ? { contaNova: deLa.contaNova, valorCentavos: deLa.valorCentavos } : { contaNova: false, valorCentavos: 0 },
-  };
-}
-
-async function tirarAMarca(assinaturaId: string): Promise<void> {
-  const a = await buscarAssinatura(assinaturaId);
-  const descricao = a.description ?? "";
-  if (descricao.includes(MARCA_DO_PACOTE)) {
-    await trocarDescricaoDaAssinatura(assinaturaId, descricao.replace(MARCA_DO_PACOTE, ""));
-  }
+  return { ok: true, atomatiza: { contaNova: deLa.contaNova, valorCentavos: deLa.valorCentavos }, totalCentavos: total };
 }
 
 /**
