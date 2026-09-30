@@ -47,9 +47,25 @@ export const SQL_MARCAR_PAGO = `update tenants
               plano_do_periodo = plano_id, atualizado_em = now()
         where id = $1`;
 
-/** Os pagamentos que o Asaas tem e nós não contamos. Não mexe em nada. */
-export async function procurarPagamentosPerdidos(agora = new Date()): Promise<PagamentoPerdido[]> {
-  if (!asaasConfigurado()) return [];
+/** O estúdio cujas cobranças o Asaas não deixou ler — e o erro. */
+export interface ConferenciaQueFalhou {
+  tenantId: string;
+  estudio: string;
+  erro: string;
+}
+
+/**
+ * Os pagamentos que o Asaas tem e nós não contamos. Não mexe em nada.
+ *
+ * As falhas voltam junto, e não só no log: a primeira rodada no servidor
+ * (30/09/2026) não conseguiu ler NENHUMA cobrança — chave com a barra do
+ * escape — e mesmo assim terminou dizendo "nenhum pagamento perdido". Quem
+ * não conseguiu olhar não pode dizer que não achou.
+ */
+export async function procurarPagamentosPerdidos(
+  agora = new Date(),
+): Promise<{ perdidos: PagamentoPerdido[]; falhas: ConferenciaQueFalhou[] }> {
+  if (!asaasConfigurado()) return { perdidos: [], falhas: [] };
   const estudios = await consultar<{
     id: string;
     nome_estudio: string;
@@ -66,12 +82,13 @@ export async function procurarPagamentosPerdidos(agora = new Date()): Promise<Pa
   );
 
   const perdidos: PagamentoPerdido[] = [];
+  const falhas: ConferenciaQueFalhou[] = [];
   for (const e of estudios) {
     let cobranca;
     try {
       cobranca = await ultimaCobrancaPaga(e.asaas_assinatura_id);
     } catch (erro) {
-      console.error(`[pagamentos-perdidos] não consegui ler as cobranças de ${e.id}:`, erro);
+      falhas.push({ tenantId: e.id, estudio: e.nome_estudio, erro: erro instanceof Error ? erro.message : String(erro) });
       continue;
     }
     if (!cobranca) continue;
@@ -90,7 +107,7 @@ export async function procurarPagamentosPerdidos(agora = new Date()): Promise<Pa
       pagoAteDepois: pagoAte,
     });
   }
-  return perdidos;
+  return { perdidos, falhas };
 }
 
 /** Conta um pagamento perdido como o webhook contaria. */

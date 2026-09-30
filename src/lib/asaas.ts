@@ -52,6 +52,24 @@ function base(): string {
 
 export const asaasConfigurado = () => Boolean(process.env.ASAAS_API_KEY);
 
+/**
+ * A chave, sem o escape do `$`.
+ *
+ * No servidor a chave mora no `.env.production` escrita `\$aact_…`: o Next lê
+ * `$palavra` como variável e, sem a barra, a chave chegava vazia ao app (ver
+ * `docs/ligar-cobranca.md`, passo 3). Só que os scripts do servidor carregam o
+ * mesmo arquivo com `node --env-file`, que NÃO expande nada e entrega a barra
+ * junto — e o Asaas responde "A chave de API fornecida é inválida". Foi o que
+ * derrubou a primeira `scripts/conferir-pagamentos.mjs` em 30/09/2026.
+ *
+ * Chave do Asaas não tem barra invertida, então tirar `\` de antes de um `$` só
+ * desfaz o escape: o app (que já recebe sem barra) não muda, e os scripts
+ * passam a mandar a chave de verdade.
+ */
+export function chaveDoAsaas(): string | undefined {
+  return process.env.ASAAS_API_KEY?.replace(/\\\$/g, "$");
+}
+
 export const asaasEmProducao = () => process.env.ASAAS_AMBIENTE === "producao";
 
 /**
@@ -69,7 +87,7 @@ function segmento(id: string): string {
 }
 
 async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
-  const chave = process.env.ASAAS_API_KEY;
+  const chave = chaveDoAsaas();
   if (!chave) throw new Error("ASAAS_API_KEY não configurada");
 
   const r = await fetch(`${base()}${caminho}`, {
