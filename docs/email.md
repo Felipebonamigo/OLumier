@@ -19,13 +19,20 @@ tempo, e as três parecem problemas separados quando aparecem.
 > |---|---|---|
 > | Confirmar o e-mail antes de enviar fotos | conta nova nasce confirmada | nasce pendente; o link sai no cadastro, e o painel mostra o recado com "mandar de novo" |
 > | Apagar os arquivos do teste abandonado | **nada é avisado, nada é apagado** | aviso aos 30 dias do vencimento, aviso final aos 53, apaga aos 60 (`src/lib/testes-abandonados.ts`) |
+> | Apagar os arquivos da conta cancelada ou inadimplente (30/09/2026) | **nada é avisado, nada é apagado** | aviso no fim do período pago e a 30, 7 e 1 dia da data; apaga 90 dias depois do 1º aviso (`src/lib/contas-encerradas.ts`) |
 >
 > A limpeza também exige a cobrança ligada (`ASAAS_API_KEY`): sem ela ninguém
 > tinha como assinar para salvar os arquivos. Ela roda dentro de
 > `scripts/limpar-lixeira.mjs` (temporizador `fotonio-lixeira`, 04:50), que
 > escreve no journal o que fez. Mais de 20 contas para apagar numa madrugada, e
 > ela para sem apagar nenhuma e manda alerta para `ALERTA_EMAIL_DESTINO` —
-> conferida a lista, rodar à mão com `--aplicar --liberar-teto`.
+> conferida a lista, rodar à mão com `--aplicar --liberar-teto`. A conta
+> encerrada roda no mesmo script, com as mesmas travas e o mesmo teto.
+>
+> `ALERTA_EMAIL_DESTINO` também recebe a **devolução a fazer** quando alguém
+> cancela pedindo o dinheiro de volta (`src/lib/devolucao.ts`): o estorno é
+> feito à mão no painel do Asaas, em até 5 dias úteis, e a pendência aparece no
+> caixa dos sócios até o aviso de estorno chegar.
 >
 > O CPF/CNPJ único e o limite de 3 cadastros por IP por dia valem já, com ou
 > sem e-mail.

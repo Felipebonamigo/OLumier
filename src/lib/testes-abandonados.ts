@@ -171,7 +171,7 @@ async function candidatas(agora: Date, apenas?: string[]): Promise<Candidata[]> 
   );
 }
 
-function porExtenso(d: Date): string {
+export function porExtenso(d: Date): string {
   return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
@@ -180,7 +180,7 @@ function porExtenso(d: Date): string {
   });
 }
 
-function escapar(texto: string): string {
+export function escapar(texto: string): string {
   return texto
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -229,23 +229,20 @@ export async function enviarAvisoDeLimpeza(
 }
 
 /**
- * Apaga todas as galerias de uma conta — linhas e arquivos — e registra.
- *
- * Confere de novo, na hora, que a conta continua um teste sem assinatura: a
- * lista foi montada minutos antes, e alguém pode ter assinado nesse meio tempo.
+ * Apaga todas as galerias de uma conta — linhas e arquivos — e registra cada
+ * uma. Serve ao teste abandonado e à conta encerrada (`contas-encerradas.ts`);
+ * quem chama confere ANTES, na hora, que a conta ainda está no estado que
+ * autoriza apagar.
  *
  * Os arquivos saem por `apagarArquivosDasMedias`, que sabe quais originais
  * moram no B2 — e a capa enviada à parte (`capa_chave`, migração 029), que não
  * é mídia e ficaria para trás.
  */
-async function apagarArquivosDaConta(tenantId: string): Promise<{ galerias: number; arquivos: number }> {
-  const ainda = await consultarUm<{ nome_estudio: string }>(
-    `select nome_estudio from tenants
-      where id = $1 and status = 'trial' and asaas_assinatura_id is null`,
-    [tenantId],
-  );
-  if (!ainda) return { galerias: 0, arquivos: 0 };
-
+export async function apagarGaleriasDaConta(
+  tenantId: string,
+  estudio: string,
+  motivo: "teste_abandonado" | "conta_encerrada",
+): Promise<{ galerias: number; arquivos: number }> {
   const galerias = await consultar<{ id: string; titulo: string; capa_chave: string | null }>(
     "select id, titulo, capa_chave from galerias where tenant_id = $1",
     [tenantId],
@@ -265,25 +262,47 @@ async function apagarArquivosDaConta(tenantId: string): Promise<{ galerias: numb
 
     await registrarEvento({
       tenantId,
-      estudio: ainda.nome_estudio,
+      estudio,
       ator: "sistema",
       acao: ACOES.GALERIA_DESTRUIDA,
       alvoTipo: "galeria",
       alvoId: g.id,
-      detalhe: { titulo: g.titulo, arquivos: medias.length, motivo: "teste_abandonado" },
+      detalhe: { titulo: g.titulo, arquivos: medias.length, motivo },
     });
 
     /* O banco já é a verdade; falha no armazém vira órfão, que
      * `varrer-orfaos.mjs` recolhe — mesma regra de `destruirGaleria`. */
     const r = await apagarArquivosDasMedias(medias);
-    if (r.falhou) console.error(`[testes-abandonados] galeria ${g.id}: ${r.falhou}`);
+    if (r.falhou) console.error(`[${motivo}] galeria ${g.id}: ${r.falhou}`);
     if (g.capa_chave) {
       await apagarObjetos([g.capa_chave]).catch((e) =>
-        console.error(`[testes-abandonados] capa da galeria ${g.id}:`, e),
+        console.error(`[${motivo}] capa da galeria ${g.id}:`, e),
       );
     }
     arquivos += medias.length;
   }
+  return { galerias: galerias.length, arquivos };
+}
+
+/**
+ * Apaga os arquivos de um teste abandonado.
+ *
+ * Confere de novo, na hora, que a conta continua um teste sem assinatura: a
+ * lista foi montada minutos antes, e alguém pode ter assinado nesse meio tempo.
+ */
+async function apagarArquivosDaConta(tenantId: string): Promise<{ galerias: number; arquivos: number }> {
+  const ainda = await consultarUm<{ nome_estudio: string }>(
+    `select nome_estudio from tenants
+      where id = $1 and status = 'trial' and asaas_assinatura_id is null`,
+    [tenantId],
+  );
+  if (!ainda) return { galerias: 0, arquivos: 0 };
+
+  const { galerias, arquivos } = await apagarGaleriasDaConta(
+    tenantId,
+    ainda.nome_estudio,
+    "teste_abandonado",
+  );
 
   await consultar("update tenants set arquivos_limpos_em = now() where id = $1", [tenantId]);
   await registrarEvento({
@@ -293,9 +312,9 @@ async function apagarArquivosDaConta(tenantId: string): Promise<{ galerias: numb
     acao: ACOES.ARQUIVOS_DO_TESTE_APAGADOS,
     alvoTipo: "conta",
     alvoId: tenantId,
-    detalhe: { galerias: galerias.length, arquivos },
+    detalhe: { galerias, arquivos },
   });
-  return { galerias: galerias.length, arquivos };
+  return { galerias, arquivos };
 }
 
 export interface ResumoDaRodada {
@@ -312,13 +331,26 @@ export interface ResumoDaRodada {
   linhas: string[];
 }
 
-/** "Para sozinha e chama uma pessoa" — o endereço é o dos alertas do servidor. */
-async function chamarUmaPessoa(quantas: number, linhas: string[]): Promise<void> {
+/**
+ * Um e-mail para quem cuida do servidor — o endereço é o dos alertas do vigia
+ * e do backup. Sem o endereço, fica no log, e o log diz que ninguém soube.
+ */
+export async function alertarUmaPessoa(assunto: string, titulo: string, texto: string): Promise<void> {
   const para = process.env.ALERTA_EMAIL_DESTINO?.trim();
   if (!para) {
-    console.error("[testes-abandonados] teto atingido e ALERTA_EMAIL_DESTINO ausente: ninguém foi avisado");
+    console.error(`[alerta] ALERTA_EMAIL_DESTINO ausente — ninguém foi avisado: ${assunto}`);
     return;
   }
+  await enviarEmail({
+    para,
+    assunto: `[${marca.nome}] ${assunto}`,
+    html: moldura(titulo, `<pre style="white-space:pre-wrap;font-size:13px;color:#a4adbd">${escapar(texto)}</pre>`),
+    texto,
+  });
+}
+
+/** "Para sozinha e chama uma pessoa". */
+async function chamarUmaPessoa(quantas: number, linhas: string[]): Promise<void> {
   const texto = [
     `A limpeza de testes abandonados parou: ${quantas} contas estavam para ter os arquivos apagados`,
     `nesta madrugada, e o teto é ${TETO_POR_RODADA}. Nada foi apagado.`,
@@ -328,12 +360,11 @@ async function chamarUmaPessoa(quantas: number, linhas: string[]): Promise<void>
     "Conferido que está certo, rodar no servidor:",
     "  scripts/limpar-lixeira.mjs --aplicar --liberar-teto",
   ].join("\n");
-  await enviarEmail({
-    para,
-    assunto: `[${marca.nome}] limpeza de testes parada pelo teto (${quantas} contas)`,
-    html: moldura("Limpeza parada pelo teto", `<pre style="white-space:pre-wrap;font-size:13px;color:#a4adbd">${escapar(texto)}</pre>`),
+  await alertarUmaPessoa(
+    `limpeza de testes parada pelo teto (${quantas} contas)`,
+    "Limpeza parada pelo teto",
     texto,
-  });
+  );
 }
 
 /**

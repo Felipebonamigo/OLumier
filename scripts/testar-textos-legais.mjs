@@ -192,5 +192,44 @@ await etapa("os Termos dizem que o cancelamento é pelo painel, que tem o botão
   }
 });
 
+/* ── 5. devolução, prazo da conta encerrada e operador ───────────────────── */
+
+await etapa("Termos, Privacidade e home tiram os números da mesma regra que o código usa", () => {
+  /* Número escrito à mão num texto e outro na configuração é a contradição
+   * que vira processo: o texto promete 3 meses e a rotina apaga em 60 dias. */
+  const termos = ler(PAGINAS.termos);
+  for (const nome of ["DIAS_DE_ARREPENDIMENTO", "PRAZO_DA_DEVOLUCAO", "RETENCAO_POR_EXTENSO", "TOTAL_DE_AVISOS"]) {
+    if (!termos.includes(`{${nome}}`)) throw new Error(`os Termos não usam ${nome}`);
+  }
+  if (!ler(PAGINAS.privacidade).includes("{RETENCAO_POR_EXTENSO}")) {
+    throw new Error("a Privacidade não diz o prazo da conta encerrada pela configuração");
+  }
+  if (!ler("src/app/page.tsx").includes("{RETENCAO_POR_EXTENSO}")) {
+    throw new Error("a FAQ da home não diz o prazo da conta encerrada pela configuração");
+  }
+});
+
+await etapa("nenhuma tela promete que cancelar não apaga nada", () => {
+  /* Era a frase da confirmação de cancelar até 30/09/2026 — e deixou de ser
+   * verdade quando a conta encerrada ganhou prazo. */
+  for (const rel of ["src/components/plano-conta.tsx", "src/app/page.tsx", "src/lib/assinatura.ts"]) {
+    const t = semComentarios(ler(rel));
+    if (/cancel[\s\S]{0,160}nada (é|e) apagado/i.test(t)) throw new Error(`${rel} ainda promete que nada é apagado`);
+  }
+});
+
+await etapa("o operador tem CNPJ no formato certo, ou nenhum", async () => {
+  const { OPERADOR, operadorPorExtenso } = await import("../src/config/documentos-legais.ts");
+  if (OPERADOR.cnpj !== null && !/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(OPERADOR.cnpj)) {
+    throw new Error(`CNPJ fora do formato: ${OPERADOR.cnpj}`);
+  }
+  for (const pagina of ["termos", "privacidade"]) {
+    if (!ler(PAGINAS[pagina]).includes("operadorPorExtenso()")) {
+      throw new Error(`/${pagina} escreve o operador à mão`);
+    }
+  }
+  return operadorPorExtenso();
+});
+
 console.log(falhou ? "\n✗ os textos legais contradizem o sistema" : "\n✓ textos legais coerentes");
 process.exitCode = falhou ? 1 : 0;

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
-import { VERSOES_LEGAIS, dataPorExtenso } from "@/config/documentos-legais";
+import { VERSOES_LEGAIS, dataPorExtenso, operadorPorExtenso } from "@/config/documentos-legais";
+import { RETENCAO_POR_EXTENSO, TOTAL_DE_AVISOS } from "@/config/retencao";
 
 export const metadata: Metadata = {
   title: "Política de Privacidade",
@@ -39,7 +40,7 @@ export default function PrivacidadePage() {
 
       <h2>Quem é o responsável</h2>
       <p>
-        A {marca.nome} é operada por Felipe Carboni Bonamigo. Contato para qualquer assunto de
+        A {marca.nome} é operada por {operadorPorExtenso()}. Contato para qualquer assunto de
         privacidade, inclusive os pedidos descritos abaixo:{" "}
         <a href={marca.whatsappLink}>WhatsApp {marca.whatsappVisivel}</a>.
       </p>
@@ -162,6 +163,12 @@ export default function PrivacidadePage() {
         <li>
           <strong>Enquanto a conta existir.</strong> Galeria que vence vai para o cofre: sai do ar,
           mas <em>nada é apagado</em> — é o comportamento contratado.
+        </li>
+        <li>
+          <strong>Assinatura cancelada, ou pagamento em atraso</strong>: os arquivos ficam{" "}
+          {RETENCAO_POR_EXTENSO} depois do fim do período pago, com {TOTAL_DE_AVISOS} avisos por
+          e-mail antes, e então são apagados. A conta e os dados de cadastro continuam até você
+          pedir a exclusão.
         </li>
         <li>
           <strong>Teste grátis que termina sem assinatura</strong>: os arquivos enviados durante o

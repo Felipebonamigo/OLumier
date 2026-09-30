@@ -6,6 +6,7 @@ import { asaasConfigurado, asaasEmProducao, pagamentosAReceber, pagamentosRecebi
 import { panoramaDosEstudios } from "@/lib/admin";
 import { resumoDaPlataforma } from "@/lib/metricas-admin";
 import { listarCustos } from "@/lib/custos-da-sociedade";
+import { devolucoesPendentes, PRAZO_DA_DEVOLUCAO, type DevolucaoPendente } from "@/lib/devolucao";
 import {
   SISTEMAS_DO_CUSTO,
   ERROS_DO_CUSTO,
@@ -93,7 +94,7 @@ export default async function CaixaDosSociosPage({
   const pedido = mesValido(params.mes);
   const mes = pedido && pedido <= hoje ? pedido : hoje;
 
-  const [leitura, custos, estudios] = await Promise.all([
+  const [leitura, custos, estudios, devolucoes] = await Promise.all([
     lerAsaas(mes),
     /* Sem a migração 047 a tabela não existe: a página abre com a lista vazia
        e avisa, em vez de cair. */
@@ -102,6 +103,8 @@ export default async function CaixaDosSociosPage({
       () => ({ lista: [] as CustoDaSociedade[], ok: false as const }),
     ),
     panoramaDosEstudios(),
+    /* Sem a migração 051, lista vazia em vez de página caída. */
+    devolucoesPendentes().catch(() => [] as DevolucaoPendente[]),
   ]);
 
   const armazenamento = resumoDaPlataforma(estudios).custoMensalCentavos;
@@ -152,6 +155,8 @@ export default async function CaixaDosSociosPage({
         <p className="mt-6 rounded-lg border border-erro/40 bg-erro/10 px-3 py-2 text-sm text-erro">{erroMsg}</p>
       )}
 
+      {devolucoes.length > 0 && <Devolucoes lista={devolucoes} />}
+
       {leitura.tipo === "sem-asaas" && (
         <Aviso>O Asaas não está configurado neste ambiente: dá para ver e mudar os custos, não a receita.</Aviso>
       )}
@@ -176,6 +181,34 @@ export default async function CaixaDosSociosPage({
         estornos e o que foi lançado à mão fora do Asaas.
       </p>
     </main>
+  );
+}
+
+/**
+ * Devolução pedida ao cancelar e ainda não estornada (`lib/devolucao.ts`).
+ * Fica no topo: é dinheiro que já é do cliente, com prazo prometido nos Termos.
+ * Some sozinha quando o aviso de estorno do Asaas chega.
+ */
+function Devolucoes({ lista }: { lista: DevolucaoPendente[] }) {
+  return (
+    <section className="mt-6 rounded-lg border border-alerta/40 bg-alerta/10 px-4 py-3 text-sm text-alerta">
+      <h2 className="font-semibold">
+        {plural(lista.length, "devolução a fazer", "devoluções a fazer")} (prazo: {PRAZO_DA_DEVOLUCAO})
+      </h2>
+      <ul className="mt-2 space-y-1">
+        {lista.map((d) => (
+          <li key={d.id}>
+            {d.nome_estudio}: <strong>{formatarReais(d.valor_centavos)}</strong> da cobrança{" "}
+            <code className="text-xs">{d.cobranca_asaas_id}</code> — pedida em{" "}
+            {new Date(d.pedida_em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} (
+            {d.regra === "arrependimento" ? "arrependimento" : "proporcional"})
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-xs">
+        Estornar esse valor dessa cobrança no painel do Asaas. O aviso de estorno fecha a linha.
+      </p>
+    </section>
   );
 }
 
