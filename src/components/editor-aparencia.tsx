@@ -18,6 +18,8 @@ import {
   temPesoLeve,
   comFormatoDe,
   type Aparencia,
+  type EstiloPastas,
+  type EstiloStream,
   type ViewportPrevia,
 } from "@/config/aparencia";
 import {
@@ -34,7 +36,7 @@ import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 import { medirLogo } from "@/lib/logo-client";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
-import { EsquemaDoFormato } from "@/components/esquema-do-formato";
+import { EsquemaDoEstilo, EsquemaDoFormato } from "@/components/esquema-do-formato";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -488,6 +490,28 @@ function SeletorDeFormato({
           {aviso}
         </p>
       )}
+      {/*
+        O ESTILO DO FORMATO, logo abaixo dele (30/09/2026): "vamos pensar em
+        estilos para pastas e stream". Só aparece o do formato escolhido —
+        quatro cartões de pasta numa entrega em Stream seriam uma pergunta
+        sobre uma tela que ninguém vai ver. A prévia ao lado mostra a escolha.
+      */}
+      {ap.formato === "pastas" && (
+        <EstilosDoFormato
+          titulo="Estilo das pastas"
+          opcoes={OPCOES.estiloPastas}
+          atual={ap.estiloPastas}
+          escolher={(id) => mudar({ ...ap, estiloPastas: id })}
+        />
+      )}
+      {ap.formato === "stream" && (
+        <EstilosDoFormato
+          titulo="Estilo do stream"
+          opcoes={OPCOES.estiloStream}
+          atual={ap.estiloStream}
+          escolher={(id) => mudar({ ...ap, estiloStream: id })}
+        />
+      )}
       {ap.formato === "pastas" && (
         <p className="text-[11px] leading-snug text-texto-faint">
           A capa de cada pasta é a primeira foto do capítulo. Para trocar, na aba Fotos passe o
@@ -496,12 +520,53 @@ function SeletorDeFormato({
       )}
       {ap.formato === "stream" && (
         <p className="text-[11px] leading-snug text-texto-faint">
-          Cada capítulo vira uma fileira de episódios, na ordem da aba Fotos. As fotos da entrega
+          Cada capítulo vira um bloco de episódios — fileira, temporada ou seção, conforme o estilo —, na ordem da aba Fotos. As fotos da entrega
           continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio
           — troque na aba Fotos se quiser outra.
         </p>
       )}
     </>
+  );
+}
+
+/** Os cartões de estilo de um formato — esquema, nome e o que ele faz. */
+function EstilosDoFormato<T extends EstiloPastas | EstiloStream>({
+  titulo,
+  opcoes,
+  atual,
+  escolher,
+}: {
+  titulo: string;
+  opcoes: readonly { id: T; nome: string; desc: string }[];
+  atual: T;
+  escolher: (id: T) => void;
+}) {
+  return (
+    <div>
+      <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
+      <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {opcoes.map((op) => {
+          const ativo = atual === op.id;
+          return (
+            <button
+              key={op.id}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => escolher(op.id)}
+              className={`rounded-lg border p-2.5 text-left transition ${
+                ativo ? "border-acento bg-acento/5" : "border-linha hover:border-acento hover:bg-acento/5"
+              }`}
+            >
+              <span className="mb-2 block h-16 overflow-hidden rounded-md border border-linha bg-carbon-2">
+                <EsquemaDoEstilo estilo={op.id} />
+              </span>
+              <span className="block text-sm font-medium">{op.nome}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">{op.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

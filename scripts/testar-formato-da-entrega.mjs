@@ -125,6 +125,32 @@ etapa("formato não tira a galeria do estilo nem do padrão", () => {
   }
 });
 
+etapa("o desenho das pastas e do stream anda com o formato, não com o estilo", () => {
+  const atual = ap.lerAparencia({ formato: "stream", estiloStream: "mostra", estiloPastas: "indice" });
+  const depois = ap.comFormatoDe(ap.presetPorId("atelie").aparencia, atual);
+  igual([depois.formato, depois.estiloStream, depois.estiloPastas], ["stream", "mostra", "indice"], "estrutura");
+  const revista = ap.presetPorId("revista").aparencia;
+  if (!ap.mesmaAparencia({ ...revista, estiloStream: "vitrine" }, revista)) {
+    throw new Error("trocar o desenho do stream tirou a galeria do padrão");
+  }
+});
+
+etapa("desenho gravado antes do eixo, ou estranho, cai no primeiro", () => {
+  igual(ap.lerAparencia({}).estiloPastas, "pilha", "pastas");
+  igual(ap.lerAparencia({}).estiloStream, "cinema", "stream");
+  igual(ap.lerAparencia({ estiloStream: "netflix" }).estiloStream, "cinema", "fora da lista");
+});
+
+etapa("a sala Cinema escurece o tema claro, e deixa o escuro como está", () => {
+  const claro = ap.lerAparencia({ tema: "claro", formato: "stream", estiloStream: "cinema" });
+  igual(ap.variaveisDaEntrega(claro, "stream")["--g-fundo"], ap.SALA_ESCURA["--g-fundo"], "claro vira sala escura");
+  const noite = ap.lerAparencia({ tema: "noite", formato: "stream", estiloStream: "cinema" });
+  igual(ap.variaveisDaEntrega(noite, "stream")["--g-fundo"], ap.TEMAS.noite["--g-fundo"], "noite fica noite");
+  const vitrine = ap.lerAparencia({ tema: "claro", formato: "stream", estiloStream: "vitrine" });
+  igual(ap.variaveisDaEntrega(vitrine, "stream")["--g-fundo"], ap.TEMAS.claro["--g-fundo"], "vitrine segue o tema");
+  igual(ap.variaveisDaEntrega(claro, "galeria")["--g-fundo"], ap.TEMAS.claro["--g-fundo"], "fora do stream, nada muda");
+});
+
 etapa("todo estilo pronto nasce em galeria", () => {
   const fora = ap.PRESETS.filter((p) => p.aparencia.formato !== "galeria").map((p) => p.id);
   igual(fora, [], "presets com outro formato");

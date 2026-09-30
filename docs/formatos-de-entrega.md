@@ -48,6 +48,31 @@ A regra mora em `lib/formato-da-entrega.ts` e está presa em
 - Sempre abrem a galeria: um capítulo aberto (é entrar na pasta), a busca por
   rosto (`?fotos=`) e o "Ver as fotos" do stream (`?ver=galeria`).
 
+## Estilos de cada formato (30/09/2026)
+
+"Vamos pensar em estilos para pastas e stream" — e, no meio do trabalho: "um
+dos formatos pode ser igual Netflix, e outros parecidos com streamings". Cada
+formato ganhou desenhos próprios, escolhidos em **Design → Formato**, logo
+abaixo dos três cartões (eixos `estiloPastas` e `estiloStream`). Andam com o
+formato, não com o estilo: aplicar "Revista" não muda o desenho das pastas.
+
+| Pastas | |
+|---|---|
+| **Pilha** (padrão) | a capa e cópias atrás, em leque no hover |
+| **Capas** | cartaz: foto alta, nome escrito sobre ela (branco sobre véu, em qualquer tema) |
+| **Índice** | sumário: número e nome grandes na letra do título, tira de fotos ao lado |
+| **Mosaico** | folha de contato: capa e duas fotos, com "+N" do que falta ver |
+
+| Stream | inspiração | |
+|---|---|---|
+| **Cinema** (padrão) | plataformas de série | sala escura **sempre** (troca o tema claro pela `SALA_ESCURA`), capa em tela cheia à esquerda, botão branco, fileiras com o nome sobre o cartão |
+| **Episódios** | página de série | capa dividida, capítulos como temporadas em abas, lista de episódios |
+| **Vitrine** | lojas de filme mais limpas | título-manchete, destaque em cartão grande arredondado, grade de cartões largos; segue o tema |
+| **Mostra** | sites de festival | programa tipográfico em lista, a imagem aparece à direita no hover (no toque, miniatura na linha) |
+
+Os nomes na tela são nossos e neutros — nenhum cita serviço de streaming: a
+entrega é do fotógrafo e não pode anunciar a marca de ninguém.
+
 ## Pastas
 
 Cada pasta é uma **pilha de cópias** — a capa na frente e duas fotos do mesmo

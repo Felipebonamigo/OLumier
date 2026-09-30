@@ -314,6 +314,9 @@ const COM_PECA_PROPRIA = {
   tipografia: "<SeletorDeFonte",
   logo: "<BarraDaLogo",
   formato: "<SeletorDeFormato",
+  /* O desenho de cada formato mora dentro do grupo Formato, em cartões. */
+  estiloPastas: "opcoes={OPCOES.estiloPastas}",
+  estiloStream: "opcoes={OPCOES.estiloStream}",
 };
 const forasDaTela = Object.keys(OPCOES).filter((eixo) =>
   COM_PECA_PROPRIA[eixo] ? !editor.includes(COM_PECA_PROPRIA[eixo]) : !editor.includes(`eixo="${eixo}"`),

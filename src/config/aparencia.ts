@@ -395,6 +395,50 @@ export type CartaoDoLink = "sobreposto" | "foto";
 export type Formato = "galeria" | "pastas" | "stream";
 
 /**
+ * A CARA DAS PASTAS E DO STREAM (30/09/2026).
+ *
+ * Felipe, depois de ver os dois formatos no ar: "vamos pensar em estilos para
+ * pastas e stream". A galeria tem capa, grade e densidade para escolher; os
+ * formatos novos nasceram com um desenho só cada um — e um desenho só é a
+ * mesma entrega para todo fotógrafo, que é o que a marca pede para não
+ * existir (`docs/estrategia-de-marca.md`, §9).
+ *
+ * PASTAS
+ *   pilha     a capa na frente e duas cópias atrás, que se abrem em leque — o
+ *             maço de fotos na mesa. O primeiro desenho, e o padrão.
+ *   capas     cada pasta é um cartaz: a foto grande, alta, com o nome escrito
+ *             sobre ela. A foto manda; é a mais "revista".
+ *   indice    um sumário: número grande, nome na letra do título e uma tira
+ *             de fotos ao lado. Tipográfico, como o índice de um livro.
+ *   mosaico   uma folha de contato por pasta: a capa e três fotos em grade,
+ *             o capítulo mostrado pelo que tem dentro.
+ *
+ * STREAM — quatro salas, cada uma na linha de um serviço de streaming que o
+ * cliente já sabe usar (Felipe: "um dos formatos pode ser igual Netflix, e
+ * outros parecidos com streamings"). Os NOMES na tela são nossos e neutros:
+ * a entrega é do fotógrafo, e ela não pode anunciar a marca de ninguém.
+ *
+ *   cinema    a sala escura das plataformas de série: capa em tela cheia
+ *             alinhada à esquerda, botão branco de assistir, fileiras que
+ *             rolam de lado com o título sobre o cartão. É o único que IGNORA
+ *             o tema claro — sala de cinema clara não existe. O padrão.
+ *   episodios a página de uma série: capa dividida, os capítulos como
+ *             temporadas em abas e a lista de episódios um embaixo do outro,
+ *             com número, duração e quanto já foi visto.
+ *   vitrine   a linha das lojas de filme mais limpas: o destaque num cartão
+ *             grande e arredondado, e os outros em cartões largos, com muito
+ *             respiro. Segue o tema — no claro fica branca e calma.
+ *   mostra    o programa de festival: os títulos grandes, em lista, na letra
+ *             da galeria; a imagem aparece ao passar o mouse. O mais
+ *             tipográfico, para o filmmaker que é autor.
+ *
+ * Os dois andam JUNTO do formato, e não dos estilos: são a estrutura da
+ * entrega vista de perto. Ver `EIXOS_DA_ESTRUTURA`.
+ */
+export type EstiloPastas = "pilha" | "capas" | "indice" | "mosaico";
+export type EstiloStream = "cinema" | "episodios" | "vitrine" | "mostra";
+
+/**
  * Quantas fotos a prévia do editor desenha.
  *
  * A prévia é a galeria pública de verdade, renderizada no tamanho de uma tela
@@ -528,6 +572,10 @@ export interface Aparencia {
   cartao: CartaoDoLink;
   /** Galeria, pastas ou stream. Ver `Formato`. */
   formato: Formato;
+  /** Como as pastas se desenham. Ver `EstiloPastas`. */
+  estiloPastas: EstiloPastas;
+  /** Como o stream se desenha. Ver `EstiloStream`. */
+  estiloStream: EstiloStream;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
 }
@@ -594,6 +642,10 @@ export const APARENCIA_PADRAO: Aparencia = {
   rotulo: "",
   /* `galeria` é a estrutura de toda entrega até 30/09/2026. Ver `Formato`. */
   formato: "galeria",
+  /* Os primeiros desenhos de cada formato — quem já escolheu pastas ou stream
+     continua vendo exatamente o que viu. */
+  estiloPastas: "pilha",
+  estiloStream: "cinema",
 };
 
 /**
@@ -737,6 +789,8 @@ export function lerAparencia(bruto: unknown): Aparencia {
     rotulo: typeof o.rotulo === "string" ? o.rotulo.trim().slice(0, 40) : APARENCIA_PADRAO.rotulo,
     cartao: valida(o.cartao, OPCOES.cartao.map((x) => x.id), APARENCIA_PADRAO.cartao),
     formato: valida(o.formato, OPCOES.formato.map((x) => x.id), APARENCIA_PADRAO.formato),
+    estiloPastas: valida(o.estiloPastas, OPCOES.estiloPastas.map((x) => x.id), APARENCIA_PADRAO.estiloPastas),
+    estiloStream: valida(o.estiloStream, OPCOES.estiloStream.map((x) => x.id), APARENCIA_PADRAO.estiloStream),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
        "sujo/publicado" do editor iguais ao que eram. */
@@ -998,7 +1052,19 @@ export const OPCOES = {
   formato: [
     { id: "galeria", nome: "Galeria", desc: "Tudo numa rolagem só, capítulo depois de capítulo" },
     { id: "pastas", nome: "Pastas", desc: "Cada capítulo vira uma pasta com capa; as fotos ficam dentro" },
-    { id: "stream", nome: "Stream", desc: "Os vídeos em tela de cinema, com fileiras e próximo episódio" },
+    { id: "stream", nome: "Stream", desc: "Os vídeos como num serviço de streaming, com próximo episódio" },
+  ],
+  estiloPastas: [
+    { id: "pilha", nome: "Pilha", desc: "A capa na frente e cópias atrás, que se abrem em leque" },
+    { id: "capas", nome: "Capas", desc: "Cada pasta é um cartaz: foto alta com o nome por cima" },
+    { id: "indice", nome: "Índice", desc: "Um sumário: número, nome grande e uma tira de fotos" },
+    { id: "mosaico", nome: "Mosaico", desc: "Folha de contato: a capa e três fotos de cada pasta" },
+  ],
+  estiloStream: [
+    { id: "cinema", nome: "Cinema", desc: "Sala escura: capa em tela cheia e fileiras que rolam de lado" },
+    { id: "episodios", nome: "Episódios", desc: "Página de série: capítulos como temporadas e a lista de episódios" },
+    { id: "vitrine", nome: "Vitrine", desc: "Cartões grandes e arredondados, o filme principal em destaque" },
+    { id: "mostra", nome: "Mostra", desc: "Programa de festival: títulos grandes em lista, a imagem no hover" },
   ],
 } as const;
 
@@ -1051,19 +1117,19 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Banca de jornal: fundo claro, letra grande e tudo de canto vivo.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Terrosa, manuscrita e de cantos macios. Clima de ateliê.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     /*
@@ -1099,13 +1165,13 @@ export const PRESETS: Preset[] = [
     id: "marfim",
     nome: "Marfim",
     desc: "Creme e manuscrita, fotos rentes. É o desenho da nossa página inicial.",
-    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho e de canto vivo.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     /*
@@ -1122,7 +1188,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -1145,25 +1211,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, foto em arco e cantos bem macios. Clima de papel timbrado.",
-    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto, destaques grandes e canto vivo, como editorial de moda.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro, com a foto grande e limpa.",
-    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco, muito espaço e cantos arredondados. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema" },
   },
 ];
 
@@ -1206,18 +1272,25 @@ export function presetEquivalente(a: Aparencia): string | null {
  * das chaves não decidir nada — o editor espalha objetos, e `{...ap, cores}`
  * põe a cor no fim de um e no meio do outro.
  */
+/**
+ * Os eixos que são a ESTRUTURA da entrega, e não a cara dela: o formato e o
+ * desenho de cada formato. Andam juntos — um estilo aplicado não mexe em
+ * nenhum deles, e a comparação "está no meu padrão?" não olha para eles.
+ */
+export const EIXOS_DA_ESTRUTURA = ["formato", "estiloPastas", "estiloStream"] as const;
+
 /*
  * O FORMATO FICA FORA DA COMPARAÇÃO (30/09/2026): estilo é cara, formato é
  * estrutura (ver `Formato`). Uma entrega em Stream com a cara exata do padrão
  * do estúdio ESTÁ no padrão — e o cartão dele tem de dizer isso.
  */
 export function mesmaAparencia(a: unknown, b: unknown): boolean {
-  const semFormato = (x: unknown) => {
-    const { formato: _formato, ...resto } = lerAparencia(x);
-    void _formato;
-    return JSON.stringify(resto);
+  const semEstrutura = (x: unknown) => {
+    const lida: Record<string, unknown> = { ...lerAparencia(x) };
+    for (const eixo of EIXOS_DA_ESTRUTURA) delete lida[eixo];
+    return JSON.stringify(lida);
   };
-  return semFormato(a) === semFormato(b);
+  return semEstrutura(a) === semEstrutura(b);
 }
 
 /**
@@ -1229,7 +1302,12 @@ export function mesmaAparencia(a: unknown, b: unknown): boolean {
  * nem ter olhado para ele.
  */
 export function comFormatoDe(estilo: Aparencia, atual: Aparencia): Aparencia {
-  return { ...estilo, formato: atual.formato };
+  return {
+    ...estilo,
+    formato: atual.formato,
+    estiloPastas: atual.estiloPastas,
+    estiloStream: atual.estiloStream,
+  };
 }
 
 /**
@@ -1388,6 +1466,55 @@ export function variaveisDeForma(a: Aparencia): Record<string, string> {
        fotos, de propósito — ver `OPCOES.canto`. */
     "--g-pilula": `${raioDaPilulaPx(a.canto)}px`,
   };
+}
+
+/**
+ * A SALA ESCURA do estilo Cinema do stream (30/09/2026).
+ *
+ * É o único desenho que não segue o tema: a sala das plataformas de série é
+ * escura por definição, e "igual Netflix" num fundo branco não é igual a
+ * nada. Cinzas neutros, sem o âmbar da casa — o botão de assistir é branco
+ * com texto preto, que é o que o cliente reconhece. A LETRA continua sendo a
+ * da galeria, e a logo continua sendo a do estúdio: a sala é escura, mas é a
+ * sala do fotógrafo.
+ *
+ * Quem escolheu o tema noite (ou cores próprias escuras) já está no escuro,
+ * e aí o tema dele vale — ver `variaveisDaEntrega`.
+ */
+export const SALA_ESCURA: Record<string, string> = {
+  "--g-fundo": "#0b0b0c",
+  "--g-superficie": "#1a1a1c",
+  "--g-texto": "#f5f5f5",
+  "--g-suave": "#b3b3b3",
+  "--g-tenue": "#7c7c7c",
+  "--g-linha": "rgba(255,255,255,.14)",
+  "--g-destaque": "#f5f5f5",
+  "--g-sobre-destaque": "#0b0b0c",
+};
+
+/**
+ * As variáveis de cor da página inteira, pela tela que ela mostra. Igual a
+ * `variaveisDoTema` em tudo, menos no Stream em Cinema com fundo claro, que
+ * vira a sala escura — a página INTEIRA, rodapé incluído, senão sobraria uma
+ * faixa branca embaixo da sala.
+ */
+export function variaveisDaEntrega(a: Aparencia, tela: "galeria" | "pastas" | "stream"): Record<string, string> {
+  const doTema = variaveisDoTema(a);
+  if (tela !== "stream" || a.estiloStream !== "cinema") return doTema;
+  const fundo = doTema["--g-fundo"] ?? "#000000";
+  return luminanciaHex(fundo) < 0.2 ? doTema : { ...doTema, ...SALA_ESCURA };
+}
+
+/** Luminância relativa de um `#rrggbb` (0 = preto, 1 = branco). */
+function luminanciaHex(hex: string): number {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return 0;
+  const n = parseInt(m[1], 16);
+  const canal = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * canal((n >> 16) & 255) + 0.7152 * canal((n >> 8) & 255) + 0.0722 * canal(n & 255);
 }
 
 export function variaveisDoTema(a: Aparencia): Record<string, string> {
