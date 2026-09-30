@@ -24,6 +24,7 @@ import { estudioDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 
 const { definirPixiesetLiberado } = await import("../src/lib/acesso-pixieset.ts");
 const { loginDoPixiesetLiberado } = await import("../src/config/pixieset.ts");
+const { hashDeEmail } = await import("../src/lib/ip.ts");
 
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
@@ -69,10 +70,11 @@ await etapa("liberar grava o carimbo e registra quem fez", async () => {
   if (!loginDoPixiesetLiberado(linha)) throw new Error("a regra não reconheceu");
   carimbo = linha.pixieset_liberado_em.getTime();
   const ev = await eventos("pixieset.liberado");
-  if (ev.length !== 1 || ev[0].detalhe?.por !== ADMIN.email) {
+  /* O e-mail do admin vai em hash, nunca cru: o registro é imutável. */
+  if (ev.length !== 1 || ev[0].detalhe?.por_hash !== hashDeEmail(ADMIN.email) || ev[0].detalhe?.por) {
     throw new Error(`auditoria: ${JSON.stringify(ev)}`);
   }
-  return `por ${ev[0].detalhe.por}`;
+  return `por ${ev[0].detalhe.adminId}`;
 });
 
 await etapa("apertar de novo não mexe no carimbo nem repete o evento", async () => {

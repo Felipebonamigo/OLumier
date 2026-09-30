@@ -28,6 +28,7 @@
 import pg from "pg";
 import { galeriasVencidasNaLixeira, destruirGaleria, PRAZO_LIXEIRA_DIAS } from "../src/lib/tenants.ts";
 import { rodarLimpezaDeTestes, TETO_POR_RODADA } from "../src/lib/testes-abandonados.ts";
+import { rodarRetencaoDeContasEncerradas } from "../src/lib/contas-encerradas.ts";
 
 const APLICAR = process.argv.includes("--aplicar");
 /* Só à mão, depois de conferir a lista do alerta — ver "o teto" em
@@ -99,6 +100,31 @@ try {
     }
   } catch (e) {
     console.error("  ✗ a limpeza dos testes falhou:", e);
+    process.exitCode = 1;
+  }
+
+  /* ── a conta encerrada ──────────────────────────────────────────────────
+     Cancelada ou inadimplente: três meses depois do fim do período pago, com
+     quatro avisos (src/lib/contas-encerradas.ts). Bloco próprio pelo mesmo
+     motivo do de cima. */
+  console.log("\ncontas encerradas");
+  try {
+    const r = await rodarRetencaoDeContasEncerradas({ aplicar: APLICAR, liberarTeto: LIBERAR_TETO });
+    if (!r.ligada) {
+      console.log("  desligada — precisa do e-mail E da cobrança ligados; nada foi avisado nem apagado");
+    } else {
+      for (const l of r.linhas) console.log(`  ${l}`);
+      console.log(
+        `  ${APLICAR ? "✓" : "(simulação)"} avisos: ${r.avisos} · contas limpas: ${r.apagadas}` +
+          (r.falhasDeEnvio ? ` · e-mails que não saíram: ${r.falhasDeEnvio} (tentam amanhã)` : "") +
+          (r.travadasPeloTeto
+            ? ` · PARADA PELO TETO (${r.travadasPeloTeto} > ${TETO_POR_RODADA}): nada apagado, alerta enviado`
+            : ""),
+      );
+      if (r.travadasPeloTeto) process.exitCode = 1;
+    }
+  } catch (e) {
+    console.error("  ✗ a limpeza das contas encerradas falhou:", e);
     process.exitCode = 1;
   }
 } finally {

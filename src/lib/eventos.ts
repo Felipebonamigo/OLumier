@@ -47,6 +47,15 @@ export const ACOES = {
    * disputa a pergunta vai ser "fui avisado? quando?". */
   AVISO_LIMPEZA_ENVIADO: "conta.aviso_limpeza",
   ARQUIVOS_DO_TESTE_APAGADOS: "conta.arquivos_apagados",
+  /* A conta encerrada (migração 052): cancelada ou inadimplente, três meses
+   * depois do fim do período pago, com quatro avisos antes. Mesma pergunta de
+   * disputa do teste abandonado — "fui avisado? quando? para onde?". */
+  AVISO_RETENCAO_ENVIADO: "conta.aviso_retencao",
+  ARQUIVOS_DA_CONTA_ENCERRADA_APAGADOS: "conta.encerrada.arquivos_apagados",
+  /* A devolução pedida ao cancelar (migração 052): quanto, de qual cobrança,
+   * e por qual regra. "Cancelei no segundo mês e não me devolveram nada" é a
+   * reclamação previsível do anual, e a resposta tem de ter data e valor. */
+  DEVOLUCAO_PEDIDA: "assinatura.devolucao",
   /* Galeria criada por um programa, não por um clique no painel — hoje, o
    * Atomatiza criando a galeria de um contrato pela chave de API. Entra na
    * lista porque é ACESSO: a pergunta de disputa é "quem criou isto?", e a

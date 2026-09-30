@@ -31,6 +31,7 @@ import { listarChaves } from "@/lib/chaves-api";
 import { estadoDoCanal } from "@/lib/avisos";
 import { MINIMO_SENHA } from "@/lib/recuperacao";
 import { urlDeLeitura } from "@/lib/r2";
+import { dataPrometidaParaApagar } from "@/lib/contas-encerradas";
 
 export const metadata: Metadata = { title: "Conta" };
 export const dynamic = "force-dynamic";
@@ -93,6 +94,8 @@ export default async function ContaPage() {
           Math.ceil((new Date(tenant.trial_ate).getTime() - Date.now()) / (24 * 60 * 60 * 1000)),
         )
       : null;
+
+  const apagarEm = dataPrometidaParaApagar(tenant);
 
   // Só consulta o Asaas se houver assinatura — evita chamada externa à toa.
   const cobranca =
@@ -257,6 +260,25 @@ export default async function ContaPage() {
             dentro de `!podeEnviar`, e um aviso enfiado lá nunca apareceria.
             Cor de aviso, não de erro: nada está errado, só tem data para
             acabar. */}
+        {/* A data que o último aviso prometeu, quando a conta encerrada já
+            entrou no calendário de exclusão. Está nos e-mails; aqui é para
+            quem abre o painel antes de abrir o e-mail. */}
+        {apagarEm && (
+          <p
+            role="status"
+            className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta"
+          >
+            Os arquivos desta conta serão apagados em{" "}
+            {apagarEm.toLocaleDateString("pt-BR", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+              timeZone: "America/Sao_Paulo",
+            })}
+            . Reativar a assinatura antes dessa data mantém tudo como está.
+          </p>
+        )}
+
         {situacaoEnvio.aviso && (
           <p
             role="status"

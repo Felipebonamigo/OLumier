@@ -1,6 +1,7 @@
 import "server-only";
 import { consultarUm } from "@/lib/db";
 import { ACOES, registrarEvento } from "@/lib/eventos";
+import { hashDeEmail } from "@/lib/ip";
 
 /**
  * Libera ou bloqueia o "Entrar com a conta do Pixieset" de UM estúdio.
@@ -41,7 +42,9 @@ export async function definirPixiesetLiberado(
     acao: liberar ? ACOES.PIXIESET_LIBERADO : ACOES.PIXIESET_BLOQUEADO,
     alvoTipo: "conta",
     alvoId: estudioId,
-    detalhe: { por: admin.email, adminId: admin.id },
+    /* O e-mail do admin vai em hash: o registro não se apaga, e o
+       `adminId` já diz quem foi (ver `hashDeEmail`). */
+    detalhe: { por_hash: hashDeEmail(admin.email), adminId: admin.id },
   });
 
   return liberar ? "liberado" : "bloqueado";

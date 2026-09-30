@@ -470,6 +470,34 @@ export async function temCobrancaPaga(assinaturaId: string): Promise<boolean> {
   return (r.data ?? []).some((c) => PAGAS.has(c.status ?? ""));
 }
 
+/**
+ * A cobrança que pagou o período em curso: a paga mais recente da assinatura.
+ *
+ * É dela que sai o valor da devolução ao cancelar (`config/devolucao.ts`) e o
+ * id que a pessoa estorna no painel do Asaas. "Mais recente" pela data em que
+ * o dinheiro foi confirmado, com o vencimento de reserva — a lista do Asaas não
+ * promete ordem.
+ */
+export async function ultimaCobrancaPaga(
+  assinaturaId: string,
+): Promise<{ id: string; centavos: number } | null> {
+  const r = await chamar<{
+    data?: {
+      id: string;
+      status?: string;
+      value?: number;
+      confirmedDate?: string | null;
+      paymentDate?: string | null;
+      dueDate?: string | null;
+    }[];
+  }>(`/subscriptions/${segmento(assinaturaId)}/payments?limit=100`);
+  const pagas = (r.data ?? []).filter((c) => PAGAS.has(c.status ?? ""));
+  if (pagas.length === 0) return null;
+  const quando = (c: (typeof pagas)[number]) => c.confirmedDate ?? c.paymentDate ?? c.dueDate ?? "";
+  const ultima = pagas.reduce((a, b) => (quando(b) > quando(a) ? b : a));
+  return { id: ultima.id, centavos: Math.round((ultima.value ?? 0) * 100) };
+}
+
 export async function cancelarAssinatura(assinaturaId: string) {
   return chamar(`/subscriptions/${assinaturaId}`, { method: "DELETE" });
 }
