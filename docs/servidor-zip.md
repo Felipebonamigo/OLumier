@@ -121,8 +121,15 @@ originais **descem inteiros** à frente do que está sendo escrito, ao mesmo
 tempo, até somarem `ZIP_MEMORIA_A_FRENTE_MB` (256): o B2 está a 150–220 ms
 daqui e cada foto é um pedido novo. Até 30/09/2026 eles eram só *abertos* à
 frente — o corpo esperava a vez, e o ZIP descia do B2 uma foto por vez: 326
-KB/s montando contra 2,4 MB/s do disco, na mesma galeria. Arquivo acima de
-64 MB (vídeo) continua só aberto, e desce em fluxo na vez dele.
+KB/s montando contra 2,4 MB/s do disco, na mesma galeria; depois da troca,
+11,6 MB/s montando. Arquivo acima de 64 MB (vídeo) continua só aberto, e
+desce em fluxo na vez dele.
+
+A memória dessas buscas tem um segundo teto, do **servidor inteiro**:
+`ZIP_MEMORIA_TOTAL_MB` (1024), dividido entre todas as montagens que estiverem
+andando. Com várias galerias montando juntas, quem chega com o teto cheio
+desce só a foto da vez e a seguinte — mais devagar, nunca sem memória. Baixar
+do disco não usa nada disto; só montar.
 
 ## Instalar
 

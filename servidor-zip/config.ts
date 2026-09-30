@@ -9,7 +9,8 @@
  *   ZIP_CACHE_DIAS         dias sem pedido até apagar um ZIP pronto (padrão 14)
  *   ZIP_CACHE_MAX_GB       teto do disco; passou, apaga o mais antigo (padrão 150)
  *   ZIP_BUSCAS_PARALELAS   quantos originais descem à frente, ao mesmo tempo (padrão 8)
- *   ZIP_MEMORIA_A_FRENTE_MB  teto de memória dessas buscas (padrão 256)
+ *   ZIP_MEMORIA_A_FRENTE_MB  teto de memória dessas buscas, por montagem (padrão 256)
+ *   ZIP_MEMORIA_TOTAL_MB   o mesmo teto para o servidor inteiro, somando todas (padrão 1024)
  */
 
 function inteiro(nome: string, padrao: number): number {
@@ -26,6 +27,7 @@ export const CONFIG = {
   cacheMaxBytes: inteiro("ZIP_CACHE_MAX_GB", 150) * 1024 ** 3,
   buscasParalelas: inteiro("ZIP_BUSCAS_PARALELAS", 8),
   memoriaAFrente: inteiro("ZIP_MEMORIA_A_FRENTE_MB", 256) * 1024 * 1024,
+  memoriaTotal: inteiro("ZIP_MEMORIA_TOTAL_MB", 1024) * 1024 * 1024,
 };
 
 export function conferirConfig(): string[] {

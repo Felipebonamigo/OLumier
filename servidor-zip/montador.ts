@@ -29,9 +29,59 @@ import { CONFIG } from "./config.ts";
  * contra 2,4 MB/s no segundo (do disco). A diferença inteira era esta.
  *
  * Agora a foto que cabe na memória é baixada INTEIRA na busca à frente, e N
- * fotos descem ao mesmo tempo. O teto de memória é `CONFIG.memoriaAFrente`;
- * arquivo grande (vídeo) continua só aberto, e desce em fluxo na vez dele.
+ * fotos descem ao mesmo tempo. Arquivo grande (vídeo) continua só aberto, e
+ * desce em fluxo na vez dele.
+ *
+ * ── DOIS TETOS DE MEMÓRIA ─────────────────────────────────────────────────
+ *
+ * `CONFIG.memoriaAFrente` vale por montagem; `CONFIG.memoriaTotal`, para o
+ * SERVIDOR inteiro. O segundo existe pela pergunta do Felipe no mesmo dia —
+ * "e se tivermos várias pessoas, com várias galerias?": 256 MB por montagem
+ * vezes quinze galerias montando juntas passa dos 4 GB da máquina. Com o teto
+ * global, quem chega com o servidor cheio desce uma foto à frente, não oito —
+ * mais devagar, nunca sem memória. A foto da vez e a seguinte são pedidas
+ * sempre: é o que garante que toda montagem anda.
  */
+
+/** O que as buscas à frente de TODAS as montagens seguram agora, em bytes. */
+let reservadoNoServidor = 0;
+
+/** Para o teste (e para um dia aparecer no /saude). */
+export function memoriaReservada(): number {
+  return reservadoNoServidor;
+}
+
+/**
+ * A parte de uma montagem no teto global. `liberar` pode ser chamada mais de
+ * uma vez para a mesma foto; `liberarTudo` fecha a conta quando a montagem
+ * termina — inteira, com erro ou abandonada no meio.
+ */
+export interface Conta {
+  reservar: (i: number, bytes: number) => void;
+  liberar: (i: number) => void;
+  liberarTudo: () => void;
+}
+
+export function novaConta(): Conta {
+  const minhas = new Map<number, number>();
+  const liberar = (i: number) => {
+    const b = minhas.get(i);
+    if (b === undefined) return;
+    minhas.delete(i);
+    reservadoNoServidor -= b;
+  };
+  return {
+    reservar: (i, bytes) => {
+      liberar(i);
+      minhas.set(i, bytes);
+      reservadoNoServidor += bytes;
+    },
+    liberar,
+    liberarTudo: () => {
+      for (const i of [...minhas.keys()]) liberar(i);
+    },
+  };
+}
 
 const TENTATIVAS = 3;
 const ESPERAS_MS = [1_000, 4_000];
@@ -128,75 +178,95 @@ export interface FonteDeUrls {
  * falhar, o erro só é visto na vez dela, e a nova tentativa acontece ali.
  *
  * N é `CONFIG.buscasParalelas`, e para antes se as fotos à frente somarem mais
- * que `CONFIG.memoriaAFrente` — uma sequência de vídeos de 60 MB não pode
- * encher a máquina. A próxima foto é pedida sempre.
+ * que `CONFIG.memoriaAFrente`, ou se o servidor inteiro já segura
+ * `CONFIG.memoriaTotal` (ver "dois tetos", no alto). A próxima foto é pedida
+ * sempre.
  */
-export function arquivosDoManifesto(manifesto: Manifesto, fonte: FonteDeUrls): ArquivoDoZip[] {
+export function arquivosDoManifesto(
+  manifesto: Manifesto,
+  fonte: FonteDeUrls,
+  conta: Conta = novaConta(),
+): ArquivoDoZip[] {
   let urls = manifesto.arquivos.map((a) => a.url ?? "");
   const janela = new Map<number, Promise<Aberto>>();
 
-  const pedir = (i: number) => {
-    if (!janela.has(i) && i < urls.length) {
-      const p = abrir(urls[i], manifesto.arquivos[i].tamanho);
-      p.catch(() => {}); // a rejeição é tratada na vez dele
-      janela.set(i, p);
+  /** Pede a foto i. Sem `obrigatoria`, desiste (false) se o servidor estiver cheio. */
+  const pedir = (i: number, obrigatoria: boolean): boolean => {
+    if (i >= urls.length) return false;
+    if (janela.has(i)) return true;
+    const tamanho = manifesto.arquivos[i].tamanho;
+    if (tamanho <= TETO_EM_MEMORIA) {
+      if (!obrigatoria && reservadoNoServidor + tamanho > CONFIG.memoriaTotal) return false;
+      conta.reservar(i, tamanho);
     }
+    const p = abrir(urls[i], tamanho);
+    p.catch(() => {}); // a rejeição é tratada na vez dele
+    janela.set(i, p);
+    return true;
   };
 
   async function renovarUrls() {
     const novo = await fonte.renovar();
     urls = novo.arquivos.map((a) => a.url ?? "");
     janela.clear();
+    conta.liberarTudo();
   }
 
   return manifesto.arquivos.map((a: ArquivoDoManifesto, i: number) => ({
     nome: a.nome,
     tamanho: a.tamanho,
     abrir: async function* () {
-      for (let tentativa = 1; ; tentativa++) {
-        pedir(i);
-        for (let j = 1; j <= CONFIG.buscasParalelas; j++) {
-          if (j > 1 && naMemoria(manifesto.arquivos, i, j) > CONFIG.memoriaAFrente) break;
-          pedir(i + j);
-        }
-        try {
-          const aberto = await janela.get(i)!;
-          janela.delete(i);
-          if (aberto.status === 403 || aberto.status === 401) {
-            /* A URL venceu — 6 h se passaram. Renova todas e tenta de novo,
-               sem gastar uma das tentativas: não foi falha, foi o tempo. */
-            await renovarUrls();
-            tentativa--;
-            continue;
+      try {
+        for (let tentativa = 1; ; tentativa++) {
+          pedir(i, true);
+          for (let j = 1; j <= CONFIG.buscasParalelas; j++) {
+            if (j > 1 && naMemoria(manifesto.arquivos, i, j) > CONFIG.memoriaAFrente) break;
+            if (!pedir(i + j, j === 1)) break;
           }
-          if (aberto.status !== 200) throw new Error(`HTTP ${aberto.status}`);
-          if (aberto.pedacos) {
-            for (const pedaco of aberto.pedacos) yield pedaco;
+          try {
+            const aberto = await janela.get(i)!;
+            janela.delete(i);
+            if (aberto.status === 403 || aberto.status === 401) {
+              /* A URL venceu — 6 h se passaram. Renova todas e tenta de novo,
+                 sem gastar uma das tentativas: não foi falha, foi o tempo. */
+              await renovarUrls();
+              tentativa--;
+              continue;
+            }
+            if (aberto.status !== 200) throw new Error(`HTTP ${aberto.status}`);
+            if (aberto.pedacos) {
+              for (const pedaco of aberto.pedacos) yield pedaco;
+              return;
+            }
+            /*
+             * Arquivo grande: em fluxo. Os bytes já entregues não voltam — se a
+             * falha for no meio, o ZIP está perdido de qualquer jeito, e conta
+             * com a conferência do escritor. Por isso só vai assim o que não
+             * cabe na memória.
+             */
+            if (!aberto.resposta?.body) throw new Error(`HTTP ${aberto.status} sem corpo`);
+            let lidos = 0;
+            for await (const pedaco of aberto.resposta.body as unknown as AsyncIterable<Uint8Array>) {
+              lidos += pedaco.length;
+              yield pedaco;
+            }
+            if (lidos !== a.tamanho) {
+              throw new Error(`chegou com ${lidos} bytes, e o banco diz ${a.tamanho}`);
+            }
             return;
+          } catch (e) {
+            janela.delete(i);
+            conta.liberar(i);
+            if (tentativa >= TENTATIVAS) {
+              throw new Error(`"${a.nome}" não veio depois de ${TENTATIVAS} tentativas: ${(e as Error).message}`);
+            }
+            await new Promise((r) => setTimeout(r, ESPERAS_MS[tentativa - 1] ?? 4_000));
           }
-          /*
-           * Arquivo grande: em fluxo. Os bytes já entregues não voltam — se a
-           * falha for no meio, o ZIP está perdido de qualquer jeito, e conta
-           * com a conferência do escritor. Por isso só vai assim o que não
-           * cabe na memória.
-           */
-          if (!aberto.resposta?.body) throw new Error(`HTTP ${aberto.status} sem corpo`);
-          let lidos = 0;
-          for await (const pedaco of aberto.resposta.body as unknown as AsyncIterable<Uint8Array>) {
-            lidos += pedaco.length;
-            yield pedaco;
-          }
-          if (lidos !== a.tamanho) {
-            throw new Error(`chegou com ${lidos} bytes, e o banco diz ${a.tamanho}`);
-          }
-          return;
-        } catch (e) {
-          janela.delete(i);
-          if (tentativa >= TENTATIVAS) {
-            throw new Error(`"${a.nome}" não veio depois de ${TENTATIVAS} tentativas: ${(e as Error).message}`);
-          }
-          await new Promise((r) => setTimeout(r, ESPERAS_MS[tentativa - 1] ?? 4_000));
         }
+      } finally {
+        /* Entregue, desistida ou abandonada no meio: a memória desta foto sai
+           da conta do servidor. */
+        conta.liberar(i);
       }
     },
   }));
@@ -208,9 +278,16 @@ export function tamanhoDoManifesto(manifesto: Manifesto): number {
 
 async function* vazio(): AsyncIterable<Uint8Array> {}
 
-export function fluxoDoManifesto(manifesto: Manifesto, fonte: FonteDeUrls): AsyncGenerator<Uint8Array> {
+export async function* fluxoDoManifesto(manifesto: Manifesto, fonte: FonteDeUrls): AsyncGenerator<Uint8Array> {
   /* Data fixa por conteúdo: remontar dá os mesmos bytes (ver OpcoesDoZip.data).
      Um app mais velho que não manda a data cai na hora da montagem. */
   const data = manifesto.dataDoConteudo ? new Date(manifesto.dataDoConteudo) : undefined;
-  return zipEmFluxo(arquivosDoManifesto(manifesto, fonte), { data });
+  /* A conta fecha aqui, e não foto a foto: as buscas à frente que ninguém
+     chegou a ler (o cliente desistiu, a montagem deu erro) também saem. */
+  const conta = novaConta();
+  try {
+    yield* zipEmFluxo(arquivosDoManifesto(manifesto, fonte, conta), { data });
+  } finally {
+    conta.liberarTudo();
+  }
 }

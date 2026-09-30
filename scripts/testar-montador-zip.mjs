@@ -21,7 +21,9 @@
  */
 process.env.ZIP_BUSCAS_PARALELAS = "3";
 
-const { arquivosDoManifesto } = await import("../servidor-zip/montador.ts");
+const { arquivosDoManifesto, fluxoDoManifesto, memoriaReservada, novaConta } = await import(
+  "../servidor-zip/montador.ts"
+);
 const { CONFIG } = await import("../servidor-zip/config.ts");
 
 let falhou = false;
@@ -82,19 +84,27 @@ function balde({ tamanhos, planos = {} }) {
   return { estado, conteudo };
 }
 
-function manifesto(tamanhos) {
+function manifesto(tamanhos, primeiro = 0, quantos = tamanhos.length - primeiro) {
+  const indices = Array.from({ length: quantos }, (_, k) => primeiro + k);
   return {
-    arquivos: tamanhos.map((t, i) => ({ nome: `foto-${i}.jpg`, tamanho: t, url: `http://balde/${i}` })),
+    arquivos: indices.map((i) => ({ nome: `foto-${i}.jpg`, tamanho: tamanhos[i], url: `http://balde/${i}` })),
   };
 }
 const semRenovar = { renovar: async () => { throw new Error("não devia renovar"); } };
+/* O ZIP começa pelo cabeçalho da foto, e só depois pede o conteúdo dela: anda
+   o fluxo até a primeira foto ter sido pedida ao balde. */
+async function ateAPrimeiraFoto(fluxo, estado, i) {
+  for (let k = 0; k < 10 && !estado.pedidos.has(i); k++) await fluxo.next();
+  if (!estado.pedidos.has(i)) throw new Error(`a foto ${i} nunca foi pedida`);
+}
 
 console.log("\nmontador do ZIP — a busca à frente\n");
 
 await etapa("a busca à frente BAIXA as próximas fotos, não só abre", async () => {
   const tamanhos = Array(6).fill(TAMANHO);
   const { estado } = balde({ tamanhos });
-  const arquivos = arquivosDoManifesto(manifesto(tamanhos), semRenovar);
+  const conta = novaConta();
+  const arquivos = arquivosDoManifesto(manifesto(tamanhos), semRenovar, conta);
   const it = arquivos[0].abrir()[Symbol.asyncIterator]();
   await it.next(); // a foto 0 começou a sair
   await espera(50);
@@ -104,6 +114,7 @@ await etapa("a busca à frente BAIXA as próximas fotos, não só abre", async (
   }
   if (estado.pedidos.has(4)) throw new Error("pediu além da janela de 3");
   await it.return?.();
+  conta.liberarTudo();
   return "as 3 seguintes inteiras enquanto a primeira sai; a 5ª nem foi pedida";
 });
 
@@ -113,13 +124,15 @@ await etapa("o teto de memória segura a janela (e a próxima vem sempre)", asyn
   try {
     const tamanhos = Array(6).fill(TAMANHO);
     const { estado } = balde({ tamanhos });
-    const arquivos = arquivosDoManifesto(manifesto(tamanhos), semRenovar);
+    const conta = novaConta();
+    const arquivos = arquivosDoManifesto(manifesto(tamanhos), semRenovar, conta);
     const it = arquivos[0].abrir()[Symbol.asyncIterator]();
     await it.next();
     await espera(50);
     if (!estado.completos.has(1)) throw new Error("a próxima não desceu");
     if (estado.pedidos.has(2)) throw new Error("passou do teto e pediu a terceira");
     await it.return?.();
+    conta.liberarTudo();
     return "só a próxima, com o teto de 1,5 foto";
   } finally {
     CONFIG.memoriaAFrente = antes;
@@ -130,7 +143,8 @@ await etapa("arquivo grande (vídeo) é só aberto à frente, e não conta no te
   const GRANDE = 70 * 1024 * 1024; // acima do teto em memória de 64 MB
   const tamanhos = [TAMANHO, GRANDE, TAMANHO, TAMANHO, TAMANHO];
   const { estado } = balde({ tamanhos });
-  const arquivos = arquivosDoManifesto(manifesto(tamanhos), semRenovar);
+  const conta = novaConta();
+  const arquivos = arquivosDoManifesto(manifesto(tamanhos), semRenovar, conta);
   const it = arquivos[0].abrir()[Symbol.asyncIterator]();
   await it.next();
   await espera(50);
@@ -138,6 +152,7 @@ await etapa("arquivo grande (vídeo) é só aberto à frente, e não conta no te
   if ((estado.lidos.get(1) ?? 0) > 0) throw new Error(`leu ${estado.lidos.get(1)} B do vídeo antes da vez`);
   if (!estado.completos.has(2) || !estado.completos.has(3)) throw new Error("as fotos depois do vídeo não desceram");
   await it.return?.();
+  conta.liberarTudo();
   return "aberto, 0 B lidos; as fotos depois dele desceram";
 });
 
@@ -153,7 +168,57 @@ await etapa("o ZIP inteiro sai certo, com erro e corpo cortado na primeira busca
   }
   if (estado.pedidos.get(2) !== 2) throw new Error(`a foto do 500 foi pedida ${estado.pedidos.get(2)} vez(es)`);
   if (estado.pedidos.get(4) !== 2) throw new Error(`a foto cortada foi pedida ${estado.pedidos.get(4)} vez(es)`);
-  return "7 fotos byte a byte; o 500 e o corte ganharam nova tentativa";
+  if (memoriaReservada() !== 0) throw new Error(`sobraram ${memoriaReservada()} B reservados no servidor`);
+  return "7 fotos byte a byte; o 500 e o corte ganharam nova tentativa; a memória voltou a zero";
+});
+
+/*
+ * ── VÁRIAS GALERIAS AO MESMO TEMPO (30/09/2026) ──────────────────────────
+ *
+ * Felipe: "e se tivermos várias pessoas, com várias galerias com vários
+ * downloads?". O teto por montagem não basta: quinze montagens de 256 MB
+ * passam dos 4 GB da máquina. O teto do servidor é dividido entre todas.
+ */
+await etapa("o teto é do SERVIDOR: a segunda galeria encontra a memória ocupada", async () => {
+  const antes = CONFIG.memoriaTotal;
+  /* Três fotos no servidor inteiro — menos que a janela de 3 à frente, para o
+     teto global ser o que segura, e não a janela. */
+  CONFIG.memoriaTotal = 3 * TAMANHO;
+  const tamanhos = Array(16).fill(TAMANHO);
+  const { estado } = balde({ tamanhos });
+  const a = fluxoDoManifesto(manifesto(tamanhos, 0, 6), semRenovar);
+  const b = fluxoDoManifesto(manifesto(tamanhos, 10, 6), semRenovar);
+  try {
+    await ateAPrimeiraFoto(a, estado, 0);
+    await espera(50);
+    /* A: a da vez, a seguinte (sempre) e mais uma até o teto de 3 fotos. */
+    const deA = [0, 1, 2, 3, 4].filter((i) => estado.pedidos.has(i));
+    if (deA.join() !== "0,1,2") throw new Error(`A pediu ${deA}`);
+    await ateAPrimeiraFoto(b, estado, 10);
+    await espera(50);
+    /* B: com o servidor cheio, só a da vez e a seguinte — anda, mais devagar. */
+    const deB = [10, 11, 12, 13].filter((i) => estado.pedidos.has(i));
+    if (deB.join() !== "10,11") throw new Error(`B pediu ${deB}`);
+    return `A pediu 3, B só as 2 garantidas — ${memoriaReservada() / TAMANHO} fotos na memória`;
+  } finally {
+    await a.return();
+    await b.return();
+    CONFIG.memoriaTotal = antes;
+  }
+});
+
+await etapa("montagem abandonada no meio devolve toda a memória", async () => {
+  if (memoriaReservada() !== 0) throw new Error(`sobraram ${memoriaReservada()} B depois de fechar A e B`);
+  const tamanhos = Array(8).fill(TAMANHO);
+  const { estado } = balde({ tamanhos });
+  const z = fluxoDoManifesto(manifesto(tamanhos), semRenovar);
+  await ateAPrimeiraFoto(z, estado, 0);
+  await espera(50);
+  const durante = memoriaReservada();
+  if (durante === 0) throw new Error("nada reservado durante a montagem");
+  await z.return(); // o cliente fechou a aba
+  if (memoriaReservada() !== 0) throw new Error(`sobraram ${memoriaReservada()} B`);
+  return `${durante / TAMANHO} fotos reservadas → 0 ao abandonar`;
 });
 
 console.log(falhou ? "\n✗ a busca à frente tem problema" : "\n✓ a montagem baixa à frente, com teto de memória");
