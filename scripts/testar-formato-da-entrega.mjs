@@ -130,6 +130,32 @@ etapa("todo estilo pronto nasce em galeria", () => {
   igual(fora, [], "presets com outro formato");
 });
 
+/* ── 3b. o formato escolhido na criação da galeria ──────────────────────── */
+
+etapa("criação sem estilo e em Galeria não grava nada (o '{}' de sempre)", () => {
+  igual(ap.aparenciaComFormato(null, "galeria"), null, "galeria sem estilo");
+  igual(ap.aparenciaComFormato(null, ""), null, "sem pedido");
+});
+
+etapa("criação sem estilo em Stream nasce em Stream, com o resto no padrão", () => {
+  const gravada = ap.aparenciaComFormato(null, "stream");
+  igual(ap.lerAparencia(gravada).formato, "stream", "formato");
+  igual(ap.lerAparencia(gravada).capa, ap.APARENCIA_PADRAO.capa, "o resto é o padrão");
+});
+
+etapa("o formato escolhido agora vence o que veio no padrão do estúdio", () => {
+  const padrao = { ...ap.presetPorId("revista").aparencia, formato: "stream" };
+  const gravada = ap.lerAparencia(ap.aparenciaComFormato(padrao, "pastas"));
+  igual(gravada.formato, "pastas", "formato");
+  igual(gravada.capa, "jornal", "o estilo do padrão fica");
+});
+
+etapa("formato fora da lista não mexe no estilo escolhido", () => {
+  const revista = ap.presetPorId("revista").aparencia;
+  igual(ap.aparenciaComFormato(revista, "netflix"), revista, "estilo intacto");
+  igual(ap.aparenciaComFormato(null, "netflix"), null, "sem estilo, nada");
+});
+
 /* ── 4. o cartão do episódio ────────────────────────────────────────────── */
 
 etapa("título do episódio sai do nome do arquivo", () => {

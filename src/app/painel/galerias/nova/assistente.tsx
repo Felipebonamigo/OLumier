@@ -10,9 +10,17 @@ import {
   BOTAO_PRIMARIO,
   BOTAO_SECUNDARIO,
 } from "@/components/form-ui";
-import { PRESETS, mesmaAparencia, type Aparencia } from "@/config/aparencia";
+import {
+  OPCOES,
+  PRESETS,
+  APARENCIA_PADRAO,
+  mesmaAparencia,
+  type Aparencia,
+  type Formato,
+} from "@/config/aparencia";
 import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
+import { EsquemaDoFormato } from "@/components/esquema-do-formato";
 
 /**
  * Criar galeria em três etapas.
@@ -75,6 +83,11 @@ export function AssistenteNovaGaleria({
      `aparenciaInicialDaGaleria`. */
   const [estilo, setEstilo] = useState<string>("");
   const [capitulos, setCapitulos] = useState<string[]>([]);
+  /* O formato abre no do padrão do estúdio: é o que a galeria receberia se
+     ninguém mexesse, e a tela não pode dizer uma coisa e criar outra. */
+  const [formato, setFormato] = useState<Formato>(
+    padraoDoEstudio?.formato ?? APARENCIA_PADRAO.formato,
+  );
 
   const semNome = titulo.trim().length === 0;
 
@@ -153,6 +166,45 @@ export function AssistenteNovaGaleria({
             padrão” — ele passa a aparecer aqui como a primeira opção.
           </p>
         )}
+        {/*
+          ── O FORMATO VEM ANTES DO ESTILO (30/09/2026) ─────────────────────
+
+          Felipe, nesta tela: "deveria aqui ter a opção para selecionar os 3
+          tipos, se é galeria, pastas ou stream". O formato é a decisão maior
+          — a estrutura da entrega — e o fotógrafo já a traz pronta: o filme
+          do casamento é Stream antes de existir. Vem em cima porque é lida
+          primeiro, e os estilos abaixo valem para os três.
+
+          Mesmos cartões do grupo Formato do Design (`EsquemaDoFormato`), e o
+          estilo continua não mexendo no formato: são duas escolhas.
+        */}
+        <input type="hidden" name="formato" value={formato} />
+        <fieldset className="mt-5">
+          <legend className="text-xs font-medium text-texto-soft">Formato da entrega</legend>
+          <div className="mt-2 grid max-w-3xl gap-3 sm:grid-cols-3">
+            {OPCOES.formato.map((op) => {
+              const escolhido = formato === op.id;
+              return (
+                <button
+                  key={op.id}
+                  type="button"
+                  aria-pressed={escolhido}
+                  onClick={() => setFormato(op.id)}
+                  className={`rounded-xl border p-3 text-left transition ${
+                    escolhido ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+                  }`}
+                >
+                  <span className="mb-2 block h-20 overflow-hidden rounded-md border border-linha bg-carbon-2">
+                    <EsquemaDoFormato formato={op.id} />
+                  </span>
+                  <span className="block text-sm font-medium">{op.nome}</span>
+                  <span className="mt-0.5 block text-xs text-texto-faint">{op.desc}</span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+        <p className="mt-6 text-xs font-medium text-texto-soft">Estilo</p>
         <input type="hidden" name="preset" value={preset} />
         <input type="hidden" name="estilo" value={estilo} />
         {/* Mais colunas conforme a tela, porque aqui a largura VIRA amostra:
@@ -160,7 +212,7 @@ export function AssistenteNovaGaleria({
             px, e escolher a cara da entrega por uma miniatura desse tamanho é
             escolher no escuro. O teto é cinco — passando disso a amostra volta
             a encolher, e o nome do estilo começa a quebrar. */}
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {padraoDoEstudio && (
             <button
               type="button"
@@ -285,6 +337,16 @@ export function AssistenteNovaGaleria({
             );
           })}
         </div>
+        {/* Pastas vivem dos capítulos: com menos de dois, o cliente vê a
+            galeria de sempre (ver `lib/formato-da-entrega.ts`). Dito aqui,
+            onde se decide, e não depois de a galeria nascer sem pasta. */}
+        {formato === "pastas" && capitulos.length < 2 && (
+          <p className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta">
+            Você escolheu entregar em pastas: cada capítulo vira uma pasta. Marque pelo menos dois
+            — ou, se for enviar a pasta do casamento já separada em subpastas, os capítulos
+            nascem delas no envio.
+          </p>
+        )}
         <p className="mt-3 text-xs text-texto-faint">
           {capitulos.length === 0
             ? "Nenhum escolhido — a galeria fica numa sequência só, o que também funciona."

@@ -23,6 +23,12 @@ Aba **Design → Formato**, três cartões com o esquema da tela:
 - **Pastas** — a galeria abre com os capítulos como pastas; as fotos ficam dentro.
 - **Stream** — os vídeos numa tela de cinema, em fileiras, com próximo episódio.
 
+Também na **criação da galeria** (etapa 2. Estilo, acima dos estilos), com os
+mesmos cartões — pedido do Felipe em 30/09/2026: o formato é decisão que o
+fotógrafo já traz ao criar. A tela abre no formato do padrão do estúdio; o
+escolhido ali vence o do padrão (`aparenciaComFormato`). Escolhendo Pastas, a
+etapa de capítulos avisa enquanto houver menos de dois.
+
 O formato é um eixo da aparência (`formato` em `config/aparencia.ts`), então
 herda rascunho, prévia, publicar e o padrão do estúdio. **Estilo não mexe no
 formato**: aplicar "Revista" numa entrega em Stream troca a cara e mantém o

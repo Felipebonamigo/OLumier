@@ -1232,6 +1232,35 @@ export function comFormatoDe(estilo: Aparencia, atual: Aparencia): Aparencia {
   return { ...estilo, formato: atual.formato };
 }
 
+/**
+ * A aparência com que a galeria NOVA nasce, com o formato escolhido na
+ * criação por cima do estilo (30/09/2026).
+ *
+ * Felipe, olhando a etapa de estilo: "deveria aqui ter a opção para
+ * selecionar os 3 tipos". O formato é decisão que o fotógrafo já traz ao
+ * criar — o filme do casamento é Stream antes de existir.
+ *
+ * A escolha feita AGORA vence a que veio no estilo (o padrão do estúdio pode
+ * trazer um formato): é a mesma regra de `aparenciaInicialDaGaleria`, em que
+ * a decisão mais perto desta galeria ganha. A tela já abre marcada no formato
+ * do padrão, então quem não mexe continua recebendo o do padrão.
+ *
+ *   `inicial`  o que `aparenciaInicialDaGaleria` devolveu — null quando a
+ *              galeria nasceria no padrão do código
+ *   `pedido`   o texto do formulário; fora da lista, não muda nada
+ *
+ * Devolve null só quando não há nada a gravar: sem estilo e em Galeria, que
+ * é exatamente o `'{}'` de sempre.
+ */
+export function aparenciaComFormato(inicial: unknown | null, pedido: string): unknown | null {
+  const formato = OPCOES.formato.find((o) => o.id === pedido)?.id;
+  if (!formato) return inicial;
+  if (inicial === null || inicial === undefined) {
+    return formato === APARENCIA_PADRAO.formato ? null : { formato };
+  }
+  return { ...lerAparencia(inicial), formato };
+}
+
 // --- tradução para CSS --------------------------------------------------------
 
 /** Cada tema é um conjunto de variáveis; os componentes leem sempre as mesmas. */
