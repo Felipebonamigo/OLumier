@@ -222,15 +222,25 @@ await etapa("mesmo nome sem acento e sem caixa é a mesma galeria existente", ()
   igual(achada?.id, "1", "existente");
 });
 
-/* ── o login do Pixieset, só para contas apontadas ────────────────────── */
+/* ── o login das outras plataformas, só para contas apontadas ─────────── */
 
-await etapa("login do Pixieset: ninguém por padrão, só a conta liberada no admin", async () => {
-  const px = await import("../src/config/pixieset.ts");
-  if (px.loginDoPixiesetLiberado({ pixieset_liberado_em: null })) throw new Error("liberou com nulo");
-  if (px.loginDoPixiesetLiberado({})) throw new Error("liberou sem a coluna");
-  if (!px.loginDoPixiesetLiberado({ pixieset_liberado_em: new Date() })) throw new Error("não reconheceu a liberada");
-  /* A segunda trava: sem conector, nem conta liberada vê o formulário aceso. */
-  if (px.CONECTOR_PIXIESET_PRONTO) throw new Error("conector marcado como pronto sem existir");
+await etapa("login de outra plataforma: ninguém por padrão, e cada uma na sua coluna", async () => {
+  const px = await import("../src/config/plataformas-de-origem.ts");
+  igual(px.PLATAFORMAS.map((p) => p.id), ["pixieset", "pixellu"], "plataformas");
+  for (const p of px.PLATAFORMAS) {
+    if (px.loginLiberado({ [p.coluna]: null }, p.id)) throw new Error(`${p.nome}: liberou com nulo`);
+    if (px.loginLiberado({}, p.id)) throw new Error(`${p.nome}: liberou sem a coluna`);
+    if (!px.loginLiberado({ [p.coluna]: new Date() }, p.id)) throw new Error(`${p.nome}: não reconheceu`);
+    /* A segunda trava: sem conector, nem conta liberada vê o formulário aceso. */
+    if (p.conectorPronto) throw new Error(`${p.nome}: conector marcado como pronto sem existir`);
+  }
+  /* Liberar uma não libera a outra. */
+  if (px.loginLiberado({ pixieset_liberado_em: new Date() }, "pixellu")) {
+    throw new Error("o Pixieset liberado abriu o Pixellu");
+  }
+  if (px.plataformaPorId("dropbox") || px.plataformaPorId("pixieset_liberado_em")) {
+    throw new Error("aceitou plataforma fora da lista");
+  }
 });
 
 console.log(falhou ? "\nFALHOU" : "\nOK");
