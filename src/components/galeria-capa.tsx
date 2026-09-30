@@ -1,7 +1,8 @@
 import { desenhoDoTitulo, temPalavraQueNaoCabe } from "@/lib/titulo-da-capa";
 import {
   FONTES_TITULO,
-  alturaLogoPx,
+  medidaDaLogo,
+  proporcaoDaLogo,
   fonteDoDetalhe,
   pesoDoTitulo,
   type Aparencia,
@@ -14,6 +15,9 @@ export interface DadosCapa {
   estudio: string;
   /** Logo do estúdio; quando existe, substitui o nome em texto. */
   logoUrl?: string | null;
+  /** A medida do arquivo da logo (migração 051) — a proporção que a área usa. */
+  logoLargura?: number | null;
+  logoAltura?: number | null;
   urlImagem: string | null;
   /** Onde cortar a foto, em porcentagem. 50/50 é o centro — ver migração 031. */
   focoX: number;
@@ -102,8 +106,23 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
    * código à procura de classes escritas por extenso, e a que se monta em tempo
    * de execução simplesmente não é gerada. Já quebrou assim em outros projetos;
    * `style` não tem esse problema.
+   *
+   * ── E DESDE 30/09/2026, PELA ÁREA ─────────────────────────────────────
+   *
+   * Com a barrinha mexida (`tamanhoLogo`), a altura sai da área escolhida e da
+   * proporção do arquivo — ver `medidaDaLogo`. Aí a altura é EXATA, e não teto:
+   * a logo pequena também cresce até o tamanho pedido, que era o meio-termo que
+   * faltava. `object-contain` segura o desenho se a tela for mais estreita que a
+   * logo (o `max-width: 100%` do Tailwind estreita a caixa, não a imagem).
    */
-  const alturaLogo = alturaLogoPx(aparencia.logo);
+  const medidaLogo = medidaDaLogo(
+    aparencia,
+    proporcaoDaLogo(dados.logoLargura, dados.logoAltura),
+  );
+  const estiloLogo =
+    medidaLogo && "altura" in medidaLogo
+      ? { height: `${medidaLogo.altura}px`, maxWidth: "100%" }
+      : { maxHeight: `${medidaLogo?.tetoAltura ?? 0}px` };
 
   /*
    * ── A CAPA QUE FICA (16/09/2026) ────────────────────────────────────────
@@ -172,7 +191,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
       <img
         src={logoUrl}
         alt={estudio}
-        style={{ maxHeight: `${alturaLogo}px` }}
+        style={estiloLogo}
         // inline-block em vez de mx-auto: assim o alinhamento vem do pai (ou
         // do `self-*` que a capa passa quando a logo é filha de um flex).
         className={`inline-block w-auto object-contain ${className}`}

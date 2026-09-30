@@ -742,6 +742,8 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           dataFormatada: dataEvento,
           estudio: galeria.estudio_nome,
           logoUrl: urlLogo,
+          logoLargura: galeria.estudio_logo_largura,
+          logoAltura: galeria.estudio_logo_altura,
           urlImagem: urlCapa,
           /*
            * ESCOLHIDA, e não herdada.
