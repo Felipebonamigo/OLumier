@@ -22,7 +22,8 @@ import {
   emParaleloDeFila,
   manterAcordado,
   ordenarNaturalPorCaminho,
-  arquivoAceito,
+  itemAceito,
+  tamanhoDe,
 } from "@/lib/fila-upload";
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
 import { garantirSecoesAction } from "@/app/painel/actions";
@@ -66,6 +67,8 @@ type Situacao = "esperando" | "preparando" | "enviando" | "pronto" | "erro";
 
 export interface ItemFila {
   id: string;
+  /** A galeria para onde este arquivo vai — a importação manda para várias. */
+  galeriaId: string;
   nome: string;
   bytes: number;
   progresso: number;
@@ -77,6 +80,13 @@ export interface ItemFila {
 }
 
 export interface OpcoesDeEnvio {
+  /**
+   * Para qual galeria vai ESTE lote. Sem ele, vale a do provedor — que é o caso
+   * da aba Fotos. A importação (`/painel/importar`) não tem galeria no provedor
+   * e manda uma por lote: uma fila só para as 80 galerias, com a mesma pausa,
+   * a mesma retentativa e os mesmos três envios de cada vez.
+   */
+  galeriaId?: string;
   /** Capítulo escolhido na tela, para os arquivos soltos (a pasta vence este). */
   destino?: string;
   /** A busca por rosto está ligada: cada foto é medida durante o envio. */
@@ -88,7 +98,10 @@ interface Envio {
   rodando: boolean;
   pausado: boolean;
   avisoRostos: string | null;
-  enfileirar: (itens: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => void;
+  /* Devolve quando o lote ENTROU na fila (capítulos criados, tarefas montadas),
+     não quando terminou de subir. A importação espera cada um para as galerias
+     entrarem na ordem da lista; a aba Fotos não precisa esperar. */
+  enfileirar: (itens: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => Promise<void>;
   pausar: () => void;
   retomar: () => void;
   parar: () => void;
@@ -163,9 +176,13 @@ const duracao = (ms: number) => {
 
 export function ProvedorDeEnvio({
   galeriaId,
+  escopo,
   children,
 }: {
-  galeriaId: string;
+  /** A galeria da aba Fotos. Ausente na importação, que diz a galeria a cada lote. */
+  galeriaId?: string;
+  /** O pedaço do painel que NÃO é saída — ver `useAvisoDeSaida`. */
+  escopo?: string;
   children: React.ReactNode;
 }) {
   const [fila, setFila] = useState<ItemFila[]>([]);
@@ -219,7 +236,7 @@ export function ProvedorDeEnvio({
      *
      * A barra alta continua: sair da galeria mata a fila, e aí o aviso vale.
      */
-    `/painel/galerias/${galeriaId}/`,
+    escopo ?? `/painel/galerias/${galeriaId}/`,
   );
 
   /*
@@ -248,7 +265,10 @@ export function ProvedorDeEnvio({
    */
   type Tarefa = {
     item: ItemFila;
+    galeriaId: string;
     arquivo: File;
+    /** Arquivo de dentro de um ZIP: o conteúdo só sai de lá na vez dele. */
+    abrir?: () => Promise<File>;
     /** Já resolvido: a pasta vence o seletor da tela. */
     secaoId?: string;
     indice: number;
@@ -265,8 +285,11 @@ export function ProvedorDeEnvio({
    * lote recomeçasse do zero enquanto o primeiro ainda sobe, as duas metades
    * disputariam as mesmas posições e a narrativa do casamento sairia
    * embaralhada. O contador só zera quando a fila seca.
+   *
+   * Um contador POR GALERIA: a posição é dentro da galeria, e na importação a
+   * segunda galeria começaria na posição 600 da primeira.
    */
-  const proximoIndice = useRef(0);
+  const proximoIndice = useRef(new Map<string, number>());
   /*
    * O LOTE — um nome para ESTE envio, e o par do contador acima.
    *
@@ -302,8 +325,15 @@ export function ProvedorDeEnvio({
         | { emPartes: false; url: string }
       );
       let preparado: Preparo | null = null;
+      let arquivo = tarefa.arquivo;
 
       try {
+        /* Fora da retentativa: um ZIP que não abre este arquivo não abre na
+           segunda vez, e o erro diz qual foi. */
+        if (tarefa.abrir) {
+          atualizar(tarefa.item.id, { situacao: "preparando", progresso: 0 });
+          arquivo = await tarefa.abrir();
+        }
         await comRetentativa(
           async () => {
             atualizar(tarefa.item.id, { situacao: "preparando", progresso: 0 });
@@ -317,20 +347,20 @@ export function ProvedorDeEnvio({
              * lê 128 KB do começo do arquivo, o outro decodifica a imagem.
              */
             const [derivadas, tiradaEm] = await Promise.all([
-              gerarDerivadas(tarefa.arquivo, { medirRostos: tarefa.medidor }),
-              dataDaFoto(tarefa.arquivo),
+              gerarDerivadas(arquivo, { medirRostos: tarefa.medidor }),
+              dataDaFoto(arquivo),
             ]);
 
             atualizar(tarefa.item.id, { situacao: "enviando" });
 
             if (!preparado) {
-              const preparo = await fetch(`/api/galerias/${galeriaId}/upload`, {
+              const preparo = await fetch(`/api/galerias/${tarefa.galeriaId}/upload`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                  nome: tarefa.arquivo.name,
-                  mime: tarefa.arquivo.type,
-                  bytes: tarefa.arquivo.size,
+                  nome: arquivo.name,
+                  mime: arquivo.type,
+                  bytes: arquivo.size,
                   comDerivadas: Boolean(derivadas),
                   /* Vídeo manda pôster e não manda preview: sem este aviso a
                      rota reservaria a chave do preview e a mídia ficaria com um
@@ -399,13 +429,13 @@ export function ProvedorDeEnvio({
 
             // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
             if (dados.emPartes) {
-              await enviarEmPartes(dados.mediaId, tarefa.arquivo, dados.tamanhoParte, (pct) =>
+              await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
                 atualizar(tarefa.item.id, { progresso: pct }),
               );
             } else {
               await enviarComProgresso(
                 dados.url,
-                tarefa.arquivo,
+                arquivo,
                 (pct) => atualizar(tarefa.item.id, { progresso: pct }),
                 dados.mime,
               );
@@ -464,7 +494,7 @@ export function ProvedorDeEnvio({
         });
       }
     },
-    [galeriaId],
+    [],
   );
 
   const trabalhar = useCallback(async () => {
@@ -486,7 +516,7 @@ export function ProvedorDeEnvio({
     trabalhandoRef.current = false;
     setRodando(false);
     setPausado(false);
-    proximoIndice.current = 0;
+    proximoIndice.current = new Map();
     loteAtual.current = null;
     /* O que ficou em "esperando" quando alguém parou não vai subir: dizer isso
        é melhor que deixar a linha girando para sempre. */
@@ -505,7 +535,9 @@ export function ProvedorDeEnvio({
 
   const enfileirar = useCallback(
     async (brutos: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => {
-      const itens = ordenarNaturalPorCaminho(brutos.filter((b) => arquivoAceito(b.arquivo)));
+      const alvo = opcoes.galeriaId ?? galeriaId;
+      if (!alvo) return;
+      const itens = ordenarNaturalPorCaminho(brutos.filter(itemAceito));
       if (itens.length === 0) return;
 
       paradoRef.current = false;
@@ -526,7 +558,7 @@ export function ProvedorDeEnvio({
       if (capitulos.length > 0) {
         try {
           const criados = await garantirSecoesAction(
-            galeriaId,
+            alvo,
             capitulos.map((c) => c.nome),
           );
           const idPorNome = new Map(criados.map((c) => [c.nome, c.id]));
@@ -572,31 +604,35 @@ export function ProvedorDeEnvio({
          — envio não pode falhar por causa disto. */
       loteAtual.current ??= globalThis.crypto?.randomUUID?.() ?? null;
 
+      const base = proximoIndice.current.get(alvo) ?? 0;
       const lote = itens.map((it, k) => {
         const item: ItemFila = {
           /* O `k` sozinho repetia entre lotes enfileirados no mesmo
-             milissegundo; o índice global não repete nunca. */
-          id: `${Date.now()}-${proximoIndice.current + k}-${it.arquivo.name}`,
+             milissegundo; o índice mais a galeria não repetem nunca. */
+          id: `${Date.now()}-${alvo}-${base + k}-${it.arquivo.name}`,
+          galeriaId: alvo,
           nome: it.arquivo.name,
-          bytes: it.arquivo.size,
+          bytes: tamanhoDe(it),
           progresso: 0,
           situacao: "esperando" as const,
           tentativa: 0,
         };
         return {
           item,
+          galeriaId: alvo,
           arquivo: it.arquivo,
+          abrir: it.deZip?.abrir,
           /* A pasta manda: o capítulo lido do disco vence o seletor da tela,
              que é o palpite para arquivos soltos. Resolvido AQUI e guardado na
              tarefa — na hora do envio o seletor já pode estar em outro
              capítulo, que é justamente o que esta mudança libera. */
           secaoId: porCaminho.get(it.caminho) || opcoes.destino || undefined,
-          indice: proximoIndice.current + k,
+          indice: base + k,
           lote: loteAtual.current,
           medidor,
         };
       });
-      proximoIndice.current += lote.length;
+      proximoIndice.current.set(alvo, base + lote.length);
 
       pendentes.current.push(...lote);
       setFila((f) => [...f, ...lote.map((t) => t.item)]);
@@ -611,7 +647,7 @@ export function ProvedorDeEnvio({
       rodando,
       pausado,
       avisoRostos,
-      enfileirar: (itens, opcoes) => void enfileirar(itens, opcoes),
+      enfileirar,
       pausar: () => {
         pausadoRef.current = true;
         setPausado(true);
