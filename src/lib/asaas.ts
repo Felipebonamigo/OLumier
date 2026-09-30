@@ -444,6 +444,57 @@ export interface ClienteDoDocumento {
   deleted?: boolean;
 }
 
+/**
+ * Os clientes da conta com este e-mail — só para diagnóstico
+ * (`scripts/conferir-combo.mjs`). O combo liga as contas pelo CPF/CNPJ; quando
+ * não liga, o e-mail costuma achar o cadastro do Atomatiza feito com OUTRO
+ * documento (o CNPJ da empresa lá, o CPF aqui).
+ */
+export async function clientesDoEmail(email: string): Promise<(ClienteDoDocumento & { name?: string; email?: string })[]> {
+  const r = await chamar<{ data?: (ClienteDoDocumento & { name?: string; email?: string })[] }>(
+    `/customers?email=${encodeURIComponent(email)}&limit=100`,
+  );
+  return (r.data ?? []).filter((c) => !c.deleted);
+}
+
+/** Todas as cobranças de um cliente — avulsas e de assinatura —, só para diagnóstico. */
+export async function cobrancasDoCliente(clienteId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  subscription?: string | null;
+  externalReference?: string | null;
+  description?: string | null;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    subscription?: string | null; externalReference?: string | null; description?: string | null;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/payments?customer=${encodeURIComponent(clienteId)}&limit=100`);
+  return r.data ?? [];
+}
+
+/** Todas as cobranças de uma assinatura, com situação — só para diagnóstico. */
+export async function cobrancasDaAssinatura(assinaturaId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/subscriptions/${segmento(assinaturaId)}/payments?limit=100`);
+  return r.data ?? [];
+}
+
 /** Os clientes da conta com este CPF/CNPJ — o nosso e o do Atomatiza. */
 export async function clientesDoDocumento(documento: string): Promise<ClienteDoDocumento[]> {
   const r = await chamar<{ data?: ClienteDoDocumento[] }>(

@@ -33,6 +33,7 @@ if (!busca) {
 const { consultar } = await import("../src/lib/db.ts");
 const { diagnosticarCombo, recalcularCombo } = await import("../src/lib/combo.ts");
 const { linhaDoCombo, linhaDoValor } = await import("../src/lib/aviso-de-pagamento.ts");
+const { assinaturasDoCliente, clientesDoEmail, cobrancasDaAssinatura, cobrancasDoCliente, clientesDoDocumento } = await import("../src/lib/asaas.ts");
 
 const digitos = busca.replace(/\D/g, "");
 const estudios = await consultar(
@@ -66,6 +67,52 @@ for (const a of d.assinaturasDoAtomatiza) {
 }
 console.log(`  combo:      ${linhaDoCombo(d)}`);
 console.log(`  assinatura: ${linhaDoValor(d)}`);
+
+/* O que o Asaas tem, cru — para quando o resumo acima não bastar (30/09/2026:
+   a Bia "pagou" e o Asaas não tinha cobrança paga nenhuma na assinatura). */
+const estudio = (await consultar("select asaas_assinatura_id from tenants where id = $1", [e.id]))[0];
+if (estudio?.asaas_assinatura_id) {
+  console.log(`\n  Cobranças da assinatura da Galeria (${estudio.asaas_assinatura_id}):`);
+  const cobs = await cobrancasDaAssinatura(estudio.asaas_assinatura_id);
+  if (cobs.length === 0) console.log("    (nenhuma)");
+  for (const c of cobs) {
+    const pago = c.confirmedDate ?? c.paymentDate;
+    console.log(`    · ${c.id} — ${c.status} · R$ ${Number(c.value ?? 0).toFixed(2)} · vence ${c.dueDate ?? "?"} · ${c.billingType ?? "?"}${pago ? ` · pago em ${pago}` : ""}`);
+  }
+}
+console.log(`\n  Clientes no Asaas com o e-mail ${d.email} ou o CPF/CNPJ ${d.documento ?? "-"}:`);
+const vistos = new Map();
+for (const c of [...(await clientesDoEmail(d.email)), ...(d.documento ? await clientesDoDocumento(d.documento) : [])]) vistos.set(c.id, c);
+const clientes = [...vistos.values()];
+if (clientes.length === 0) console.log("    (nenhum)");
+for (const c of clientes) {
+  const subs = await assinaturasDoCliente(c.id);
+  const lista = subs.length
+    ? subs.map((a) => `${a.externalReference ?? "sem referência"} ${a.status}${a.description ? ` "${a.description}"` : ""}`).join("; ")
+    : "sem assinatura";
+  const outroDoc = (c.cpfCnpj ?? "") !== (d.documento ?? "") ? "  ← documento DIFERENTE do da Galeria" : "";
+  console.log(`    · ${c.id} — ${c.name ?? ""} · doc ${c.cpfCnpj ?? "(nenhum)"}${outroDoc}\n      assinaturas: ${lista}`);
+  // Toda cobrança do cliente, avulsa inclusive: é aqui que aparece um Pix pago
+  // fora da assinatura (o caso da Bia, 30/09/2026).
+  for (const p of await cobrancasDoCliente(c.id)) {
+    const pago = p.confirmedDate ?? p.paymentDate;
+    console.log(`      · ${p.id} — ${p.status} · R$ ${Number(p.value ?? 0).toFixed(2)} · ${p.billingType ?? "?"} · vence ${p.dueDate ?? "?"}${pago ? ` · pago em ${pago}` : ""} · ${p.subscription ? `assinatura ${p.subscription}` : "AVULSA"} · ref ${p.externalReference ?? "-"}${p.description ? ` · "${p.description}"` : ""}`);
+  }
+}
+
+/* Tudo que caiu na conta nos últimos 3 dias, dos dois produtos: um Pix que
+   não achou dono acima (outro e-mail, outro documento, cobrança avulsa) aparece
+   aqui pelo valor e pela hora. Marca com ◀ o que é de um cliente listado acima. */
+const { pagamentosRecebidos } = await import("../src/lib/asaas.ts");
+const hoje = new Date();
+const dia = (d) => d.toISOString().slice(0, 10);
+const { pagamentos: recentes, incompleto } = await pagamentosRecebidos(dia(new Date(hoje.getTime() - 3 * 86_400_000)), dia(hoje));
+console.log(`\n  Tudo que caiu na conta do Asaas nos últimos 3 dias (${recentes.length}${incompleto ? ", lista cortada" : ""}):`);
+if (recentes.length === 0) console.log("    (nada)");
+for (const p of recentes) {
+  const deste = vistos.has(p.customer) ? "  ◀ cliente acima" : "";
+  console.log(`    · ${p.paymentDate ?? "?"} — R$ ${Number(p.value ?? 0).toFixed(2)} · ${p.billingType ?? "?"} · ${p.status} · cliente ${p.customer ?? "?"} · ${p.subscription ? `assinatura ${p.subscription}` : "AVULSA"} · ref ${p.externalReference ?? "-"}${p.description ? ` · "${p.description}"` : ""}${deste}`);
+}
 
 if (acertar) {
   const r = await recalcularCombo(e.id, "conferir-combo");
