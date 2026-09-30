@@ -27,6 +27,12 @@ import {
 import { planoPorId, formatarReais, cicloDe, GB } from "@/config/planos";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import {
+  COLUNAS_DOS_ESTUDIOS,
+  enderecoDaOrdem,
+  lerOrdem,
+  ordenarEstudios,
+} from "@/lib/ordem-dos-estudios";
+import {
   Cartao,
   Bloco,
   Situacao,
@@ -89,7 +95,11 @@ const SECOES = [
  * acidente esperando o dia cansado. O que precisar mudar, muda pelo caminho
  * normal — que deixa rastro na auditoria com o nome de quem fez.
  */
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ordem?: string | string[]; sentido?: string | string[] }>;
+}) {
   await exigirAdmin();
 
   const [estudios, meses, entrega, somasDeZip, eventos, custos] = await Promise.all([
@@ -109,6 +119,11 @@ export default async function AdminPage() {
        que eles editam lá. Sem a tabela, vale o de `config/custos-fixos.ts`. */
     listarCustos().catch(() => null),
   ]);
+
+  /* Só a TABELA muda de ordem; os totais e as listas de cima leem `estudios`.
+     Ver `lib/ordem-dos-estudios.ts`. */
+  const ordem = lerOrdem(await searchParams);
+  const naTabela = ordenarEstudios(estudios, ordem);
 
   const agora = new Date();
   const r = resumoDaPlataforma(
@@ -537,15 +552,14 @@ export default async function AdminPage() {
             <table className="w-full min-w-[1000px] text-sm">
               <thead>
                 <tr className="border-b border-linha bg-carbon text-left">
-                  {[
-                    "Estúdio",
-                    "Situação",
-                    "Plano",
-                    "Paga",
-                    "Custa por mês",
-                    "Espaço",
-                    "Conteúdo",
-                    /*
+                  {/*
+                    ── OS CABEÇALHOS ORDENAM (30/09/2026) ─────────────────
+                    Felipe: "permita ordenar essa lista pelas colunas". Cada
+                    título é um link para a mesma página na ordem dele; clicar
+                    de novo inverte. As colunas e o que cada uma ordena moram
+                    em `lib/ordem-dos-estudios.ts`.
+                  */}
+                  {/*
                       ── DOIS NOMES QUE FALTAVAM (29/09/2026) ──────────────
 
                       Felipe: "último acesso, última alteração também".
@@ -561,8 +575,7 @@ export default async function AdminPage() {
                       (ver `ultima_alteracao` em `lib/admin.ts`). As duas juntas
                       respondem a pergunta que a tabela existe para responder —
                       esta conta está viva dos dois lados?
-                    */
-                    /*
+
                       ── AS DATAS AGRUPADAS POR QUEM AGIU (29/09/2026) ──────
 
                       Eram duas colunas com nome de MOMENTO ("Último acesso",
@@ -575,22 +588,31 @@ export default async function AdminPage() {
                       acessos de 30 dias com o cliente, a última alteração com o
                       estúdio, que é quem altera. A tabela não cresceu e as três
                       perguntas continuam respondidas.
-                    */
-                    "Cliente abriu",
-                    "Estúdio entrou",
-                    "Entrou",
-                  ].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-texto-faint"
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  */}
+                  {COLUNAS_DOS_ESTUDIOS.map((c) => {
+                    const ativa = ordem.coluna === c.id;
+                    return (
+                      <th
+                        key={c.id}
+                        aria-sort={ativa ? (ordem.sentido === "asc" ? "ascending" : "descending") : undefined}
+                        className="px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-texto-faint"
+                      >
+                        <Link
+                          href={enderecoDaOrdem(ordem, c.id)}
+                          className={`inline-flex items-center gap-1 transition hover:text-texto ${ativa ? "text-texto" : ""}`}
+                        >
+                          {c.titulo}
+                          <span aria-hidden="true" className={ativa ? "" : "opacity-0"}>
+                            {ativa && ordem.sentido === "asc" ? "↑" : "↓"}
+                          </span>
+                        </Link>
+                      </th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
-                {estudios.map((e) => {
+                {naTabela.map((e) => {
                   const plano = planoPorId(e.plano_id);
                   const ciclo = cicloDe(e.ciclo_cobranca);
                   const noAr = BigInt(e.bytes_no_ar);
