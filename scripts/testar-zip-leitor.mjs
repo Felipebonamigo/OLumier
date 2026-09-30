@@ -57,6 +57,46 @@ for (const [caminho, bytes] of Object.entries(ARQUIVOS)) {
 /* O lixo que o Mac põe em todo ZIP — tem de ficar de fora. */
 writeFileSync(path.join(origem, "Ana e Pedro", ".DS_Store"), "lixo");
 
+/*
+ * ── SEM AS FERRAMENTAS, ISTO É "NÃO RODOU" (30/09/2026) ──────────────────
+ *
+ * Este arquivo existe para provar que a gente LÊ zip feito por outros
+ * programas, então ele precisa de outros programas: `zip` (Info-ZIP) e
+ * `python3`. Numa máquina Windows sem eles — e o `python3` do Windows costuma
+ * ser um atalho da Loja que só imprime um recado e sai — o arquivo reprovava
+ * por ferramenta ausente, e o portão do deploy recusava publicar por um defeito
+ * que não existe no código.
+ *
+ * A regra da suíte já é essa, escrita em `testar-tudo.mjs` sobre o servidor de
+ * desenvolvimento: "sem ele, o resultado é PULADO em vez de vermelho, para não
+ * confundir 'não rodou' com 'quebrou'".
+ *
+ * Conferimos EXECUTANDO, e não com `command -v`: o atalho da Loja existe no
+ * caminho e falha na hora de rodar, que é o jeito mais irritante de uma
+ * ferramenta estar "instalada".
+ *
+ * ⚠ Onde isto pular, a leitura de zip de terceiros NÃO é conferida por
+ * ninguém. Numa máquina com as duas ferramentas, tudo roda e pode reprovar.
+ */
+function ferramentaServe(cmd, args) {
+  try {
+    return spawnSync(cmd, args, { encoding: "utf8" }).status === 0;
+  } catch {
+    return false;
+  }
+}
+const faltando = [
+  ["zip", ["-v"]],
+  ["python3", ["-c", "pass"]],
+].filter(([cmd, args]) => !ferramentaServe(cmd, args)).map(([cmd]) => cmd);
+if (faltando.length) {
+  console.log(
+    `  ⚠ ferramenta de zip ausente (${faltando.join(", ")}) — pulado` +
+      " (a leitura de zip de terceiros não foi conferida)",
+  );
+  process.exit(0);
+}
+
 function rodar(cmd, args, cwd) {
   const r = spawnSync(cmd, args, { cwd, encoding: "utf8" });
   if (r.status !== 0) throw new Error(`${cmd} falhou: ${r.stderr || r.stdout}`);

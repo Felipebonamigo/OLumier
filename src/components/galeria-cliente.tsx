@@ -136,6 +136,7 @@ export function GaleriaCliente({
   selecaoInicial,
   buscaPorRosto = null,
   fatia = null,
+  totalNaGaleria,
   capituloAberto = null,
   enderecoBase,
   recorte = false,
@@ -161,6 +162,8 @@ export function GaleriaCliente({
    * de quase toda galeria: nada muda de comportamento.
    */
   fatia?: { total: number; capituloAtivo: string | null } | null;
+  /** Quantas mídias a galeria TEM, independente do que esta tela mostra. */
+  totalNaGaleria?: number;
   /**
    * O capítulo aberto (`?cap=`), pelo ID — ou `null` na galeria inteira.
    *
@@ -486,7 +489,23 @@ export function GaleriaCliente({
    * precisa do número inteiro é a prova de entrega: baixar as 600 de uma
    * galeria de 2.108 não pode contar como ter levado o casamento.
    */
-  const totalDaGaleria = fatia?.total ?? itens.length;
+  /*
+   * ── O TOTAL DA GALERIA NÃO É O DA TELA (30/09/2026) ────────────────────
+   *
+   * Isto era `fatia?.total ?? itens.length`, e funcionava enquanto a galeria
+   * pequena mostrasse tudo: sem fatia, o que está na tela É a galeria.
+   *
+   * Deixou de ser verdade quando a galeria passou a abrir no primeiro capítulo
+   * em qualquer tamanho. Numa galeria de 4 fotos com dois capítulos, o menu
+   * passou a oferecer "Todas as fotos num zip (3)" — o casal clicaria em
+   * "todas" e levaria três quartos do casamento achando que levou tudo.
+   * `testar-download-por-pasta` pegou na primeira rodada.
+   *
+   * `totalNaGaleria` vem do servidor e é sempre o acervo inteiro. A fatia
+   * continua respondendo outra pergunta — quanto ainda vem pela rede — e é
+   * por isso que ela não serve aqui: elas coincidiam por acaso.
+   */
+  const totalDaGaleria = totalNaGaleria ?? fatia?.total ?? itens.length;
 
   /**
    * Baixa um zip montado no servidor — ver `api/g/[id]/zip`.

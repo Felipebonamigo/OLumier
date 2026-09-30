@@ -1119,6 +1119,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             enderecoBase={enderecoBase}
             buscaPorRosto={buscaPorRosto}
             bytesDaGaleria={bytesDaGaleria}
+            totalNaGaleria={todasAsMedias.length}
             recorte={escolhidas.size > 0 && !amostrando}
             /* O capítulo aberto vale em qualquer galeria, fatiada ou não —
                ver `capituloAberto` em galeria-cliente. */
