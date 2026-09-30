@@ -185,9 +185,24 @@ const EXTENSOES = /\.(jpe?g|png|webp|avif|heic|heif|mp4|mov|webm)$/i;
 
 /** Ignora o lixo que vem junto quando se arrasta uma pasta inteira. */
 export function arquivoAceito(f: File): boolean {
+  return aceitoPeloNome(f) && f.size > 0;
+}
+
+/**
+ * O mesmo filtro para um item da fila, que pode morar dentro de um ZIP — aí o
+ * `File` é um marcador vazio e o tamanho real vem do índice do ZIP.
+ *
+ * Função separada, e não um segundo parâmetro de `arquivoAceito`, porque ela é
+ * passada direto ao `.filter()`: o filtro manda o ÍNDICE como segundo
+ * argumento, e o primeiro arquivo da lista seria lido como "tamanho 0".
+ */
+export function itemAceito(it: ArquivoComCaminho): boolean {
+  return aceitoPeloNome(it.arquivo) && tamanhoDe(it) > 0;
+}
+
+function aceitoPeloNome(f: File): boolean {
   if (f.name.startsWith(".")) return false; // .DS_Store, Thumbs.db ocultos
   if (f.name.toLowerCase() === "thumbs.db") return false;
-  if (f.size === 0) return false;
   return EXTENSOES.test(f.name) || f.type.startsWith("image/") || f.type.startsWith("video/");
 }
 
@@ -206,6 +221,19 @@ export interface ArquivoComCaminho {
   arquivo: File;
   /** "Casamento/Cerimônia/foto.jpg" — relativo ao que foi solto na tela. */
   caminho: string;
+  /**
+   * O arquivo mora DENTRO de um ZIP (importação, ver `lib/importacao.ts`).
+   *
+   * Aí `arquivo` é só um marcador vazio com o nome: abrir as 3 000 fotos de 80
+   * ZIPs de uma vez encheria a memória com os comprimidos. O conteúdo é aberto
+   * na vez dele na fila, e o tamanho real vem do índice do ZIP.
+   */
+  deZip?: { bytes: number; abrir: () => Promise<File> };
+}
+
+/** O tamanho real — o do ZIP, quando o arquivo vem de dentro de um. */
+export function tamanhoDe(it: ArquivoComCaminho): number {
+  return it.deZip?.bytes ?? it.arquivo.size;
 }
 
 /** Caminho de um arquivo vindo do `<input>`; cai no nome quando não há pasta. */
