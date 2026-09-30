@@ -31,9 +31,9 @@ import { CONECTOR_PIXIESET_PRONTO } from "@/config/pixieset";
  * ── SÓ PARA AS CONTAS APONTADAS (30/09/2026) ─────────────────────────────
  *
  * Felipe: "deixa desabilitado o botão de logar no pixieset por enquanto, para
- * todos, só vamos habilitar para os usuários que eu apontar". A lista mora em
- * `PIXIESET_LOGIN_LIBERADO` (ver `config/pixieset.ts`) e é lida no SERVIDOR:
- * este componente só recebe se ESTA conta está nela, nunca a lista.
+ * todos, só vamos habilitar para os usuários que eu apontar". Quem libera é o
+ * admin, no botão "Permitir Pixieset" da ficha do estúdio (migração 051); este
+ * componente só recebe se ESTA conta foi liberada.
  *
  * O formulário só acende com as duas travas abertas — conta liberada E
  * conector pronto. Hoje o conector não existe, então liberar uma conta só

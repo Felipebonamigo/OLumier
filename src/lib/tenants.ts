@@ -71,6 +71,8 @@ export interface Tenant {
   aviso_limpeza_em: Date | null;
   aviso_limpeza_final_em: Date | null;
   arquivos_limpos_em: Date | null;
+  /** Liberado no admin para o login do Pixieset (migração 051). Nulo = não. */
+  pixieset_liberado_em: Date | null;
   criado_em: Date;
 }
 
