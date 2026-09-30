@@ -42,7 +42,12 @@ import {
  */
 
 /** O passo a passo do ZIP e os riscos do login, no idioma de cada plataforma. */
-const TEXTOS: Record<Plataforma, { passos: ReactNode[]; riscoDaConta: ReactNode; senha: string }> = {
+/* `oQueASenhaAbre`, e não `senha`: o portão de `testar-defaults-inseguros` lê
+   `senha: "…"` como senha embutida no código — e é bom que leia. */
+const TEXTOS: Record<
+  Plataforma,
+  { passos: ReactNode[]; riscoDaConta: ReactNode; oQueASenhaAbre: string }
+> = {
   pixieset: {
     passos: [
       "No Pixieset, abra a coleção e use o download da coleção inteira.",
@@ -57,7 +62,7 @@ const TEXTOS: Record<Plataforma, { passos: ReactNode[]; riscoDaConta: ReactNode;
         permitem esse tipo de acesso.
       </>
     ),
-    senha: "Ela abre tudo no Pixieset: clientes, pagamentos, contratos.",
+    oQueASenhaAbre: "Ela abre tudo no Pixieset: clientes, pagamentos, contratos.",
   },
   pixellu: {
     passos: [
@@ -72,7 +77,7 @@ const TEXTOS: Record<Plataforma, { passos: ReactNode[]; riscoDaConta: ReactNode;
         esse tipo de acesso nos termos de uso.
       </>
     ),
-    senha: "A mesma conta abre as suas galerias, os seus álbuns e o que você paga ao Pixellu.",
+    oQueASenhaAbre: "A mesma conta abre as suas galerias, os seus álbuns e o que você paga ao Pixellu.",
   },
 };
 
@@ -139,7 +144,7 @@ function DaPlataforma({ plataforma: p, liberado }: { plataforma: PlataformaDeOri
             </li>
             <li>
               <strong className="text-texto">Sua senha passaria pelo nosso sistema.</strong>{" "}
-              {texto.senha} Mesmo sem guardá-la, ela precisaria trafegar até aqui.
+              {texto.oQueASenhaAbre} Mesmo sem guardá-la, ela precisaria trafegar até aqui.
             </li>
             <li>
               <strong className="text-texto">Pode parar de funcionar sem aviso</strong>, no dia em
