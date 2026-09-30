@@ -64,7 +64,10 @@ export function AssistenteNovaGaleria({
   padraoDoEstudio = null,
   estilosDoEstudio = [],
   slotLogo,
+  formatosLiberados = false,
 }: {
+  /** A conta vê Pastas e Stream? Ver `config/formatos-liberados.ts`. */
+  formatosLiberados?: boolean;
   /** Vem do servidor: `lib/secoes.ts` é server-only e não pode ser importado aqui. */
   capitulosSugeridos: readonly string[];
   /** O design que o estúdio salvou como padrão, ou null se nunca salvou. */
@@ -178,8 +181,8 @@ export function AssistenteNovaGaleria({
           Mesmos cartões do grupo Formato do Design (`EsquemaDoFormato`), e o
           estilo continua não mexendo no formato: são duas escolhas.
         */}
-        <input type="hidden" name="formato" value={formato} />
-        <fieldset className="mt-5">
+        {formatosLiberados && <input type="hidden" name="formato" value={formato} />}
+        <fieldset className={formatosLiberados ? "mt-5" : "hidden"}>
           <legend className="text-xs font-medium text-texto-soft">Formato da entrega</legend>
           <div className="mt-2 grid max-w-3xl gap-3 sm:grid-cols-3">
             {OPCOES.formato.map((op) => {
@@ -204,7 +207,7 @@ export function AssistenteNovaGaleria({
             })}
           </div>
         </fieldset>
-        <p className="mt-6 text-xs font-medium text-texto-soft">Estilo</p>
+        {formatosLiberados && <p className="mt-6 text-xs font-medium text-texto-soft">Estilo</p>}
         <input type="hidden" name="preset" value={preset} />
         <input type="hidden" name="estilo" value={estilo} />
         {/* Mais colunas conforme a tela, porque aqui a largura VIRA amostra:
@@ -340,7 +343,7 @@ export function AssistenteNovaGaleria({
         {/* Pastas vivem dos capítulos: com menos de dois, o cliente vê a
             galeria de sempre (ver `lib/formato-da-entrega.ts`). Dito aqui,
             onde se decide, e não depois de a galeria nascer sem pasta. */}
-        {formato === "pastas" && capitulos.length < 2 && (
+        {formatosLiberados && formato === "pastas" && capitulos.length < 2 && (
           <p className="mt-3 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta">
             Você escolheu entregar em pastas: cada capítulo vira uma pasta. Marque pelo menos dois
             — ou, se for enviar a pasta do casamento já separada em subpastas, os capítulos

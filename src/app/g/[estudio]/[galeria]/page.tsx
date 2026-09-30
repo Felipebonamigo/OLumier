@@ -55,6 +55,7 @@ import {
 import { GaleriaPastas, VoltarAsPastas, type PastaDaEntrega } from "@/components/galeria-pastas";
 import { GaleriaStream, type FileiraDoStream } from "@/components/galeria-stream";
 import { AncoraDeChegada } from "@/components/ancora-de-chegada";
+import { aparenciaPermitida } from "@/lib/acesso-formatos";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -315,6 +316,10 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       /* Parâmetro ilegível não derruba a prévia: vale o que está gravado. */
     }
   }
+  /* Pastas e Stream só para contas liberadas (30/09/2026) — inclusive na
+     prévia do dono: o que ele não pode entregar, ele não deve ver pronto.
+     Galeria de sempre não consulta nada. Ver `config/formatos-liberados.ts`. */
+  aparencia = await aparenciaPermitida(aparencia, galeria.tenant_id);
 
   /*
    * ── A AMOSTRA DA PRÉVIA (31/08/2026) ─────────────────────────────────────

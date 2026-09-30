@@ -677,7 +677,11 @@ export function EditorAparencia({
   slotCapa,
   conteudo = null,
   logo = null,
+  formatosLiberados = false,
 }: {
+  /** A conta vê Pastas e Stream? Sem isso o grupo Formato não aparece —
+      ver `config/formatos-liberados.ts`. */
+  formatosLiberados?: boolean;
   /** O que a galeria tem hoje — só para o grupo Formato avisar quando a
       escolha não tem com o que trabalhar (pastas sem capítulo, stream sem
       vídeo). Null = não sabemos, e aí nada é dito. */
@@ -976,7 +980,7 @@ export function EditorAparencia({
             Editar
           </span>
           <ul className="-mx-1 mt-2 flex gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex-col sm:overflow-visible sm:px-0">
-            {GRUPOS.map((g) => {
+            {GRUPOS.filter((g) => g.id !== "formato" || formatosLiberados).map((g) => {
               const ativo = grupo === g.id;
               return (
                 <li key={g.id} className="shrink-0 sm:shrink">
@@ -1174,7 +1178,7 @@ export function EditorAparencia({
               })}
             </div>
           )}
-          {grupo === "formato" && (
+          {grupo === "formato" && formatosLiberados && (
             <SeletorDeFormato ap={ap} mudar={mudar} conteudo={conteudo} />
           )}
           {grupo === "capa" && (

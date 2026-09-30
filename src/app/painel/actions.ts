@@ -28,6 +28,7 @@ import {
   type EstiloDoEstudio,
 } from "@/lib/estilos-do-estudio";
 import { aparenciaComFormato, type Aparencia } from "@/config/aparencia";
+import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 import { descricaoDaAssinatura, precoDoCicloComComboCentavos, descontoDaGaleriaCentavos } from "@/config/combo";
 import { faixaDoAtomatiza } from "@/lib/combo";
 import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
@@ -136,7 +137,9 @@ export async function criarGaleriaAction(
       String(form.get("preset") ?? ""),
       String(form.get("estilo") ?? ""),
     ),
-    String(form.get("formato") ?? ""),
+    /* Quem não tem Pastas e Stream liberados não escolhe formato — o campo
+       nem aparece, e o formulário é um endpoint. Ver `acesso-formatos`. */
+    (await formatosLiberadosPara(tenantId)) ? String(form.get("formato") ?? "") : "",
   );
   if (aparenciaInicial) {
     await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [

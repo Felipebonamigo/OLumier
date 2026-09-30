@@ -8,6 +8,7 @@ import { padraoDoEstudioLido } from "@/lib/aparencia-galeria";
 import { estilosDoEstudio } from "@/lib/estilos-do-estudio";
 import { CapaGaleriaEditor } from "@/components/capa-galeria-editor";
 import { lerAparencia } from "@/config/aparencia";
+import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 import { consultarUm } from "@/lib/db";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
@@ -140,6 +141,7 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       padraoDoEstudio={await padraoDoEstudioLido(galeria.tenant_id)}
       estilosDoEstudio={await estilosDoEstudio(galeria.tenant_id)}
       conteudo={conteudo}
+      formatosLiberados={await formatosLiberadosPara(galeria.tenant_id)}
       logo={logo}
     />
   );

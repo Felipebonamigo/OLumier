@@ -6,6 +6,22 @@ arquivos dentro) e uma outra forma de Stream (estilo Netflix), que vai passando
 os episódios — mais para vídeos, pois hoje nossa entrega de vídeos ainda é meio
 feia/pobre."*
 
+## Quem vê (30/09/2026)
+
+"Isso só ficará visível para sócios primeiramente (eu, Carol, Sirius)."
+Pastas e Stream aparecem só para a conta **liberada** na ficha do estúdio no
+Admin (botão "Liberar Pastas e Stream", `tenants.formatos_liberados_em`,
+migração 054) e para as contas de **admin** (`ADMINS`), que não precisam
+liberar a si mesmas. Regra em `src/config/formatos-liberados.ts`; abrir para
+todo mundo é trocar o corpo dela por `return true`.
+
+Sem liberação: o grupo Formato some do Design, a escolha some da criação, o
+"capa da pasta" some da aba Fotos, e a galeria pública desenha a galeria de
+sempre mesmo que a aparência gravada diga outra coisa (o servidor decide —
+`aparenciaPermitida`). A migração 054 já nasce liberando quem usou pastas ou
+stream no intervalo em que estiveram abertos, para nenhuma entrega mudar
+sozinha. Preso em `scripts/testar-formatos-liberados.mjs`.
+
 ## Estado
 
 | | Situação |
