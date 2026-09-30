@@ -50,7 +50,10 @@ export function GradeMedias({
   capaId,
   secoes,
   capasDasPastas = {},
+  mostrarCapaDaPasta = false,
 }: {
+  /** A conta usa Pastas? Sem isso o botão "capa da pasta" não aparece. */
+  mostrarCapaDaPasta?: boolean;
   medias: MediaExibida[];
   galeriaId: string;
   capaId: string | null;
@@ -634,14 +637,14 @@ export function GradeMedias({
                 ✓
               </button>
 
-              {(capaId === m.id || ehCapaDaPasta(m)) && (
+              {(capaId === m.id || (mostrarCapaDaPasta && ehCapaDaPasta(m))) && (
                 <span className="absolute left-9 top-1.5 z-10 flex flex-col items-start gap-1">
                   {capaId === m.id && (
                     <span className="rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
                       capa
                     </span>
                   )}
-                  {ehCapaDaPasta(m) && (
+                  {mostrarCapaDaPasta && ehCapaDaPasta(m) && (
                     <span className="whitespace-nowrap rounded-md bg-void/85 px-2 py-0.5 text-[10px] font-semibold text-acento-alto">
                       capa da pasta
                     </span>
@@ -727,7 +730,7 @@ export function GradeMedias({
                 )}
                 {/* Vídeo também pode ser a frente da pasta — a pasta do filme
                     tem só vídeo —, desde que tenha pôster para mostrar. */}
-                {m.secaoId && !ehCapaDaPasta(m) && (m.tipo === "foto" || m.temCapa) && (
+                {mostrarCapaDaPasta && m.secaoId && !ehCapaDaPasta(m) && (m.tipo === "foto" || m.temCapa) && (
                   <button
                     type="button"
                     onClick={() => definirCapaDaPasta(m)}

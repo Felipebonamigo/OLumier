@@ -125,9 +125,61 @@ etapa("formato não tira a galeria do estilo nem do padrão", () => {
   }
 });
 
+etapa("o desenho das pastas e do stream anda com o formato, não com o estilo", () => {
+  const atual = ap.lerAparencia({ formato: "stream", estiloStream: "mostra", estiloPastas: "indice" });
+  const depois = ap.comFormatoDe(ap.presetPorId("atelie").aparencia, atual);
+  igual([depois.formato, depois.estiloStream, depois.estiloPastas], ["stream", "mostra", "indice"], "estrutura");
+  const revista = ap.presetPorId("revista").aparencia;
+  if (!ap.mesmaAparencia({ ...revista, estiloStream: "vitrine" }, revista)) {
+    throw new Error("trocar o desenho do stream tirou a galeria do padrão");
+  }
+});
+
+etapa("desenho gravado antes do eixo, ou estranho, cai no primeiro", () => {
+  igual(ap.lerAparencia({}).estiloPastas, "pilha", "pastas");
+  igual(ap.lerAparencia({}).estiloStream, "cinema", "stream");
+  igual(ap.lerAparencia({ estiloStream: "netflix" }).estiloStream, "cinema", "fora da lista");
+});
+
+etapa("a sala Cinema escurece o tema claro, e deixa o escuro como está", () => {
+  const claro = ap.lerAparencia({ tema: "claro", formato: "stream", estiloStream: "cinema" });
+  igual(ap.variaveisDaEntrega(claro, "stream")["--g-fundo"], ap.SALA_ESCURA["--g-fundo"], "claro vira sala escura");
+  const noite = ap.lerAparencia({ tema: "noite", formato: "stream", estiloStream: "cinema" });
+  igual(ap.variaveisDaEntrega(noite, "stream")["--g-fundo"], ap.TEMAS.noite["--g-fundo"], "noite fica noite");
+  const vitrine = ap.lerAparencia({ tema: "claro", formato: "stream", estiloStream: "vitrine" });
+  igual(ap.variaveisDaEntrega(vitrine, "stream")["--g-fundo"], ap.TEMAS.claro["--g-fundo"], "vitrine segue o tema");
+  igual(ap.variaveisDaEntrega(claro, "galeria")["--g-fundo"], ap.TEMAS.claro["--g-fundo"], "fora do stream, nada muda");
+});
+
 etapa("todo estilo pronto nasce em galeria", () => {
   const fora = ap.PRESETS.filter((p) => p.aparencia.formato !== "galeria").map((p) => p.id);
   igual(fora, [], "presets com outro formato");
+});
+
+/* ── 3b. o formato escolhido na criação da galeria ──────────────────────── */
+
+etapa("criação sem estilo e em Galeria não grava nada (o '{}' de sempre)", () => {
+  igual(ap.aparenciaComFormato(null, "galeria"), null, "galeria sem estilo");
+  igual(ap.aparenciaComFormato(null, ""), null, "sem pedido");
+});
+
+etapa("criação sem estilo em Stream nasce em Stream, com o resto no padrão", () => {
+  const gravada = ap.aparenciaComFormato(null, "stream");
+  igual(ap.lerAparencia(gravada).formato, "stream", "formato");
+  igual(ap.lerAparencia(gravada).capa, ap.APARENCIA_PADRAO.capa, "o resto é o padrão");
+});
+
+etapa("o formato escolhido agora vence o que veio no padrão do estúdio", () => {
+  const padrao = { ...ap.presetPorId("revista").aparencia, formato: "stream" };
+  const gravada = ap.lerAparencia(ap.aparenciaComFormato(padrao, "pastas"));
+  igual(gravada.formato, "pastas", "formato");
+  igual(gravada.capa, "jornal", "o estilo do padrão fica");
+});
+
+etapa("formato fora da lista não mexe no estilo escolhido", () => {
+  const revista = ap.presetPorId("revista").aparencia;
+  igual(ap.aparenciaComFormato(revista, "netflix"), revista, "estilo intacto");
+  igual(ap.aparenciaComFormato(null, "netflix"), null, "sem estilo, nada");
 });
 
 /* ── 4. o cartão do episódio ────────────────────────────────────────────── */

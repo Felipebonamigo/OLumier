@@ -14,6 +14,7 @@ import { AvisoDeRepetidas } from "@/components/aviso-de-repetidas";
 import { EnviarArquivos } from "@/components/enviar-arquivos";
 import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
 import { EditorSecoes } from "@/components/editor-secoes";
+import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 
 export const metadata: Metadata = { title: "Fotos da galeria" };
 export const dynamic = "force-dynamic";
@@ -224,6 +225,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
         /* A capa de cada pasta (migração 052), para o selo e o botão da grade.
            Só as escolhidas: sem escolha a pasta usa a primeira foto, e a
            grade não precisa dizer isso em cada capítulo. */
+        mostrarCapaDaPasta={await formatosLiberadosPara(galeria.tenant_id)}
         capasDasPastas={Object.fromEntries(
           secoes.filter((s) => s.capa_media_id).map((s) => [s.id, s.capa_media_id as string]),
         )}

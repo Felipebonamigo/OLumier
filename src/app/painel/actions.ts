@@ -27,7 +27,8 @@ import {
   tornarEstiloPadrao,
   type EstiloDoEstudio,
 } from "@/lib/estilos-do-estudio";
-import type { Aparencia } from "@/config/aparencia";
+import { aparenciaComFormato, type Aparencia } from "@/config/aparencia";
+import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 import { descricaoDaAssinatura, precoDoCicloComComboCentavos, descontoDaGaleriaCentavos } from "@/config/combo";
 import { faixaDoAtomatiza } from "@/lib/combo";
 import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
@@ -128,10 +129,17 @@ export async function criarGaleriaAction(
    */
   /* Um estilo salvo do estúdio (até cinco, desde 28/09/2026) entra na mesma
      fila, entre o pronto e o padrão — ver `aparenciaInicialDaGaleria`. */
-  const aparenciaInicial = await aparenciaInicialDaGaleria(
-    tenantId,
-    String(form.get("preset") ?? ""),
-    String(form.get("estilo") ?? ""),
+  /* E o formato (galeria, pastas, stream), escolhido na mesma etapa, por
+     cima do estilo — ver `aparenciaComFormato`. */
+  const aparenciaInicial = aparenciaComFormato(
+    await aparenciaInicialDaGaleria(
+      tenantId,
+      String(form.get("preset") ?? ""),
+      String(form.get("estilo") ?? ""),
+    ),
+    /* Quem não tem Pastas e Stream liberados não escolhe formato — o campo
+       nem aparece, e o formulário é um endpoint. Ver `acesso-formatos`. */
+    (await formatosLiberadosPara(tenantId)) ? String(form.get("formato") ?? "") : "",
   );
   if (aparenciaInicial) {
     await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
