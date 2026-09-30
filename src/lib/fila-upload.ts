@@ -11,8 +11,47 @@ import { compararNomeNatural } from "@/lib/ordem-natural";
  * queda de rede não pode parar a fila no arquivo 412) e não travar o navegador.
  */
 
-/** Quantos envios ao mesmo tempo. */
-export const PARALELOS = 3;
+/**
+ * Quantos envios ao mesmo tempo.
+ *
+ * ── DE 3 PARA 6 (30/09/2026) ─────────────────────────────────────────────
+ *
+ * O Juan, de Portland: "uns 10 minutos pra subir 300 fotos". Medido no
+ * navegador com rede de hotel simulada (20 Mbps de subida, 150 ms de
+ * latência) e 30 fotos de 24 MP: com 3 de cada vez, 1,48× o mínimo que a
+ * banda permite; com 6, 1,29×. Cada arquivo gasta idas e voltas que não são
+ * banda (preparar, confirmar, as miniaturas), e com três no ar a subida
+ * fica ociosa enquanto elas acontecem. Sem limite de rede, 3 e 6 empatam: aí
+ * quem manda é o processador — ver `MINIATURAS_JUNTAS`.
+ */
+export const PARALELOS = 6;
+
+/**
+ * Quantas fotos geram miniatura ao mesmo tempo. Separado de `PARALELOS` de
+ * propósito: gerar a miniatura decodifica a foto inteira (24 MP são ~100 MB
+ * de memória), e seis de uma vez num notebook modesto ou num iPad é aba que
+ * fecha sozinha. A rede aguenta seis; o processador fica em três.
+ */
+export const MINIATURAS_JUNTAS = 3;
+
+/**
+ * Um limitador: no máximo `n` chamadas de `fn` rodando ao mesmo tempo; as
+ * outras esperam a vez, na ordem em que chegaram.
+ */
+export function limitador(n: number) {
+  let ativos = 0;
+  const fila: Array<() => void> = [];
+  return async function <T>(fn: () => Promise<T>): Promise<T> {
+    if (ativos >= n) await new Promise<void>((vez) => fila.push(vez));
+    ativos++;
+    try {
+      return await fn();
+    } finally {
+      ativos--;
+      fila.shift()?.();
+    }
+  };
+}
 
 /**
  * A espera antes de cada nova tentativa: 2 s, 5 s, 15 s, 30 s, 60 s — quase

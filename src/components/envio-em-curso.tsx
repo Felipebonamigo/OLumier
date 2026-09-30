@@ -17,6 +17,8 @@ import type { RostoMedido } from "@/lib/rostos-client";
 import { enviarEmPartes } from "@/lib/multipart-client";
 import {
   PARALELOS,
+  MINIATURAS_JUNTAS,
+  limitador,
   type ArquivoComCaminho,
   comRetentativa,
   erroDefinitivo,
@@ -119,6 +121,10 @@ interface Envio {
 }
 
 const Contexto = createContext<Envio | null>(null);
+
+/* Um só para a aba inteira: a importação e a aba Fotos dividem o mesmo
+   processador. Ver `MINIATURAS_JUNTAS`. */
+const vezDaMiniatura = limitador(MINIATURAS_JUNTAS);
 
 /** A fila desta galeria. Fora do provedor não existe envio — e isso é um erro. */
 export function useEnvio(): Envio {
@@ -416,7 +422,8 @@ export function ProvedorDeEnvio({
              * lê 128 KB do começo do arquivo, o outro decodifica a imagem.
              */
             const [derivadas, tiradaEm] = await Promise.all([
-              gerarDerivadas(arquivo, { medirRostos: tarefa.medidor }),
+              /* Na vez do processador: seis no ar, três gerando miniatura. */
+              vezDaMiniatura(() => gerarDerivadas(arquivo, { medirRostos: tarefa.medidor })),
               dataDaFoto(arquivo),
             ]);
 

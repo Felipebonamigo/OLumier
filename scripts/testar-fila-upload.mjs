@@ -13,6 +13,7 @@ import pg from "pg";
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const mod = await import("../src/lib/fila-upload.ts");
+const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let falhou = false;
 const etapa = async (nome, fn) => {
@@ -285,6 +286,49 @@ await etapa("sem rede nenhuma, a fila espera a rede voltar sem gastar tentativa"
     if (janelaOriginal === undefined) delete globalThis.window;
     else globalThis.window = janelaOriginal;
   }
+});
+
+/*
+ * ── SEIS NO AR, TRÊS NO PROCESSADOR (30/09/2026) ─────────────────────────
+ *
+ * Juan, de Portland: 300 fotos em 10 minutos. Com rede de hotel simulada, 6
+ * envios de cada vez chegaram mais perto do mínimo da banda que 3 (1,29× contra
+ * 1,48×). Mas a miniatura decodifica a foto inteira: seis juntas pesam demais
+ * num notebook modesto. O limitador segura o processador em três.
+ */
+await etapa("seis envios ao mesmo tempo, e a miniatura limitada a três", async () => {
+  if (mod.PARALELOS < 6) throw new Error(`PARALELOS = ${mod.PARALELOS}`);
+  if (mod.MINIATURAS_JUNTAS > 3) throw new Error(`MINIATURAS_JUNTAS = ${mod.MINIATURAS_JUNTAS}`);
+  const vez = mod.limitador(mod.MINIATURAS_JUNTAS);
+  let agora = 0;
+  let pico = 0;
+  const ordem = [];
+  await mod.emParalelo(
+    Array.from({ length: 12 }, (_, i) => i),
+    mod.PARALELOS,
+    async (i) => {
+      await vez(async () => {
+        agora++;
+        pico = Math.max(pico, agora);
+        ordem.push(i);
+        await espera(5);
+        agora--;
+      });
+    },
+  );
+  if (pico !== mod.MINIATURAS_JUNTAS) throw new Error(`pico de ${pico} miniaturas juntas`);
+  if (ordem.length !== 12) throw new Error(`${ordem.length} de 12`);
+  return `${mod.PARALELOS} no ar, pico de ${pico} gerando miniatura`;
+});
+
+await etapa("o limitador solta a vez mesmo quando a tarefa falha", async () => {
+  const vez = mod.limitador(1);
+  await vez(async () => {
+    throw new Error("decodificação falhou");
+  }).catch(() => {});
+  const r = await Promise.race([vez(async () => "andou"), espera(200).then(() => "travou")]);
+  if (r !== "andou") throw new Error("a vez ficou presa depois da falha");
+  return "a próxima andou";
 });
 
 /*
