@@ -163,6 +163,35 @@ Atualizar o código depois: rodar o mesmo script de novo (ele faz `git reset
 --hard origin/master` e reinicia). O `systemctl restart` espera os downloads
 em andamento terminarem (`TimeoutStopSec=6h`).
 
+## A rede, para download longe (30/09/2026)
+
+Uma fotógrafa testou uma galeria de 527 MB e viu **270–470 KB/s** com a
+internet dela normal. Não há freio nosso; o que explica é a distância com a
+configuração de fábrica do Linux:
+
+- o Caddy entrega por **HTTP/3** (QUIC, sobre UDP) quando o navegador aceita,
+  e o quic-go precisa de ~7 MB de buffer de UDP — o Linux dá ~200 KB. A
+  ~250 ms de ida e volta até o sul do Brasil, isso é um teto de ~800 KB/s, e
+  a perda de pacote no caminho derruba para metade;
+- em TCP, o **cubic** (padrão) desaba com pouca perda num caminho longo; o
+  **BBR** não.
+
+`ops/ajustar-rede-zip.sh` liga BBR com a fila `fq`, abre os buffers de TCP
+(até 64 MB) e de UDP, e desliga o HTTP/3 no Caddy desta máquina — TCP com
+BBR é o caminho previsível para um arquivo de horas numa conexão só. O
+instalador chama o script no passo 7; numa máquina que já está no ar, basta:
+
+```
+cd /opt/fotonio-zip && git fetch --depth 1 origin master && git reset --hard origin/master
+bash ops/ajustar-rede-zip.sh
+```
+
+Não derruba download em andamento. Para medir, baixar a mesma galeria duas
+vezes de um computador no Brasil: a segunda sai do disco e mostra só a
+entrega. Se ainda ficar baixo, o próximo degrau é a **localização**: um
+servidor em Ashburn (EUA, leste) fica ao lado do B2 (`us-east-005`) e a
+~120 ms do Brasil, contra ~250 ms da Alemanha.
+
 ## Acompanhar
 
 O bloco **Tráfego e custo da entrega** do `/painel/admin` mostra, para o mês
