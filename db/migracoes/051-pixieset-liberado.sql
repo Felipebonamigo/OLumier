@@ -1,0 +1,21 @@
+-- ============================================================================
+--  QUEM PODE USAR O "ENTRAR COM A CONTA DO PIXIESET"
+-- ============================================================================
+--
+--  Felipe, 30/09/2026: "crie essa opção, para liberar, lá no admin, um botão de
+--  'permitir pixieset'".
+--
+--  A liberação morava numa variável de ambiente (PIXIESET_LOGIN_LIBERADO), no
+--  molde de ADMINS — e mudar exigia acesso ao servidor. Passa a ser um botão na
+--  ficha do estúdio, no admin. O que segura o poder agora é o portão do admin
+--  (`lib/portao-admin.ts`, conferido de novo dentro da ação) e a auditoria:
+--  cada liberação e cada bloqueio vira evento com quem fez.
+--
+--  Carimbo de data e não booleano: "desde quando está liberado?" responde
+--  sozinho, e nulo continua sendo o padrão — ninguém liberado.
+--
+--  Liberar ainda não abre o formulário: o conector que entra no Pixieset não
+--  existe (CONECTOR_PIXIESET_PRONTO em src/config/pixieset.ts). Ver
+--  docs/importacao.md.
+
+alter table tenants add column if not exists pixieset_liberado_em timestamptz;

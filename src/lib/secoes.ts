@@ -25,7 +25,7 @@ export interface Secao {
   slug: string;
   ordem: number;
   total?: number;
-  /** A foto de frente da pasta (migração 051). Null = a primeira do capítulo. */
+  /** A foto de frente da pasta (migração 052). Null = a primeira do capítulo. */
   capa_media_id?: string | null;
 }
 
@@ -61,7 +61,7 @@ export async function listarSecoes(galeriaId: string) {
 
 /**
  * A capa da pasta: a foto que o fotógrafo apontou vira a frente do capítulo
- * dela (migração 051).
+ * dela (migração 052).
  *
  * O capítulo sai DA FOTO, e não do pedido: é a foto que sabe onde está, e
  * assim não há como apontar a foto da cerimônia para a pasta da festa. Foto

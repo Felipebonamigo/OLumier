@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   FONTES_TITULO,
-  alturaLogoPx,
   fonteDoDetalhe,
+  medidaDaLogo,
+  proporcaoDaLogo,
   pesoDoTitulo,
   type Aparencia,
 } from "@/config/aparencia";
@@ -108,6 +109,8 @@ export function GaleriaStream({
   dataFormatada,
   estudio,
   logoUrl,
+  logoLargura = null,
+  logoAltura = null,
   fundo,
   focoX,
   focoY,
@@ -123,6 +126,9 @@ export function GaleriaStream({
   dataFormatada: string | null;
   estudio: string;
   logoUrl: string | null;
+  /** A medida do arquivo da logo — a mesma régua da capa, ver `medidaDaLogo`. */
+  logoLargura?: number | null;
+  logoAltura?: number | null;
   fundo: string | null;
   focoX: number;
   focoY: number;
@@ -174,7 +180,13 @@ export function GaleriaStream({
   const peso = pesoDoTitulo(aparencia.tipografia, aparencia.peso);
   const detalhe = fonteDoDetalhe(aparencia);
   const centro = aparencia.alinhamento === "centro";
-  const alturaLogo = Math.min(alturaLogoPx(aparencia.logo), 72);
+  /* A mesma régua da capa (`medidaDaLogo`): a barrinha de tamanho do editor
+     vale aqui também. `max-w` segura a logo larga no celular. */
+  const medidaLogo = medidaDaLogo(aparencia, proporcaoDaLogo(logoLargura, logoAltura));
+  const estiloLogo =
+    medidaLogo && "altura" in medidaLogo
+      ? { height: `${medidaLogo.altura}px` }
+      : { maxHeight: `${medidaLogo?.tetoAltura ?? 0}px` };
 
   const meta = [
     dataFormatada,
@@ -223,12 +235,12 @@ export function GaleriaStream({
         />
 
         <div className={`flex px-5 pt-6 sm:px-10 sm:pt-8 ${centro ? "justify-center" : ""}`}>
-          {aparencia.logo !== "nenhuma" && logoUrl ? (
+          {medidaLogo && logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- URL assinada do armazém
             <img
               src={logoUrl}
               alt={estudio}
-              style={{ maxHeight: `${alturaLogo}px` }}
+              style={estiloLogo}
               className="w-auto max-w-[55vw] object-contain"
             />
           ) : (

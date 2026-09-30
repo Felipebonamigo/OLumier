@@ -50,7 +50,7 @@ Não é o ícone de pasta do computador de propósito: essa é a cara de nuvem
 genérica que a estratégia evita (§12). Cor, canto e letra são os da galeria.
 
 - A capa é a **escolhida no painel** (aba Fotos → hover na foto → "capa da
-  pasta", migração 051) ou a primeira foto do capítulo. Foto movida para outro
+  pasta", migração 052) ou a primeira foto do capítulo. Foto movida para outro
   capítulo deixa de valer como capa na pasta antiga.
 - Abrir a pasta é a rota de capítulo que já existia (`/…/<galeria>/<capitulo>`):
   menu de baixar, favoritas, visualizador e rolagem infinita são os de sempre.
@@ -111,4 +111,4 @@ navegador a lê no envio, do mesmo `<video>` que já abria para tirar o pôster.
 | `src/app/g/[estudio]/[galeria]/page.tsx` | decide a tela antes de assinar a grade |
 | `src/components/editor-aparencia.tsx` | grupo Formato |
 | `src/components/grade-medias.tsx` | botão e selo "capa da pasta" |
-| `db/migracoes/051-capa-da-pasta.sql` | `secoes.capa_media_id` |
+| `db/migracoes/052-capa-da-pasta.sql` | `secoes.capa_media_id` |

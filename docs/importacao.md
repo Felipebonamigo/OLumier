@@ -87,11 +87,15 @@ Por quê:
 
 **Só para contas apontadas.** Felipe, 30/09/2026: "deixa desabilitado o botão
 de logar no pixieset por enquanto, para todos, só vamos habilitar para os
-usuários que eu apontar". A lista é a variável `PIXIESET_LOGIN_LIBERADO`
-(e-mails separados por vírgula, no `.env.production`), no mesmo molde de
-`ADMINS`. Vazia, que é o padrão, ninguém tem acesso. O formulário só se abre com as
-duas travas: a conta na lista **e** `CONECTOR_PIXIESET_PRONTO = true` em
-`src/config/pixieset.ts`. Hoje o conector não existe, então liberar uma conta
+usuários que eu apontar" — e depois: "crie essa opção, para liberar, lá no
+admin". Quem libera é o botão **"Permitir Pixieset"** na ficha do estúdio
+(`/painel/admin/estudios/<id>`), que grava `tenants.pixieset_liberado_em`
+(migração 052). Só um admin (`ADMINS`) vê e aperta o botão, a ação confere o
+admin de novo, e cada liberação ou bloqueio vira evento na auditoria com quem
+fez. Nulo, que é o padrão, ninguém tem acesso. (Por algumas horas isto foi a
+variável `PIXIESET_LOGIN_LIBERADO`; nunca chegou a ser preenchida em produção.)
+O formulário só se abre com as duas travas: a conta liberada **e**
+`CONECTOR_PIXIESET_PRONTO = true` em `src/config/pixieset.ts`. Hoje o conector não existe, então liberar uma conta
 só troca o recado ("sua conta está liberada, mas o caminho ainda não foi
 ligado").
 

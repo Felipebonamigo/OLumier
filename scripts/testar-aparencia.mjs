@@ -302,15 +302,21 @@ if (/max-h-\d/.test(capa)) {
  * TODO EIXO PRECISA ESTAR NA TELA.
  *
  * Eixo que existe no config e não aparece no editor é opção que ninguém
- * alcança — e ninguém descobre, porque nada quebra. Duas exceções conhecidas,
- * cada uma com seletor próprio que tem de estar na tela: a tipografia
- * (`SeletorDeFonte`, agrupado por família) e o formato (`SeletorDeFormato`,
- * cartões com o esquema da tela — 30/09/2026).
+ * alcança — e ninguém descobre, porque nada quebra. A tipografia é a exceção
+ * conhecida: ela tem seletor próprio (`SeletorDeFonte`), agrupado por família.
+ * A logo é a segunda desde 30/09/2026: "Mostrar / Nenhuma" e a barrinha de
+ * tamanho moram em `BarraDaLogo` — e aí a exigência é a barrinha estar lá.
+ * O formato é a terceira, no mesmo dia: cartões com o esquema da tela, em
+ * `SeletorDeFormato`.
  */
 const editor = readFileSync(path.join(RAIZ, "src/components/editor-aparencia.tsx"), "utf8");
-const SELETOR_PROPRIO = { tipografia: "<SeletorDeFonte", formato: "<SeletorDeFormato" };
+const COM_PECA_PROPRIA = {
+  tipografia: "<SeletorDeFonte",
+  logo: "<BarraDaLogo",
+  formato: "<SeletorDeFormato",
+};
 const forasDaTela = Object.keys(OPCOES).filter((eixo) =>
-  SELETOR_PROPRIO[eixo] ? !editor.includes(SELETOR_PROPRIO[eixo]) : !editor.includes(`eixo="${eixo}"`),
+  COM_PECA_PROPRIA[eixo] ? !editor.includes(COM_PECA_PROPRIA[eixo]) : !editor.includes(`eixo="${eixo}"`),
 );
 if (forasDaTela.length) {
   console.error(`  ✗ eixo sem lugar no editor: ${forasDaTela.join(", ")}`);

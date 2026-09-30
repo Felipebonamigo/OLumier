@@ -779,7 +779,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           grupos.map(async (g) => {
             /* A capa escolhida, se ainda está NESTE capítulo e tem imagem; senão
                a primeira foto; senão o primeiro vídeo com pôster. Ver a
-               migração 051 para por que a conferência é na leitura também. */
+               migração 052 para por que a conferência é na leitura também. */
             const escolhida = g.capaId ? g.medias.find((m) => m.id === g.capaId && temImagem(m)) : undefined;
             const capaDaPasta =
               escolhida ?? g.medias.find((m) => m.tipo === "foto") ?? g.medias.find(temImagem);
@@ -916,6 +916,8 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           dataFormatada={dataEvento}
           estudio={galeria.estudio_nome}
           logoUrl={urlLogo}
+          logoLargura={galeria.estudio_logo_largura}
+          logoAltura={galeria.estudio_logo_altura}
           fundo={fundoDoStream}
           focoX={galeria.capa_foco_x}
           focoY={galeria.capa_foco_y}
@@ -939,6 +941,8 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             dataFormatada: dataEvento,
             estudio: galeria.estudio_nome,
             logoUrl: urlLogo,
+            logoLargura: galeria.estudio_logo_largura,
+            logoAltura: galeria.estudio_logo_altura,
             urlImagem: urlCapa,
             /*
              * ESCOLHIDA, e não herdada.

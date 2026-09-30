@@ -53,6 +53,9 @@ export interface GaleriaPublica {
   estudio_site: unknown;
   estudio_slug: string;
   estudio_logo: string | null;
+  /* A medida da logo (migração 052), para a capa desenhá-la pela área. */
+  estudio_logo_largura: number | null;
+  estudio_logo_altura: number | null;
   /* A fonte própria do estúdio. Vem junto porque a galeria pública precisa dela
      para montar o @font-face — sem isso seria uma segunda consulta por página. */
   estudio_fonte: string | null;
@@ -82,6 +85,7 @@ export async function buscarGaleriaPublica(
             g.permite_download, g.publicada, g.expira_em, g.aparencia, g.aparencia_rascunho, g.capa_media_id, g.capa_chave, g.capa_foco_x, g.capa_foco_y, g.rostos_ativos, g.grupo_solto,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug, t.site as estudio_site,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
+            t.logo_largura as estudio_logo_largura, t.logo_altura as estudio_logo_altura,
             t.fonte_chave as estudio_fonte, t.fonte_nome as estudio_fonte_nome,
             -- Para galeriasNoAr: o trial abandonado deixa de servir a galeria
             -- 15 dias depois de vencer. Sem estas duas colunas a regra recebe

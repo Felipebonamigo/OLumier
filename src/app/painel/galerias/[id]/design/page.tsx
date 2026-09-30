@@ -79,6 +79,21 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
    * Resumo em vez das colunas cruas porque uma delas é a chave do objeto no
    * armazém, e ela não tem o que fazer numa URL.
    */
+  /* A logo do estúdio, para a barrinha de tamanho do editor. A medida pode
+     vir nula (logo anterior à migração 052): o editor mede e grava. */
+  const estudio = await consultarUm<{
+    logo_chave: string | null;
+    logo_largura: number | null;
+    logo_altura: number | null;
+  }>("select logo_chave, logo_largura, logo_altura from tenants where id = $1", [tenantId]);
+  const logo = estudio?.logo_chave
+    ? {
+        url: await urlDeLeitura(estudio.logo_chave, 3600),
+        largura: estudio.logo_largura,
+        altura: estudio.logo_altura,
+      }
+    : null;
+
   const versaoDaCapa = createHash("sha256")
     .update(
       [galeria.capa_chave, galeria.capa_media_id, galeria.capa_foco_x, galeria.capa_foco_y].join(
@@ -125,6 +140,7 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       padraoDoEstudio={await padraoDoEstudioLido(galeria.tenant_id)}
       estilosDoEstudio={await estilosDoEstudio(galeria.tenant_id)}
       conteudo={conteudo}
+      logo={logo}
     />
   );
 }

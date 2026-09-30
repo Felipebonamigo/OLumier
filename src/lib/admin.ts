@@ -39,6 +39,8 @@ export interface LinhaAdmin {
   ultimo_pagamento_em: Date | null;
   pago_ate: Date | null;
   senha_alterada_em: Date | null;
+  /** Liberado para o login do Pixieset (migração 052). */
+  pixieset_liberado_em: Date | null;
   quota_bytes: string;
   bytes_no_ar: string;
   bytes_no_cofre: string;
@@ -98,6 +100,7 @@ export async function panoramaDosEstudios(): Promise<LinhaAdmin[]> {
       (t.asaas_assinatura_id is not null) as tem_assinatura,
       t.asaas_cliente_id, t.asaas_assinatura_id,
       t.assinatura_criada_em, t.ultimo_pagamento_em, t.pago_ate, t.senha_alterada_em,
+      t.pixieset_liberado_em,
       t.quota_bytes,
       coalesce((
         select sum(m.bytes) from medias m
