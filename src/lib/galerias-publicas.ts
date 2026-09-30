@@ -122,6 +122,8 @@ export async function listarMediasPublicas(galeriaId: string) {
     versao: number;
     /** Só vídeo, e só os enviados depois de 30/09/2026 — ver o formato Stream. */
     duracao_seg: number | null;
+    /** O nome que o fotógrafo escreveu para a tela (migração 055), ou null. */
+    titulo: string | null;
   }>(
     /*
      * A ordem já sai agrupada por capítulo (seções pela ordem definida pelo
@@ -130,7 +132,7 @@ export async function listarMediasPublicas(galeriaId: string) {
      */
     `select m.id, m.chave, m.chave_thumb, m.chave_preview, m.nome_original,
             m.tipo, m.bytes, m.largura, m.altura, m.secao_id, m.armazem, m.versao,
-            m.duracao_seg
+            m.duracao_seg, m.titulo
        from medias m
        left join secoes s on s.id = m.secao_id
       where m.galeria_id = $1 and m.pronto

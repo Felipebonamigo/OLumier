@@ -9,6 +9,7 @@ import { estilosDoEstudio } from "@/lib/estilos-do-estudio";
 import { CapaGaleriaEditor } from "@/components/capa-galeria-editor";
 import { lerAparencia } from "@/config/aparencia";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
+import { pastasNoDesign, videosNoDesign } from "@/lib/entrega-no-design";
 import { consultarUm } from "@/lib/db";
 import { urlDeLeitura } from "@/lib/r2";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
@@ -95,11 +96,28 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       }
     : null;
 
+  /*
+   * Os vídeos e as pastas, para o grupo Formato (30/09/2026) — só para quem
+   * vê o grupo. Um pôster por vídeo e uma miniatura por capítulo; as fotos de
+   * cada pasta vêm só quando ela é aberta. Ver `lib/entrega-no-design.ts`.
+   */
+  const liberado = await formatosLiberadosPara(galeria.tenant_id);
+  const [videos, pastas] = liberado
+    ? await Promise.all([videosNoDesign(galeria.id), pastasNoDesign(galeria.id)])
+    : [[], []];
+
+  /* O nome de cada vídeo e a capa de cada pasta entram na assinatura: eles
+     também gravam fora do `?ap=`, e a prévia tem de recarregar quando mudam. */
   const versaoDaCapa = createHash("sha256")
     .update(
-      [galeria.capa_chave, galeria.capa_media_id, galeria.capa_foco_x, galeria.capa_foco_y].join(
-        "|",
-      ),
+      [
+        galeria.capa_chave,
+        galeria.capa_media_id,
+        galeria.capa_foco_x,
+        galeria.capa_foco_y,
+        ...videos.map((v) => `${v.id}:${v.titulo ?? ""}`),
+        ...pastas.map((p) => `${p.secaoId}:${p.escolhida ? p.capa?.split("?")[0] : ""}`),
+      ].join("|"),
     )
     .digest("hex")
     .slice(0, 8);
@@ -109,9 +127,10 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
    * vira galeria". Uma consulta de contagem, sem assinar nada — a aba continua
    * sem carregar mídia.
    */
-  const conteudo = await consultarUm<{ grupos: number; videos: number; fotos: number }>(
+  const conteudo = await consultarUm<{ grupos: number; videos: number; videosSoltos: number; fotos: number }>(
     `select count(distinct coalesce(secao_id::text, '-'))::int as grupos,
             count(*) filter (where tipo = 'video')::int as videos,
+            count(*) filter (where tipo = 'video' and secao_id is null)::int as "videosSoltos",
             count(*) filter (where tipo = 'foto')::int as fotos
        from medias where galeria_id = $1 and pronto`,
     [galeria.id],
@@ -141,7 +160,9 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       padraoDoEstudio={await padraoDoEstudioLido(galeria.tenant_id)}
       estilosDoEstudio={await estilosDoEstudio(galeria.tenant_id)}
       conteudo={conteudo}
-      formatosLiberados={await formatosLiberadosPara(galeria.tenant_id)}
+      formatosLiberados={liberado}
+      videos={videos}
+      pastas={pastas}
       logo={logo}
     />
   );
