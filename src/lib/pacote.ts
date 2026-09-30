@@ -2,7 +2,8 @@ import "server-only";
 import { consultar, consultarUm } from "@/lib/db";
 import { marca } from "@/config/marca";
 import { cicloDe, espacoValido, idDaMontagem, planoPorId, type Ciclo } from "@/config/planos";
-import { ehFaixaAtomatiza, type FaixaAtomatiza } from "@/config/combo";
+import { ehFaixaAtomatiza, MARCA_DO_PACOTE, type FaixaAtomatiza } from "@/config/combo";
+import { buscarAssinatura, trocarDescricaoDaAssinatura } from "@/lib/asaas";
 import { ESCOLHA_CARTAO, formaDaAssinatura } from "@/config/forma-assinatura";
 import { VERSOES_LEGAIS } from "@/config/documentos-legais";
 import { conferirDocumento, soDigitos } from "@/lib/documento";
@@ -409,7 +410,21 @@ export async function assinarPacote(tenantId: string, escolha: EscolhaDoPacote):
     aceitouTermos: escolha.aceitouTermos,
   });
 
+  /* A conferência roda nos dois casos: um "não respondeu" pode ter sido uma
+   * assinatura que nasceu lá e cuja resposta se perdeu no caminho. */
+  const conferir = () =>
+    recalcularCombo(tenantId, "pacote").catch((e) =>
+      console.error(`[pacote] estúdio ${tenantId}: a conferência do combo falhou:`, e),
+    );
+
   if (!deLa.ok && deLa.codigo !== "ja_assina") {
+    /* Sem o outro lado, a marca sai: ela faria o Atomatiza contar a nossa
+     * assinatura ainda não paga se a pessoa o assinasse separado depois — e
+     * separado a regra é a de sempre (`docs/pacote.md`). */
+    await tirarAMarca(nossa.assinaturaId).catch((e) =>
+      console.error(`[pacote] estúdio ${tenantId}: não consegui tirar a marca do pacote:`, e),
+    );
+    await conferir();
     return {
       ok: false,
       galeriaAssinada: true,
@@ -417,13 +432,19 @@ export async function assinarPacote(tenantId: string, escolha: EscolhaDoPacote):
     };
   }
 
-  await recalcularCombo(tenantId, "pacote").catch((e) =>
-    console.error(`[pacote] estúdio ${tenantId}: o Atomatiza foi assinado, mas a conferência do combo falhou:`, e),
-  );
+  await conferir();
   return {
     ok: true,
     atomatiza: deLa.ok ? { contaNova: deLa.contaNova, valorCentavos: deLa.valorCentavos } : { contaNova: false, valorCentavos: 0 },
   };
+}
+
+async function tirarAMarca(assinaturaId: string): Promise<void> {
+  const a = await buscarAssinatura(assinaturaId);
+  const descricao = a.description ?? "";
+  if (descricao.includes(MARCA_DO_PACOTE)) {
+    await trocarDescricaoDaAssinatura(assinaturaId, descricao.replace(MARCA_DO_PACOTE, ""));
+  }
 }
 
 /**

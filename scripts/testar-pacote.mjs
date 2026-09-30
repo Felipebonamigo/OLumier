@@ -393,7 +393,9 @@ try {
       igual([r.ok, r.galeriaAssinada], [false, true], "resultado");
       if (!r.erro.includes("outro e-mail")) throw new Error(`erro: ${r.erro}`);
       const t = (await db.query("select asaas_assinatura_id from tenants where id = $1", [rows[0].id])).rows[0];
-      igual(asaas.assinaturas.find((a) => a.id === t.asaas_assinatura_id)?.value, 49.99, "cheio");
+      const sub = asaas.assinaturas.find((a) => a.id === t.asaas_assinatura_id);
+      igual(sub?.value, 49.99, "cheio");
+      if (C.ehDoPacote(sub?.description)) throw new Error(`a marca ficou sem o outro lado: ${sub?.description}`);
     } finally {
       atz.resposta = null;
     }

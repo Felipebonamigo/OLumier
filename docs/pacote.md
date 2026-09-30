@@ -112,6 +112,9 @@ Respostas:
 - 409 `{ "erro": "…", "codigo": "email_em_uso" }` — o documento não tem conta
   aí, mas o e-mail já é de outra conta.
 - 409 `{ "erro": "…", "codigo": "ja_assina" }` — a conta já tem assinatura viva.
+- 409 `{ "erro": "…", "codigo": "combinado" }` — a conta paga a mensalidade
+  combinada direto com a gente, fora do Asaas. Não há assinatura para o combo:
+  quem chama trata como erro (a própria assinatura fica no cheio).
 - 400 `{ "erro": "…" }` — documento, plano, ciclo ou forma inválidos, ou
   `aceitouTermos` ausente quando a conta seria criada.
 - 5xx — falhou do lado de lá (Asaas fora etc.).
@@ -139,7 +142,10 @@ Regras de quem recebe:
    acha o parceiro marcado e baixa a própria assinatura, fatura emitida
    inclusive.
 4. Deu errado → a própria assinatura fica no preço cheio (o certo, sem
-   parceiro), e a tela diz o que houve e que dá para assinar o outro por lá.
+   parceiro), PERDE a marca `· pacote` (senão o outro, assinado separado
+   depois, contaria a nossa ainda não paga), e a tela diz o que houve e que
+   dá para assinar o outro por lá. A conferência do passo 3 roda mesmo assim:
+   um "não respondeu" pode ter sido uma assinatura que nasceu lá.
 
 Assim nenhum dos dois fica com desconto sem o outro existir.
 

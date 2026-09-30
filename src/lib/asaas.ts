@@ -538,6 +538,18 @@ export async function temCobrancaVencida(assinaturaId: string): Promise<boolean>
   return (r.data?.length ?? 0) > 0;
 }
 
+/**
+ * Só a descrição da assinatura — sem mexer em valor nem split. Usada pelo
+ * pacote para tirar a marca `· pacote` quando o outro lado recusou
+ * (`lib/pacote.ts`).
+ */
+export async function trocarDescricaoDaAssinatura(assinaturaId: string, descricao: string): Promise<void> {
+  await chamar(`/subscriptions/${segmento(assinaturaId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ description: descricao }),
+  });
+}
+
 /** Os estados de cobrança em que o dinheiro entrou (cartão, Pix/boleto, em mãos). */
 const PAGAS = new Set(["CONFIRMED", "RECEIVED", "RECEIVED_IN_CASH"]);
 
