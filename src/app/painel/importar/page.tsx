@@ -67,7 +67,7 @@ export default async function ImportarPage() {
         />
       </ProvedorDeEnvio>
 
-      <MigrarDoPixieset liberado={loginDoPixiesetLiberado(tenant.email)} />
+      <MigrarDoPixieset liberado={loginDoPixiesetLiberado(tenant)} />
     </main>
   );
 }

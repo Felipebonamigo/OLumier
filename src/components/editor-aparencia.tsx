@@ -12,6 +12,9 @@ import {
   PALETAS,
   TEMAS,
   TAMANHO_TITULO,
+  TAMANHO_LOGO,
+  proporcaoDaLogo,
+  tamanhoLogoEquivalente,
   temPesoLeve,
   type Aparencia,
   type ViewportPrevia,
@@ -28,6 +31,7 @@ import {
 } from "@/app/painel/actions";
 import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
+import { medirLogo } from "@/lib/logo-client";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
 
 /**
@@ -161,6 +165,116 @@ function BarraDoTitulo({ ap, mudar }: PecaProps) {
       <p className="mt-1 text-[11px] leading-snug text-texto-faint">
         Multiplica o tamanho que a capa escolhida já usa — 100% é o de sempre.
       </p>
+    </div>
+  );
+}
+
+/** A logo do estúdio, como o editor precisa dela: o link e a medida. */
+export interface LogoDoEditor {
+  url: string;
+  largura: number | null;
+  altura: number | null;
+}
+
+/*
+ * ── A BARRINHA DA LOGO (30/09/2026) ─────────────────────────────────────
+ *
+ * Um fotógrafo, pelo Felipe: "ou achava muito grande ou muito pequena. Aí
+ * tinha que diminuir a própria imagem da logo antes de subir. Seria
+ * interessante um modo de nós mesmo definirmos o tamanho, em vez de já ter ali
+ * (pequeno, médio, grande)". Mesma razão da barrinha do título: tamanho não
+ * tem nome, tem mais e menos — e a resposta aparece arrastando e olhando a
+ * prévia.
+ *
+ * "Nenhuma" continua, em pastilha, porque ESSA é uma escolha com nome (tirar
+ * a assinatura da capa), não um tamanho. As pastilhas antigas de tamanho saem
+ * da tela; o valor delas continua valendo nas galerias que nunca tocaram na
+ * barrinha — e é dele que a barrinha parte (`tamanhoLogoEquivalente`), para o
+ * primeiro arrasto não dar pulo.
+ *
+ * A barrinha só aparece com logo enviada: sem ela a capa escreve o nome do
+ * estúdio em texto, e o tamanho do texto é outra conversa.
+ *
+ * A logo enviada antes de 30/09/2026 não tem medida gravada. O editor mede a
+ * imagem aqui e manda para o servidor uma vez (PATCH /api/marca/logo) — é a
+ * proporção que faz uma logo comprida e uma quadrada terem o mesmo peso.
+ */
+function BarraDaLogo({ ap, mudar, logo }: PecaProps & { logo: LogoDoEditor | null }) {
+  const [medida, setMedida] = useState(
+    logo?.largura && logo.altura ? { largura: logo.largura, altura: logo.altura } : null,
+  );
+  useEffect(() => {
+    if (!logo || medida) return;
+    let vivo = true;
+    medirLogo(logo.url).then((m) => {
+      if (!m || !vivo) return;
+      setMedida(m);
+      fetch("/api/marca/logo", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(m),
+      }).catch(() => {});
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [logo, medida]);
+
+  const semLogo = ap.logo === "nenhuma";
+  const proporcao = proporcaoDaLogo(medida?.largura, medida?.altura);
+  const valor = ap.tamanhoLogo ?? tamanhoLogoEquivalente(ap.logo, proporcao);
+  /* Sair de "Nenhuma" volta para a assinatura de sempre; o tamanho que a pessoa
+     já tinha escolhido na barrinha continua lá. */
+  const comLogo = semLogo ? "media" : ap.logo;
+
+  return (
+    <div>
+      <span className="block text-xs font-medium text-texto-soft">Logo</span>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {[
+          { id: "mostrar", nome: "Mostrar", desc: "A logo do estúdio na capa", ativo: !semLogo },
+          { id: "nenhuma", nome: "Nenhuma", desc: "Só o título e a data — sem assinatura", ativo: semLogo },
+        ].map((op) => (
+          <button
+            key={op.id}
+            type="button"
+            title={op.desc}
+            onClick={() => mudar({ ...ap, logo: op.id === "nenhuma" ? "nenhuma" : comLogo })}
+            className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+              op.ativo
+                ? "border-acento bg-acento/10 text-acento-alto"
+                : "border-linha text-texto-soft hover:border-acento hover:bg-acento/5 hover:text-texto"
+            }`}
+          >
+            {op.nome}
+          </button>
+        ))}
+      </div>
+
+      {logo && !semLogo && (
+        <div className="mt-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <label htmlFor="tamanho-logo" className="block text-xs font-medium text-texto-soft">
+              Tamanho da logo
+            </label>
+            <span className="font-mono text-[11px] text-texto-faint">{valor}%</span>
+          </div>
+          <input
+            id="tamanho-logo"
+            type="range"
+            min={TAMANHO_LOGO.min}
+            max={TAMANHO_LOGO.max}
+            step={TAMANHO_LOGO.passo}
+            value={valor}
+            onChange={(e) => mudar({ ...ap, logo: comLogo, tamanhoLogo: Number(e.target.value) })}
+            className="mt-2 w-full accent-acento"
+          />
+          <p className="mt-1 text-[11px] leading-snug text-texto-faint">
+            Arraste olhando a prévia. Vale pela área: logo comprida e logo quadrada ficam com o mesmo
+            peso na capa.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -408,6 +522,7 @@ export function EditorAparencia({
   padraoDoEstudio = null,
   estilosDoEstudio = [],
   slotCapa,
+  logo = null,
 }: {
   galeriaId: string;
   caminhoPublico: string;
@@ -429,6 +544,8 @@ export function EditorAparencia({
   /** Os até cinco estilos salvos do estúdio, com nome (28/09/2026). Ver
       `lib/estilos-do-estudio.ts`. */
   estilosDoEstudio?: EstiloDoEstudio[];
+  /** A logo do estúdio, para a barrinha de tamanho. `null` sem logo. */
+  logo?: LogoDoEditor | null;
 }) {
   /* Qual grupo do ajuste fino está aberto. Só desenho: não entra no rascunho
      nem na publicação — trocar de grupo não é mexer na galeria. */
@@ -937,7 +1054,7 @@ export function EditorAparencia({
                 </div>
               )}
               <Eixo eixo="capa" titulo="Desenho da capa" ap={ap} mudar={mudar} />
-              <Eixo eixo="logo" titulo="Logo" ap={ap} mudar={mudar} />
+              <BarraDaLogo ap={ap} mudar={mudar} logo={logo} />
               {/* Junto do desenho da capa porque é a MESMA decisão vista de
                   outro lado: escolher "imersa" e depois "baixa" é dizer foto em
                   tela cheia, mas não a tela inteira. */}

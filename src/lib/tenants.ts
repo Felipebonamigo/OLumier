@@ -71,7 +71,9 @@ export interface Tenant {
   aviso_limpeza_em: Date | null;
   aviso_limpeza_final_em: Date | null;
   arquivos_limpos_em: Date | null;
-  /* O calendário da conta encerrada (migração 051). Quem os escreve é só
+  /** Liberado no admin para o login do Pixieset (migração 051). Nulo = não. */
+  pixieset_liberado_em: Date | null;
+  /* O calendário da conta encerrada (migração 052). Quem os escreve é só
      `lib/contas-encerradas.ts`. */
   retencao_aviso_em: Date | null;
   retencao_avisos: number;

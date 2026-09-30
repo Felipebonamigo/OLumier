@@ -13,6 +13,8 @@ import {
   CARENCIA_POS_TRIAL_DIAS,
 } from "@/config/trial";
 import { marca } from "@/config/marca";
+import { CONECTOR_PIXIESET_PRONTO } from "@/config/pixieset";
+import { permitirPixiesetAction } from "./actions";
 import {
   Cartao,
   Bloco,
@@ -181,6 +183,57 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
           </dl>
         </Bloco>
       </div>
+
+      {/*
+        ── PERMITIR PIXIESET (30/09/2026) ──────────────────────────────────
+
+        Felipe: "crie essa opção, para liberar, lá no admin, um botão de
+        'permitir pixieset'". É a primeira escrita da ficha do estúdio: a ação
+        confere o admin de novo e registra quem apertou (ver `actions.ts` e
+        `lib/acesso-pixieset.ts`).
+
+        O recado diz o que o botão NÃO faz ainda: sem o conector, liberar só
+        troca o texto que o estúdio lê. Sem isso, o admin liberaria achando
+        que o fotógrafo já pode entrar.
+      */}
+      <Bloco
+        id="pixieset"
+        titulo="Importar do Pixieset"
+        explicacao="O “Entrar com a conta do Pixieset” da tela Importar galerias. Desligado para todo mundo, até ser liberado aqui."
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-linha bg-carbon px-4 py-3">
+          <div className="text-sm">
+            {e.pixieset_liberado_em ? (
+              <>
+                <span className="font-medium text-ok">Liberado</span>
+                <span className="text-texto-faint"> desde {dataHora(e.pixieset_liberado_em)}</span>
+              </>
+            ) : (
+              <span className="text-texto-soft">Não liberado</span>
+            )}
+            {!CONECTOR_PIXIESET_PRONTO && (
+              <p className="mt-1 text-xs text-texto-faint">
+                O conector ainda não existe: liberada, a conta só vê o recado de que foi liberada,
+                com o formulário desligado.
+              </p>
+            )}
+          </div>
+          <form action={permitirPixiesetAction}>
+            <input type="hidden" name="id" value={e.id} />
+            <input type="hidden" name="liberar" value={e.pixieset_liberado_em ? "0" : "1"} />
+            <button
+              type="submit"
+              className={
+                e.pixieset_liberado_em
+                  ? "rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
+                  : "rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
+              }
+            >
+              {e.pixieset_liberado_em ? "Bloquear Pixieset" : "Permitir Pixieset"}
+            </button>
+          </form>
+        </div>
+      </Bloco>
 
       <Bloco
         titulo="Espaço"

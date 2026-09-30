@@ -103,7 +103,7 @@ export default async function CaixaDosSociosPage({
       () => ({ lista: [] as CustoDaSociedade[], ok: false as const }),
     ),
     panoramaDosEstudios(),
-    /* Sem a migração 051, lista vazia em vez de página caída. */
+    /* Sem a migração 052, lista vazia em vez de página caída. */
     devolucoesPendentes().catch(() => [] as DevolucaoPendente[]),
   ]);
 
