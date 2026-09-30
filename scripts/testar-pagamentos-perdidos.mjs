@@ -52,6 +52,7 @@ const asaas = http.createServer((req, res) => {
   let m = /^\/subscriptions\/([^/]+)\/payments$/.exec(url.pathname);
   if (m) {
     const filtro = url.searchParams.get("status");
+    if (cobrancas.get(m[1]) === "QUEBRA") return r(401, { errors: [{ description: "A chave de API fornecida é inválida" }] });
     return r(200, { data: (cobrancas.get(m[1]) ?? []).filter((c) => !filtro || c.status === filtro) });
   }
   m = /^\/subscriptions\/([^/]+)$/.exec(url.pathname);
@@ -85,7 +86,7 @@ const igual = (a, b, o) => {
 try {
   const t = await estudioDaRodada(db, { nome: "Bia Zac Fotografia" });
   const assinatura = `sub_${t.id.slice(0, 8)}`;
-  const doTeste = (lista) => lista.filter((p) => p.tenantId === t.id);
+  const doTeste = (r) => r.perdidos.filter((p) => p.tenantId === t.id);
   const preparar = async ({ status = "trial", pagoAte = null, cobranca = null } = {}) => {
     await db.query(
       `update tenants set status = $1, pago_ate = $2, plano_id = 'g:foto:500', ciclo_cobranca = 'mensal',
@@ -133,6 +134,29 @@ try {
   await etapa("cortesia fica de fora", async () => {
     await preparar({ status: "cortesia", cobranca: { id: "pay_x", status: "RECEIVED", value: 79.99, confirmedDate: hoje } });
     igual(doTeste(await P.procurarPagamentosPerdidos()).length, 0, "achados");
+  });
+
+  await etapa("chave escapada como no servidor (\\$aact…) ainda fala com o Asaas", async () => {
+    const guardada = process.env.ASAAS_API_KEY;
+    process.env.ASAAS_API_KEY = "\\$aact_chave_de_mentira";
+    try {
+      const { chaveDoAsaas } = await import("../src/lib/asaas.ts");
+      igual(chaveDoAsaas(), "$aact_chave_de_mentira", "chave sem a barra");
+    } finally {
+      process.env.ASAAS_API_KEY = guardada;
+    }
+  });
+
+  await etapa("quem não pôde ser conferido volta como falha, e não some", async () => {
+    await preparar({ cobranca: { id: "pay_bia", status: "RECEIVED", value: 79.99, confirmedDate: hoje } });
+    const antes = cobrancas.get(assinatura);
+    cobrancas.set(assinatura, "QUEBRA");
+    try {
+      const r = await P.procurarPagamentosPerdidos();
+      if (!r.falhas.some((f) => f.tenantId === t.id)) throw new Error("a falha sumiu");
+    } finally {
+      cobrancas.set(assinatura, antes);
+    }
   });
 
   await etapa("a escrita é a mesma do webhook", () => {

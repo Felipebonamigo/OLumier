@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FUSO } from "@/config/fuso";
 import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
@@ -44,7 +45,7 @@ export default async function GaleriaLayout({
   if (!galeria) notFound();
 
   const dataEvento = galeria.data_evento
-    ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", {
+    ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", { timeZone: FUSO,
         day: "2-digit",
         month: "long",
         year: "numeric",

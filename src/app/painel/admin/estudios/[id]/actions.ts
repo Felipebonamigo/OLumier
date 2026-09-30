@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { adminDaRequisicao } from "@/lib/portao-admin";
 import { definirLoginLiberado } from "@/lib/acesso-plataforma";
 import { plataformaPorId } from "@/config/plataformas-de-origem";
+import { definirFormatosLiberados } from "@/lib/acesso-formatos";
 
 /**
  * Os botões "Permitir Pixieset" e "Permitir Pixellu" da ficha do estúdio.
@@ -40,4 +41,19 @@ export async function permitirLoginAction(form: FormData): Promise<void> {
 
   revalidatePath(`/painel/admin/estudios/${id}`);
   redirect(`/painel/admin/estudios/${id}#outras-plataformas`);
+}
+
+/** O botão "Liberar Pastas e Stream" da ficha — mesma tranca do Pixieset. */
+export async function liberarFormatosAction(form: FormData): Promise<void> {
+  const admin = await adminDaRequisicao();
+  if (!admin) notFound();
+
+  const id = String(form.get("id") ?? "");
+  if (!UUID.test(id)) notFound();
+
+  const resultado = await definirFormatosLiberados(id, form.get("liberar") === "1", admin);
+  if (resultado === "nao-existe") notFound();
+
+  revalidatePath(`/painel/admin/estudios/${id}`);
+  redirect(`/painel/admin/estudios/${id}#formatos`);
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { FUSO } from "@/config/fuso";
 import { useFormStatus } from "react-dom";
 import {
   criarChaveApiAction,
@@ -24,7 +25,7 @@ function Botao() {
 }
 
 const data = (v: string | null) =>
-  v ? new Date(v).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : null;
+  v ? new Date(v).toLocaleDateString("pt-BR", { timeZone: FUSO, day: "2-digit", month: "short", year: "numeric" }) : null;
 
 /**
  * Chaves de API do estúdio.

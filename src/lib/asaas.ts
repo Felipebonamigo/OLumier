@@ -52,6 +52,24 @@ function base(): string {
 
 export const asaasConfigurado = () => Boolean(process.env.ASAAS_API_KEY);
 
+/**
+ * A chave, sem o escape do `$`.
+ *
+ * No servidor a chave mora no `.env.production` escrita `\$aact_…`: o Next lê
+ * `$palavra` como variável e, sem a barra, a chave chegava vazia ao app (ver
+ * `docs/ligar-cobranca.md`, passo 3). Só que os scripts do servidor carregam o
+ * mesmo arquivo com `node --env-file`, que NÃO expande nada e entrega a barra
+ * junto — e o Asaas responde "A chave de API fornecida é inválida". Foi o que
+ * derrubou a primeira `scripts/conferir-pagamentos.mjs` em 30/09/2026.
+ *
+ * Chave do Asaas não tem barra invertida, então tirar `\` de antes de um `$` só
+ * desfaz o escape: o app (que já recebe sem barra) não muda, e os scripts
+ * passam a mandar a chave de verdade.
+ */
+export function chaveDoAsaas(): string | undefined {
+  return process.env.ASAAS_API_KEY?.replace(/\\\$/g, "$");
+}
+
 export const asaasEmProducao = () => process.env.ASAAS_AMBIENTE === "producao";
 
 /**
@@ -69,7 +87,7 @@ function segmento(id: string): string {
 }
 
 async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
-  const chave = process.env.ASAAS_API_KEY;
+  const chave = chaveDoAsaas();
   if (!chave) throw new Error("ASAAS_API_KEY não configurada");
 
   const r = await fetch(`${base()}${caminho}`, {
@@ -426,6 +444,57 @@ export interface ClienteDoDocumento {
   deleted?: boolean;
 }
 
+/**
+ * Os clientes da conta com este e-mail — só para diagnóstico
+ * (`scripts/conferir-combo.mjs`). O combo liga as contas pelo CPF/CNPJ; quando
+ * não liga, o e-mail costuma achar o cadastro do Atomatiza feito com OUTRO
+ * documento (o CNPJ da empresa lá, o CPF aqui).
+ */
+export async function clientesDoEmail(email: string): Promise<(ClienteDoDocumento & { name?: string; email?: string })[]> {
+  const r = await chamar<{ data?: (ClienteDoDocumento & { name?: string; email?: string })[] }>(
+    `/customers?email=${encodeURIComponent(email)}&limit=100`,
+  );
+  return (r.data ?? []).filter((c) => !c.deleted);
+}
+
+/** Todas as cobranças de um cliente — avulsas e de assinatura —, só para diagnóstico. */
+export async function cobrancasDoCliente(clienteId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  subscription?: string | null;
+  externalReference?: string | null;
+  description?: string | null;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    subscription?: string | null; externalReference?: string | null; description?: string | null;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/payments?customer=${encodeURIComponent(clienteId)}&limit=100`);
+  return r.data ?? [];
+}
+
+/** Todas as cobranças de uma assinatura, com situação — só para diagnóstico. */
+export async function cobrancasDaAssinatura(assinaturaId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/subscriptions/${segmento(assinaturaId)}/payments?limit=100`);
+  return r.data ?? [];
+}
+
 /** Os clientes da conta com este CPF/CNPJ — o nosso e o do Atomatiza. */
 export async function clientesDoDocumento(documento: string): Promise<ClienteDoDocumento[]> {
   const r = await chamar<{ data?: ClienteDoDocumento[] }>(
@@ -436,6 +505,22 @@ export async function clientesDoDocumento(documento: string): Promise<ClienteDoD
 
 export async function buscarCliente(clienteId: string): Promise<ClienteDoDocumento> {
   return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`);
+}
+
+/**
+ * Troca o CPF/CNPJ do NOSSO cliente no Asaas. Só por `scripts/trocar-documento.mjs`:
+ * trocar de documento não é autoatendimento — é o que prende o teste grátis e o
+ * combo à pessoa. Recusa o cliente que não tem a nossa referência.
+ */
+export async function trocarDocumentoDoCliente(clienteId: string, documento: string): Promise<ClienteDoDocumento> {
+  const cliente = await buscarCliente(clienteId);
+  if (!cliente.externalReference?.startsWith(PREFIXO)) {
+    throw new Error(`o cliente ${clienteId} não é da Galeria (ref ${cliente.externalReference ?? "-"})`);
+  }
+  return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`, {
+    method: "POST",
+    body: JSON.stringify({ cpfCnpj: documento.replace(/\D/g, "") }),
+  });
 }
 
 export async function assinaturasDoCliente(clienteId: string): Promise<AssinaturaAsaas[]> {

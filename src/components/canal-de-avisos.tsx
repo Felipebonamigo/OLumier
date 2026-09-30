@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FUSO } from "@/config/fuso";
 import { useFormStatus } from "react-dom";
 import { desligarAvisosAction } from "@/app/painel/actions";
 
@@ -15,7 +16,7 @@ export interface CanalNaTela {
 
 const quando = (v: string | null) =>
   v
-    ? new Date(v).toLocaleString("pt-BR", {
+    ? new Date(v).toLocaleString("pt-BR", { timeZone: FUSO,
         day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
       })
     : null;

@@ -15,11 +15,15 @@
 const acertar = process.argv.includes("--acertar");
 const { procurarPagamentosPerdidos, registrarPagamentoPerdido } = await import("../src/lib/pagamentos-perdidos.ts");
 
-const perdidos = await procurarPagamentosPerdidos();
+const { perdidos, falhas } = await procurarPagamentosPerdidos();
 const agora = new Date().toISOString();
+
+// Quem não conseguiu olhar não diz "nenhum": a falha sai antes, e o código de
+// saída acusa (o timer registra no log do systemd).
+for (const f of falhas) console.error(`${agora} NÃO CONSEGUI CONFERIR ${f.estudio} (${f.tenantId}): ${f.erro}`);
 if (perdidos.length === 0) {
-  console.log(`${agora} nenhum pagamento perdido`);
-  process.exit(0);
+  console.log(falhas.length ? `${agora} nada achado — mas ${falhas.length} estúdio(s) não puderam ser conferidos` : `${agora} nenhum pagamento perdido`);
+  process.exit(falhas.length ? 1 : 0);
 }
 
 const data = (d) => (d ? new Date(d).toISOString().slice(0, 10) : "nunca");
@@ -31,4 +35,4 @@ for (const p of perdidos) {
   if (acertar) await registrarPagamentoPerdido(p);
 }
 console.log(acertar ? "  contados." : "  Para contar, rode de novo com --acertar.");
-process.exit(0);
+process.exit(falhas.length ? 1 : 0);

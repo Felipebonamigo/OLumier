@@ -28,6 +28,7 @@
  */
 
 import { CARENCIA_POS_TRIAL_DIAS } from "@/config/trial";
+import { FUSO } from "@/config/fuso";
 import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 import { dataDoAsaas } from "@/config/troca-de-plano";
 
@@ -80,7 +81,7 @@ export interface ContaParaAvaliar {
 
 /** Data em dd/mm/aaaa com dois dígitos sempre — o dia 1 não pode virar "1/9". */
 function porExtenso(data: Date): string {
-  return data.toLocaleDateString("pt-BR", {
+  return data.toLocaleDateString("pt-BR", { timeZone: FUSO,
     day: "2-digit",
     month: "2-digit",
     year: "numeric",

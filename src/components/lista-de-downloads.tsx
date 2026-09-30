@@ -19,6 +19,7 @@
 "use client";
 
 import { useState } from "react";
+import { FUSO } from "@/config/fuso";
 
 export interface LinhaDeDownload {
   id: string;
@@ -34,7 +35,7 @@ export interface LinhaDeDownload {
 const POR_VEZ = 50;
 
 const quandoLegivel = (iso: string) =>
-  new Date(iso).toLocaleString("pt-BR", {
+  new Date(iso).toLocaleString("pt-BR", { timeZone: FUSO,
     day: "2-digit",
     month: "short",
     year: "numeric",

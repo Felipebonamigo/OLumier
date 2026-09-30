@@ -94,6 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     duracao?: number;
     indice?: number;
     lote?: string;
+    alternativo?: boolean;
   };
   try {
     corpo = await request.json();
@@ -226,8 +227,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
    *
    * O armazém é decidido UMA vez, aqui, e gravado na linha: as etapas seguintes
    * do envio (partes, conclusão) leem da mídia, nunca perguntam de novo.
+   *
+   * ── O CAMINHO ALTERNATIVO (30/09/2026) ─────────────────────────────────
+   *
+   * A Alícia ficou com "0 de 38" e três arquivos em "tentando de novo (4)":
+   * o PUT do original para o B2 caía sempre na máquina dela, enquanto 675
+   * fotos já tinham subido antes. O navegador não diz por quê (erro de rede
+   * não tem corpo), e daqui não dá para consertar a rede de ninguém. O que dá
+   * é oferecer OUTRA porta: quando o envio para o B2 falha duas vezes, a fila
+   * pede de novo com `alternativo`, e o original nasce no R2 — o mesmo lugar
+   * das miniaturas, que para ela estavam subindo. `medias.armazem` guarda onde
+   * ficou, e a leitura, o ZIP e a lixeira já sabem ler dos dois (ver
+   * `lib/armazem.ts`). Custa mais por GB guardado, e só para quem precisou.
    */
-  const armazem = armazemDeNovosUploads();
+  const armazem = corpo.alternativo === true ? "r2" : armazemDeNovosUploads();
 
   const media = await criarMediaPendente({
     armazem,

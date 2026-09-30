@@ -13,34 +13,96 @@ import { compararNomeNatural } from "@/lib/ordem-natural";
 
 /** Quantos envios ao mesmo tempo. */
 export const PARALELOS = 3;
+
+/**
+ * A espera antes de cada nova tentativa: 2 s, 5 s, 15 s, 30 s, 60 s — quase
+ * dois minutos de paciência por arquivo, em vez dos QUATRO SEGUNDOS de antes.
+ *
+ * ── POR QUE CRESCEU (30/09/2026) ─────────────────────────────────────────
+ *
+ * A Alícia mandou a foto da tela: três arquivos em "conexão interrompida" e
+ * três em "tentando de novo (2)…", todos ao mesmo tempo. O armazém estava
+ * aceitando (a conferência de CORS do deploy daquele minuto passou); o que
+ * caiu foi a conexão dela. Eram três tentativas com 1 s e 3 s de intervalo:
+ * um Wi-Fi que some por cinco segundos — o roteador trocando de canal, o
+ * notebook trocando de rede — matava todo arquivo que estava no ar.
+ *
+ * Crescente de propósito: quando a internet oscila, insistir no mesmo instante
+ * só piora. E sem conexão nenhuma a espera nem conta (ver `comRetentativa`).
+ *
+ * Paciência não bastou: horas depois ela estava em "0 de 38", com o envio ao
+ * B2 caindo em TODA tentativa — não era oscilação. Daí o caminho alternativo
+ * pelo R2 (`envio-em-curso.tsx`) e o motivo da falha na tela.
+ */
+export const ESPERAS_ENTRE_TENTATIVAS = [2000, 5000, 15000, 30000, 60000] as const;
 /** Tentativas por arquivo antes de desistir. */
-export const TENTATIVAS = 3;
+export const TENTATIVAS = ESPERAS_ENTRE_TENTATIVAS.length + 1;
 
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** O navegador sabe que está sem rede nenhuma? (Fora dele, nunca.) */
+const semRede = () => typeof navigator !== "undefined" && navigator.onLine === false;
+
+/** Resolve quando a rede volta. */
+const aguardarRede = () =>
+  new Promise<void>((voltou) => window.addEventListener("online", () => voltou(), { once: true }));
+
 /**
- * Tenta de novo com intervalo crescente (1s, 3s, 9s).
+ * Tenta de novo com intervalo crescente (`ESPERAS_ENTRE_TENTATIVAS`).
  *
- * Crescente de propósito: quando a internet oscila, insistir no mesmo instante
- * só piora. Dar um tempo maior a cada tentativa costuma pegar a rede já de volta.
+ * Sem rede nenhuma (`navigator.onLine` falso: o Wi-Fi caiu, o cabo saiu), a
+ * fila ESPERA a rede voltar em vez de gastar tentativa contra uma parede —
+ * quem fechou o notebook no meio do envio e abriu em outro lugar encontra a
+ * fila andando, não uma lista vermelha. `onLine` verdadeiro não garante
+ * internet (só que há uma rede), então ali vale a espera crescente.
+ *
+ * Erro marcado `definitivo` (sem espaço, tipo recusado, assinatura vencida)
+ * sai na hora: insistir não muda a resposta, e dois minutos de "tentando de
+ * novo" escondiam o motivo de quem estava olhando a tela.
+ *
+ * `aoTentarDeNovo` recebe o erro da tentativa que falhou, para a tela dizer
+ * POR QUE está tentando de novo — "tentando de novo (4)…" sozinho, na foto da
+ * Alícia, não dizia nada a ela nem a nós.
+ *
+ * `esperas` existe para o teste não esperar dois minutos de verdade.
  */
 export async function comRetentativa<T>(
   tarefa: () => Promise<T>,
-  aoTentarDeNovo?: (tentativa: number) => void,
+  aoTentarDeNovo?: (tentativa: number, semRede: boolean, erro: unknown) => void,
+  esperas: readonly number[] = ESPERAS_ENTRE_TENTATIVAS,
 ): Promise<T> {
   let ultimoErro: unknown;
-  for (let tentativa = 1; tentativa <= TENTATIVAS; tentativa++) {
+  const tentativas = esperas.length + 1;
+  for (let tentativa = 1; tentativa <= tentativas; tentativa++) {
     try {
       return await tarefa();
     } catch (e) {
       ultimoErro = e;
-      if (tentativa < TENTATIVAS) {
-        aoTentarDeNovo?.(tentativa);
-        await espera(1000 * Math.pow(3, tentativa - 1));
+      if (ehDefinitivo(e)) break;
+      if (tentativa < tentativas) {
+        if (semRede()) {
+          aoTentarDeNovo?.(tentativa, true, e);
+          await aguardarRede();
+          /* A queda de rede não conta como tentativa: quem ficou sem Wi-Fi
+             por dez minutos não pode chegar com o arquivo já condenado. */
+          tentativa--;
+          continue;
+        }
+        aoTentarDeNovo?.(tentativa, false, e);
+        await espera(esperas[tentativa - 1]);
       }
     }
   }
   throw ultimoErro;
+}
+
+/** Erro que tentar de novo não resolve. Ver `comRetentativa`. */
+export function erroDefinitivo(mensagem: string): Error {
+  return Object.assign(new Error(mensagem), { definitivo: true });
+}
+
+function ehDefinitivo(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { definitivo?: unknown }).definitivo === true;
 }
 
 /**

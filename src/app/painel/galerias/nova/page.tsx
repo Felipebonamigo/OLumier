@@ -9,6 +9,7 @@ import { estilosDoEstudio } from "@/lib/estilos-do-estudio";
 import { CAPITULOS_SUGERIDOS } from "@/lib/secoes";
 import { LogoEstudio } from "@/components/logo-estudio";
 import { AssistenteNovaGaleria } from "./assistente";
+import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 
 export const metadata: Metadata = { title: "Nova galeria" };
 
@@ -69,6 +70,7 @@ export default async function NovaGaleriaPage() {
         capitulosSugeridos={CAPITULOS_SUGERIDOS}
         padraoDoEstudio={await padraoDoEstudioLido(tenantId)}
         estilosDoEstudio={await estilosDoEstudio(tenantId)}
+        formatosLiberados={await formatosLiberadosPara(tenantId)}
         slotLogo={
           <section className="rounded-xl border border-linha bg-carbon p-5">
             <LogoEstudio

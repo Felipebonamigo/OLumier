@@ -36,7 +36,7 @@ const NOME_DA_FAIXA = { solo: "Solo", equipe: "Equipe", estudio: "Estúdio" } as
 /** A linha do combo, em texto: o que o Felipe precisa saber de relance. */
 export function linhaDoCombo(d: DiagnosticoDoCombo): string {
   if (d.faixa) {
-    return `Sim — Atomatiza ${NOME_DA_FAIXA[d.faixa]}. A Galeria cede ${reais(d.descontoMensalCentavos)} por mês; a outra metade do desconto sai na assinatura do Atomatiza.`;
+    return `Sim — Atomatiza ${NOME_DA_FAIXA[d.faixa]}. A Galeria cede ${reais(d.descontoMensalCentavos)} por mês; o resto do desconto sai na assinatura do Atomatiza.`;
   }
   return `Não — ${d.motivo ?? "sem motivo identificado"}.`;
 }

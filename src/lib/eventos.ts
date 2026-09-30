@@ -92,6 +92,10 @@ export const ACOES = {
   /* O mesmo, para o "Entrar com a conta do Pixellu" (migração 053). */
   PIXELLU_LIBERADO: "pixellu.liberado",
   PIXELLU_BLOQUEADO: "pixellu.bloqueado",
+  /* O admin liberou ou bloqueou Pastas e Stream para este estúdio (migração
+   * 054) — os formatos em validação pelos sócios. */
+  FORMATOS_LIBERADOS: "formatos.liberados",
+  FORMATOS_BLOQUEADOS: "formatos.bloqueados",
   /* Aqui havia `ESPELHO_PURGADO: "espelho.purgado"`, removido em 27/08/2026
    * junto com o espelho. Antes de tirar, foi conferido que nenhum dos dois
    * bancos tinha uma linha com essa ação — se tivesse, o nome ficaria, porque

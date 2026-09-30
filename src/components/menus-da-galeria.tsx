@@ -90,6 +90,7 @@ export function MenusDaGaleria({
   capitulos,
   enderecoBase,
   fatia = null,
+  capituloAberto = null,
   favoritas,
   baixar,
   tocarSlideshow,
@@ -99,6 +100,16 @@ export function MenusDaGaleria({
   enderecoBase: string;
   /** Só numa galeria que não coube inteira — ver `config/fatia-galeria.ts`. */
   fatia?: { total: number; capituloAtivo: string | null } | null;
+  /**
+   * O capítulo aberto, dito por quem sabe — e não deduzido do endereço.
+   *
+   * Desde 29/09/2026 o capítulo é apagado da barra assim que ele abre (ver
+   * `galeria-cliente.tsx`). Quem decidisse a pastilha acesa olhando o endereço
+   * deixaria de ver capítulo nenhum e, numa galeria fatiada, cairia na reserva
+   * "primeiro capítulo" — acendendo o Making Of para quem está no Trend.
+   * Juan, 29/09/2026: "a galeria está trocando de capítulo sozinha".
+   */
+  capituloAberto?: string | null;
   /** Null quando não há o que oferecer: escolha encerrada e nenhuma marcada. */
   favoritas: MenuFavoritas | null;
   /** Null quando o fotógrafo não liberou download. */
@@ -147,7 +158,7 @@ export function MenusDaGaleria({
    * seria movimento sem motivo no meio da leitura.
    */
   const listaDeCapitulos = useRef<HTMLUListElement | null>(null);
-  const ativoNaBarra = fatia ? (fatia.capituloAtivo ?? null) : capituloVisivel;
+  const ativoNaBarra = capituloAberto ?? (fatia ? fatia.capituloAtivo : capituloVisivel);
   useEffect(() => {
     const lista = listaDeCapitulos.current;
     if (!lista || !ativoNaBarra) return;
@@ -472,8 +483,13 @@ export function MenusDaGaleria({
                que ela de fato mostra. A ressalva "da parte 2 em diante"
                desapareceu junto com a paginação em 16/09/2026: agora existe
                UMA tela por capítulo, e o resto chega rolando. */
-            const aberto = fatia ? (fatia.capituloAtivo ?? capitulos[0]?.id) : null;
-            const ativo = fatia ? aberto === c.id : capituloVisivel === c.id;
+            /* A reserva "primeiro capítulo" continua valendo para a galeria
+               fatiada que abriu SEM capítulo — ela de fato mostra o primeiro. O
+               que não pode é cair nela quando há capítulo aberto e só o endereço
+               foi limpo: aí quem manda é `capituloAberto`. */
+            const aberto =
+              capituloAberto ?? (fatia ? (fatia.capituloAtivo ?? capitulos[0]?.id) : null);
+            const ativo = aberto ? aberto === c.id : capituloVisivel === c.id;
             return (
               <li key={c.id}>
                 <a

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { notFound, permanentRedirect } from "next/navigation";
 import { resolverEstudio } from "@/lib/endereco";
 import { marca } from "@/config/marca";
@@ -504,7 +505,7 @@ function Galerias({
                 >
                   {[
                     g.data_evento
-                      ? new Date(g.data_evento).toLocaleDateString("pt-BR", {
+                      ? new Date(g.data_evento).toLocaleDateString("pt-BR", { timeZone: FUSO,
                           month: "long",
                           year: "numeric",
                         })

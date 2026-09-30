@@ -245,7 +245,32 @@ export function GaleriaCliente({
      resultado da selfie. `router.push` e não `location.href`: o Next troca só
      o que mudou, e é o caminho que o próprio framework pede. */
   const router = useRouter();
-  const caminho = usePathname();
+  const caminhoDaBarra = usePathname();
+
+  /*
+   * ── O CAMINHO QUE NÃO SOME COM A LIMPEZA DA BARRA (29/09/2026) ──────────
+   *
+   * Desde 29/09 o capítulo é apagado do endereço assim que ele abre (o
+   * `replaceState` logo abaixo). `usePathname()` passa a dizer o endereço da
+   * GALERIA, e todo `router.push(caminho)` daqui para baixo mandava a pessoa
+   * para fora do capítulo em que ela estava:
+   *
+   *   - "ver só as favoritas" e o "limpar" dele;
+   *   - o "encontrar minhas fotos", que volta com `?fotos=`.
+   *
+   * Juan, 29/09/2026: "a galeria está trocando de capítulo sozinha". Era isto.
+   *
+   * `caminho` passa a ser o endereço REAL do que está aberto — com o capítulo
+   * quando há um —, montado do que o servidor informou e não do que a barra
+   * mostra. A barra continua limpa para copiar; a navegação continua dentro do
+   * capítulo.
+   */
+  const caminho = useMemo(() => {
+    const cap = capituloAberto
+      ? capitulos.find((c) => c.id === capituloAberto)?.apelido
+      : null;
+    return cap ? enderecoNaGaleria(enderecoBase, "", { cap }) : caminhoDaBarra;
+  }, [capituloAberto, capitulos, enderecoBase, caminhoDaBarra]);
 
   /*
    * ── O CAPÍTULO NÃO FICA NA BARRA (29/09/2026) ───────────────────────────
@@ -1345,6 +1370,7 @@ export function GaleriaCliente({
         enderecoBase={enderecoBase}
         capitulos={capitulos}
         fatia={fatia}
+        capituloAberto={capituloAtivo}
         tocarSlideshow={ordemVisivel.length > 1 ? tocarSlideshow : null}
         favoritas={
           /* Sem escolha aberta e sem nenhuma marcada não há o que oferecer, e
