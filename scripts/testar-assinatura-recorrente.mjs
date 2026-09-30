@@ -46,14 +46,27 @@ const pedidos = [];
    o servidor passa a responder `/wallets` e a recusar split para ela, como o
    Asaas de verdade recusou em 29/09/2026. */
 let carteiraDaConta = null;
-const servidor = createServer((req, res) => {
+/* A chave sem a permissão ACCOUNT_INFO:READ: `/wallets` responde 403, e o
+   cliente precisa descobrir a carteira da conta pela recusa (30/09/2026). */
+let walletsNegado = false;
+/* Um erro que NÃO é o da carteira — não pode ser repetido. */
+let outroErro = null;
+const atender = (req, res) => {
   let corpo = "";
   req.on("data", (p) => (corpo += p));
   req.on("end", () => {
     pedidos.push({ metodo: req.method, caminho: req.url, corpo });
     if (carteiraDaConta && req.method === "GET" && req.url.startsWith("/wallets")) {
+      if (walletsNegado) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        return res.end(JSON.stringify({ errors: [{ code: "forbidden", description: "Permissão insuficiente." }] }));
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify({ object: "list", data: [{ object: "wallet", id: carteiraDaConta }] }));
+    }
+    if (outroErro && req.method !== "GET") {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ errors: [{ code: "invalid", description: outroErro }] }));
     }
     const split = corpo ? (JSON.parse(corpo).split ?? []) : [];
     if (carteiraDaConta && split.some((f) => f.walletId === carteiraDaConta)) {
@@ -71,7 +84,8 @@ const servidor = createServer((req, res) => {
         : '{"id":"sub_1","status":"ACTIVE","nextDueDate":"2026-10-01","value":139.99}',
     );
   });
-});
+};
+const servidor = createServer(atender);
 await new Promise((ok) => servidor.listen(0, "127.0.0.1", ok));
 process.env.ASAAS_API = `http://127.0.0.1:${servidor.address().port}`;
 
@@ -379,6 +393,64 @@ await etapa("nem a cobrança da diferença", async () => {
   return `POST /payments com ${corpo.split.length} fatias, nenhuma da conta`;
 });
 
+console.log("\nquando a chave não pode ler a carteira da conta (30/09/2026)");
+
+/*
+ * A primeira correção perguntava ao Asaas qual é a carteira da conta. Se a
+ * chave não tiver permissão para essa pergunta, ela falha — e o split iria
+ * inteiro de novo. Um SEGUNDO servidor, porque o cliente guarda a carteira
+ * descoberta por endereço da API: no primeiro ela já está guardada, e o
+ * caminho da recusa nunca seria exercido.
+ *
+ * A carteira da conta aqui é a ÚLTIMA da lista (Sirius), para a descoberta
+ * ter de passar pelas outras duas antes de acertar.
+ */
+const SIRIUS = process.env.ASAAS_CARTEIRA_SIRIUS;
+const servidor2 = createServer(atender);
+await new Promise((ok) => servidor2.listen(0, "127.0.0.1", ok));
+process.env.ASAAS_API = `http://127.0.0.1:${servidor2.address().port}`;
+carteiraDaConta = SIRIUS;
+walletsNegado = true;
+
+const postsDeAssinatura = () =>
+  pedidos.filter((x) => x.metodo === "POST" && x.caminho.startsWith("/subscriptions"));
+
+await etapa("sem poder ler a carteira, a assinatura nasce mesmo assim — pela recusa", async () => {
+  const r = await assinar("UNDEFINED");
+  if (r.id !== "sub_1") throw new Error("a assinatura não voltou");
+  if (!pedidos.some((x) => x.caminho.startsWith("/wallets"))) throw new Error("nem perguntou a carteira");
+  const posts = postsDeAssinatura();
+  const aceito = JSON.parse(posts.at(-1).corpo).split.map((f) => f.walletId);
+  if (aceito.includes(SIRIUS)) throw new Error("a carteira da conta foi no split aceito");
+  for (const outra of [FELIPE, process.env.ASAAS_CARTEIRA_CAROL]) {
+    if (!aceito.includes(outra)) throw new Error(`a carteira ${outra.slice(0, 8)} sumiu do split aceito`);
+  }
+  return `${posts.length} tentativas, a última sem a carteira da conta e com as outras duas`;
+});
+
+await etapa("descoberta uma vez, a próxima cobrança já sai certa de primeira", async () => {
+  await assinar("UNDEFINED");
+  const posts = postsDeAssinatura();
+  if (posts.length !== 1) throw new Error(`${posts.length} tentativas — não guardou o que descobriu`);
+  return "1 tentativa";
+});
+
+await etapa("outro erro do Asaas não é repetido", async () => {
+  outroErro = "O CPF/CNPJ informado é inválido.";
+  try {
+    await assinar("UNDEFINED");
+    throw new Error("a assinatura passou com o Asaas recusando");
+  } catch (e) {
+    if (!e.message.includes("CPF/CNPJ")) throw e;
+  } finally {
+    outroErro = null;
+  }
+  const posts = postsDeAssinatura();
+  if (posts.length !== 1) throw new Error(`${posts.length} tentativas para um erro que não é o da carteira`);
+  return "1 tentativa, e o erro chega inteiro";
+});
+
+servidor2.close();
 servidor.close();
 console.log(falhou ? "\n✗ a cobrança automática tem problema" : "\n✓ cobrança automática ok");
 process.exitCode = falhou ? 1 : 0;

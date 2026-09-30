@@ -18,11 +18,19 @@
  *
  * ── E SE O NAVEGADOR NÃO DEIXAR TRAZER PARA A FRENTE ─────────────────────
  *
- * `focus()` numa aba vizinha é pedido, não ordem: há navegador e configuração
- * que ignoram. Se, um instante depois, esta aba continua com o foco, o pedido
- * não foi atendido — e aí vale o caminho antigo (o link nomeado), que troca de
- * aba em todo lugar, ao preço de recarregar. Pior caso = o comportamento de
- * antes, nunca um clique que não faz nada.
+ * Trazer uma aba vizinha para a frente é pedido, não ordem: há navegador e
+ * configuração que ignoram. Se esta aba NÃO sai da frente, o pedido não foi
+ * atendido — e aí vale o caminho antigo (o link nomeado), que troca de aba em
+ * todo lugar, ao preço de recarregar. Pior caso = o comportamento de antes,
+ * nunca um clique que não faz nada.
+ *
+ * "Sair da frente" é o navegador quem diz, por evento (`visibilitychange` para
+ * oculta, ou `blur`), e não um relógio curto. A primeira versão olhava o foco
+ * 250 ms depois do clique, e com os dois painéis de verdade a outra aba levava
+ * mais que isso para aparecer: a conferência via esta aba ainda na frente,
+ * achava que tinha falhado e recarregava a outra à toa — era a "recarga dupla"
+ * que o Felipe viu no dia 29/09. Reproduzido no Chrome de verdade, com os dois
+ * produtos no ar lado a lado, e corrigido aqui.
  *
  * Clique com Ctrl/Cmd/Shift ou do meio segue sendo do navegador: quem pede aba
  * nova recebe aba nova.
@@ -30,8 +38,12 @@
  * Cópia idêntica em `src/lib/aba-nomeada.ts` do Atomatiza — mudou aqui, mude lá.
  */
 
-/** Quanto esperar para saber se a outra aba veio para a frente. */
-const ESPERA_DO_FOCO_MS = 250;
+/**
+ * Até quando esperar o sinal de que a outra aba veio para a frente. É só o
+ * teto do caso em que ela NÃO vem: quando vem, o sinal chega antes e nada
+ * mais acontece.
+ */
+const ESPERA_MAXIMA_MS = 1500;
 
 /** O que o clique precisa ter — serve para o evento do React e o do DOM. */
 type Clique = {
@@ -72,11 +84,24 @@ export function irParaAba(evento: Clique, url: string, nome: string) {
   }
 
   aba.focus();
+
+  let saiuDaFrente = false;
+  const saiu = () => {
+    saiuDaFrente = true;
+  };
+  const aoMudarVisibilidade = () => {
+    if (document.visibilityState === "hidden") saiu();
+  };
+  document.addEventListener("visibilitychange", aoMudarVisibilidade);
+  window.addEventListener("blur", saiu);
+
   window.setTimeout(() => {
-    if (!document.hasFocus()) return; // trocou de aba: pronto
+    document.removeEventListener("visibilitychange", aoMudarVisibilidade);
+    window.removeEventListener("blur", saiu);
+    if (saiuDaFrente || document.visibilityState === "hidden" || !document.hasFocus()) return; // trocou de aba
     const link = document.createElement("a");
     link.href = url;
     link.target = nome;
     link.click();
-  }, ESPERA_DO_FOCO_MS);
+  }, ESPERA_MAXIMA_MS);
 }
