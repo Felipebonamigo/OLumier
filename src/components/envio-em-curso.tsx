@@ -74,6 +74,8 @@ export interface ItemFila {
   progresso: number;
   situacao: Situacao;
   tentativa: number;
+  /** Esperando a rede voltar — a tentativa não está sendo gasta. */
+  semRede?: boolean;
   erro?: string;
   /** Quantos rostos a busca por rosto guardou desta foto. */
   rostos?: number;
@@ -105,6 +107,8 @@ interface Envio {
   pausar: () => void;
   retomar: () => void;
   parar: () => void;
+  /** Põe de volta na fila o que desistiu — sem arrastar a pasta de novo. */
+  reenviarFalhas: () => void;
   limparConcluidos: () => void;
 }
 
@@ -277,6 +281,15 @@ export function ProvedorDeEnvio({
     medidor?: (bitmap: ImageBitmap) => Promise<RostoMedido[]>;
   };
   const pendentes = useRef<Tarefa[]>([]);
+  /*
+   * O QUE DESISTIU, GUARDADO PARA O "REENVIAR" (30/09/2026).
+   *
+   * A Alícia viu uma fileira de "conexão interrompida" e o único caminho era
+   * arrastar a pasta de novo — e descobrir quais tinham subido. A tarefa
+   * inteira fica aqui (o arquivo aberto, o capítulo, a posição na galeria),
+   * então reenviar é devolvê-la à fila, na mesma ordem de antes.
+   */
+  const falhas = useRef(new Map<string, Tarefa>());
   const trabalhandoRef = useRef(false);
   /*
    * A ORDEM continua de onde parou entre lotes.
@@ -474,10 +487,11 @@ export function ProvedorDeEnvio({
               }
             }
           },
-          (tentativa) => atualizar(tarefa.item.id, { tentativa, situacao: "esperando", progresso: 0 }),
+          (tentativa, semRede) =>
+            atualizar(tarefa.item.id, { tentativa, semRede, situacao: "esperando", progresso: 0 }),
         );
 
-        atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100 });
+        atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false });
       } catch (e) {
         /*
          * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
@@ -492,8 +506,10 @@ export function ProvedorDeEnvio({
         }
         atualizar(tarefa.item.id, {
           situacao: "erro",
+          semRede: false,
           erro: e instanceof Error ? e.message : "falhou",
         });
+        falhas.current.set(tarefa.item.id, tarefa);
       }
     },
     [],
@@ -523,6 +539,8 @@ export function ProvedorDeEnvio({
     /* O que ficou em "esperando" quando alguém parou não vai subir: dizer isso
        é melhor que deixar a linha girando para sempre. */
     if (paradoRef.current) {
+      /* O que não chegou a sair também pode ser reenviado depois. */
+      for (const t of pendentes.current) falhas.current.set(t.item.id, t);
       pendentes.current = [];
       setFila((f) =>
         f.map((i) =>
@@ -663,9 +681,28 @@ export function ProvedorDeEnvio({
         pausadoRef.current = false;
         setPausado(false);
       },
-      limparConcluidos: () => setFila([]),
+      reenviarFalhas: () => {
+        const lista = [...falhas.current.values()].sort((a, b) => a.indice - b.indice);
+        if (lista.length === 0) return;
+        falhas.current.clear();
+        const ids = new Set(lista.map((t) => t.item.id));
+        setFila((f) =>
+          f.map((i) =>
+            ids.has(i.id)
+              ? { ...i, situacao: "esperando", progresso: 0, tentativa: 0, semRede: false, erro: undefined }
+              : i,
+          ),
+        );
+        paradoRef.current = false;
+        pendentes.current.push(...lista);
+        void trabalhar();
+      },
+      limparConcluidos: () => {
+        falhas.current.clear();
+        setFila([]);
+      },
     }),
-    [fila, rodando, pausado, avisoRostos, enfileirar],
+    [fila, rodando, pausado, avisoRostos, enfileirar, trabalhar],
   );
 
   const enviados = fila.filter((i) => i.situacao === "pronto").length;
@@ -709,6 +746,7 @@ export function ProvedorDeEnvio({
           aoPausar={valor.pausar}
           aoRetomar={valor.retomar}
           aoParar={valor.parar}
+          aoReenviar={valor.reenviarFalhas}
           aoLimpar={valor.limparConcluidos}
         />
       )}
@@ -733,6 +771,7 @@ function BarraDeEnvio({
   aoPausar,
   aoRetomar,
   aoParar,
+  aoReenviar,
   aoLimpar,
 }: {
   fila: ItemFila[];
@@ -744,6 +783,7 @@ function BarraDeEnvio({
   aoPausar: () => void;
   aoRetomar: () => void;
   aoParar: () => void;
+  aoReenviar: () => void;
   aoLimpar: () => void;
 }) {
   const [aberta, setAberta] = useState(false);
@@ -798,6 +838,16 @@ function BarraDeEnvio({
                 </button>
               </>
             ) : (
+              <>
+                {comErro > 0 && (
+                  <button
+                    type="button"
+                    onClick={aoReenviar}
+                    className="rounded-lg border border-acento px-3 py-1.5 text-xs text-acento-alto transition hover:bg-acento/10"
+                  >
+                    Reenviar {comErro === 1 ? "o que falhou" : `os ${comErro} que falharam`}
+                  </button>
+                )}
               <button
                 type="button"
                 onClick={aoLimpar}
@@ -805,6 +855,7 @@ function BarraDeEnvio({
               >
                 Fechar
               </button>
+              </>
             )}
           </div>
         </div>
@@ -831,6 +882,8 @@ function BarraDeEnvio({
                         {item.rostos !== undefined &&
                           ` · ${item.rostos} ${item.rostos === 1 ? "rosto" : "rostos"}`}
                       </span>
+                    ) : item.semRede ? (
+                      <span className="text-alerta">sem internet — continua quando voltar</span>
                     ) : item.tentativa > 0 ? (
                       <span className="text-alerta">tentando de novo ({item.tentativa})…</span>
                     ) : item.situacao === "preparando" ? (
