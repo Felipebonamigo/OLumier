@@ -80,7 +80,11 @@ export function CapaDeVideo({
       const confirmacao = await fetch(`/api/medias/${mediaId}/poster`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ largura: derivadas.largura, altura: derivadas.altura }),
+        body: JSON.stringify({
+          largura: derivadas.largura,
+          altura: derivadas.altura,
+          duracao: derivadas.duracao,
+        }),
       });
       if (!confirmacao.ok) throw new Error((await confirmacao.json()).erro ?? "Falha ao gravar.");
 

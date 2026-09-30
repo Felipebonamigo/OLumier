@@ -116,6 +116,8 @@ export async function listarMediasPublicas(galeriaId: string) {
     armazem: string;
     /** Sobe a cada republicação (migração 039). Entra na chave do ZIP guardado. */
     versao: number;
+    /** Só vídeo, e só os enviados depois de 30/09/2026 — ver o formato Stream. */
+    duracao_seg: number | null;
   }>(
     /*
      * A ordem já sai agrupada por capítulo (seções pela ordem definida pelo
@@ -123,7 +125,8 @@ export async function listarMediasPublicas(galeriaId: string) {
      * capítulo e o lightbox anda na mesma ordem que a página mostra.
      */
     `select m.id, m.chave, m.chave_thumb, m.chave_preview, m.nome_original,
-            m.tipo, m.bytes, m.largura, m.altura, m.secao_id, m.armazem, m.versao
+            m.tipo, m.bytes, m.largura, m.altura, m.secao_id, m.armazem, m.versao,
+            m.duracao_seg
        from medias m
        left join secoes s on s.id = m.secao_id
       where m.galeria_id = $1 and m.pronto

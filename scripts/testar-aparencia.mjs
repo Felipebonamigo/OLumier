@@ -302,12 +302,15 @@ if (/max-h-\d/.test(capa)) {
  * TODO EIXO PRECISA ESTAR NA TELA.
  *
  * Eixo que existe no config e não aparece no editor é opção que ninguém
- * alcança — e ninguém descobre, porque nada quebra. A tipografia é a exceção
- * conhecida: ela tem seletor próprio (`SeletorDeFonte`), agrupado por família.
+ * alcança — e ninguém descobre, porque nada quebra. Duas exceções conhecidas,
+ * cada uma com seletor próprio que tem de estar na tela: a tipografia
+ * (`SeletorDeFonte`, agrupado por família) e o formato (`SeletorDeFormato`,
+ * cartões com o esquema da tela — 30/09/2026).
  */
 const editor = readFileSync(path.join(RAIZ, "src/components/editor-aparencia.tsx"), "utf8");
-const forasDaTela = Object.keys(OPCOES).filter(
-  (eixo) => eixo !== "tipografia" && !editor.includes(`eixo="${eixo}"`),
+const SELETOR_PROPRIO = { tipografia: "<SeletorDeFonte", formato: "<SeletorDeFormato" };
+const forasDaTela = Object.keys(OPCOES).filter((eixo) =>
+  SELETOR_PROPRIO[eixo] ? !editor.includes(SELETOR_PROPRIO[eixo]) : !editor.includes(`eixo="${eixo}"`),
 );
 if (forasDaTela.length) {
   console.error(`  ✗ eixo sem lugar no editor: ${forasDaTela.join(", ")}`);

@@ -2,7 +2,12 @@
 
 import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { definirCapaAction, moverMediasAction, moverFotoAction } from "@/app/painel/actions";
+import {
+  definirCapaAction,
+  definirCapaDaPastaAction,
+  moverMediasAction,
+  moverFotoAction,
+} from "@/app/painel/actions";
 import { depoisDoClique } from "@/lib/trecho-selecionado";
 
 export interface MediaExibida {
@@ -44,11 +49,14 @@ export function GradeMedias({
   galeriaId,
   capaId,
   secoes,
+  capasDasPastas = {},
 }: {
   medias: MediaExibida[];
   galeriaId: string;
   capaId: string | null;
   secoes: SecaoOpcao[];
+  /** Capítulo → foto de frente da pasta, só onde o fotógrafo escolheu. */
+  capasDasPastas?: Record<string, string>;
 }) {
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [definindoCapa, setDefinindoCapa] = useState<string | null>(null);
@@ -98,6 +106,28 @@ export function GradeMedias({
       setSelecao(new Set());
       router.refresh();
     });
+  }
+
+  /*
+   * A CAPA DA PASTA (30/09/2026) — a frente do capítulo no formato Pastas.
+   *
+   * Mesmo gesto da capa da galeria, e ao lado dela: o fotógrafo já sabe que
+   * "capa" no canto da foto escolhe a frente de alguma coisa. O capítulo é o
+   * da própria foto — quem decide é o servidor (`definirCapaDaPasta`).
+   */
+  const ehCapaDaPasta = (m: MediaExibida) =>
+    Boolean(m.secaoId && capasDasPastas[m.secaoId] === m.id);
+  async function definirCapaDaPasta(m: MediaExibida) {
+    setDefinindoCapa(`pasta:${m.id}`);
+    try {
+      const f = new FormData();
+      f.set("galeria_id", galeriaId);
+      f.set("media_id", m.id);
+      await definirCapaDaPastaAction(f);
+      router.refresh();
+    } finally {
+      setDefinindoCapa(null);
+    }
   }
 
   async function definirCapa(m: MediaExibida) {
@@ -604,9 +634,18 @@ export function GradeMedias({
                 ✓
               </button>
 
-              {capaId === m.id && (
-                <span className="absolute left-9 top-1.5 z-10 rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
-                  capa
+              {(capaId === m.id || ehCapaDaPasta(m)) && (
+                <span className="absolute left-9 top-1.5 z-10 flex flex-col items-start gap-1">
+                  {capaId === m.id && (
+                    <span className="rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
+                      capa
+                    </span>
+                  )}
+                  {ehCapaDaPasta(m) && (
+                    <span className="whitespace-nowrap rounded-md bg-void/85 px-2 py-0.5 text-[10px] font-semibold text-acento-alto">
+                      capa da pasta
+                    </span>
+                  )}
                 </span>
               )}
 
@@ -684,6 +723,20 @@ export function GradeMedias({
                     className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
                   >
                     {definindoCapa === m.id ? "…" : "capa"}
+                  </button>
+                )}
+                {/* Vídeo também pode ser a frente da pasta — a pasta do filme
+                    tem só vídeo —, desde que tenha pôster para mostrar. */}
+                {m.secaoId && !ehCapaDaPasta(m) && (m.tipo === "foto" || m.temCapa) && (
+                  <button
+                    type="button"
+                    onClick={() => definirCapaDaPasta(m)}
+                    disabled={definindoCapa === `pasta:${m.id}`}
+                    aria-label={`Usar ${m.nome} como capa da pasta`}
+                    title="A frente deste capítulo quando a galeria é entregue em pastas"
+                    className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
+                  >
+                    {definindoCapa === `pasta:${m.id}` ? "…" : "capa da pasta"}
                   </button>
                 )}
                 <button

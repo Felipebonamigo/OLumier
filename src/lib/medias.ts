@@ -137,6 +137,8 @@ export async function criarMediaPendente(dados: {
   bytes: number;
   largura?: number | null;
   altura?: number | null;
+  /** Só vídeo — ver o formato Stream. */
+  duracaoSeg?: number | null;
   secaoId?: string | null;
   /** Posição do arquivo na lista que o fotógrafo ordenou. */
   indice?: number;
@@ -226,8 +228,8 @@ export async function criarMediaPendente(dados: {
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
                          nome_original, tipo, mime, bytes, largura, altura, secao_id, ordem, pronto,
-                         armazem, tirada_em, lote)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15, $16)
+                         armazem, tirada_em, lote, duracao_seg)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, false, $14, $15, $16, $17)
      returning *`,
     [
       dados.galeriaId,
@@ -246,6 +248,7 @@ export async function criarMediaPendente(dados: {
       dados.armazem ?? "r2",
       dados.tiradaEm ?? null,
       dados.lote ?? null,
+      dados.duracaoSeg ?? null,
     ],
   );
 }
@@ -515,15 +518,19 @@ export async function definirMiniatura(
   chaveThumb: string,
   largura?: number,
   altura?: number,
+  /* A duração, quando a capa saiu do próprio filme. É o caminho de o vídeo
+     enviado antes de 30/09/2026 ganhar duração no Stream: trocar a capa. */
+  duracaoSeg?: number | null,
 ): Promise<boolean> {
   const linhas = await consultar<{ id: string }>(
     `update medias
         set chave_thumb = $3,
             largura = coalesce($4, largura),
-            altura = coalesce($5, altura)
+            altura = coalesce($5, altura),
+            duracao_seg = coalesce($6, duracao_seg)
       where id = $1 and tenant_id = $2 and tipo = 'video'
       returning id`,
-    [mediaId, tenantId, chaveThumb, largura ?? null, altura ?? null],
+    [mediaId, tenantId, chaveThumb, largura ?? null, altura ?? null, duracaoSeg ?? null],
   );
   return linhas.length > 0;
 }

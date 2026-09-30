@@ -221,6 +221,12 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
         galeriaId={galeria.id}
         capaId={galeria.capa_media_id}
         secoes={secoes.map((s) => ({ id: s.id, nome: s.nome }))}
+        /* A capa de cada pasta (migração 051), para o selo e o botão da grade.
+           Só as escolhidas: sem escolha a pasta usa a primeira foto, e a
+           grade não precisa dizer isso em cada capítulo. */
+        capasDasPastas={Object.fromEntries(
+          secoes.filter((s) => s.capa_media_id).map((s) => [s.id, s.capa_media_id as string]),
+        )}
       />
     </>
   );
