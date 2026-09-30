@@ -480,13 +480,20 @@ export async function temCobrancaPaga(assinaturaId: string): Promise<boolean> {
  */
 export async function ultimaCobrancaPaga(
   assinaturaId: string,
-): Promise<{ id: string; centavos: number } | null> {
+): Promise<{
+  id: string;
+  centavos: number;
+  confirmedDate: string | null;
+  clientPaymentDate: string | null;
+  paymentDate: string | null;
+} | null> {
   const r = await chamar<{
     data?: {
       id: string;
       status?: string;
       value?: number;
       confirmedDate?: string | null;
+      clientPaymentDate?: string | null;
       paymentDate?: string | null;
       dueDate?: string | null;
     }[];
@@ -495,7 +502,15 @@ export async function ultimaCobrancaPaga(
   if (pagas.length === 0) return null;
   const quando = (c: (typeof pagas)[number]) => c.confirmedDate ?? c.paymentDate ?? c.dueDate ?? "";
   const ultima = pagas.reduce((a, b) => (quando(b) > quando(a) ? b : a));
-  return { id: ultima.id, centavos: Math.round((ultima.value ?? 0) * 100) };
+  return {
+    id: ultima.id,
+    centavos: Math.round((ultima.value ?? 0) * 100),
+    // As datas vão junto para a conferência de pagamentos perdidos contar o
+    // período do mesmo jeito que o webhook (`pagoAteDepoisDoAviso`).
+    confirmedDate: ultima.confirmedDate ?? null,
+    clientPaymentDate: ultima.clientPaymentDate ?? null,
+    paymentDate: ultima.paymentDate ?? null,
+  };
 }
 
 export async function cancelarAssinatura(assinaturaId: string) {

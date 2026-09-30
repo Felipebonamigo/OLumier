@@ -67,29 +67,79 @@ const ORDEM: FaixaAtomatiza[] = ["solo", "equipe", "estudio"];
  * dela.
  */
 export async function faixaDoAtomatiza(documento: string, plano?: Plano): Promise<FaixaAtomatiza | null> {
-  const doc = soDigitos(documento);
-  if (!doc) return null;
+  return (await diagnosticarAtomatiza(documento, plano)).faixa;
+}
 
+/** O que a conferência viu numa assinatura do Atomatiza, e se ela conta. */
+export interface AssinaturaVistaDoAtomatiza {
+  id: string;
+  descricao: string | null;
+  faixa: FaixaAtomatiza | null;
+  /** Vazio quando conta para o combo; senão, por que não conta. */
+  foraPorque: string | null;
+}
+
+export interface DiagnosticoDoAtomatiza {
+  faixa: FaixaAtomatiza | null;
+  assinaturas: AssinaturaVistaDoAtomatiza[];
+  /** Por que não há combo, numa frase — ou null quando há. */
+  motivo: string | null;
+}
+
+/**
+ * A MESMA conferência de `faixaDoAtomatiza`, contando o que viu no caminho.
+ *
+ * Existe para o aviso de pagamento e para `scripts/conferir-combo.mjs`
+ * responderem "por que ESTE estúdio não ganhou o desconto?" sem uma segunda
+ * cópia das regras — duas cópias envelheceriam separadas, e o diagnóstico
+ * passaria a dizer uma coisa enquanto o preço faz outra.
+ */
+export async function diagnosticarAtomatiza(documento: string, plano?: Plano): Promise<DiagnosticoDoAtomatiza> {
+  const doc = soDigitos(documento);
+  if (!doc) return { faixa: null, assinaturas: [], motivo: "o estúdio não tem CPF/CNPJ na conta daqui" };
+
+  const vistas: AssinaturaVistaDoAtomatiza[] = [];
   const achadas: FaixaAtomatiza[] = [];
   for (const cliente of await clientesDoDocumento(doc)) {
     for (const a of await assinaturasDoCliente(cliente.id)) {
-      if (a.deleted || a.status !== "ACTIVE") continue;
       if (!a.externalReference?.startsWith(PREFIXO_ATOMATIZA)) continue;
       const faixa = faixaDaDescricaoAtomatiza(a.description);
-      if (!faixa) continue;
-      if (!(await temCobrancaPaga(a.id))) continue;
-      if (await temCobrancaVencida(a.id)) continue;
+      const vista: AssinaturaVistaDoAtomatiza = { id: a.id, descricao: a.description ?? null, faixa, foraPorque: null };
+      vistas.push(vista);
+      if (a.deleted || a.status !== "ACTIVE") {
+        vista.foraPorque = a.deleted ? "apagada" : `não está ativa (${a.status})`;
+        continue;
+      }
+      if (!faixa) {
+        vista.foraPorque = "a descrição não diz a faixa (solo, equipe ou estúdio)";
+        continue;
+      }
+      if (!(await temCobrancaPaga(a.id))) {
+        vista.foraPorque = "nenhuma cobrança paga ainda (teste ou primeira fatura em aberto)";
+        continue;
+      }
+      if (await temCobrancaVencida(a.id)) {
+        vista.foraPorque = "tem cobrança vencida";
+        continue;
+      }
       achadas.push(faixa);
     }
   }
-  if (achadas.length === 0) return null;
+
+  if (achadas.length === 0) {
+    const motivo =
+      vistas.length === 0
+        ? "nenhuma assinatura do Atomatiza com este CPF/CNPJ no Asaas"
+        : `a assinatura do Atomatiza ${vistas.map((v) => v.foraPorque).join("; ")}`;
+    return { faixa: null, assinaturas: vistas, motivo };
+  }
   /* Com mais de uma faixa viva (não deveria acontecer), vale a que dá o MENOR
    * desconto a este plano. Na divisão proporcional, qual é depende do tamanho
    * da galeria: em 250 GB é o Equipe, e não o Solo. Sem o plano, a ordem. */
-  if (plano) {
-    return achadas.reduce((a, b) => (descontoDaGaleriaCentavos(plano, b) < descontoDaGaleriaCentavos(plano, a) ? b : a));
-  }
-  return ORDEM.find((f) => achadas.includes(f)) ?? null;
+  const faixa = plano
+    ? achadas.reduce((a, b) => (descontoDaGaleriaCentavos(plano, b) < descontoDaGaleriaCentavos(plano, a) ? b : a))
+    : (ORDEM.find((f) => achadas.includes(f)) ?? null);
+  return { faixa, assinaturas: vistas, motivo: null };
 }
 
 /**
@@ -207,4 +257,71 @@ export async function recalcularComboDoCliente(clienteAsaasId: string, motivo: s
     }
   }
   return estudios.length;
+}
+
+/** Tudo o que responde "este estúdio está com o desconto do combo?". */
+export interface DiagnosticoDoCombo {
+  tenantId: string;
+  estudio: string;
+  email: string;
+  documento: string | null;
+  planoId: string;
+  ciclo: Ciclo;
+  /** A faixa do Atomatiza que dá desconto a ESTE plano, ou null. */
+  faixa: FaixaAtomatiza | null;
+  /** Por que não há desconto, numa frase — ou null quando há. */
+  motivo: string | null;
+  /** Quanto a Galeria cede por mês por causa do combo, em centavos. */
+  descontoMensalCentavos: number;
+  /** O que a assinatura cobra hoje no Asaas, ou null sem assinatura. */
+  valorAtualCentavos: number | null;
+  /** O que ela deveria cobrar, com ou sem combo. */
+  valorCertoCentavos: number;
+  assinaturasDoAtomatiza: AssinaturaVistaDoAtomatiza[];
+}
+
+/**
+ * O combo deste estúdio, conferido de ponta a ponta e sem mexer em nada: o
+ * plano, o documento, o Atomatiza visto pelo Asaas e o valor que a nossa
+ * assinatura cobra. Quem acerta é `recalcularCombo`; isto só explica.
+ */
+export async function diagnosticarCombo(tenantId: string): Promise<DiagnosticoDoCombo | null> {
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return null;
+  const plano = planoPorId(tenant.plano_id);
+  const ciclo = cicloDe(tenant.ciclo_cobranca);
+  const base = {
+    tenantId,
+    estudio: tenant.nome_estudio,
+    email: tenant.email,
+    documento: tenant.cpf_cnpj,
+    planoId: tenant.plano_id,
+    ciclo,
+  };
+  if (!plano) {
+    return { ...base, faixa: null, motivo: `plano desconhecido (${tenant.plano_id})`, descontoMensalCentavos: 0,
+      valorAtualCentavos: null, valorCertoCentavos: 0, assinaturasDoAtomatiza: [] };
+  }
+
+  let valorAtualCentavos: number | null = null;
+  if (tenant.asaas_assinatura_id && asaasConfigurado()) {
+    const a = await buscarAssinatura(tenant.asaas_assinatura_id);
+    if (!a.deleted) valorAtualCentavos = Math.round(Number(a.value) * 100);
+  }
+
+  const atomatiza = await diagnosticarAtomatiza(tenant.cpf_cnpj ?? "", plano);
+  const desconto = descontoDaGaleriaCentavos(plano, atomatiza.faixa);
+  let motivo = atomatiza.motivo;
+  if (!motivo && !planoEntraNoCombo(plano)) motivo = `o plano ${plano.id} é da grade antiga e fica fora do combo`;
+  if (!motivo && desconto <= 0) motivo = "a tabela do combo não dá desconto a este par";
+
+  return {
+    ...base,
+    faixa: desconto > 0 ? atomatiza.faixa : null,
+    motivo,
+    descontoMensalCentavos: desconto,
+    valorAtualCentavos,
+    valorCertoCentavos: precoDoCicloComComboCentavos(plano, ciclo, atomatiza.faixa),
+    assinaturasDoAtomatiza: atomatiza.assinaturas,
+  };
 }

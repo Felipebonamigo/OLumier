@@ -474,7 +474,9 @@ try {
     if (!/startsWith\(PREFIXO_DIFERENCA_ATOMATIZA\)/.test(fonte)) {
       throw new Error("a diferença de uma troca de faixa no Atomatiza não confere o combo aqui");
     }
-    if (!/after\(\(\) =>\s*recalcularCombo\(tenantId/.test(fonte)) {
+    // `after(() => recalcularCombo(...))`, ou o bloco que confere o combo e
+    // depois avisa o pagamento (`lib/aviso-de-pagamento.ts`, 30/09/2026).
+    if (!/after\((?:\(\) =>|async \(\) => \{)\s*(?:await )?recalcularCombo\(tenantId/.test(fonte)) {
       throw new Error("o nosso pagamento não confere o combo — um aviso perdido do Atomatiza nunca se acertaria");
     }
     if (!/\.catch\(/.test(fonte.slice(gatilhoDeLa, gatilhoDeLa + 200))) {
