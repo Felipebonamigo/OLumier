@@ -11,6 +11,7 @@ import { asaasConfigurado } from "@/lib/asaas";
 import { ProvedorDeEnvio } from "@/components/envio-em-curso";
 import { ImportarGalerias } from "@/components/importar-galerias";
 import { MigrarDoPixieset } from "@/components/migrar-do-pixieset";
+import { loginDoPixiesetLiberado } from "@/config/pixieset";
 
 export const metadata: Metadata = { title: "Importar galerias" };
 export const dynamic = "force-dynamic";
@@ -66,7 +67,7 @@ export default async function ImportarPage() {
         />
       </ProvedorDeEnvio>
 
-      <MigrarDoPixieset />
+      <MigrarDoPixieset liberado={loginDoPixiesetLiberado(tenant.email)} />
     </main>
   );
 }

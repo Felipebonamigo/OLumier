@@ -85,6 +85,16 @@ Por quê:
 - pelo que a busca indicou, os termos do Pixieset não permitem acesso por
   endereços não documentados. O texto exato precisa ser lido por alguém.
 
+**Só para contas apontadas.** Felipe, 30/09/2026: "deixa desabilitado o botão
+de logar no pixieset por enquanto, para todos, só vamos habilitar para os
+usuários que eu apontar". A lista é a variável `PIXIESET_LOGIN_LIBERADO`
+(e-mails separados por vírgula, no `.env.production`), no mesmo molde de
+`ADMINS`. Vazia, que é o padrão, ninguém tem acesso. O formulário só se abre com as
+duas travas: a conta na lista **e** `CONECTOR_PIXIESET_PRONTO = true` em
+`src/config/pixieset.ts`. Hoje o conector não existe, então liberar uma conta
+só troca o recado ("sua conta está liberada, mas o caminho ainda não foi
+ligado").
+
 Para ligar, nesta ordem:
 
 1. **Decisão dos sócios, com leitura jurídica** dos termos do Pixieset: o risco

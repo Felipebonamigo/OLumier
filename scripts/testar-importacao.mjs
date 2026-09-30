@@ -222,5 +222,25 @@ await etapa("mesmo nome sem acento e sem caixa é a mesma galeria existente", ()
   igual(achada?.id, "1", "existente");
 });
 
+/* ── o login do Pixieset, só para contas apontadas ────────────────────── */
+
+await etapa("login do Pixieset: ninguém por padrão, só os e-mails da lista", async () => {
+  const px = await import("../src/config/pixieset.ts");
+  const antes = process.env.PIXIESET_LOGIN_LIBERADO;
+  try {
+    delete process.env.PIXIESET_LOGIN_LIBERADO;
+    if (px.loginDoPixiesetLiberado("felipe@exemplo.com")) throw new Error("liberou sem lista");
+    process.env.PIXIESET_LOGIN_LIBERADO = " Felipe@Exemplo.com , carol@exemplo.com";
+    if (!px.loginDoPixiesetLiberado("felipe@exemplo.com ")) throw new Error("não reconheceu da lista");
+    if (px.loginDoPixiesetLiberado("outro@exemplo.com")) throw new Error("liberou quem não está");
+    if (px.loginDoPixiesetLiberado(null)) throw new Error("liberou sem e-mail");
+  } finally {
+    if (antes === undefined) delete process.env.PIXIESET_LOGIN_LIBERADO;
+    else process.env.PIXIESET_LOGIN_LIBERADO = antes;
+  }
+  /* A segunda trava: sem conector, nem conta liberada vê o formulário aceso. */
+  if (px.CONECTOR_PIXIESET_PRONTO) throw new Error("conector marcado como pronto sem existir");
+});
+
 console.log(falhou ? "\nFALHOU" : "\nOK");
 process.exit(falhou ? 1 : 0);
