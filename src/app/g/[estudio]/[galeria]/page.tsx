@@ -877,16 +877,23 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     fileiras = await Promise.all(
       comVideo.map(async (g) => ({
         id: g.id,
-        /* Com uma fileira só, o nome do grupo das soltas ("Outras fotos")
-           não diz nada sobre vídeos: vira "Episódios". */
-        nome: comVideo.length === 1 && g.id === "sem-capitulo" ? "Episódios" : g.nome,
+        /* A fileira dos vídeos soltos leva o nome que o fotógrafo escreveu
+           no Design (Juan, 30/09/2026: "poder mudar o título 'Episódios'").
+           Sem nome escrito e com uma fileira só, o nome do grupo das soltas
+           ("Outras fotos") não diz nada sobre vídeos: vira "Episódios".
+           Capítulo continua com o nome do capítulo. */
+        nome:
+          g.id !== "sem-capitulo"
+            ? g.nome
+            : aparencia.nomeDosVideos || (comVideo.length === 1 ? "Episódios" : g.nome),
+        frase: g.id === "sem-capitulo" && aparencia.fraseDosVideos ? aparencia.fraseDosVideos : undefined,
         episodios: await Promise.all(
           g.medias
             .filter((m) => m.tipo === "video")
             .map(async (m) => ({
               id: m.id,
               numero: ++numero,
-              titulo: tituloDoEpisodio(m.nome_original),
+              titulo: m.titulo ?? tituloDoEpisodio(m.nome_original),
               nomeDoArquivo: m.nome_original,
               duracao: m.duracao_seg,
               poster: m.chave_thumb ? await urlDeLeitura(m.chave_thumb, VALIDADE) : null,
@@ -910,6 +917,34 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        macio, e por isso a capa vem antes. */
     fundoDoStream = urlCapa ?? fileiras[0]?.episodios.find((e) => e.poster)?.poster ?? null;
   }
+
+  /* A entrega em stream, desenhada com a capa da própria sala ou embaixo da
+     capa do grupo Capa — ver `CapaDoStream`. */
+  const streamDaEntrega =
+    tela === "stream" ? (
+      <GaleriaStream
+        galeriaId={galeria.id}
+        aparencia={aparencia}
+        titulo={galeria.titulo}
+        subtitulo={galeria.subtitulo}
+        dataFormatada={dataEvento}
+        estudio={galeria.estudio_nome}
+        logoUrl={urlLogo}
+        logoLargura={galeria.estudio_logo_largura}
+        logoAltura={galeria.estudio_logo_altura}
+        fundo={fundoDoStream}
+        focoX={galeria.capa_foco_x}
+        focoY={galeria.capa_foco_y}
+        fileiras={fileiras}
+        fotos={{
+          total: fotosNaGaleria,
+          amostra: amostraDeFotos,
+          href: `${comConsulta({ ver: "galeria" })}#conteudo`,
+        }}
+        permiteDownload={galeria.permite_download}
+        identificado={Boolean(eu)}
+      />
+    ) : null;
 
   return (
     /*
@@ -958,62 +993,59 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       {fonteDoEstudio && (
         <style>{`@font-face{font-family:"${FAMILIA_PROPRIA}";src:url("${fonteDoEstudio}");font-display:swap}`}</style>
       )}
-      {tela === "stream" ? (
+      {tela === "stream" && aparencia.capaStream === "sala" ? (
         /*
-          O STREAM TRAZ A PRÓPRIA CAPA: a tela de cinema É a capa — foto de
+          A SALA TRAZ A PRÓPRIA CAPA: a tela de cinema É a capa — foto de
           fundo, logo, título na letra da galeria e o botão de assistir. Duas
           capas seguidas empurrariam os episódios para a segunda tela.
         */
-        <GaleriaStream
-          galeriaId={galeria.id}
-          aparencia={aparencia}
-          titulo={galeria.titulo}
-          subtitulo={galeria.subtitulo}
-          dataFormatada={dataEvento}
-          estudio={galeria.estudio_nome}
-          logoUrl={urlLogo}
-          logoLargura={galeria.estudio_logo_largura}
-          logoAltura={galeria.estudio_logo_altura}
-          fundo={fundoDoStream}
-          focoX={galeria.capa_foco_x}
-          focoY={galeria.capa_foco_y}
-          fileiras={fileiras}
-          fotos={{
-            total: fotosNaGaleria,
-            amostra: amostraDeFotos,
-            href: `${comConsulta({ ver: "galeria" })}#conteudo`,
-          }}
-          permiteDownload={galeria.permite_download}
-          identificado={Boolean(eu)}
-        />
+        streamDaEntrega
       ) : (
         <>
-      {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
-        <GaleriaCapa
-          aparencia={aparencia}
-          dados={{
-            titulo: galeria.titulo,
-            subtitulo: galeria.subtitulo,
-            dataFormatada: dataEvento,
-            estudio: galeria.estudio_nome,
-            logoUrl: urlLogo,
-            logoLargura: galeria.estudio_logo_largura,
-            logoAltura: galeria.estudio_logo_altura,
-            urlImagem: urlCapa,
-            /*
-             * ESCOLHIDA, e não herdada.
-             *
-             * A capa jornal só mostra foto quando o fotógrafo apontou uma — o
-             * arquivo enviado ou a foto marcada. A terceira via desta página (a
-             * primeira foto da galeria, quando ninguém escolheu nada) NÃO conta:
-             * se contasse, toda galeria que hoje usa o preset Revista ganharia
-             * uma foto de capa da noite para o dia, incluindo as já entregues.
-             */
-            capaEscolhida: Boolean(galeria.capa_chave || galeria.capa_media_id),
-            focoX: galeria.capa_foco_x,
-            focoY: galeria.capa_foco_y,
-          }}
-        />
+          {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
+          <GaleriaCapa
+            aparencia={aparencia}
+            dados={{
+              titulo: galeria.titulo,
+              subtitulo: galeria.subtitulo,
+              dataFormatada: dataEvento,
+              estudio: galeria.estudio_nome,
+              logoUrl: urlLogo,
+              logoLargura: galeria.estudio_logo_largura,
+              logoAltura: galeria.estudio_logo_altura,
+              /* No stream sem capa escolhida, o pôster do primeiro vídeo —
+                 a mesma régua do fundo da sala (`fundoDoStream`). */
+              urlImagem: tela === "stream" ? fundoDoStream : urlCapa,
+              /*
+               * ESCOLHIDA, e não herdada.
+               *
+               * A capa jornal só mostra foto quando o fotógrafo apontou uma — o
+               * arquivo enviado ou a foto marcada. A terceira via desta página (a
+               * primeira foto da galeria, quando ninguém escolheu nada) NÃO conta:
+               * se contasse, toda galeria que hoje usa o preset Revista ganharia
+               * uma foto de capa da noite para o dia, incluindo as já entregues.
+               */
+              capaEscolhida: Boolean(galeria.capa_chave || galeria.capa_media_id),
+              focoX: galeria.capa_foco_x,
+              focoY: galeria.capa_foco_y,
+              chamada: tela === "stream" ? "Ver os vídeos" : undefined,
+            }}
+          />
+          {/*
+            O STREAM COM A CAPA DO GRUPO CAPA (Juan, 30/09/2026: "corrigir os
+            formatos de CAPA quando o formato de entrega foi o STREAM"). A sala
+            começa embaixo, sem a capa dela. `id="fotos"` é o alvo do "Ver os
+            vídeos" das capas que têm chamada; a camada com fundo cobre a capa
+            fixa. `relative` SEM `z-index`: vir depois da capa no documento já
+            a põe por cima, e um `z-10` aqui criaria um contexto de
+            empilhamento que prenderia o player (`fixed`, z-60) embaixo do
+            rodapé.
+          */}
+          {tela === "stream" && (
+            <div id="fotos" className="relative scroll-mt-4" style={{ background: "var(--g-fundo)" }}>
+              {streamDaEntrega}
+            </div>
+          )}
         </>
       )}
 

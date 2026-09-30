@@ -141,6 +141,46 @@ etapa("desenho gravado antes do eixo, ou estranho, cai no primeiro", () => {
   igual(ap.lerAparencia({ estiloStream: "netflix" }).estiloStream, "cinema", "fora da lista");
 });
 
+/* ── 2b. o que o Juan pediu depois de ver o Stream (30/09/2026) ─────────── */
+
+etapa("capa, rolagem e textos do stream: o padrão é o Stream de sempre", () => {
+  const vazia = ap.lerAparencia({});
+  igual(
+    [vazia.capaStream, vazia.rolagemStream, vazia.nomeDosVideos, vazia.fraseDosVideos],
+    ["sala", "lado", "", ""],
+    "padrão",
+  );
+  const estranha = ap.lerAparencia({ capaStream: "netflix", rolagemStream: 3, nomeDosVideos: 42 });
+  igual([estranha.capaStream, estranha.rolagemStream, estranha.nomeDosVideos], ["sala", "lado", ""], "fora da lista");
+});
+
+etapa("título e frase dos vídeos: aparados, sem espaço sobrando, com teto", () => {
+  const a = ap.lerAparencia({ nomeDosVideos: "  Os   filmes  ", fraseDosVideos: "x".repeat(300) });
+  igual(a.nomeDosVideos, "Os filmes", "espaços");
+  igual(a.fraseDosVideos.length, 120, "teto da frase");
+  igual(ap.lerAparencia({ nomeDosVideos: "y".repeat(90) }).nomeDosVideos.length, 40, "teto do título");
+});
+
+etapa("capa, rolagem e textos do stream andam com o formato, não com o estilo", () => {
+  const atual = ap.lerAparencia({
+    formato: "stream",
+    capaStream: "galeria",
+    rolagemStream: "baixo",
+    nomeDosVideos: "Filmes",
+    fraseDosVideos: "O filme e o teaser",
+  });
+  const depois = ap.comFormatoDe(ap.presetPorId("revista").aparencia, atual);
+  igual(
+    [depois.capaStream, depois.rolagemStream, depois.nomeDosVideos, depois.fraseDosVideos],
+    ["galeria", "baixo", "Filmes", "O filme e o teaser"],
+    "estrutura",
+  );
+  const revista = ap.presetPorId("revista").aparencia;
+  if (!ap.mesmaAparencia({ ...revista, nomeDosVideos: "Filmes", rolagemStream: "baixo" }, revista)) {
+    throw new Error("escrever o título dos vídeos tirou a galeria do padrão");
+  }
+});
+
 etapa("a sala Cinema escurece o tema claro, e deixa o escuro como está", () => {
   const claro = ap.lerAparencia({ tema: "claro", formato: "stream", estiloStream: "cinema" });
   igual(ap.variaveisDaEntrega(claro, "stream")["--g-fundo"], ap.SALA_ESCURA["--g-fundo"], "claro vira sala escura");

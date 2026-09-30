@@ -75,6 +75,8 @@ import {
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
 import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
+import { fotosDaPasta, type FotoDaPasta } from "@/lib/entrega-no-design";
+import { definirTituloDoVideo } from "@/lib/medias";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -440,6 +442,34 @@ export async function definirCapaDaPastaAction(form: FormData): Promise<{ ok: bo
   const mediaId = String(form.get("media_id") ?? "");
   if (!galeriaId || !mediaId) return { ok: false };
   const ok = await definirCapaDaPasta(galeriaId, tenantId, mediaId);
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  return { ok };
+}
+
+/**
+ * As fotos de uma pasta, uma página por vez, para escolher a capa dela na aba
+ * Design. Ver `fotosDaPasta` em `lib/entrega-no-design.ts`.
+ */
+export async function fotosDaPastaAction(
+  galeriaId: string,
+  secaoId: string,
+  desde: number,
+): Promise<{ fotos: FotoDaPasta[]; mais: boolean }> {
+  const tenantId = await exigirTenant();
+  if (!galeriaId || !secaoId) return { fotos: [], mais: false };
+  return fotosDaPasta(galeriaId, tenantId, secaoId, Number(desde) || 0);
+}
+
+/**
+ * O nome do vídeo na tela do Stream (migração 055). Vazio volta ao nome
+ * tirado do arquivo. Ver `definirTituloDoVideo`.
+ */
+export async function renomearVideoAction(form: FormData): Promise<{ ok: boolean }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const mediaId = String(form.get("media_id") ?? "");
+  if (!galeriaId || !mediaId) return { ok: false };
+  const ok = await definirTituloDoVideo(galeriaId, tenantId, mediaId, String(form.get("titulo") ?? ""));
   revalidatePath(`/painel/galerias/${galeriaId}`);
   return { ok };
 }

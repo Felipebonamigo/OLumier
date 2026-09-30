@@ -630,6 +630,50 @@ html[data-js] .revelar[data-visivel] {
   animation: stream-enche var(--espera, 8s) linear both;
 }
 
+/* A linha do filme e o volume no player do Stream (30/09/2026). Um range
+   nativo — teclado, leitor de tela e arrasto no toque de graça —, com a parte
+   já vista em branco. `--andou` vem do componente. A área de toque é o
+   elemento inteiro (20 px de altura); o traço visível é fino. */
+.linha-do-filme {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+.linha-do-filme::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #fff var(--andou, 0%), rgba(255, 255, 255, 0.28) var(--andou, 0%));
+}
+.linha-do-filme::-moz-range-track {
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(to right, #fff var(--andou, 0%), rgba(255, 255, 255, 0.28) var(--andou, 0%));
+}
+.linha-do-filme::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.linha-do-filme::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 9999px;
+  background: #fff;
+}
+.linha-do-filme:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pasta-entra,
   .stream-enche {

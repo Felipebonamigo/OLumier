@@ -24,6 +24,9 @@ export interface DadosCapa {
   focoY: number;
   /** O fotógrafo APONTOU uma capa (não é a primeira foto por falta de escolha). */
   capaEscolhida: boolean;
+  /** O texto da chamada das capas que têm uma ("Ver galeria"). No Stream com a
+      capa do grupo Capa ela leva aos vídeos, e diz isso. */
+  chamada?: string;
 }
 
 /*
@@ -668,7 +671,7 @@ export function GaleriaCapa({ dados, aparencia }: { dados: DadosCapa; aparencia:
                 borderBottom: "1px solid var(--g-destaque)",
               }}
             >
-              Ver galeria
+              {dados.chamada ?? "Ver galeria"}
             </a>
           </div>
         </div>

@@ -534,3 +534,31 @@ export async function definirMiniatura(
   );
   return linhas.length > 0;
 }
+
+/**
+ * O nome do vídeo na tela do Stream (migração 055).
+ *
+ * Juan, 30/09/2026: "adicionar possibilidade de trocar o nome do arquivo que
+ * aparece na visualização". É só o nome de EXIBIÇÃO: o download continua
+ * chegando com `nome_original`.
+ *
+ * Texto vazio devolve o vídeo à regra de sempre (o título tirado do arquivo) —
+ * apagar o campo é o jeito natural de desfazer, e gravar "" seria um título
+ * invisível. Só vídeo, pela mesma razão de `definirMiniatura`: a trava mora no
+ * `where`, e não em quem chama.
+ */
+export async function definirTituloDoVideo(
+  galeriaId: string,
+  tenantId: string,
+  mediaId: string,
+  titulo: string,
+): Promise<boolean> {
+  const limpo = titulo.replace(/\s+/g, " ").trim().slice(0, 120);
+  const linhas = await consultar<{ id: string }>(
+    `update medias set titulo = $4
+      where id = $1 and galeria_id = $2 and tenant_id = $3 and tipo = 'video'
+      returning id`,
+    [mediaId, galeriaId, tenantId, limpo || null],
+  );
+  return linhas.length > 0;
+}

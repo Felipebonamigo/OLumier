@@ -54,8 +54,14 @@ import { baixarNoComputador } from "@/lib/salvar-client";
 
 export interface EpisodioDoStream {
   id: string;
-  /** Contado na galeria inteira, na ordem das fileiras: E1, E2, E3… */
+  /**
+   * Contado na galeria inteira, na ordem das fileiras. Só as salas que são
+   * LISTA numeram (Episódios e Mostra, onde o número é desenho). O "E1"
+   * miúdo sobre o cartão e no player saiu a pedido do Juan (30/09/2026):
+   * "tirar o EP1 minúsculo que fica no vídeo".
+   */
   numero: number;
+  /** O nome escrito pelo fotógrafo (migração 055) ou o tirado do arquivo. */
   titulo: string;
   /** O nome original — é com ele que o arquivo baixado chega. */
   nomeDoArquivo: string;
@@ -69,6 +75,8 @@ export interface EpisodioDoStream {
 export interface FileiraDoStream {
   id: string;
   nome: string;
+  /** Uma frase embaixo do nome — só a fileira dos vídeos soltos tem. Ver `fraseDosVideos`. */
+  frase?: string;
   episodios: EpisodioDoStream[];
 }
 
@@ -120,6 +128,8 @@ export function GaleriaStream({
   identificado,
 }: {
   galeriaId: string;
+  /** `capaStream` decide se a sala desenha a própria capa ou se a página já
+      desenhou a do grupo Capa acima dela. Ver `CapaDoStream`. */
   aparencia: Aparencia;
   titulo: string;
   subtitulo: string | null;
@@ -185,12 +195,11 @@ export function GaleriaStream({
       ? { height: `${medidaLogo.altura}px` }
       : { maxHeight: `${medidaLogo?.tetoAltura ?? 0}px` };
 
-  const meta = [
-    dataFormatada,
-    subtitulo,
+  const metaDosVideos = [
     `${episodios.length} ${episodios.length === 1 ? "vídeo" : "vídeos"}`,
     todasComDuracao ? duracaoLegivel(duracaoTotal) : null,
   ].filter((m): m is string => Boolean(m));
+  const meta = [dataFormatada, subtitulo, ...metaDosVideos].filter((m): m is string => Boolean(m));
 
   /*
    * O QUE OS QUATRO DESENHOS DIVIDEM — a "sala". Cada estilo decide onde pôr
@@ -200,8 +209,11 @@ export function GaleriaStream({
    */
   const sala: Sala = {
     aparencia,
+    semCapa: aparencia.capaStream === "galeria",
+    grade: aparencia.rolagemStream === "baixo",
     titulo,
     meta,
+    metaDosVideos,
     fundo,
     foco: { objectPosition: `${focoX}% ${focoY}%` },
     fileiras,
@@ -297,8 +309,14 @@ export function GaleriaStream({
 
 interface Sala {
   aparencia: Aparencia;
+  /** A página já desenhou a capa do grupo Capa: a sala começa no conteúdo. */
+  semCapa: boolean;
+  /** Tudo em grade, para baixo, em vez de fileiras de lado. */
+  grade: boolean;
   titulo: string;
   meta: string[];
+  /** Só a quantidade e a duração — o que a barra diz embaixo da capa do grupo Capa. */
+  metaDosVideos: string[];
   fundo: string | null;
   foco: CSSProperties;
   fileiras: FileiraDoStream[];
@@ -318,13 +336,68 @@ function RotuloAssistir({ sala }: { sala: Sala }) {
   return sala.continuar ? (
     <span>
       Continuar
-      <span className="font-normal opacity-75">
-        {" "}
-        · E{sala.continuar.ep.numero} · {relogio(sala.continuar.marca.t)}
-      </span>
+      <span className="font-normal opacity-75"> · {relogio(sala.continuar.marca.t)}</span>
     </span>
   ) : (
     <span>Assistir</span>
+  );
+}
+
+/**
+ * O botão de assistir quando a capa é a do grupo Capa (`capaStream: galeria`).
+ *
+ * A capa da galeria não sabe que existe filme: ela tem "Ver galeria", no
+ * máximo. Sem esta barra, a primeira coisa que o cliente veria depois do nome
+ * do casal seria uma fileira, e o "continuar de onde parou" sumiria. É o mesmo
+ * botão da capa de cada sala, com o que a entrega tem ao lado.
+ *
+ * `cinema` desenha o botão branco das plataformas de série; as outras salas
+ * usam a cor de destaque do tema, como na própria capa delas.
+ */
+function BarraDeAssistir({ sala, cinema = false, centro = false }: { sala: Sala; cinema?: boolean; centro?: boolean }) {
+  return (
+    <div className={`flex flex-wrap items-center gap-x-5 gap-y-3 ${centro ? "justify-center text-center" : ""}`}>
+      {sala.alvo && (
+        <button
+          type="button"
+          onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
+          className={
+            cinema
+              ? "inline-flex items-center gap-3 rounded-[min(var(--g-pilula,9999px),0.375rem)] bg-white px-7 py-3 text-base font-semibold text-black transition hover:bg-white/80"
+              : "inline-flex items-center gap-2.5 rounded-[var(--g-pilula,9999px)] px-7 py-3 text-sm font-semibold transition hover:opacity-85"
+          }
+          style={cinema ? undefined : { background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+        >
+          <IconePlay className={cinema ? "h-4 w-4" : "h-3.5 w-3.5"} />
+          <RotuloAssistir sala={sala} />
+        </button>
+      )}
+      {cinema && sala.fotos.total > 0 && (
+        <Link
+          href={sala.fotos.href}
+          className="inline-flex items-center gap-2 rounded-[min(var(--g-pilula,9999px),0.375rem)] px-6 py-3 text-base font-semibold text-white transition hover:bg-[rgba(109,109,110,.4)]"
+          style={{ background: "rgba(109,109,110,.7)" }}
+        >
+          Ver as fotos
+          <span className="font-normal opacity-75">{sala.fotos.total}</span>
+        </Link>
+      )}
+      {/* Só o que a capa não disse: data e local já estão nela, logo acima. */}
+      {sala.metaDosVideos.length > 0 && (
+        <p className="text-sm" style={{ color: "var(--g-suave)" }}>
+          {sala.metaDosVideos.join("  ·  ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A frase que o fotógrafo escreveu embaixo do nome da fileira. */
+function FraseDaFileira({ frase, className = "" }: { frase: string; className?: string }) {
+  return (
+    <p className={`max-w-2xl text-sm leading-relaxed ${className}`} style={{ color: "var(--g-suave)" }}>
+      {frase}
+    </p>
   );
 }
 
@@ -387,71 +460,80 @@ function duracaoDe(ep: EpisodioDoStream, marca: Marca | undefined): string | nul
  * letra do título e a logo continuam sendo as do fotógrafo.
  */
 function SalaCinema({ sala }: { sala: Sala }) {
+  /* Na grade o cartão ocupa a coluna; na fileira, a largura fixa que deixa o
+     próximo aparecer cortado na borda. */
+  const cartao = sala.grade ? "min-w-0" : "w-[72vw] shrink-0 snap-start sm:w-[300px] lg:w-[340px]";
   return (
     <>
-      <header className="relative isolate flex min-h-[88svh] flex-col overflow-hidden">
-        <Imagem src={sala.fundo} prioridade style={sala.foco} className="absolute inset-0 -z-10 h-full w-full" />
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10"
-          style={{
-            background:
-              "linear-gradient(to top, var(--g-fundo) 2%, color-mix(in srgb, var(--g-fundo) 55%, transparent) 30%, transparent 60%), linear-gradient(to right, color-mix(in srgb, var(--g-fundo) 80%, transparent) 0%, color-mix(in srgb, var(--g-fundo) 25%, transparent) 45%, transparent 70%)",
-          }}
-        />
-        <div className="px-5 pt-6 sm:px-12 sm:pt-8">{sala.logo}</div>
-        <div className="mt-auto w-full max-w-2xl px-5 pb-12 sm:px-12 sm:pb-20">
-          {sala.aparencia.rotulo && (
-            <span className={`block text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
-              {sala.aparencia.rotulo}
-            </span>
-          )}
-          <h1
-            className="mt-3 text-balance leading-[0.92]"
-            style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(2.6rem, 7.5vw, 6rem)") }}
-          >
-            {sala.titulo}
-          </h1>
-          {sala.meta.length > 0 && (
-            <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: "var(--g-suave)" }}>
-              {sala.meta.map((m, i) => (
-                <span key={i} className="flex items-center gap-3">
-                  {i > 0 && <span aria-hidden className="h-1 w-1 rounded-full bg-current opacity-60" />}
-                  {m}
-                </span>
-              ))}
-            </p>
-          )}
-          <div className="mt-7 flex flex-wrap gap-3">
-            {sala.alvo && (
-              <button
-                type="button"
-                onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
-                className="inline-flex items-center gap-3 rounded-[min(var(--g-pilula,9999px),0.375rem)] bg-white px-7 py-3 text-base font-semibold text-black transition hover:bg-white/80"
-              >
-                <IconePlay className="h-4 w-4" />
-                <RotuloAssistir sala={sala} />
-              </button>
-            )}
-            {sala.fotos.total > 0 && (
-              <Link
-                href={sala.fotos.href}
-                className="inline-flex items-center gap-2 rounded-[min(var(--g-pilula,9999px),0.375rem)] px-6 py-3 text-base font-semibold text-white transition hover:bg-[rgba(109,109,110,.4)]"
-                style={{ background: "rgba(109,109,110,.7)" }}
-              >
-                Ver as fotos
-                <span className="font-normal opacity-75">{sala.fotos.total}</span>
-              </Link>
-            )}
-          </div>
+      {sala.semCapa ? (
+        <div className="px-5 pt-10 sm:px-12 sm:pt-14">
+          <BarraDeAssistir sala={sala} cinema />
         </div>
-      </header>
+      ) : (
+        <header className="relative isolate flex min-h-[88svh] flex-col overflow-hidden">
+          <Imagem src={sala.fundo} prioridade style={sala.foco} className="absolute inset-0 -z-10 h-full w-full" />
+          <div
+            aria-hidden
+            className="absolute inset-0 -z-10"
+            style={{
+              background:
+                "linear-gradient(to top, var(--g-fundo) 2%, color-mix(in srgb, var(--g-fundo) 55%, transparent) 30%, transparent 60%), linear-gradient(to right, color-mix(in srgb, var(--g-fundo) 80%, transparent) 0%, color-mix(in srgb, var(--g-fundo) 25%, transparent) 45%, transparent 70%)",
+            }}
+          />
+          <div className="px-5 pt-6 sm:px-12 sm:pt-8">{sala.logo}</div>
+          <div className="mt-auto w-full max-w-2xl px-5 pb-12 sm:px-12 sm:pb-20">
+            {sala.aparencia.rotulo && (
+              <span className={`block text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
+                {sala.aparencia.rotulo}
+              </span>
+            )}
+            <h1
+              className="mt-3 text-balance leading-[0.92]"
+              style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(2.6rem, 7.5vw, 6rem)") }}
+            >
+              {sala.titulo}
+            </h1>
+            {sala.meta.length > 0 && (
+              <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" style={{ color: "var(--g-suave)" }}>
+                {sala.meta.map((m, i) => (
+                  <span key={i} className="flex items-center gap-3">
+                    {i > 0 && <span aria-hidden className="h-1 w-1 rounded-full bg-current opacity-60" />}
+                    {m}
+                  </span>
+                ))}
+              </p>
+            )}
+            <div className="mt-7 flex flex-wrap gap-3">
+              {sala.alvo && (
+                <button
+                  type="button"
+                  onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
+                  className="inline-flex items-center gap-3 rounded-[min(var(--g-pilula,9999px),0.375rem)] bg-white px-7 py-3 text-base font-semibold text-black transition hover:bg-white/80"
+                >
+                  <IconePlay className="h-4 w-4" />
+                  <RotuloAssistir sala={sala} />
+                </button>
+              )}
+              {sala.fotos.total > 0 && (
+                <Link
+                  href={sala.fotos.href}
+                  className="inline-flex items-center gap-2 rounded-[min(var(--g-pilula,9999px),0.375rem)] px-6 py-3 text-base font-semibold text-white transition hover:bg-[rgba(109,109,110,.4)]"
+                  style={{ background: "rgba(109,109,110,.7)" }}
+                >
+                  Ver as fotos
+                  <span className="font-normal opacity-75">{sala.fotos.total}</span>
+                </Link>
+              )}
+            </div>
+          </div>
+        </header>
+      )}
 
-      <div className="relative z-10 -mt-6 space-y-10 pb-8 sm:-mt-12 sm:space-y-12">
+      <div className={`relative z-10 space-y-10 pb-8 sm:space-y-12 ${sala.semCapa ? "pt-6" : "-mt-6 sm:-mt-12"}`}>
         {sala.fileiras.map((f) => (
-          <Fileira key={f.id} titulo={f.nome} forte>
+          <Fileira key={f.id} titulo={f.nome} frase={f.frase} forte grade={sala.grade}>
             {f.episodios.map((ep) => (
-              <li key={ep.id} className="w-[72vw] shrink-0 snap-start sm:w-[300px] lg:w-[340px]">
+              <li key={ep.id} className={cartao}>
                 <button
                   type="button"
                   onClick={() => sala.tocar(ep.id)}
@@ -465,10 +547,7 @@ function SalaCinema({ sala }: { sala: Sala }) {
                     style={{ background: "linear-gradient(to top, rgba(0,0,0,.8) 0%, rgba(0,0,0,.2) 45%, transparent 70%)" }}
                   />
                   <span className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-3 text-white">
-                    <span className="min-w-0">
-                      <span className="block font-mono text-[10px] tabular-nums text-white/60">E{ep.numero}</span>
-                      <span className="block truncate text-[15px] font-semibold">{ep.titulo}</span>
-                    </span>
+                    <span className="block min-w-0 truncate text-[15px] font-semibold">{ep.titulo}</span>
                     {duracaoDe(ep, sala.progresso[ep.id]) && (
                       <span className="shrink-0 text-[11px] tabular-nums text-white/75">{duracaoDe(ep, sala.progresso[ep.id])}</span>
                     )}
@@ -506,140 +585,186 @@ function SalaEpisodios({ sala }: { sala: Sala }) {
   const fileira = sala.fileiras[Math.min(aba, sala.fileiras.length - 1)];
   const centro = sala.aparencia.alinhamento === "centro";
   return (
-    <div className="mx-auto max-w-6xl px-5 pb-10 pt-6 sm:px-8 sm:pt-8">
-      <div className={centro ? "flex justify-center" : ""}>{sala.logo}</div>
+    <div className={`mx-auto max-w-6xl px-5 pb-10 sm:px-8 ${sala.semCapa ? "pt-10 sm:pt-14" : "pt-6 sm:pt-8"}`}>
+      {sala.semCapa ? (
+        <BarraDeAssistir sala={sala} centro={centro} />
+      ) : (
+        <>
+          <div className={centro ? "flex justify-center" : ""}>{sala.logo}</div>
 
-      <header className="mt-8 grid items-center gap-8 md:mt-12 md:grid-cols-[1.2fr_1fr] md:gap-12">
-        <button
-          type="button"
-          onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
-          aria-label="Assistir"
-          className="group relative block aspect-video overflow-hidden rounded-[var(--g-canto,6px)]"
-          style={{ background: "var(--g-superficie)" }}
-        >
-          <Imagem src={sala.fundo} prioridade style={sala.foco} className="h-full w-full transition duration-700 group-hover:scale-[1.03] motion-reduce:transition-none" />
-          <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/10 transition group-hover:bg-black/25">
-            <span className="grid h-16 w-16 place-items-center rounded-full bg-white/90 text-black shadow-xl transition group-hover:scale-110 motion-reduce:transition-none">
-              <IconePlay className="ml-1 h-5 w-5" />
-            </span>
-          </span>
-        </button>
-        <div className={centro ? "text-center" : ""}>
-          {sala.aparencia.rotulo && (
-            <span className={`block text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
-              {sala.aparencia.rotulo}
-            </span>
-          )}
-          <h1 className="mt-3 text-balance leading-[0.98]" style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(2.2rem, 5vw, 4.25rem)") }}>
-            {sala.titulo}
-          </h1>
-          {sala.meta.length > 0 && (
-            <p className="mt-4 text-sm" style={{ color: "var(--g-suave)" }}>
-              {sala.meta.join("  ·  ")}
-            </p>
-          )}
-          <div className={`mt-6 flex flex-wrap gap-3 ${centro ? "justify-center" : ""}`}>
-            {sala.alvo && (
-              <button
-                type="button"
-                onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
-                className="inline-flex items-center gap-2.5 rounded-[var(--g-pilula,9999px)] px-7 py-3 text-sm font-semibold transition hover:opacity-85"
-                style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
-              >
-                <IconePlay className="h-3.5 w-3.5" />
-                <RotuloAssistir sala={sala} />
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* As abas: cada capítulo é uma temporada, e as fotos são a última. */}
-      <nav
-        aria-label="Temporadas"
-        className="fileira-sem-barra mt-12 flex gap-6 overflow-x-auto border-b sm:mt-16 sm:gap-8"
-        style={{ borderColor: "var(--g-linha)" }}
-      >
-        {sala.fileiras.map((f, i) => {
-          const ativa = f === fileira;
-          return (
+          <header className="mt-8 grid items-center gap-8 md:mt-12 md:grid-cols-[1.2fr_1fr] md:gap-12">
             <button
-              key={f.id}
               type="button"
-              onClick={() => setAba(i)}
-              aria-current={ativa ? "true" : undefined}
-              className="-mb-px shrink-0 border-b-2 pb-3 text-sm font-medium transition sm:text-base"
-              style={{
-                borderColor: ativa ? "var(--g-texto)" : "transparent",
-                color: ativa ? "var(--g-texto)" : "var(--g-tenue)",
-              }}
+              onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
+              aria-label="Assistir"
+              className="group relative block aspect-video overflow-hidden rounded-[var(--g-canto,6px)]"
+              style={{ background: "var(--g-superficie)" }}
             >
-              {f.nome}
-              <span className="ml-1.5 text-xs font-normal opacity-70">{f.episodios.length}</span>
+              <Imagem src={sala.fundo} prioridade style={sala.foco} className="h-full w-full transition duration-700 group-hover:scale-[1.03] motion-reduce:transition-none" />
+              <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/10 transition group-hover:bg-black/25">
+                <span className="grid h-16 w-16 place-items-center rounded-full bg-white/90 text-black shadow-xl transition group-hover:scale-110 motion-reduce:transition-none">
+                  <IconePlay className="ml-1 h-5 w-5" />
+                </span>
+              </span>
             </button>
-          );
-        })}
-        {sala.fotos.total > 0 && (
-          <Link
-            href={sala.fotos.href}
-            className="-mb-px shrink-0 border-b-2 border-transparent pb-3 text-sm font-medium transition hover:opacity-70 sm:text-base"
-            style={{ color: "var(--g-tenue)" }}
-          >
-            Fotos
-            <span className="ml-1.5 text-xs font-normal opacity-70">{sala.fotos.total}</span>
-          </Link>
-        )}
-      </nav>
+            <div className={centro ? "text-center" : ""}>
+              {sala.aparencia.rotulo && (
+                <span className={`block text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
+                  {sala.aparencia.rotulo}
+                </span>
+              )}
+              <h1 className="mt-3 text-balance leading-[0.98]" style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(2.2rem, 5vw, 4.25rem)") }}>
+                {sala.titulo}
+              </h1>
+              {sala.meta.length > 0 && (
+                <p className="mt-4 text-sm" style={{ color: "var(--g-suave)" }}>
+                  {sala.meta.join("  ·  ")}
+                </p>
+              )}
+              <div className={`mt-6 flex flex-wrap gap-3 ${centro ? "justify-center" : ""}`}>
+                {sala.alvo && (
+                  <button
+                    type="button"
+                    onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
+                    className="inline-flex items-center gap-2.5 rounded-[var(--g-pilula,9999px)] px-7 py-3 text-sm font-semibold transition hover:opacity-85"
+                    style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
+                  >
+                    <IconePlay className="h-3.5 w-3.5" />
+                    <RotuloAssistir sala={sala} />
+                  </button>
+                )}
+              </div>
+            </div>
+          </header>
+        </>
+      )}
 
-      <ol>
-        {fileira?.episodios.map((ep) => {
-          const marca = sala.progresso[ep.id];
-          const retomar = marca ? pontoDeRetomada(marca.t, marca.d) : 0;
-          return (
-            <li key={ep.id} className="border-b" style={{ borderColor: "var(--g-linha)" }}>
-              <button
-                type="button"
-                onClick={() => sala.tocar(ep.id)}
-                className="group grid w-full grid-cols-[auto_1fr] items-center gap-4 rounded-[var(--g-canto,6px)] px-1 py-5 text-left transition hover:bg-[var(--g-superficie)] sm:grid-cols-[2.5rem_auto_1fr] sm:gap-6 sm:px-3"
+      {sala.grade ? (
+        /* PARA BAIXO: todas as temporadas abertas, uma embaixo da outra, em
+           vez das abas. Quem entrega três capítulos de filme não precisa
+           esconder dois atrás de um clique. */
+        <>
+          {sala.fileiras.map((f) => (
+            <section key={f.id} className="mt-12 sm:mt-16">
+              <h2 className="border-b pb-3 text-lg font-medium sm:text-xl" style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}>
+                {f.nome}
+                <span className="ml-2 text-xs font-normal" style={{ color: "var(--g-tenue)" }}>{f.episodios.length}</span>
+              </h2>
+              {f.frase && <FraseDaFileira frase={f.frase} className="mt-3" />}
+              <ListaDeEpisodios sala={sala} episodios={f.episodios} />
+            </section>
+          ))}
+          {sala.fotos.total > 0 && (
+            <Link
+              href={sala.fotos.href}
+              className="mt-12 flex items-baseline justify-between gap-4 border-b pb-3 text-lg font-medium transition hover:opacity-70 sm:mt-16 sm:text-xl"
+              style={{ borderColor: "var(--g-linha)", color: "var(--g-texto)" }}
+            >
+              Fotos
+              <span className="text-sm font-normal" style={{ color: "var(--g-suave)" }}>
+                ver todas ({sala.fotos.total}) →
+              </span>
+            </Link>
+          )}
+        </>
+      ) : (
+        <>
+          {/* As abas: cada capítulo é uma temporada, e as fotos são a última. */}
+          <nav
+            aria-label="Temporadas"
+            className="fileira-sem-barra mt-12 flex gap-6 overflow-x-auto border-b sm:mt-16 sm:gap-8"
+            style={{ borderColor: "var(--g-linha)" }}
+          >
+            {sala.fileiras.map((f, i) => {
+              const ativa = f === fileira;
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setAba(i)}
+                  aria-current={ativa ? "true" : undefined}
+                  className="-mb-px shrink-0 border-b-2 pb-3 text-sm font-medium transition sm:text-base"
+                  style={{
+                    borderColor: ativa ? "var(--g-texto)" : "transparent",
+                    color: ativa ? "var(--g-texto)" : "var(--g-tenue)",
+                  }}
+                >
+                  {f.nome}
+                  <span className="ml-1.5 text-xs font-normal opacity-70">{f.episodios.length}</span>
+                </button>
+              );
+            })}
+            {sala.fotos.total > 0 && (
+              <Link
+                href={sala.fotos.href}
+                className="-mb-px shrink-0 border-b-2 border-transparent pb-3 text-sm font-medium transition hover:opacity-70 sm:text-base"
+                style={{ color: "var(--g-tenue)" }}
               >
-                <span className="hidden text-2xl tabular-nums sm:block" style={{ ...sala.letras.titulo, color: "var(--g-tenue)" }}>
-                  {ep.numero}
-                </span>
-                <span className="relative block aspect-video w-36 overflow-hidden rounded-[var(--g-canto,6px)] sm:w-56" style={{ background: "var(--g-superficie)" }}>
-                  <Imagem src={ep.poster} className="h-full w-full" />
-                  <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/0 transition group-hover:bg-black/30">
-                    <span className="grid h-10 w-10 place-items-center rounded-full border border-white/80 text-white opacity-0 transition group-hover:opacity-100">
-                      <IconePlay className="ml-0.5 h-3.5 w-3.5" />
-                    </span>
-                  </span>
-                  <BarraVista marca={marca} />
-                </span>
-                <span className="min-w-0">
-                  {/* No celular o nome quebra em até duas linhas e a duração
-                      desce para a linha de baixo: dividindo a linha com ela, o
-                      nome era cortado na terceira palavra. */}
-                  <span className="flex items-baseline justify-between gap-3">
-                    <span className="line-clamp-2 text-[15px] font-medium leading-snug sm:line-clamp-1 sm:text-lg" style={{ color: "var(--g-texto)" }}>
-                      <span className="sm:hidden" style={{ color: "var(--g-tenue)" }}>{ep.numero}. </span>
-                      {ep.titulo}
-                    </span>
-                    {duracaoDe(ep, marca) && (
-                      <span className="hidden shrink-0 text-sm tabular-nums sm:inline" style={{ color: "var(--g-suave)" }}>
-                        {duracaoDe(ep, marca)}
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-1 block text-xs" style={{ color: "var(--g-tenue)" }}>
-                    {duracaoDe(ep, marca) && <span className="sm:hidden">{duracaoDe(ep, marca)} · </span>}
-                    {retomar > 0 ? `Continuar de ${relogio(retomar)}` : tamanho(ep.bytes)}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+                Fotos
+                <span className="ml-1.5 text-xs font-normal opacity-70">{sala.fotos.total}</span>
+              </Link>
+            )}
+          </nav>
+
+          {fileira?.frase && <FraseDaFileira frase={fileira.frase} className="mt-5" />}
+          <ListaDeEpisodios sala={sala} episodios={fileira?.episodios ?? []} />
+        </>
+      )}
     </div>
+  );
+}
+
+/** A lista de episódios da sala Episódios — numa aba, ou em cada capítulo aberto. */
+function ListaDeEpisodios({ sala, episodios }: { sala: Sala; episodios: EpisodioDoStream[] }) {
+  return (
+    <ol>
+      {episodios.map((ep) => {
+        const marca = sala.progresso[ep.id];
+        const retomar = marca ? pontoDeRetomada(marca.t, marca.d) : 0;
+        return (
+          <li key={ep.id} className="border-b" style={{ borderColor: "var(--g-linha)" }}>
+            <button
+              type="button"
+              onClick={() => sala.tocar(ep.id)}
+              className="group grid w-full grid-cols-[auto_1fr] items-center gap-4 rounded-[var(--g-canto,6px)] px-1 py-5 text-left transition hover:bg-[var(--g-superficie)] sm:grid-cols-[2.5rem_auto_1fr] sm:gap-6 sm:px-3"
+            >
+              <span className="hidden text-2xl tabular-nums sm:block" style={{ ...sala.letras.titulo, color: "var(--g-tenue)" }}>
+                {ep.numero}
+              </span>
+              <span className="relative block aspect-video w-36 overflow-hidden rounded-[var(--g-canto,6px)] sm:w-56" style={{ background: "var(--g-superficie)" }}>
+                <Imagem src={ep.poster} className="h-full w-full" />
+                <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/0 transition group-hover:bg-black/30">
+                  <span className="grid h-10 w-10 place-items-center rounded-full border border-white/80 text-white opacity-0 transition group-hover:opacity-100">
+                    <IconePlay className="ml-0.5 h-3.5 w-3.5" />
+                  </span>
+                </span>
+                <BarraVista marca={marca} />
+              </span>
+              <span className="min-w-0">
+                {/* No celular o nome quebra em até duas linhas e a duração
+                    desce para a linha de baixo: dividindo a linha com ela, o
+                    nome era cortado na terceira palavra. */}
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="line-clamp-2 text-[15px] font-medium leading-snug sm:line-clamp-1 sm:text-lg" style={{ color: "var(--g-texto)" }}>
+                    <span className="sm:hidden" style={{ color: "var(--g-tenue)" }}>{ep.numero}. </span>
+                    {ep.titulo}
+                  </span>
+                  {duracaoDe(ep, marca) && (
+                    <span className="hidden shrink-0 text-sm tabular-nums sm:inline" style={{ color: "var(--g-suave)" }}>
+                      {duracaoDe(ep, marca)}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-1 block text-xs" style={{ color: "var(--g-tenue)" }}>
+                  {duracaoDe(ep, marca) && <span className="sm:hidden">{duracaoDe(ep, marca)} · </span>}
+                  {retomar > 0 ? `Continuar de ${relogio(retomar)}` : tamanho(ep.bytes)}
+                </span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -661,24 +786,28 @@ function SalaVitrine({ sala }: { sala: Sala }) {
   const RAIO = "rounded-[calc(var(--g-canto,6px)*2)]";
   const SOMBRA = "shadow-[0_24px_60px_-28px_rgba(0,0,0,.45)]";
   return (
-    <div className="mx-auto max-w-7xl px-5 pb-10 pt-6 sm:px-8 sm:pt-8">
-      <div className={centro ? "flex justify-center" : ""}>{sala.logo}</div>
+    <div className={`mx-auto max-w-7xl px-5 pb-10 sm:px-8 ${sala.semCapa ? "pt-4 sm:pt-6" : "pt-6 sm:pt-8"}`}>
+      {!sala.semCapa && (
+        <>
+          <div className={centro ? "flex justify-center" : ""}>{sala.logo}</div>
 
-      <header className={`mt-10 sm:mt-14 ${centro ? "text-center" : ""}`}>
-        {sala.aparencia.rotulo && (
-          <span className={`block text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
-            {sala.aparencia.rotulo}
-          </span>
-        )}
-        <h1 className="mt-2 text-balance leading-[0.98]" style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(2.4rem, 6vw, 5rem)") }}>
-          {sala.titulo}
-        </h1>
-        {sala.meta.length > 0 && (
-          <p className="mt-3 text-sm" style={{ color: "var(--g-suave)" }}>
-            {sala.meta.join("  ·  ")}
-          </p>
-        )}
-      </header>
+          <header className={`mt-10 sm:mt-14 ${centro ? "text-center" : ""}`}>
+            {sala.aparencia.rotulo && (
+              <span className={`block text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
+                {sala.aparencia.rotulo}
+              </span>
+            )}
+            <h1 className="mt-2 text-balance leading-[0.98]" style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(2.4rem, 6vw, 5rem)") }}>
+              {sala.titulo}
+            </h1>
+            {sala.meta.length > 0 && (
+              <p className="mt-3 text-sm" style={{ color: "var(--g-suave)" }}>
+                {sala.meta.join("  ·  ")}
+              </p>
+            )}
+          </header>
+        </>
+      )}
 
       {destaque && (
         <button
@@ -687,10 +816,12 @@ function SalaVitrine({ sala }: { sala: Sala }) {
           className={`group relative mt-8 block aspect-[4/5] w-full overflow-hidden text-left sm:mt-10 sm:aspect-[16/8] ${RAIO} ${SOMBRA}`}
           style={{ background: "var(--g-superficie)" }}
         >
+          {/* Com a capa do grupo Capa logo acima, o destaque mostra o próprio
+              filme: repetir a foto da capa seriam duas iguais seguidas. */}
           <Imagem
-            src={sala.fundo ?? destaque.poster}
+            src={sala.semCapa ? destaque.poster : (sala.fundo ?? destaque.poster)}
             prioridade
-            style={sala.fundo ? sala.foco : undefined}
+            style={sala.fundo && !sala.semCapa ? sala.foco : undefined}
             className="absolute inset-0 h-full w-full transition duration-[1200ms] group-hover:scale-[1.03] motion-reduce:transition-none"
           />
           <span aria-hidden className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,.7), rgba(0,0,0,.1) 50%, transparent 70%)" }} />
@@ -720,6 +851,7 @@ function SalaVitrine({ sala }: { sala: Sala }) {
           <h2 className="text-xl font-semibold sm:text-2xl" style={{ color: "var(--g-texto)" }}>
             {f.nome}
           </h2>
+          {f.frase && <FraseDaFileira frase={f.frase} className="mt-1.5" />}
           <ul className="mt-5 grid gap-x-6 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">
             {f.episodios.map((ep) => (
               <li key={ep.id}>
@@ -735,7 +867,7 @@ function SalaVitrine({ sala }: { sala: Sala }) {
                     {ep.titulo}
                   </span>
                   <span className="mt-0.5 block text-sm" style={{ color: "var(--g-suave)" }}>
-                    {[`Episódio ${ep.numero}`, duracaoDe(ep, sala.progresso[ep.id])].filter(Boolean).join(" · ")}
+                    {duracaoDe(ep, sala.progresso[ep.id]) ?? "\u00a0"}
                   </span>
                 </button>
               </li>
@@ -783,39 +915,47 @@ function SalaMostra({ sala }: { sala: Sala }) {
   const [flutua, setFlutua] = useState<{ src: string; x: number; y: number } | null>(null);
   const centro = sala.aparencia.alinhamento === "centro";
   return (
-    <div className="mx-auto max-w-6xl px-5 pb-10 pt-6 sm:px-8 sm:pt-8">
-      <div className={`flex items-center justify-between gap-4 ${centro ? "flex-col" : ""}`}>
-        {sala.logo}
-        {sala.aparencia.rotulo && (
-          <span className={`text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
-            {sala.aparencia.rotulo}
-          </span>
-        )}
-      </div>
-
-      <header className={`mt-14 border-b pb-8 sm:mt-20 sm:pb-10 ${centro ? "text-center" : ""}`} style={{ borderColor: "var(--g-texto)" }}>
-        <h1 className="text-balance leading-[0.9]" style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(3rem, 10vw, 8.5rem)") }}>
-          {sala.titulo}
-        </h1>
-        <div className={`mt-6 flex flex-wrap items-end gap-x-8 gap-y-4 ${centro ? "justify-center" : "justify-between"}`}>
-          {sala.meta.length > 0 && (
-            <p className={`text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
-              {sala.meta.join("  /  ")}
-            </p>
-          )}
-          {sala.alvo && (
-            <button
-              type="button"
-              onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
-              className="inline-flex items-center gap-2.5 border-b pb-1 text-sm font-medium transition hover:opacity-70"
-              style={{ borderColor: "currentColor", color: "var(--g-texto)" }}
-            >
-              <IconePlay className="h-3 w-3" />
-              <RotuloAssistir sala={sala} />
-            </button>
-          )}
+    <div className={`mx-auto max-w-6xl px-5 pb-10 sm:px-8 ${sala.semCapa ? "pt-10 sm:pt-14" : "pt-6 sm:pt-8"}`}>
+      {sala.semCapa ? (
+        <div className="border-b pb-8" style={{ borderColor: "var(--g-texto)" }}>
+          <BarraDeAssistir sala={sala} centro={centro} />
         </div>
-      </header>
+      ) : (
+        <>
+          <div className={`flex items-center justify-between gap-4 ${centro ? "flex-col" : ""}`}>
+            {sala.logo}
+            {sala.aparencia.rotulo && (
+              <span className={`text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
+                {sala.aparencia.rotulo}
+              </span>
+            )}
+          </div>
+
+          <header className={`mt-14 border-b pb-8 sm:mt-20 sm:pb-10 ${centro ? "text-center" : ""}`} style={{ borderColor: "var(--g-texto)" }}>
+            <h1 className="text-balance leading-[0.9]" style={{ ...sala.letras.titulo, fontSize: tamanhoDoTitulo(sala, "clamp(3rem, 10vw, 8.5rem)") }}>
+              {sala.titulo}
+            </h1>
+            <div className={`mt-6 flex flex-wrap items-end gap-x-8 gap-y-4 ${centro ? "justify-center" : "justify-between"}`}>
+              {sala.meta.length > 0 && (
+                <p className={`text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...sala.letras.detalhe.style }}>
+                  {sala.meta.join("  /  ")}
+                </p>
+              )}
+              {sala.alvo && (
+                <button
+                  type="button"
+                  onClick={() => sala.alvo && sala.tocar(sala.alvo.id)}
+                  className="inline-flex items-center gap-2.5 border-b pb-1 text-sm font-medium transition hover:opacity-70"
+                  style={{ borderColor: "currentColor", color: "var(--g-texto)" }}
+                >
+                  <IconePlay className="h-3 w-3" />
+                  <RotuloAssistir sala={sala} />
+                </button>
+              )}
+            </div>
+          </header>
+        </>
+      )}
 
       <div onMouseLeave={() => setFlutua(null)}>
         {sala.fileiras.map((f) => (
@@ -823,6 +963,7 @@ function SalaMostra({ sala }: { sala: Sala }) {
             <h2 className={`text-[11px] ${sala.letras.detalhe.className}`} style={{ color: "var(--g-tenue)", ...sala.letras.detalhe.style }}>
               {f.nome}
             </h2>
+            {f.frase && <FraseDaFileira frase={f.frase} className="mt-2" />}
             <ol className="mt-3">
               {f.episodios.map((ep) => (
                 <li key={ep.id} className="border-b" style={{ borderColor: "var(--g-linha)" }}>
@@ -919,6 +1060,9 @@ function FileiraDeFotos({ sala, forte = false }: { sala: Sala; forte?: boolean }
     <Fileira
       titulo="Fotos"
       forte={forte}
+      grade={sala.grade}
+      /* Em grade as fotos são menores que os filmes: mais colunas. */
+      colunas="grid-cols-3 sm:grid-cols-4 lg:grid-cols-6"
       extra={
         <Link href={sala.fotos.href} className="text-sm transition hover:opacity-70" style={{ color: "var(--g-suave)" }}>
           ver todas ({sala.fotos.total}) →
@@ -926,7 +1070,7 @@ function FileiraDeFotos({ sala, forte = false }: { sala: Sala; forte?: boolean }
       }
     >
       {sala.fotos.amostra.map((src, i) => (
-        <li key={i} className="w-[42vw] shrink-0 snap-start sm:w-[220px]">
+        <li key={i} className={sala.grade ? "min-w-0" : "w-[42vw] shrink-0 snap-start sm:w-[220px]"}>
           <Link
             href={sala.fotos.href}
             className="block aspect-[4/5] overflow-hidden rounded-[min(var(--g-canto,6px),0.375rem)]"
@@ -959,13 +1103,22 @@ function IconePlay({ className = "" }: { className?: string }) {
  */
 function Fileira({
   titulo,
+  frase,
   forte = false,
+  grade = false,
+  colunas = "sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4",
   extra,
   children,
 }: {
   titulo: string;
+  /** A frase embaixo do título, quando o fotógrafo escreveu uma. */
+  frase?: string;
   /** O título da fileira em negrito, grande — o da sala Cinema. */
   forte?: boolean;
+  /** Para baixo: tudo à mostra em grade, sem rolar de lado. Ver `RolagemDoStream`. */
+  grade?: boolean;
+  /** As colunas da grade, por largura de tela. */
+  colunas?: string;
   extra?: ReactNode;
   children: ReactNode;
 }) {
@@ -1006,28 +1159,35 @@ function Fileira({
         </h2>
         {extra}
       </div>
-      <ul
-        ref={faixa}
-        onScroll={medir}
-        className="fileira-sem-barra mt-3 flex snap-x snap-mandatory scroll-px-5 gap-2 overflow-x-auto px-5 py-4 sm:scroll-px-12 sm:gap-3 sm:px-12"
-      >
-        {children}
-      </ul>
-      {(["inicio", "fim"] as const).map((ponta) =>
-        pontas[ponta] ? null : (
-          <button
-            key={ponta}
-            type="button"
-            aria-label={ponta === "inicio" ? "Voltar a fileira" : "Avançar a fileira"}
-            onClick={() => andar(ponta === "inicio" ? -1 : 1)}
-            className={`absolute top-1/2 z-10 hidden h-12 w-12 place-items-center rounded-full text-lg opacity-0 shadow-xl transition group-hover/fileira:opacity-100 focus-visible:opacity-100 md:grid ${
-              ponta === "inicio" ? "left-3" : "right-3"
-            }`}
-            style={{ background: "var(--g-superficie)", color: "var(--g-texto)", border: "1px solid var(--g-linha)" }}
+      {frase && <FraseDaFileira frase={frase} className="mt-1 px-5 sm:px-12" />}
+      {grade ? (
+        <ul className={`mt-3 grid gap-x-3 gap-y-5 px-5 py-4 sm:gap-x-4 sm:px-12 ${colunas}`}>{children}</ul>
+      ) : (
+        <>
+          <ul
+            ref={faixa}
+            onScroll={medir}
+            className="fileira-sem-barra mt-3 flex snap-x snap-mandatory scroll-px-5 gap-2 overflow-x-auto px-5 py-4 sm:scroll-px-12 sm:gap-3 sm:px-12"
           >
-            {ponta === "inicio" ? "‹" : "›"}
-          </button>
-        ),
+            {children}
+          </ul>
+          {(["inicio", "fim"] as const).map((ponta) =>
+            pontas[ponta] ? null : (
+              <button
+                key={ponta}
+                type="button"
+                aria-label={ponta === "inicio" ? "Voltar a fileira" : "Avançar a fileira"}
+                onClick={() => andar(ponta === "inicio" ? -1 : 1)}
+                className={`absolute top-1/2 z-10 hidden h-12 w-12 place-items-center rounded-full text-lg opacity-0 shadow-xl transition group-hover/fileira:opacity-100 focus-visible:opacity-100 md:grid ${
+                  ponta === "inicio" ? "left-3" : "right-3"
+                }`}
+                style={{ background: "var(--g-superficie)", color: "var(--g-texto)", border: "1px solid var(--g-linha)" }}
+              >
+                {ponta === "inicio" ? "‹" : "›"}
+              </button>
+            ),
+          )}
+        </>
       )}
     </section>
   );
@@ -1077,8 +1237,98 @@ function Player({
   const [pedindoNome, setPedindoNome] = useState(false);
   const [baixando, setBaixando] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
+  const tela = useRef<HTMLDivElement>(null);
   const ultimoGravado = useRef(0);
   const registrouPlay = useRef(false);
+
+  /*
+   * ── OS CONTROLES SÃO NOSSOS (30/09/2026) ──────────────────────────────
+   *
+   * Juan, testando no iPhone: "o layout dos vídeos tá bugado, não aparece os
+   * menus de botão e dá o start sozinho. Não consigo diminuir o volume do
+   * áudio também."
+   *
+   * Eram os controles nativos num `<video>` do tamanho da tela inteira. No
+   * iPhone o Safari desenha a barra dele no pé do ELEMENTO — embaixo da
+   * barra do navegador, longe da imagem, que fica no meio com faixas pretas —
+   * e a esconde enquanto toca. E os controles nativos do iPhone não têm
+   * volume nenhum: lá o volume é só o botão do aparelho.
+   *
+   * Agora a barra é desenhada aqui: play, tempo, a linha do filme, som, tela
+   * cheia. Aparece parada, some sozinha 3 s depois de o filme andar sem
+   * ninguém mexer, e volta ao toque ou ao mouse. A tela mede `100dvh`, então
+   * o pé fica acima da barra do Safari.
+   *
+   * VOLUME: o slider só aparece onde o navegador obedece a ele. No iPhone
+   * `video.volume` é somente leitura (regra da Apple, não nossa), e um slider
+   * que não faz nada é pior que nenhum — lá fica o botão de mudo, que
+   * funciona, e o volume do aparelho.
+   *
+   * NÃO COMEÇA SOZINHO ao abrir: o filme abre parado no pôster, com o play
+   * grande no meio. Começa sozinho só o PRÓXIMO episódio, quando a pessoa já
+   * estava assistindo e deixou a contagem correr (ou apertou "Assistir agora").
+   */
+  const [rodando, setRodando] = useState(false);
+  const [tempo, setTempo] = useState(0);
+  const [duracao, setDuracao] = useState(0);
+  const [mudo, setMudo] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [esperando, setEsperando] = useState(false);
+  const [visiveis, setVisiveis] = useState(true);
+  const [volumeObedece, setVolumeObedece] = useState(false);
+  const seguirTocando = useRef(false);
+  const esconder = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ultimoToque = useRef<string>("mouse");
+
+  /* O navegador deixa mudar o volume? No iPhone, não — ver acima. */
+  useEffect(() => {
+    const teste = document.createElement("video");
+    teste.volume = 0.5;
+    /* eslint-disable-next-line react-hooks/set-state-in-effect --
+       Pergunta ao navegador, que só existe depois de montar. */
+    setVolumeObedece(teste.volume === 0.5);
+  }, []);
+
+  const mostrarControles = useCallback(() => {
+    setVisiveis(true);
+    if (esconder.current) clearTimeout(esconder.current);
+    esconder.current = setTimeout(() => {
+      if (video.current && !video.current.paused) setVisiveis(false);
+    }, 3000);
+  }, []);
+  useEffect(() => () => void (esconder.current && clearTimeout(esconder.current)), []);
+
+  const alternar = useCallback(() => {
+    const v = video.current;
+    if (!v) return;
+    if (v.paused) void v.play().catch(() => {});
+    else v.pause();
+    mostrarControles();
+  }, [mostrarControles]);
+
+  const andarNoFilme = useCallback(
+    (segundos: number) => {
+      const v = video.current;
+      if (!v || !Number.isFinite(v.duration)) return;
+      v.currentTime = Math.min(Math.max(0, v.currentTime + segundos), v.duration);
+      mostrarControles();
+    },
+    [mostrarControles],
+  );
+
+  const telaCheia = useCallback(() => {
+    const el = tela.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
+    const v = video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    /* iPhone não põe um elemento qualquer em tela cheia, só o vídeo — e com
+       os controles da Apple, que lá são os certos. */
+    if (el?.requestFullscreen) void el.requestFullscreen().catch(() => v?.webkitEnterFullscreen?.());
+    else if (el?.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else v?.webkitEnterFullscreen?.();
+  }, []);
 
   /* O endereço do filme, pedido a cada episódio. */
   useEffect(() => {
@@ -1089,6 +1339,10 @@ function Player({
     setSrc(null);
     setErro(null);
     setContagem(null);
+    setRodando(false);
+    setTempo(0);
+    setDuracao(0);
+    setVisiveis(true);
     /* eslint-enable react-hooks/set-state-in-effect */
     registrouPlay.current = false;
     ultimoGravado.current = 0;
@@ -1140,6 +1394,7 @@ function Player({
     (outro: EpisodioDoStream | null) => {
       if (!outro) return;
       guardar(true);
+      seguirTocando.current = true;
       trocar(outro.id);
     },
     [guardar, trocar],
@@ -1153,10 +1408,26 @@ function Player({
       if (e.key === "Escape") sair();
       else if (e.shiftKey && e.key.toLowerCase() === "n") irPara(proximo);
       else if (e.shiftKey && e.key.toLowerCase() === "p") irPara(anterior);
+      else {
+        /* Com o foco num botão ou na linha do filme, espaço e setas são
+           deles — senão o espaço tocaria e pausaria no mesmo aperto. */
+        const alvo = e.target as HTMLElement | null;
+        if (alvo && /^(BUTTON|INPUT|A)$/.test(alvo.tagName)) return;
+        const tecla = e.key.toLowerCase();
+        if (tecla === " " || tecla === "k") {
+          e.preventDefault();
+          alternar();
+        } else if (e.key === "ArrowRight") andarNoFilme(10);
+        else if (e.key === "ArrowLeft") andarNoFilme(-10);
+        else if (tecla === "m" && video.current) {
+          video.current.muted = !video.current.muted;
+          mostrarControles();
+        } else if (tecla === "f") telaCheia();
+      }
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
-  }, [anterior, irPara, pedindoNome, proximo, sair]);
+  }, [alternar, andarNoFilme, anterior, irPara, mostrarControles, pedindoNome, proximo, sair, telaCheia]);
 
   /* A contagem do próximo: um segundo por vez, e ao chegar a zero, troca. */
   useEffect(() => {
@@ -1208,12 +1479,22 @@ function Player({
 
   return (
     <div
+      ref={tela}
       role="dialog"
       aria-modal="true"
-      aria-label={`E${ep.numero} · ${ep.titulo}`}
-      className="fixed inset-0 z-[60] flex flex-col bg-black text-white"
+      aria-label={ep.titulo}
+      /* `100dvh`, e não `inset-0` sozinho: no iPhone o pé da tela fixa fica
+         embaixo da barra do Safari, e era lá que os controles moravam. */
+      className={`fixed inset-x-0 top-0 z-[60] flex h-[100dvh] flex-col bg-black text-white ${visiveis ? "" : "cursor-none"}`}
+      onPointerMove={(e) => {
+        if (e.pointerType === "mouse") mostrarControles();
+      }}
     >
-      <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-4 pb-10 pt-4 sm:px-6">
+      <div
+        className={`absolute inset-x-0 top-0 z-10 flex items-center gap-3 bg-gradient-to-b from-black/80 to-transparent px-4 pb-10 pt-[max(1rem,env(safe-area-inset-top))] transition-opacity duration-300 sm:px-6 ${
+          visiveis ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
         <button
           type="button"
           onClick={sair}
@@ -1228,10 +1509,7 @@ function Player({
               {fileira}
             </span>
           )}
-          <span className="block truncate text-sm sm:text-base">
-            <span className="text-white/60">E{ep.numero} · </span>
-            {ep.titulo}
-          </span>
+          <span className="block truncate text-sm sm:text-base">{ep.titulo}</span>
         </div>
         {anterior && (
           <button
@@ -1263,54 +1541,139 @@ function Player({
         )}
       </div>
 
-      <div className="relative grid min-h-0 flex-1 place-items-center">
+      <div className="relative min-h-0 flex-1">
         {src ? (
-          <video
-            key={ep.id}
-            ref={video}
-            src={src}
-            /* Mesma razão do visualizador (16/09/2026): autoplay com som pode
-               ser recusado; com pôster, a tela abre no quadro do filme e o
-               play fica evidente, em vez de um retângulo preto. */
-            poster={ep.poster ?? undefined}
-            controls
-            autoPlay
-            playsInline
-            preload="metadata"
-            className="h-full max-h-full w-full max-w-full object-contain"
-            onLoadedMetadata={(e) => {
-              const v = e.currentTarget;
-              const marca = lerProgresso(galeriaId)[ep.id];
-              const desde = marca ? pontoDeRetomada(marca.t, v.duration) : 0;
-              if (desde > 0) v.currentTime = desde;
-            }}
-            onPlay={() => {
-              setContagem(null);
-              if (registrouPlay.current) return;
-              registrouPlay.current = true;
-              fetch(`/api/g/${galeriaId}/acesso`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ acao: "assistiu", mediaId: ep.id }),
-                keepalive: true,
-              }).catch(() => {});
-            }}
-            onTimeUpdate={() => guardar()}
-            onPause={() => guardar(true)}
-            onEnded={() => {
-              guardar(true);
-              if (proximo) setContagem(ESPERA_DO_PROXIMO);
-            }}
-          />
+          <>
+            <video
+              key={ep.id}
+              ref={video}
+              src={src}
+              /* Sem `controls` e sem `autoPlay`: ver "os controles são
+                 nossos", acima. O pôster segura a tela até o play. */
+              poster={ep.poster ?? undefined}
+              playsInline
+              preload="metadata"
+              className="absolute inset-0 h-full w-full object-contain"
+              onPointerDown={(e) => {
+                ultimoToque.current = e.pointerType;
+              }}
+              onClick={() => {
+                /* No toque, o primeiro toque só mostra os controles — como
+                   em qualquer player de celular. No mouse, clicar pausa. */
+                if (ultimoToque.current !== "mouse" && !visiveis) mostrarControles();
+                else alternar();
+              }}
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                setDuracao(v.duration);
+                setMudo(v.muted);
+                setVolume(v.volume);
+                const marca = lerProgresso(galeriaId)[ep.id];
+                const desde = marca ? pontoDeRetomada(marca.t, v.duration) : 0;
+                if (desde > 0) v.currentTime = desde;
+                setTempo(v.currentTime);
+                if (seguirTocando.current) {
+                  seguirTocando.current = false;
+                  void v.play().catch(() => {});
+                }
+              }}
+              onPlay={() => {
+                setRodando(true);
+                setContagem(null);
+                mostrarControles();
+                if (registrouPlay.current) return;
+                registrouPlay.current = true;
+                fetch(`/api/g/${galeriaId}/acesso`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ acao: "assistiu", mediaId: ep.id }),
+                  keepalive: true,
+                }).catch(() => {});
+              }}
+              onTimeUpdate={(e) => {
+                setTempo(e.currentTarget.currentTime);
+                guardar();
+              }}
+              onDurationChange={(e) => setDuracao(e.currentTarget.duration)}
+              onVolumeChange={(e) => {
+                setMudo(e.currentTarget.muted);
+                setVolume(e.currentTarget.volume);
+              }}
+              onWaiting={() => setEsperando(true)}
+              onPlaying={() => setEsperando(false)}
+              onCanPlay={() => setEsperando(false)}
+              onPause={() => {
+                setRodando(false);
+                setVisiveis(true);
+                guardar(true);
+              }}
+              onEnded={() => {
+                setRodando(false);
+                setVisiveis(true);
+                guardar(true);
+                if (proximo) setContagem(ESPERA_DO_PROXIMO);
+              }}
+            />
+
+            {/* O play grande no meio, parado — é o que diz "aperte aqui". */}
+            {!rodando && contagem === null && (
+              <button
+                type="button"
+                onClick={alternar}
+                aria-label="Tocar"
+                className="absolute left-1/2 top-1/2 z-10 grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-white/90 text-black shadow-2xl transition hover:scale-105 motion-reduce:transition-none"
+              >
+                <IconePlay className="ml-1 h-7 w-7" />
+              </button>
+            )}
+            {esperando && rodando && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 animate-spin rounded-full border-2 border-white/25 border-t-white"
+              />
+            )}
+
+            <BarraDoPlayer
+              visiveis={visiveis}
+              rodando={rodando}
+              tempo={tempo}
+              duracao={duracao}
+              mudo={mudo}
+              volume={volume}
+              volumeObedece={volumeObedece}
+              alternar={alternar}
+              buscar={(t) => {
+                if (video.current) video.current.currentTime = t;
+                setTempo(t);
+                mostrarControles();
+              }}
+              alternarMudo={() => {
+                const v = video.current;
+                if (!v) return;
+                v.muted = !v.muted;
+                if (!v.muted && v.volume === 0) v.volume = 1;
+                mostrarControles();
+              }}
+              mudarVolume={(n) => {
+                const v = video.current;
+                if (!v) return;
+                v.volume = n;
+                v.muted = n === 0;
+                mostrarControles();
+              }}
+              telaCheia={telaCheia}
+              proximo={proximo ? () => irPara(proximo) : null}
+            />
+          </>
         ) : erro ? (
-          <p className="max-w-sm px-6 text-center text-sm text-white/75">{erro}</p>
+          <p className="absolute inset-0 grid place-items-center px-6 text-center text-sm text-white/75">{erro}</p>
         ) : (
-          <span className="text-sm text-white/60">preparando o vídeo…</span>
+          <span className="absolute inset-0 grid place-items-center text-sm text-white/60">preparando o vídeo…</span>
         )}
 
         {/* ── O PRÓXIMO EPISÓDIO ──────────────────────────────────────── */}
         {contagem !== null && proximo && (
-          <div className="absolute bottom-20 right-4 z-10 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl bg-neutral-900/95 shadow-2xl ring-1 ring-white/10 sm:right-8">
+          <div className="absolute bottom-28 right-4 z-20 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl bg-neutral-900/95 shadow-2xl ring-1 ring-white/10 sm:right-8">
             <div className="flex gap-3 p-3">
               <span className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-md bg-white/10">
                 {proximo.poster && (
@@ -1323,7 +1686,7 @@ function Player({
                   Próximo · em {contagem}s
                 </span>
                 <span className="mt-1 line-clamp-2 block text-sm">
-                  E{proximo.numero} · {proximo.titulo}
+                  {proximo.titulo}
                 </span>
               </div>
             </div>
@@ -1366,6 +1729,123 @@ function Player({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * A barra de baixo do player: play, tempo, a linha do filme, som e tela
+ * cheia. Ver "os controles são nossos", no `Player`.
+ */
+function BarraDoPlayer({
+  visiveis,
+  rodando,
+  tempo,
+  duracao,
+  mudo,
+  volume,
+  volumeObedece,
+  alternar,
+  buscar,
+  alternarMudo,
+  mudarVolume,
+  telaCheia,
+  proximo,
+}: {
+  visiveis: boolean;
+  rodando: boolean;
+  tempo: number;
+  duracao: number;
+  mudo: boolean;
+  volume: number;
+  volumeObedece: boolean;
+  alternar: () => void;
+  buscar: (t: number) => void;
+  alternarMudo: () => void;
+  mudarVolume: (n: number) => void;
+  telaCheia: () => void;
+  proximo: (() => void) | null;
+}) {
+  const total = Number.isFinite(duracao) && duracao > 0 ? duracao : 0;
+  const somZerado = mudo || volume === 0;
+  const BOTAO = "grid h-11 w-11 shrink-0 place-items-center rounded-full transition hover:bg-white/10";
+  return (
+    <div
+      className={`absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/50 to-transparent px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-12 transition-opacity duration-300 sm:px-6 ${
+        visiveis ? "opacity-100" : "pointer-events-none opacity-0"
+      }`}
+    >
+      <input
+        type="range"
+        min={0}
+        max={total || 1}
+        step={0.1}
+        value={Math.min(tempo, total || 1)}
+        disabled={!total}
+        onChange={(e) => buscar(Number(e.target.value))}
+        aria-label="Linha do filme"
+        aria-valuetext={`${relogio(tempo)} de ${relogio(total)}`}
+        className="linha-do-filme block w-full"
+        style={{ ["--andou" as string]: `${total ? (tempo / total) * 100 : 0}%` }}
+      />
+      <div className="mt-1 flex items-center gap-1">
+        <button type="button" onClick={alternar} aria-label={rodando ? "Pausar" : "Tocar"} className={BOTAO}>
+          {rodando ? (
+            <svg viewBox="0 0 12 14" aria-hidden className="h-4 w-4" fill="currentColor">
+              <rect x="0.5" y="0.5" width="3.8" height="13" rx="1" />
+              <rect x="7.7" y="0.5" width="3.8" height="13" rx="1" />
+            </svg>
+          ) : (
+            <IconePlay className="ml-0.5 h-4 w-4" />
+          )}
+        </button>
+        {proximo && (
+          <button type="button" onClick={proximo} aria-label="Próximo vídeo" className={BOTAO}>
+            <svg viewBox="0 0 14 14" aria-hidden className="h-4 w-4" fill="currentColor">
+              <path d="M0 1.2v11.6c0 .6.7 1 1.2.6L9.6 7.6c.4-.3.4-.9 0-1.2L1.2.6C.7.3 0 .6 0 1.2z" />
+              <rect x="10.8" y="0.8" width="2.6" height="12.4" rx="1" />
+            </svg>
+          </button>
+        )}
+        <div className="group/som flex items-center">
+          <button type="button" onClick={alternarMudo} aria-label={somZerado ? "Ligar o som" : "Tirar o som"} className={BOTAO}>
+            <svg viewBox="0 0 20 16" aria-hidden className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 5.5h3L9.5 2v12L5 10.5H2z" fill="currentColor" stroke="none" />
+              {somZerado ? (
+                <path d="M13.5 5.5l5 5m0-5l-5 5" />
+              ) : (
+                <>
+                  <path d="M13 5.2a4 4 0 0 1 0 5.6" />
+                  {volume > 0.5 && <path d="M15.6 2.8a7.4 7.4 0 0 1 0 10.4" />}
+                </>
+              )}
+            </svg>
+          </button>
+          {/* Só onde o navegador obedece — no iPhone o volume é do aparelho. */}
+          {volumeObedece && (
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={mudo ? 0 : volume}
+              onChange={(e) => mudarVolume(Number(e.target.value))}
+              aria-label="Volume"
+              className="linha-do-filme w-20 sm:w-24"
+              style={{ ["--andou" as string]: `${(mudo ? 0 : volume) * 100}%` }}
+            />
+          )}
+        </div>
+        <span className="ml-2 text-xs tabular-nums text-white/80">
+          {relogio(tempo)}
+          {total > 0 && <span className="text-white/50"> / {relogio(total)}</span>}
+        </span>
+        <button type="button" onClick={telaCheia} aria-label="Tela cheia" className={`${BOTAO} ml-auto`}>
+          <svg viewBox="0 0 16 16" aria-hidden className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

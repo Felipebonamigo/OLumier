@@ -96,8 +96,9 @@ capítulo aparecendo atrás, levemente tortas; no hover elas se abrem em leque.
 Não é o ícone de pasta do computador de propósito: essa é a cara de nuvem
 genérica que a estratégia evita (§12). Cor, canto e letra são os da galeria.
 
-- A capa é a **escolhida no painel** (aba Fotos → hover na foto → "capa da
-  pasta", migração 052) ou a primeira foto do capítulo. Foto movida para outro
+- A capa é a **escolhida no painel** (Design → Formato → Capa de cada pasta,
+  ou aba Fotos → hover na foto → "capa da pasta"; migração 052) ou a primeira
+  foto do capítulo. Foto movida para outro
   capítulo deixa de valer como capa na pasta antiga.
 - Abrir a pasta é a rota de capítulo que já existia (`/…/<galeria>/<capitulo>`):
   menu de baixar, favoritas, visualizador e rolagem infinita são os de sempre.
@@ -111,9 +112,9 @@ genérica que a estratégia evita (§12). Cor, canto e letra são os da galeria.
 - **Capa de cinema**: a capa da galeria de fundo (ou o pôster do primeiro
   vídeo), logo do estúdio, título na letra da galeria, "Assistir" e "Ver as
   fotos". Os véus são da cor de fundo do tema, então funciona no claro e no creme.
-- **Fileiras**: um capítulo com vídeo = uma fileira. Episódios numerados na
-  galeria inteira (E1, E2…), título tirado do nome do arquivo sem extensão,
-  sublinhado e número de ordenação, duração no canto. As fotos viram a última
+- **Fileiras**: um capítulo com vídeo = uma fileira. Título escrito pelo
+  fotógrafo ou, sem ele, tirado do nome do arquivo sem extensão, sublinhado e
+  número de ordenação; duração no canto. As fotos viram a última
   fileira, com amostra de 12 e link para todas.
 - **Player** em tela cheia: pede o endereço do filme à rota `urls` na hora do
   play (a mesma régua de acesso do visualizador), registra `assistiu`, e ao
@@ -134,6 +135,48 @@ navegador a lê no envio, do mesmo `<video>` que já abria para tirar o pôster.
 - Trocar a capa do vídeo escolhendo o **próprio arquivo** (aba Vídeo) preenche
   a duração de um vídeo antigo.
 - Quem já assistiu num aparelho passa a ver a duração naquele aparelho.
+
+## O retorno do Juan (30/09/2026)
+
+Depois de ver o Stream no ar: *"Manter a ideia de customização. No STREAM:
+poder mudar o título/subtítulo 'Episódios'. Tirar o EP1 minúsculo que fica no
+vídeo. Adicionar possibilidade de trocar o nome do arquivo que aparece na
+visualização. Adicionar opção de escolher 'scrollar' para baixo também, além
+dessa de scrollar para o lado. Corrigir os formatos de CAPA quando o formato de
+entrega foi o STREAM. Pro formato PASTAS: adicionar opção de escolher a capa de
+cada capítulo."* Referência citada: `finals.vicentefilms.com/lumarino` — **não
+consegui abrir** (a rede do ambiente de desenvolvimento bloqueia o endereço);
+o que foi feito segue a descrição dele, não a página.
+
+| Pedido | O que mudou | Onde |
+|---|---|---|
+| Título/subtítulo "Episódios" | **Título dos vídeos** e **subtítulo** no Design → Formato. Valem para o bloco dos vídeos fora de capítulo; vídeo em capítulo usa o nome do capítulo (a tela diz isso quando é o caso). | eixos de texto `nomeDosVideos` (40) e `fraseDosVideos` (120) |
+| Tirar o "E1" | Saiu do cartão, do player, do "próximo episódio", do "Continuar" e do "Episódio N" da Vitrine. Ficou o número grande das salas que são lista (Episódios e Mostra), onde ele é desenho. | `galeria-stream.tsx` |
+| Nome do vídeo na tela | **Nome de cada vídeo** no Design → Formato, com o pôster ao lado. Grava na hora (não é aparência). Vazio volta ao nome tirado do arquivo. **O download continua com o nome original.** | `medias.titulo`, migração 055 |
+| Rolar para baixo | **Os vídeos rolam: para o lado / para baixo.** Na Cinema, cada fileira vira grade; na Episódios, as abas somem e todos os capítulos ficam abertos. Vitrine e Mostra já descem — ali a opção não aparece. | eixo `rolagemStream` |
+| Capa no Stream | **Capa do stream: a do estilo / a do grupo Capa.** Com a do grupo Capa, a página desenha a capa escolhida (convite, arco, imersa…) e o stream começa embaixo, com uma barra de "Assistir". Escolher um desenho no grupo Capa com a entrega em Stream já passa para essa opção — clicar em "Convite" e ver o Convite. | eixo `capaStream` |
+| Capa de cada pasta | **Capa de cada pasta** no Design → Formato: o cartão de cada capítulo com a capa de hoje; "trocar" abre as fotos dele (60 por vez). O botão da aba Fotos continua existindo. | `lib/entrega-no-design.ts` |
+
+**Player (segundo recado, no mesmo dia):** *"o layout dos vídeos tá bugado,
+não aparece os menus de botão e dá o start sozinho. Não consigo diminuir o
+volume do áudio também."* Eram os controles nativos num `<video>` do tamanho
+da tela: no iPhone o Safari os desenha no pé do elemento, embaixo da barra do
+navegador, e os controles nativos do iPhone não têm volume. Agora o player tem
+controles próprios — play/pausa, linha do filme, tempo, som, próximo e tela
+cheia —, numa tela de `100dvh`; somem 3 s depois de o filme andar e voltam ao
+toque ou ao mouse. **Abre parado**, com o play grande no meio; só o próximo
+episódio começa sozinho. O slider de volume aparece onde o navegador obedece —
+**no iPhone o volume é só o do aparelho** (regra da Apple); lá fica o botão de
+mudo. Teclado: espaço/K, setas ±10 s, M, F, Esc, Shift+N/P.
+
+Os eixos novos são **estrutura** (`EIXOS_DA_ESTRUTURA`): andam com o formato,
+não com o estilo, e não tiram a galeria do "meu padrão". O padrão de cada um é
+o Stream como estava — ninguém que já usa vê mudança sem mexer, exceto o "E1",
+que sumiu para todos.
+
+O nome dos vídeos e a capa das pastas gravam fora do rascunho, como o nome de
+um capítulo; a prévia recarrega sozinha (entram na assinatura da prévia em
+`design/page.tsx`).
 
 ## O que ficou de fora, e por quê
 
@@ -159,3 +202,5 @@ navegador a lê no envio, do mesmo `<video>` que já abria para tirar o pôster.
 | `src/components/editor-aparencia.tsx` | grupo Formato |
 | `src/components/grade-medias.tsx` | botão e selo "capa da pasta" |
 | `db/migracoes/052-capa-da-pasta.sql` | `secoes.capa_media_id` |
+| `db/migracoes/055-titulo-do-video.sql` | `medias.titulo` — o nome do vídeo na tela |
+| `src/lib/entrega-no-design.ts`, `src/components/entrega-no-design.tsx` | nomes dos vídeos e capas das pastas no Design |
