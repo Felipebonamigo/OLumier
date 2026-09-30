@@ -8,7 +8,8 @@
  *   ZIP_CACHE_DIR          onde os ZIPs prontos ficam (padrão /var/lib/fotonio-zip)
  *   ZIP_CACHE_DIAS         dias sem pedido até apagar um ZIP pronto (padrão 14)
  *   ZIP_CACHE_MAX_GB       teto do disco; passou, apaga o mais antigo (padrão 150)
- *   ZIP_BUSCAS_PARALELAS   quantos originais são buscados à frente (padrão 4)
+ *   ZIP_BUSCAS_PARALELAS   quantos originais descem à frente, ao mesmo tempo (padrão 8)
+ *   ZIP_MEMORIA_A_FRENTE_MB  teto de memória dessas buscas (padrão 256)
  */
 
 function inteiro(nome: string, padrao: number): number {
@@ -23,7 +24,8 @@ export const CONFIG = {
   cacheDir: process.env.ZIP_CACHE_DIR ?? "/var/lib/fotonio-zip",
   cacheDias: inteiro("ZIP_CACHE_DIAS", 14),
   cacheMaxBytes: inteiro("ZIP_CACHE_MAX_GB", 150) * 1024 ** 3,
-  buscasParalelas: inteiro("ZIP_BUSCAS_PARALELAS", 4),
+  buscasParalelas: inteiro("ZIP_BUSCAS_PARALELAS", 8),
+  memoriaAFrente: inteiro("ZIP_MEMORIA_A_FRENTE_MB", 256) * 1024 * 1024,
 };
 
 export function conferirConfig(): string[] {

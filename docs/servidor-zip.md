@@ -116,9 +116,13 @@ de uma queda, continua de onde parou em vez de recomeçar 20 GB. Em fluxo
 ### Tolerância a falha na montagem
 
 Cada original tem três tentativas com espera crescente. Uma URL vencida (6 h se
-passaram) renova o manifesto sem gastar tentativa. `ZIP_BUSCAS_PARALELAS` (4)
-originais são abertos à frente do que está sendo escrito, porque o B2 está a
-150–220 ms daqui e cada foto é um pedido novo.
+passaram) renova o manifesto sem gastar tentativa. `ZIP_BUSCAS_PARALELAS` (8)
+originais **descem inteiros** à frente do que está sendo escrito, ao mesmo
+tempo, até somarem `ZIP_MEMORIA_A_FRENTE_MB` (256): o B2 está a 150–220 ms
+daqui e cada foto é um pedido novo. Até 30/09/2026 eles eram só *abertos* à
+frente — o corpo esperava a vez, e o ZIP descia do B2 uma foto por vez: 326
+KB/s montando contra 2,4 MB/s do disco, na mesma galeria. Arquivo acima de
+64 MB (vídeo) continua só aberto, e desce em fluxo na vez dele.
 
 ## Instalar
 
