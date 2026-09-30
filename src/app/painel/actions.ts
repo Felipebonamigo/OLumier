@@ -29,7 +29,7 @@ import {
 } from "@/lib/estilos-do-estudio";
 import { aparenciaComFormato, type Aparencia } from "@/config/aparencia";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
-import { assinarTenant } from "@/lib/assinar";
+import { assinarTenant, escolherPlanoAntesDeAssinar } from "@/lib/assinar";
 import { assinarPacote, acrescentarAtomatiza } from "@/lib/pacote";
 import { ehFaixaAtomatiza } from "@/config/combo";
 import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
@@ -703,9 +703,13 @@ export async function criarAssinaturaAction(
    * de NÃO guardar o cartão de quem não pediu. Ver `config/forma-assinatura.ts`.
    */
   escolhaDaForma?: unknown,
+  /* O tamanho escolhido no formulário. Ausente → o plano que a conta já tem. */
+  planoIdBruto?: unknown,
 ): Promise<{ erro?: string } | void> {
   const tenantId = await exigirTenant();
   try {
+    const recusa = await escolherPlanoAntesDeAssinar(tenantId, planoIdBruto, await ipDaRequisicao());
+    if (recusa) return { erro: recusa };
     const r = await assinarTenant(tenantId, {
       documento,
       ciclo: cicloDe(cicloBruto),
@@ -731,10 +735,13 @@ export async function assinarPacoteAction(
   escolhaDaForma: unknown,
   faixaBruta: unknown,
   aceitouTermos: boolean,
+  planoIdBruto?: unknown,
 ): Promise<{ erro?: string; galeriaAssinada?: boolean; contaNova?: boolean }> {
   const tenantId = await exigirTenant();
   if (!ehFaixaAtomatiza(faixaBruta)) return { erro: "Escolha a faixa do Atomatiza." };
   try {
+    const recusa = await escolherPlanoAntesDeAssinar(tenantId, planoIdBruto, await ipDaRequisicao());
+    if (recusa) return { erro: recusa };
     const r = await assinarPacote(tenantId, {
       faixa: faixaBruta,
       ciclo: cicloDe(cicloBruto),

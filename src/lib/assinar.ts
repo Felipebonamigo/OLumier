@@ -53,6 +53,30 @@ export function vencimentoDoTeste(trialAte: Date | string | null, agora = new Da
   return fimTrial > minimo ? fimTrial : minimo;
 }
 
+/**
+ * O tamanho escolhido NO formulário de assinar (30/09/2026 — Juan: "quando
+ * escolhem pra assinar, vai direto pro 500GB, não dá pra escolher nem maior
+ * nem menor"). A conta nasce no plano inicial e o tamanho só mudava pelo
+ * "Mudar de plano", acima do formulário, que ninguém achava. Agora o
+ * formulário manda o plano, e ele é trocado aqui antes de assinar — pela
+ * mesma `trocarPlano`, que recusa o tamanho em que o que já está guardado
+ * não cabe. Sem assinatura, trocar é só gravar o plano.
+ */
+export async function escolherPlanoAntesDeAssinar(
+  tenantId: string,
+  planoIdBruto: unknown,
+  ip: string | null,
+): Promise<string | null> {
+  if (typeof planoIdBruto !== "string" || !planoIdBruto) return null;
+  const plano = planoPorId(planoIdBruto);
+  if (!plano || !planoIdBruto.startsWith("g:")) return "Tamanho inválido.";
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant || tenant.asaas_assinatura_id || tenant.plano_id === plano.id) return null;
+  const { trocarPlano } = await import("@/lib/troca-de-plano");
+  const r = await trocarPlano(tenantId, plano.id, { ip });
+  return "erro" in r && r.erro ? r.erro : null;
+}
+
 export async function assinarTenant(tenantId: string, opcoes: OpcoesDeAssinar): Promise<ResultadoDeAssinar> {
   if (!asaasConfigurado()) return { ok: false, erro: "A cobrança ainda não foi ligada." };
 

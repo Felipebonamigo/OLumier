@@ -28,6 +28,9 @@ export function AcrescentarAtomatiza({ oferta, anual }: { oferta: OfertaDoPacote
   const fator = anual ? MESES_PAGOS_NO_ANO : 1;
   const sufixo = anual ? "/ano" : "/mês";
   const precisaAceitar = !oferta.atomatiza.conta;
+  /* Plano fora da grade não entra no combo: não há preço de pacote a mostrar. */
+  const precos = oferta.precos;
+  if (!precos) return null;
 
   if (feito) {
     return (
@@ -52,7 +55,7 @@ export function AcrescentarAtomatiza({ oferta, anual }: { oferta: OfertaDoPacote
 
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {FAIXAS.map((f) => {
-          const p = oferta.precos[f];
+          const p = precos[f];
           const marcada = faixa === f;
           return (
             <label
@@ -82,7 +85,7 @@ export function AcrescentarAtomatiza({ oferta, anual }: { oferta: OfertaDoPacote
       </div>
       <p className="mt-2 text-xs text-texto-faint">
         Preço com o combo, que entra quando a Galeria já foi paga. A Galeria também baixa, para{" "}
-        {formatarReais(oferta.precos[faixa].galeria * fator)}
+        {formatarReais(precos[faixa].galeria * fator)}
         {sufixo}, quando o Atomatiza for pago.
       </p>
 

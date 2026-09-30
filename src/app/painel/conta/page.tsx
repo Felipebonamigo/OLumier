@@ -5,12 +5,12 @@ import { sessaoAtual } from "@/lib/auth";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
-import { planoPorId, formatarReais, cicloDe, precoDoCicloCentavos } from "@/config/planos";
+import { planoPorId, formatarReais, cicloDe, precoDoCicloCentavos, ESPACOS, montar, type Segmento } from "@/config/planos";
 import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza, planoEntraNoCombo, precosDoPacote } from "@/config/combo";
 import { situacaoNoAtomatiza } from "@/lib/pacote";
 import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
 import { AcrescentarAtomatiza } from "@/components/acrescentar-atomatiza";
-import type { OfertaDoPacote } from "@/components/assinatura-botao";
+import type { OfertaDoPacote, Tamanho } from "@/components/assinatura-botao";
 import {
   asaasConfigurado,
   asaasEmProducao,
@@ -154,13 +154,25 @@ export default async function ContaPage() {
    * resposta de lá (null), a oferta não aparece: sem saber se a conta existe,
    * a tela prometeria o que talvez não cumpra. */
   const atomatiza =
-    asaasConfigurado() && plano && planoEntraNoCombo(plano) && tenant.cpf_cnpj
-      ? await situacaoNoAtomatiza(tenant.cpf_cnpj)
-      : null;
-  const oferta: OfertaDoPacote | null =
-    atomatiza && plano
-      ? { precos: precosDoPacote(plano), atomatiza, email: tenant.email, urlAtomatiza: URL_ATOMATIZA }
-      : null;
+    asaasConfigurado() && tenant.cpf_cnpj ? await situacaoNoAtomatiza(tenant.cpf_cnpj) : null;
+  const oferta: OfertaDoPacote | null = atomatiza
+    ? {
+        precos: plano && planoEntraNoCombo(plano) ? precosDoPacote(plano) : null,
+        atomatiza,
+        email: tenant.email,
+        urlAtomatiza: URL_ATOMATIZA,
+      }
+    : null;
+
+  /* A grade para escolher o tamanho no próprio formulário de assinar, no tipo
+   * de trabalho que a conta já tem (foto, se o plano for antigo). */
+  const segmento = (plano?.id.startsWith("g:") ? plano.id.split(":")[1] : "foto") as Segmento;
+  const tamanhos: Tamanho[] = tenant.asaas_assinatura_id
+    ? []
+    : ESPACOS.map((e) => {
+        const p = montar({ segmento, espacoGb: e.gb });
+        return { planoId: p.id, gb: e.gb, precoCentavos: p.precoCentavos, pacote: precosDoPacote(p) };
+      });
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
@@ -268,6 +280,8 @@ export default async function ContaPage() {
                preço — e para o desconto na tela nunca discordar do cobrado. */
             precoMensalCentavos={plano?.precoCentavos ?? 0}
             pacote={oferta}
+            tamanhos={tamanhos}
+            planoAtual={tenant.plano_id}
           />
         )}
 

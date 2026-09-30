@@ -9,9 +9,20 @@ import { MESES_PAGOS_NO_ANO, formatarReais } from "@/config/planos";
 import { NOME_DA_FAIXA, type FaixaAtomatiza, type PrecoDoPacote } from "@/config/combo";
 import type { SituacaoNaPonte } from "@/lib/pacote";
 
+/** Um tamanho da grade, com o preço dele sozinho e no pacote. */
+export interface Tamanho {
+  planoId: string;
+  gb: number;
+  precoCentavos: number;
+  pacote: Record<FaixaAtomatiza, PrecoDoPacote>;
+}
+
+const rotuloGb = (gb: number) => (gb >= 1000 ? `${gb / 1000} TB` : `${gb} GB`);
+
 /** O que a tela precisa para oferecer o pacote. Ausente = sem oferta. */
 export interface OfertaDoPacote {
-  precos: Record<FaixaAtomatiza, PrecoDoPacote>;
+  /** Os preços do pacote no plano ATUAL da conta (null fora da grade). */
+  precos: Record<FaixaAtomatiza, PrecoDoPacote> | null;
   /** A situação deste CPF/CNPJ no Atomatiza, lida pela ponte. */
   atomatiza: SituacaoNaPonte;
   /** O e-mail desta conta — é o que a conta nova de lá vai usar. */
@@ -65,6 +76,8 @@ export function AssinaturaBotao({
   documentoSalvo,
   precoMensalCentavos,
   pacote = null,
+  tamanhos = [],
+  planoAtual = null,
 }: {
   temAssinatura: boolean;
   cobrancaLigada: boolean;
@@ -72,6 +85,9 @@ export function AssinaturaBotao({
   /** O mensal da faixa contratada. O anual é derivado, nunca uma segunda tabela. */
   precoMensalCentavos: number;
   pacote?: OfertaDoPacote | null;
+  /** A grade para escolher o tamanho aqui mesmo. Vazia → vale o plano da conta. */
+  tamanhos?: Tamanho[];
+  planoAtual?: string | null;
 }) {
   const [documento, setDocumento] = useState(
     documentoSalvo ? formatarDocumento(documentoSalvo) : "",
@@ -87,9 +103,16 @@ export function AssinaturaBotao({
   /* "Só a Galeria" pré-marcado: o pacote é uma oferta ao lado, não um
      carrinho que já vem cheio. */
   const [faixa, setFaixa] = useState<FaixaAtomatiza | null>(null);
+  /* O tamanho começa no plano da conta — o do cadastro, ou o que ela já
+     escolheu em "Mudar de plano". */
+  const [planoId, setPlanoId] = useState<string | null>(
+    tamanhos.find((t) => t.planoId === planoAtual)?.planoId ?? tamanhos[0]?.planoId ?? null,
+  );
+  const tamanho = tamanhos.find((t) => t.planoId === planoId) ?? null;
+  const mensal = tamanho ? tamanho.precoCentavos : precoMensalCentavos;
   const [aceitou, setAceitou] = useState(false);
   const [ocupado, iniciar] = useTransition();
-  const precoAnual = precoMensalCentavos * MESES_PAGOS_NO_ANO;
+  const precoAnual = mensal * MESES_PAGOS_NO_ANO;
   const router = useRouter();
 
   if (!cobrancaLigada) {
@@ -151,12 +174,48 @@ export function AssinaturaBotao({
         numa grade só obrigariam a comparar prazo e forma ao mesmo tempo, que é
         o jeito mais rápido de a pessoa fechar a aba.
       */}
+      {tamanhos.length > 0 && (
+        <fieldset className="mt-5">
+          <legend className="text-xs font-medium text-texto-soft">Tamanho da Galeria</legend>
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {tamanhos.map((t) => {
+              const marcada = planoId === t.planoId;
+              return (
+                <label
+                  key={t.planoId}
+                  className={`cursor-pointer rounded-xl border px-3 py-2 transition ${
+                    marcada ? "border-acento bg-carbon-2" : "border-linha hover:border-linha-forte"
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="tamanho"
+                      checked={marcada}
+                      onChange={() => {
+                        setPlanoId(t.planoId);
+                        setErro(null);
+                      }}
+                      className="h-4 w-4 accent-[color:var(--acento)]"
+                    />
+                    <span className="text-sm font-medium">{rotuloGb(t.gb)}</span>
+                  </span>
+                  <span className="mt-0.5 block text-xs tabular-nums text-texto-faint">
+                    {formatarReais(t.precoCentavos)}/mês
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
+
       <fieldset className="mt-5">
         <legend className="text-xs font-medium text-texto-soft">De quanto em quanto tempo</legend>
         <div className="mt-2 grid gap-2 sm:grid-cols-2">
           {CICLOS.map((c) => {
             const marcada = ciclo === c.valor;
-            const centavos = c.valor === "anual" ? precoAnual : precoMensalCentavos;
+            const centavos = c.valor === "anual" ? precoAnual : mensal;
             return (
               <label
                 key={c.valor}
@@ -198,6 +257,8 @@ export function AssinaturaBotao({
       {pacote && (
         <MonteOPacote
           oferta={pacote}
+          precos={tamanho?.pacote ?? pacote.precos}
+          galeria={tamanho ? rotuloGb(tamanho.gb) : null}
           anual={ciclo === "anual"}
           faixa={faixa}
           escolher={(f) => {
@@ -251,12 +312,12 @@ export function AssinaturaBotao({
                 setErro("Marque que leu os Termos e a Privacidade do Atomatiza para criar a conta de lá.");
                 return;
               }
-              const r = await assinarPacoteAction(documento, ciclo, forma, faixa, aceitou);
+              const r = await assinarPacoteAction(documento, ciclo, forma, faixa, aceitou, planoId);
               if (r?.erro) setErro(r.erro);
               if (!r?.erro || r.galeriaAssinada) router.refresh();
               return;
             }
-            const r = await criarAssinaturaAction(documento, ciclo, forma);
+            const r = await criarAssinaturaAction(documento, ciclo, forma, planoId);
             if (r?.erro) setErro(r.erro);
             else router.refresh();
           })
@@ -291,6 +352,8 @@ export function AssinaturaBotao({
  */
 function MonteOPacote({
   oferta,
+  precos,
+  galeria,
   anual,
   faixa,
   escolher,
@@ -298,6 +361,9 @@ function MonteOPacote({
   aceitar,
 }: {
   oferta: OfertaDoPacote;
+  /** Os preços do pacote no tamanho escolhido; null = o tamanho não entra. */
+  precos: Record<FaixaAtomatiza, PrecoDoPacote> | null;
+  galeria: string | null;
   anual: boolean;
   faixa: FaixaAtomatiza | null;
   escolher: (f: FaixaAtomatiza | null) => void;
@@ -318,7 +384,8 @@ function MonteOPacote({
     );
   }
 
-  const escolhido = faixa ? oferta.precos[faixa] : null;
+  if (!precos) return null;
+  const escolhido = faixa ? precos[faixa] : null;
   return (
     <fieldset className="mt-5">
       <legend className="text-xs font-medium text-texto-soft">Monte o seu pacote</legend>
@@ -343,7 +410,7 @@ function MonteOPacote({
           </span>
         </label>
         {FAIXAS.map((f) => {
-          const p = oferta.precos[f];
+          const p = precos[f];
           const marcada = faixa === f;
           return (
             <label
@@ -378,7 +445,7 @@ function MonteOPacote({
       {escolhido && faixa && (
         <div className="mt-3 rounded-lg border border-ok/40 bg-ok/10 px-4 py-3 text-xs text-texto-soft">
           <p className="tabular-nums">
-            Galeria: <s className="text-texto-faint">{formatarReais(escolhido.galeriaCheio * fator)}</s>{" "}
+            Galeria{galeria ? ` ${galeria}` : ""}: <s className="text-texto-faint">{formatarReais(escolhido.galeriaCheio * fator)}</s>{" "}
             <strong className="text-texto">{formatarReais(escolhido.galeria * fator)}</strong>
             {sufixo} · Atomatiza {NOME_DA_FAIXA[faixa]}:{" "}
             <s className="text-texto-faint">{formatarReais(escolhido.atomatizaCheio * fator)}</s>{" "}
