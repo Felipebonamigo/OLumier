@@ -41,7 +41,7 @@ export const VALIDADE_CONFIRMACAO_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** O que as rotas de envio respondem enquanto o clique não veio. */
 export const RECADO_EMAIL_PENDENTE =
-  "Confirme seu e-mail para começar a enviar fotos. O link está na sua caixa de entrada — se não chegou, peça outro no topo do painel.";
+  "Confirme seu e-mail para começar a enviar fotos e vídeos. O link está na sua caixa de entrada — se não chegou, peça outro no topo do painel.";
 
 /**
  * A conta ainda precisa confirmar o e-mail para enviar?

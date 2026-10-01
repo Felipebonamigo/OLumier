@@ -76,6 +76,7 @@ await etapa("olumier: é da Galeria, atz: do Atomatiza, o resto de nenhum", () =
   igual(caixa.sistemaDaReferencia("olumier:abc:diferenca:1"), "galeria", "diferença");
   igual(caixa.sistemaDaReferencia("atz:sub:st-1"), "atomatiza", "assinatura");
   igual(caixa.sistemaDaReferencia("atz:dif:st-1:2"), "atomatiza", "diferença de lá");
+  igual(caixa.sistemaDaReferencia("pacote:t-1:st-1"), "pacote", "fatura única dos dois");
   igual(caixa.sistemaDaReferencia(null), "outros", "sem referência");
   igual(caixa.sistemaDaReferencia("xolumier:abc"), "outros", "parecido não é igual");
 });
@@ -151,27 +152,89 @@ await etapa("em cada produto, repassado + ficou na conta = líquido", () => {
 
 await etapa("a mesma pessoa soma os dois produtos, cada um com a sua porcentagem", () => {
   const carol = c.destinos.find((d) => d.destino.nome === "Carol");
-  igual(carol.porSistema, { galeria: 1025, atomatiza: 2377, outros: 0 }, "Carol");
+  igual(carol.porSistema, { galeria: 1025, atomatiza: 2377, pacote: 0, outros: 0 }, "Carol");
   igual(carol.totalCentavos, 3402, "total da Carol");
+});
+
+await etapa("o dono da conta: a parte dele que ficou na conta aparece na linha dele, não em zero", () => {
   const felipe = c.destinos.find((d) => d.destino.nome === "Felipe");
-  igual(felipe.porSistema.atomatiza, 0, "o Felipe não tem repasse no Atomatiza — o dele fica na conta");
+  igual(felipe.destino.donoDaConta, true, "marcado");
+  igual(felipe.porSistema.galeria, 2050, "na Galeria ele recebeu repasse: vale o repasse");
+  igual(
+    felipe.porSistema.atomatiza,
+    (7133 - 2377 * 2 - 100) + 801,
+    "no Atomatiza, o que não foi repassado (o cancelado incluído)",
+  );
+  const conta = c.destinos.find((d) => d.destino.chave === "conta");
+  igual(conta.porSistema.atomatiza, 0, "sem reserva no Atomatiza, nada mais fica");
+  igual(conta.destino.nome, "Reserva de custo e o resto", "o nome da linha");
+});
+
+await etapa("na Galeria, sem repasse para ele, a parte do dono sai do acordo: o dobro da Carol", () => {
+  const semFelipe = caixa.carteirasConhecidas({ ASAAS_CARTEIRA_CAROL: "w-carol", ASAAS_CARTEIRA_SIRIUS: "w-sirius" });
+  const r = caixa.montarCaixa(
+    [
+      {
+        id: "pay_g9", status: "RECEIVED", value: 79.99, netValue: 79, billingType: "PIX",
+        paymentDate: "2026-09-30", externalReference: "olumier:t-9", description: "Galeria Átomo — Foto · 500 GB",
+        split: [
+          { walletId: "w-carol", totalValue: 12.11, status: "DONE" },
+          { walletId: "w-sirius", totalValue: 12.11, status: "DONE" },
+        ],
+      },
+      // Sem produto: não é da sociedade, nada vai para o dono.
+      { id: "pay_x9", status: "RECEIVED", value: 250, netValue: 244.54, paymentDate: "2026-09-09",
+        split: [{ walletId: "w-fora", totalValue: 212.5, status: "DONE" }] },
+    ],
+    semFelipe,
+  );
+  const felipe = r.destinos.find((d) => d.destino.nome === "Felipe");
+  igual([felipe.destino.semCarteira, felipe.porSistema.galeria, felipe.porSistema.outros], [false, 2422, 0], "Felipe");
+  const conta = r.destinos.find((d) => d.destino.chave === "conta");
+  igual(conta.porSistema.galeria, 7900 - 1211 * 2 - 2422, "a reserva");
+  igual(conta.porSistema.outros, 24454 - 21250, "o resto do sem produto");
+  for (const s of caixa.SISTEMAS) {
+    igual(r.destinos.reduce((t, d) => t + d.porSistema[s], 0), r.porSistema[s].liquidoCentavos, `fecha em ${s}`);
+  }
+});
+
+await etapa("o pacote tem coluna própria, e a parte do dono fica com a reserva", () => {
+  const r = caixa.montarCaixa(
+    [{
+      id: "pay_p1", status: "RECEIVED", value: 150, netValue: 145, billingType: "CREDIT_CARD",
+      paymentDate: "2026-09-20", externalReference: "pacote:t-1:st-1",
+      description: "Pacote Galeria Átomo 1 TB + Atomatiza Solo · pacote",
+      split: [{ walletId: "w-carol", totalValue: 30, status: "DONE" }],
+    }],
+    caixa.carteirasConhecidas({ ASAAS_CARTEIRA_CAROL: "w-carol" }),
+  );
+  igual(r.porSistema.pacote.pagamentos, 1, "no pacote");
+  igual([r.porSistema.galeria.pagamentos, r.porSistema.outros.pagamentos], [0, 0], "não em outro lado");
+  igual(r.destinos.find((d) => d.destino.nome === "Felipe").porSistema.pacote, 0, "nada estimado no pacote");
+  igual(r.destinos.find((d) => d.destino.chave === "conta").porSistema.pacote, 14500 - 3000, "fica na conta");
 });
 
 await etapa("repasse cancelado conta como ficou na conta, e é avisado", () => {
   igual(c.repassesQueNaoSairam, 1, "contagem");
   const conta = c.destinos.find((d) => d.destino.chave === "conta");
-  igual(conta.porSistema.atomatiza, 7133 - 2377 * 2 - 100 + 801, "o dinheiro do cancelado ficou");
+  const felipe = c.destinos.find((d) => d.destino.nome === "Felipe");
+  igual(
+    conta.porSistema.atomatiza + felipe.porSistema.atomatiza,
+    7133 - 2377 * 2 - 100 + 801,
+    "o dinheiro do cancelado ficou na conta principal",
+  );
   const linha = c.pagamentos.find((p) => p.id === "pay_a2");
   igual(linha.repasses[0].saiu, false, "a linha mostra que não saiu");
 });
 
 await etapa("carteira desconhecida aparece com o final do código, antes da conta principal", () => {
   const nomes = c.destinos.map((d) => d.destino.nome);
-  igual(nomes, ["Felipe", "Carol", "Sirius", "Carteira …abc123", "Ficou na conta principal"], "ordem");
+  igual(nomes, ["Felipe", "Carol", "Sirius", "Carteira …abc123", "Reserva de custo e o resto"], "ordem");
 });
 
 await etapa("sócio sem carteira configurada continua na lista, marcado", () => {
   const semCarol = caixa.montarCaixa(PAGAMENTOS, caixa.carteirasConhecidas({ ASAAS_CARTEIRA_FELIPE: "w-felipe" }));
+  igual(semCarol.destinos.find((d) => d.destino.nome === "Sirius").destino.semCarteira, true, "Sirius também");
   const carol = semCarol.destinos.find((d) => d.destino.nome === "Carol");
   igual([carol.destino.semCarteira, carol.totalCentavos], [true, 0], "Carol sem carteira");
   if (!semCarol.destinos.some((d) => d.destino.nome === "Carteira …-carol")) {
@@ -184,8 +247,72 @@ await etapa("a receber: cartão aprovado e ainda não liberado, com a data mais 
   igual([r.totalCentavos, r.porSistema.galeria.pagamentos, r.ultimaLiberacao], [9500, 1, "2026-10-20"], "a receber");
 });
 
+await etapa("a receber: de onde vem cada um, quando cai, e quanto o Asaas faz esperar", () => {
+  const r = caixa.somarAReceber([
+    { id: "c1", status: "CONFIRMED", value: 250, netValue: 242.03, confirmedDate: "2026-09-25",
+      estimatedCreditDate: "2026-10-27", description: "Inscrição — NATA PADEL TOUR" },
+    { id: "c2", status: "CONFIRMED", value: 59.9, netValue: 57.62, confirmedDate: "2026-09-05",
+      estimatedCreditDate: "2026-10-07", externalReference: "atz:sub:st-1", description: "Atomatiza — plano solo" },
+    { id: "c3", status: "CONFIRMED", value: 79.99, netValue: 77.11, clientPaymentDate: "2026-10-01",
+      estimatedCreditDate: "2026-11-02", externalReference: "olumier:t-1", description: "Galeria Átomo — Foto · 500 GB" },
+    { id: "c4", status: "CONFIRMED", value: 10, netValue: 9.21, externalReference: "pacote:t-1:st-1" },
+    { id: "r1", status: "RECEIVED", value: 99, netValue: 97, externalReference: "olumier:t-2" },
+  ]);
+  igual(r.pagamentos.map((p) => p.id), ["c2", "c1", "c3", "c4"], "do que cai primeiro ao sem data");
+  igual(
+    caixa.SISTEMAS.map((s) => r.porSistema[s].pagamentos),
+    [1, 1, 1, 1],
+    "um em cada: Galeria, Atomatiza, pacote, sem produto",
+  );
+  igual(r.porSistema.outros.liquidoCentavos, 24203, "o sem produto separado da sociedade");
+  igual(r.diasAteCair, 32, "a espera média, das datas do próprio Asaas");
+  igual(
+    r.porMes.map((m) => [m.mes, m.pagamentos, m.liquidoCentavos]),
+    [["2026-10", 2, 5762 + 24203], ["2026-11", 1, 7711], ["", 1, 921]],
+    "por mês em que cai",
+  );
+  igual([r.pagamentos[0].aprovadoEm, r.pagamentos[2].aprovadoEm, r.pagamentos[3].caiEm], ["2026-09-05", "2026-10-01", null], "datas");
+});
+
 await etapa("a lista de pagamentos vem do mais recente para o mais antigo", () => {
   igual(c.pagamentos.map((p) => p.id), ["pay_x", "pay_a2", "pay_a1", "pay_g1"], "ordem");
+});
+
+await etapa("por sócio: cada um com o que levou, o que vem do cartão, e o resto separado", () => {
+  const carteiras = caixa.carteirasConhecidas({
+    ASAAS_CARTEIRA_FELIPE: "w-propria", ASAAS_CARTEIRA_CAROL: "w-carol", ASAAS_CARTEIRA_SIRIUS: "w-sirius",
+  });
+  const recebidos = caixa.montarCaixa(
+    [
+      { id: "g", status: "RECEIVED", value: 79.99, netValue: 79, paymentDate: "2026-09-30", externalReference: "olumier:t",
+        split: [{ walletId: "w-carol", totalValue: 12.11 }, { walletId: "w-sirius", totalValue: 12.11 }] },
+      { id: "a", status: "RECEIVED", value: 59.9, netValue: 58.91, paymentDate: "2026-09-22", externalReference: "atz:sub:s",
+        split: [{ walletId: "w-carol", totalValue: 19.63 }, { walletId: "w-sirius", totalValue: 19.63 }] },
+      { id: "x", status: "RECEIVED", value: 250, netValue: 244.54, paymentDate: "2026-09-09",
+        split: [{ walletId: "w-fora", totalValue: 212.5 }] },
+    ],
+    carteiras,
+  );
+  const vem = caixa.montarCaixa(
+    [
+      { id: "c", status: "CONFIRMED", value: 159.99, netValue: 154.72, externalReference: "olumier:t2",
+        split: [{ walletId: "w-carol", totalValue: 25.1, status: "PENDING" }, { walletId: "w-sirius", totalValue: 25.1, status: "PENDING" }] },
+      { id: "r", status: "RECEIVED", value: 99, netValue: 97, externalReference: "olumier:t3" },
+    ],
+    carteiras,
+    new Set(["CONFIRMED"]),
+  );
+  const r = caixa.resumirSociedade(recebidos, vem);
+  igual(
+    r.socios.map((x) => [x.nome, x.donoDaConta, x.totalCentavos, x.aReceberCentavos]),
+    [["Felipe", true, 2422 + 1965, 5020], ["Carol", false, 1211 + 1963, 2510], ["Sirius", false, 1211 + 1963, 2510]],
+    "os três",
+  );
+  igual(r.liquidoCentavos, 7900 + 5891, "o líquido é só dos produtos");
+  igual(r.reservaCentavos, 7900 - 2422 - 2422, "a reserva da Galeria");
+  igual(r.socios.reduce((t, x) => t + x.totalCentavos, 0) + r.reservaCentavos, r.liquidoCentavos, "fecha");
+  igual(r.foraDaSociedade, { pagamentos: 1, liquidoCentavos: 24454, repassadoCentavos: 21250, naContaCentavos: 3204 }, "fora");
+  igual(r.outrasCarteirasCentavos, 0, "a carteira do outro negócio não conta como da sociedade");
 });
 
 // ---------------------------------------------------------------------------

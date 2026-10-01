@@ -6,7 +6,7 @@ import { formatarBytes } from "@/lib/tenants";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { precisaConfirmarEmail } from "@/lib/confirmacao-email";
 import { listarMedias } from "@/lib/medias";
-import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { enderecoDaMiniatura } from "@/lib/miniaturas-assinadas";
 import { CAPITULOS_SUGERIDOS, listarSecoes } from "@/lib/secoes";
 import { resumoDaGaleria } from "@/lib/favoritas";
 import { downloadsPorFoto } from "@/lib/galerias-publicas";
@@ -16,8 +16,11 @@ import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
 import { EditorSecoes } from "@/components/editor-secoes";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 
-export const metadata: Metadata = { title: "Fotos da galeria" };
+export const metadata: Metadata = { title: "Fotos e vídeos da galeria" };
 export const dynamic = "force-dynamic";
+
+/** Ladrilhos que cabem numa tela grande (10 colunas × 8 linhas). */
+const PRIMEIRA_TELA = 80;
 
 /**
  * A aba FOTOS — o trabalho em si, e por isso a aba padrão.
@@ -53,7 +56,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
   const repetidas = await fotosRepetidas(galeria.id);
 
   const exibidas: MediaExibida[] = await Promise.all(
-    medias.map(async (m) => ({
+    medias.map(async (m, i) => ({
       id: m.id,
       nome: m.nome_original,
       tipo: m.tipo,
@@ -61,25 +64,27 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       secaoId: m.secao_id,
       favoritas: favoritas.porMedia.get(m.id) ?? 0,
       baixadas: baixadas.get(m.id) ?? 0,
-      url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), 3600),
-      /*
-       * ── O FILME PRECISA DO ENDEREÇO DELE (29/09/2026) ──────────────────
-       *
-       * `url` sai de `urlDaDerivada`, que devolve a MINIATURA quando ela
-       * existe. A grade desenhava `<video src={url}>` com isso — ou seja, o
-       * player recebia um WebP. Vídeo com capa não tocava no painel, e os
-       * únicos que tocavam eram os que estavam SEM capa: a inversão perfeita.
-       * Em produção, 44 dos 46 vídeos tinham capa gravada.
-       *
-       * Agora são dois endereços para duas coisas: `urlFilme` no `src`,
-       * `url` no `poster`. Só para vídeo — assinar o original de toda foto
-       * dobraria as assinaturas da aba sem ninguém usar a segunda.
-       */
-      urlFilme:
-        m.tipo === "video"
-          ? await urlDoOriginal(m.chave, armazemDe(m.armazem), 3600)
-          : undefined,
+      versao: m.versao,
       temCapa: Boolean(m.chave_thumb),
+      /*
+       * ── SÓ A PRIMEIRA TELA VEM ASSINADA (01/10/2026) ──────────────────
+       *
+       * Juan: "tá tudo bem lagado… cada exclusão / criação de um capítulo
+       * novo tá…". Esta página assinava os endereços de TODAS as mídias a
+       * cada volta do servidor — e toda ação da aba (criar capítulo, mover,
+       * marcar capa) volta ao servidor. Numa galeria de 3.000 fotos eram 1,4
+       * MB de endereços por clique, e assinatura nova é imagem nova: o
+       * navegador baixava de novo as miniaturas da tela.
+       *
+       * Agora vêm só as primeiras, para a grade nascer com imagem; o resto a
+       * grade pede quando o ladrilho chega perto da tela, e guarda. Ver
+       * `lib/miniaturas-do-painel.ts`.
+       *
+       * O vídeo leva dois endereços (`url` é a capa, `urlFilme` o filme —
+       * ver `enderecoDaMiniatura`), e foi por isso que o player do painel
+       * voltou a tocar em 29/09/2026.
+       */
+      ...(i < PRIMEIRA_TELA ? await enderecoDaMiniatura(m) : {}),
     })),
   );
 
@@ -184,7 +189,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
           {/* A mesma régua do `<h2>` do bloco de envio, porque este cartão
               ocupa o lugar dele — duas escalas no mesmo slot fariam a tela
               parecer que trocou de assunto, e não de estado. */}
-          <h2 className="text-sm font-semibold">Confirme seu e-mail para enviar fotos</h2>
+          <h2 className="text-sm font-semibold">Confirme seu e-mail para enviar fotos e vídeos</h2>
           <p className="mt-1.5 max-w-prose text-sm text-texto-soft">
             O link foi para <strong className="font-normal text-texto">{tenant?.email}</strong>. Se
             não chegou, veja o lixo eletrônico — ou peça outro no aviso do topo desta página. Assim
@@ -199,7 +204,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
            nomes — a lista já foi consultada acima, então não custa consulta
            nenhuma, e mandar a mídia inteira para o cliente seria pagar por
            dado que ele não usa. */
-        nomesNaGaleria={medias.map((m) => m.nome_original)}
+        arquivosNaGaleria={medias.map((m) => ({ nome: m.nome_original, bytes: Number(m.bytes) }))}
       />
       )}
 
@@ -215,7 +220,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
         que ESTÁ nela, e some quando não há repetida — aviso permanente vira
         mobília.
       */}
-      <AvisoDeRepetidas itens={repetidas} />
+      <AvisoDeRepetidas galeriaId={galeria.id} itens={repetidas} />
 
       <GradeMedias
         medias={exibidas}

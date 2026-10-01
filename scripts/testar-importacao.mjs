@@ -178,6 +178,23 @@ await etapa("as partes de uma coleção viram UMA galeria", () => {
   igual(imp.nomeDoZip("Ana e Pedro_part1.zip"), "Ana e Pedro", "_part1");
   igual(imp.nomeDoZip("Ana e Pedro (2).zip"), "Ana e Pedro", "(2)");
   igual(imp.nomeDoZip("Ensaio-2.zip"), "Ensaio-2", "o -2 solto fica");
+  /* Pixieset, 01/10/2026: três partes de uma galeria só, e fotos e vídeos em ZIPs separados. */
+  igual(imp.nomeDoZip("miristraidecor-photo-download-1of3.zip"), "miristraidecor", "pixieset 1of3");
+  igual(imp.nomeDoZip("miristraidecor-photo-download-3of3.zip"), "miristraidecor", "pixieset 3of3");
+  igual(imp.nomeDoZip("miristraidecor-video-download.zip"), "miristraidecor", "pixieset vídeo");
+  igual(imp.nomeDoZip("Ana e Pedro 2 de 3.zip"), "Ana e Pedro", "n de m sem part");
+  igual(imp.nomeDoZip("Casamento 2019.zip"), "Casamento 2019", "ano no fim fica");
+  igual(imp.nomeDoZip("Festa 15 de 2025.zip"), "Festa 15 de 2025", "dia de ano não é parte");
+
+  const px = ["1of3", "2of3", "3of3"].map((n, k) =>
+    imp.fonteDoZip(`miristraidecor-photo-download-${n}.zip`, [doZip(`IMG_${k}.jpg`, 3)], k),
+  );
+  const pxv = imp.fonteDoZip("miristraidecor-video-download.zip", [doZip("filme.mp4", 9)], 3);
+  const juntas = imp.montarGalerias(
+    [...px, pxv].map((fonte) => ({ fonte, titulo: fonte.nomeSugerido, data: "", incluir: true })),
+  );
+  igual(juntas.length, 1, "as três partes e o vídeo do pixieset numa galeria");
+  igual(juntas[0].itens.length, 4, "arquivos das quatro partes");
 
   const p1 = imp.fonteDoZip("Ana e Pedro - Part 1.zip", [doZip("Ceremony/a.jpg", 5)], 0);
   const p2 = imp.fonteDoZip("Ana e Pedro - Part 2.zip", [doZip("Party/b.jpg", 7)], 1);

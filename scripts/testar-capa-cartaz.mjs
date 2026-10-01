@@ -110,23 +110,37 @@ await etapa("não tem véu nenhum por cima da foto", () => {
 
 await etapa("o texto fica FORA da foto, e não por cima dela", () => {
   /*
-   * A asserção que separa o cartaz da imersa mecanicamente: na imersa a `<img>`
-   * é `absolute inset-0` e o texto flutua sobre ela; no cartaz a foto é um
-   * irmão em fluxo, e o texto vem depois.
+   * A asserção que separa o cartaz da imersa mecanicamente: na imersa a foto
+   * cobre o cabeçalho inteiro e o texto flutua sobre ela; no cartaz a foto
+   * mora numa CAIXA SÓ DELA, e o texto vem depois da caixa.
    *
-   * Comparar a POSIÇÃO do título com a da foto na string seria frágil — uma
-   * `div` aninhada a mais e a conta muda. Já "a foto não é absoluta" não
-   * depende de ordem nenhuma: sem `absolute` não existe texto por cima.
+   * Até 01/10/2026 a prova era "a `<img>` não é absoluta". Deixou de ser: a
+   * foto passou a ser `absolute` DENTRO da própria caixa, porque em fluxo a
+   * altura natural dela esticava o cabeçalho (ver o passo seguinte). O que
+   * importa continua o mesmo — nada de texto dentro da caixa da foto.
+   */
+  const caixa = b.match(/<div class="relative[^"]*"><img[^>]*><\/div>/)?.[0] ?? "";
+  if (!caixa) throw new Error("a foto não está numa caixa só dela — o texto pode cair por cima");
+  if (!/flex-1/.test(caixa)) throw new Error("a caixa da foto não fica com o que sobra do cabeçalho");
+  const depois = b.slice(b.indexOf(caixa) + caixa.length);
+  if (!/<h1/.test(depois)) throw new Error("o título não vem depois da foto");
+  return "foto na caixa dela, texto depois";
+});
+
+await etapa("a foto não decide a altura da capa", () => {
+  /*
+   * Juan, 01/10/2026: "Cartaz no formato 'pastas' tá bugado". Em 1440×900,
+   * com a capa em pé, o cabeçalho saía com 2.380 px: a `<img>` em fluxo dentro
+   * de um cabeçalho que só tem altura MÍNIMA cresce até a proporção dela, e o
+   * `min-h-0` não segura. Com a foto `absolute` numa caixa, ela não tem altura
+   * própria — quem manda é `--g-capa-h`.
    */
   const img = b.match(/<img[^>]*>/)?.[0] ?? "";
-  if (!img) throw new Error("não achei a <img> do cartaz");
-  if (/\babsolute\b/.test(img)) {
-    throw new Error("a foto é absoluta — o texto volta a flutuar sobre ela, como na imersa");
+  if (!/\babsolute inset-0\b/.test(img) || !/\bh-full\b/.test(img)) {
+    throw new Error("a foto voltou a ter altura própria — numa tela larga ela estica a capa");
   }
-  if (/absolute inset-0/.test(b)) {
-    throw new Error("há uma camada absoluta cobrindo a foto");
-  }
-  return "foto em fluxo, texto depois";
+  if (/\bflex-1\b/.test(img)) throw new Error("a foto é o item flex de novo");
+  return "a caixa manda, a foto preenche";
 });
 
 await etapa("a altura sai do eixo, e não de um número cravado", () => {

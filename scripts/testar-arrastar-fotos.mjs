@@ -38,7 +38,8 @@
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
-import { moverMediaNaOrdem } from "../src/lib/medias.ts";
+import { moverMediaNaOrdem, moverBlocoNaOrdem } from "../src/lib/medias.ts";
+import { moverBloco } from "../src/lib/ordem-em-bloco.ts";
 
 await exigirBancoDeTeste();
 
@@ -153,6 +154,91 @@ await etapa("foto de outra galeria não entra nesta", async () => {
   await arrumar();
   const antes = await sequencia();
   await moverMediaNaOrdem(g.id, tenantId, vizinha.midias[0].id, id(2));
+  const depois = await sequencia();
+  if (depois !== antes) throw new Error(`mexeu: ${antes} virou ${depois}`);
+  return "intocada";
+});
+
+/*
+ * ── VÁRIAS DE UMA VEZ (01/10/2026) ────────────────────────────────────────
+ *
+ * Vitória: "gosto de selecionar minhas favoritas e colocar como as primeiras
+ * da galeria — mas quando arrastei só deu pra fazer de uma em uma". As
+ * marcadas andam juntas, na ordem que já tinham, para ANTES da foto onde
+ * foram soltas — ou para o início ou o fim, pelos botões da barra.
+ */
+console.log("\nVárias de uma vez:\n");
+
+await etapa("a regra: antes da foto de destino, nos dois sentidos, sem inverter as marcadas", () => {
+  const o = ["0", "1", "2", "3", "4", "5", "6"];
+  const casos = [
+    [["5", "2"], "inicio", "2,5,0,1,3,4,6"],
+    [["0", "3"], "fim", "1,2,4,5,6,0,3"],
+    [["0", "1"], "4", "2,3,0,1,4,5,6"], // descendo: antes da 4
+    [["5", "6"], "1", "0,5,6,1,2,3,4"], // subindo: antes da 1
+    [["1", "4"], "3", "0,2,1,4,3,5,6"], // uma de cada lado do destino
+    [["2", "3"], "3", "0,1,2,3,4,5,6"], // soltou numa das próprias marcadas
+    [["x"], "inicio", "0,1,2,3,4,5,6"], // nada desta galeria
+  ];
+  for (const [bloco, destino, esperado] of casos) {
+    const r = moverBloco(o, bloco, destino).join(",");
+    if (r !== esperado) throw new Error(`${bloco} → ${destino}: ${r}, esperava ${esperado}`);
+  }
+  return `${casos.length} casos`;
+});
+
+await etapa("no banco: as favoritas vão para o início, e nenhuma some", async () => {
+  await arrumar();
+  await moverBlocoNaOrdem(g.id, tenantId, [id(3), id(1)], "inicio");
+  const seq = await sequencia();
+  /* Marcadas na ordem 3, 1 — e vão na ordem que já tinham na galeria: 1, 3. */
+  const esperado = ["1", "3", "0", "2", "4"].map((n) => g.midias[Number(n)].nome_original.match(/-(\d+)\.jpg$/)[1]).join(",");
+  if (seq !== esperado) throw new Error(`${seq}, esperava ${esperado}`);
+  return seq;
+});
+
+await etapa("no banco: para o fim, e para antes de uma foto do meio", async () => {
+  const nomeDe = (ns) => ns.map((n) => g.midias[n].nome_original.match(/-(\d+)\.jpg$/)[1]).join(",");
+  await arrumar();
+  await moverBlocoNaOrdem(g.id, tenantId, [id(0), id(2)], "fim");
+  let seq = await sequencia();
+  if (seq !== nomeDe([1, 3, 4, 0, 2])) throw new Error(`fim: ${seq}`);
+  await arrumar();
+  await moverBlocoNaOrdem(g.id, tenantId, [id(4), id(0)], id(2));
+  seq = await sequencia();
+  if (seq !== nomeDe([1, 0, 4, 2, 3])) throw new Error(`antes da 2: ${seq}`);
+  return "fim e meio";
+});
+
+await etapa("no banco: a mesma conta da tela (a pré-visualização não pula)", async () => {
+  await arrumar();
+  const { rows } = await db.query("select id from medias where galeria_id = $1 order by ordem, criado_em", [g.id]);
+  const naTela = moverBloco(rows.map((r) => r.id), [id(1), id(3)], id(0)).join(",");
+  await moverBlocoNaOrdem(g.id, tenantId, [id(1), id(3)], id(0));
+  const { rows: depois } = await db.query("select id from medias where galeria_id = $1 order by ordem, criado_em", [g.id]);
+  if (depois.map((r) => r.id).join(",") !== naTela) throw new Error("o banco gravou outra ordem que a da tela");
+  return "iguais";
+});
+
+await etapa("no banco: ordem repetida (galeria antiga) é renumerada, sem embaralhar", async () => {
+  await arrumar();
+  await db.query("update medias set ordem = 0 where galeria_id = $1", [g.id]);
+  const { rows: antes } = await db.query("select id from medias where galeria_id = $1 order by ordem, criado_em, id", [g.id]);
+  const esperado = moverBloco(antes.map((r) => r.id), [antes[4].id], "inicio").join(",");
+  await moverBlocoNaOrdem(g.id, tenantId, [antes[4].id], "inicio");
+  const { rows } = await db.query("select id, ordem from medias where galeria_id = $1 order by ordem, criado_em, id", [g.id]);
+  if (rows.map((r) => r.id).join(",") !== esperado) throw new Error("embaralhou");
+  if (new Set(rows.map((r) => r.ordem)).size !== rows.length) throw new Error("continuou com ordem repetida");
+  return "0..4, na ordem pedida";
+});
+
+await etapa("no banco: estúdio errado e foto de outra galeria não movem nada", async () => {
+  await arrumar();
+  const antes = await sequencia();
+  await moverBlocoNaOrdem(g.id, crypto.randomUUID(), [id(4)], "inicio");
+  const vizinha = await galeriaDaRodada(db, { nome: "bloco-vizinha", medias: 1 });
+  await moverBlocoNaOrdem(g.id, tenantId, [vizinha.midias[0].id], "inicio");
+  await moverBlocoNaOrdem(g.id, tenantId, [id(4)], vizinha.midias[0].id);
   const depois = await sequencia();
   if (depois !== antes) throw new Error(`mexeu: ${antes} virou ${depois}`);
   return "intocada";

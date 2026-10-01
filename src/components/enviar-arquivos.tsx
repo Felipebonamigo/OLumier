@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   PARALELOS,
   type ArquivoComCaminho,
   arquivosDeArrasto,
   comCaminhoDoInput,
   separarRepetidos,
+  type ArquivoConhecido,
 } from "@/lib/fila-upload";
 import { useEnvio } from "@/components/envio-em-curso";
 
@@ -27,13 +28,13 @@ export interface SecaoDestino {
 export function EnviarArquivos({
   secoes,
   rostosAtivos,
-  nomesNaGaleria,
+  arquivosNaGaleria,
 }: {
   secoes: SecaoDestino[];
   /** A busca por rosto está ligada: cada foto é medida durante o envio. */
   rostosAtivos: boolean;
   /** Nomes de arquivo que já estão na galeria — a base da pergunta de repetido. */
-  nomesNaGaleria: string[];
+  arquivosNaGaleria: ArquivoConhecido[];
 }) {
   const [arrastando, setArrastando] = useState(false);
   const [destino, setDestino] = useState("");
@@ -67,7 +68,7 @@ export function EnviarArquivos({
   /*
    * ── E A FILA DESTA SESSÃO CONTA (23/09/2026) ───────────────────────────
    *
-   * `nomesNaGaleria` é o retrato que o SERVIDOR desenhou quando a página
+   * `arquivosNaGaleria` é o retrato que o SERVIDOR desenhou quando a página
    * carregou, e quem o atualiza é o `router.refresh()` que só roda depois de a
    * fila ESVAZIAR. Num envio de 180 fotos, que leva minutos, soltar a mesma
    * pasta de novo no meio passava direto pela pergunta — e a foto entrava duas
@@ -81,16 +82,15 @@ export function EnviarArquivos({
    * Os que deram ERRO ficam de fora: nenhuma linha nasceu para eles, então
    * reenviar é legítimo e não merece diálogo no caminho.
    */
-  const jaConhecidos = useMemo(
-    () => [
-      ...nomesNaGaleria,
-      ...envio.fila.filter((i) => i.situacao !== "erro").map((i) => i.nome),
-    ],
-    [nomesNaGaleria, envio.fila],
-  );
-
+  /* Montada só na hora de soltar os arquivos: era um `useMemo` que dependia
+     da fila, e a fila muda a cada progresso — 8.000 nomes copiados dezenas
+     de vezes por segundo num envio de 4.000, para uma pergunta feita uma vez. */
   function conferirEEnviar(brutos: ArquivoComCaminho[]) {
     if (brutos.length === 0) return;
+    const jaConhecidos: ArquivoConhecido[] = [
+      ...arquivosNaGaleria,
+      ...envio.fila.filter((i) => i.situacao !== "erro").map((i) => ({ nome: i.nome, bytes: i.bytes })),
+    ];
     const { novos, repetidos } = separarRepetidos(brutos, jaConhecidos);
     if (repetidos.length === 0) mandar(brutos);
     else setPergunta({ novos, repetidos });
@@ -122,7 +122,7 @@ export function EnviarArquivos({
         some no celular.
       */}
       <h2 id="titulo-envio" className="text-sm font-semibold">
-        Enviar fotos
+        Enviar fotos e vídeos
       </h2>
       <p className="mt-0.5 text-xs text-texto-faint">
         Daqui as fotos e os vídeos vão direto do seu navegador para o armazenamento — sem passar
@@ -131,7 +131,7 @@ export function EnviarArquivos({
 
       {secoes.length > 0 && (
         <label className="mb-3 mt-4 flex flex-wrap items-center gap-2 text-sm">
-          {/* "Para" e não "Enviar para": com o `<h2>Enviar fotos</h2>` uma
+          {/* "Para" e não "Enviar para": com o `<h2>Enviar fotos e vídeos</h2>` uma
               linha acima, o verbo repetido é o eco que o Felipe chamou de feio.
               Sob o título, o rótulo continua inequívoco. */}
           <span className="text-texto-soft">Para o capítulo:</span>
@@ -266,8 +266,8 @@ export function EnviarArquivos({
           <p className="text-sm font-medium text-alerta">
             {pergunta.repetidos.length}{" "}
             {pergunta.repetidos.length === 1
-              ? "arquivo tem nome igual ao de um que já está na galeria"
-              : "arquivos têm nome igual ao de outros que já estão na galeria"}
+              ? "arquivo já está na galeria — mesmo nome e mesmo tamanho"
+              : "arquivos já estão na galeria — mesmo nome e mesmo tamanho"}
           </p>
           <p className="mt-1 text-xs text-texto-soft">
             {pergunta.repetidos
@@ -296,7 +296,7 @@ export function EnviarArquivos({
               disabled={pergunta.novos.length === 0}
               className="rounded-lg bg-acento px-3 py-1.5 text-xs font-semibold text-void transition hover:bg-acento-alto disabled:opacity-50"
             >
-              Ignorar as repetidas e enviar {pergunta.novos.length}
+              Pular esses e enviar {pergunta.novos.length}
             </button>
             <button
               type="button"

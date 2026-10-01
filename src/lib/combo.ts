@@ -9,6 +9,8 @@ import {
   planoEntraNoCombo,
   descontoDaGaleriaCentavos,
   descricaoDaAssinatura,
+  ehDoPacote,
+  ehFaixaAtomatiza,
   faixaDaDescricaoAtomatiza,
   precoDoCicloComComboCentavos,
   type FaixaAtomatiza,
@@ -20,6 +22,7 @@ import {
   buscarAssinatura,
   buscarCliente,
   clientesDoDocumento,
+  ehDoPacoteUnico,
   temCobrancaPaga,
   temCobrancaVencida,
 } from "@/lib/asaas";
@@ -114,12 +117,14 @@ export async function diagnosticarAtomatiza(documento: string, plano?: Plano): P
         vista.foraPorque = "a descrição não diz a faixa (solo, equipe ou estúdio)";
         continue;
       }
-      if (!(await temCobrancaPaga(a.id))) {
-        vista.foraPorque = "nenhuma cobrança paga ainda (teste ou primeira fatura em aberto)";
-        continue;
-      }
+      /* Vencida primeiro: vale também para o pacote, que conta antes do
+       * primeiro pagamento só enquanto não vence (`docs/pacote.md`). */
       if (await temCobrancaVencida(a.id)) {
         vista.foraPorque = "tem cobrança vencida";
+        continue;
+      }
+      if (!ehDoPacote(a.description) && !(await temCobrancaPaga(a.id))) {
+        vista.foraPorque = "nenhuma cobrança paga ainda (teste ou primeira fatura em aberto)";
         continue;
       }
       achadas.push(faixa);
@@ -188,9 +193,15 @@ export async function recalcularCombo(tenantId: string, motivo: string): Promise
   if (!plano) return null;
   const ciclo = cicloDe(tenant.ciclo_cobranca);
 
-  const faixa = await faixaDoAtomatiza(tenant.cpf_cnpj, plano);
   const assinatura = await buscarAssinatura(tenant.asaas_assinatura_id);
   if (assinatura.deleted || assinatura.status !== "ACTIVE") return null;
+  /* A FATURA ÚNICA DO PACOTE (`docs/pacote.md`) já cobra o preço do combo, e é
+   * dos dois produtos: mexer no valor dela daqui cobraria o Atomatiza errado. */
+  if (ehDoPacoteUnico(assinatura.externalReference)) {
+    const cobrado = Math.round(Number(assinatura.value) * 100);
+    return { faixa: ehFaixaAtomatiza(tenant.combo_atomatiza) ? tenant.combo_atomatiza : null, antesCentavos: cobrado, depoisCentavos: cobrado, mudou: false };
+  }
+  const faixa = await faixaDoAtomatiza(tenant.cpf_cnpj, plano);
 
   const antes = Math.round(Number(assinatura.value) * 100);
   const depois = precoDoCicloComComboCentavos(plano, ciclo, faixa);
@@ -209,7 +220,7 @@ export async function recalcularCombo(tenantId: string, motivo: string): Promise
       planoId: plano.id,
       precoCentavos: depois,
       ciclo,
-      descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa),
+      descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa, ehDoPacote(assinatura.description)),
       atualizarPendentes: depois < antes,
     });
     await registrarEvento({
@@ -278,6 +289,8 @@ export interface DiagnosticoDoCombo {
   /** O que ela deveria cobrar, com ou sem combo. */
   valorCertoCentavos: number;
   assinaturasDoAtomatiza: AssinaturaVistaDoAtomatiza[];
+  /** Assinatura da fatura única do pacote (`docs/pacote.md`). */
+  pacote?: boolean;
 }
 
 /**
@@ -309,6 +322,19 @@ export async function diagnosticarCombo(tenantId: string): Promise<DiagnosticoDo
     if (!a.deleted) valorAtualCentavos = Math.round(Number(a.value) * 100);
   }
 
+  if (tenant.pacote_atomatiza_id && ehFaixaAtomatiza(tenant.combo_atomatiza)) {
+    return {
+      ...base,
+      faixa: tenant.combo_atomatiza,
+      motivo: null,
+      descontoMensalCentavos: descontoDaGaleriaCentavos(plano, tenant.combo_atomatiza),
+      valorAtualCentavos,
+      /* O valor da fatura única é o TOTAL dos dois produtos: é ele mesmo o certo. */
+      valorCertoCentavos: valorAtualCentavos ?? 0,
+      assinaturasDoAtomatiza: [],
+      pacote: true,
+    };
+  }
   const atomatiza = await diagnosticarAtomatiza(tenant.cpf_cnpj ?? "", plano);
   const desconto = descontoDaGaleriaCentavos(plano, atomatiza.faixa);
   let motivo = atomatiza.motivo;

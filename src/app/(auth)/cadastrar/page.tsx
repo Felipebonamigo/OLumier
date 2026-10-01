@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
+import { METADADOS_DO_APP } from "@/config/app-instalado";
 import { MINIMO_SENHA } from "@/lib/senha";
 import Link from "next/link";
 import { MarcaLockup } from "@/components/marca-tile";
 import { marca } from "@/config/marca";
 import { FormCadastrar } from "./form";
 
-export const metadata: Metadata = { title: "Criar conta" };
+/* O ícone da tela de início e o app — ver `config/app-instalado.ts`. */
+export const metadata: Metadata = { title: "Criar conta", ...METADADOS_DO_APP };
 
 export default function CadastrarPage() {
   return (

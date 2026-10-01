@@ -44,6 +44,17 @@ export const SOCIOS: Socio[] = [
 ];
 
 /**
+ * DE QUEM É A CONTA PRINCIPAL DO ASAAS — a que cobra os dois produtos.
+ *
+ * O Asaas não aceita split para a própria carteira (`lib/asaas.ts`), então a
+ * fatia do dono nunca sai como repasse: ela simplesmente fica na conta. Felipe,
+ * 30/09/2026, quando o caixa dos sócios mostrou "Felipe R$ 0,00": "o restante
+ * já fica no meu Asaas, conta principal". O caixa usa isto para mostrar a parte
+ * dele em vez de zero (`lib/caixa-dos-socios.ts`).
+ */
+export const DONO_DA_CONTA_PRINCIPAL = "felipe";
+
+/**
  * Folga sobre o custo teto: cobre alta do dólar sem comer o lucro dos sócios.
  *
  * Uma só desde a unificação do plano (25/08/2026). Antes eram duas — 1,3 para a

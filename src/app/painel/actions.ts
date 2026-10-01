@@ -29,22 +29,16 @@ import {
 } from "@/lib/estilos-do-estudio";
 import { aparenciaComFormato, type Aparencia } from "@/config/aparencia";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
-import { descricaoDaAssinatura, precoDoCicloComComboCentavos, descontoDaGaleriaCentavos } from "@/config/combo";
-import { faixaDoAtomatiza } from "@/lib/combo";
-import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
+import { assinarTenant, escolherPlanoAntesDeAssinar } from "@/lib/assinar";
+import { assinarPacote, acrescentarAtomatiza } from "@/lib/pacote";
+import { ehFaixaAtomatiza } from "@/config/combo";
+import { cotarTroca, trocarPlano, RECADO_DO_PACOTE } from "@/lib/troca-de-plano";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
 import { planoPorId, cicloDe, formatarReais } from "@/config/planos";
 import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
-import {
-  asaasConfigurado,
-  garantirCliente,
-  criarAssinatura,
-  cancelarAssinatura,
-} from "@/lib/asaas";
-import { conferirDocumento, soDigitos } from "@/lib/documento";
-import { documentoEmUso } from "@/lib/cadastro";
+import { cancelarAssinatura } from "@/lib/asaas";
 import { enviarConfirmacao } from "@/lib/confirmacao-email";
 import { situacaoDoTenant } from "@/lib/assinatura";
 import { anotarDevolucao, cotarCancelamento, PRAZO_DA_DEVOLUCAO } from "@/lib/devolucao";
@@ -75,6 +69,8 @@ import {
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
 import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
+import { fotosDaPasta, type FotoDaPasta } from "@/lib/entrega-no-design";
+import { definirTituloDoVideo } from "@/lib/medias";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -444,6 +440,34 @@ export async function definirCapaDaPastaAction(form: FormData): Promise<{ ok: bo
   return { ok };
 }
 
+/**
+ * As fotos de uma pasta, uma página por vez, para escolher a capa dela na aba
+ * Design. Ver `fotosDaPasta` em `lib/entrega-no-design.ts`.
+ */
+export async function fotosDaPastaAction(
+  galeriaId: string,
+  secaoId: string,
+  desde: number,
+): Promise<{ fotos: FotoDaPasta[]; mais: boolean }> {
+  const tenantId = await exigirTenant();
+  if (!galeriaId || !secaoId) return { fotos: [], mais: false };
+  return fotosDaPasta(galeriaId, tenantId, secaoId, Number(desde) || 0);
+}
+
+/**
+ * O nome do vídeo na tela do Stream (migração 055). Vazio volta ao nome
+ * tirado do arquivo. Ver `definirTituloDoVideo`.
+ */
+export async function renomearVideoAction(form: FormData): Promise<{ ok: boolean }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const mediaId = String(form.get("media_id") ?? "");
+  if (!galeriaId || !mediaId) return { ok: false };
+  const ok = await definirTituloDoVideo(galeriaId, tenantId, mediaId, String(form.get("titulo") ?? ""));
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  return { ok };
+}
+
 // --- seleção do álbum -------------------------------------------------------
 
 /**
@@ -679,94 +703,80 @@ export async function criarAssinaturaAction(
    * de NÃO guardar o cartão de quem não pediu. Ver `config/forma-assinatura.ts`.
    */
   escolhaDaForma?: unknown,
+  /* O tamanho escolhido no formulário. Ausente → o plano que a conta já tem. */
+  planoIdBruto?: unknown,
 ): Promise<{ erro?: string } | void> {
-  const ciclo = cicloDe(cicloBruto);
   const tenantId = await exigirTenant();
-
-  if (!asaasConfigurado()) return { erro: "A cobranca ainda nao foi ligada." };
-
-  const tenant = await buscarTenantPorId(tenantId);
-  if (!tenant) return { erro: "Conta nao encontrada." };
-  if (tenant.asaas_assinatura_id) return; // ja tem
-
-  const plano = planoPorId(tenant.plano_id);
-  if (!plano) return { erro: "Plano invalido." };
-
-  // O Asaas recusa cliente sem CPF/CNPJ. Conferir aqui em vez de deixar a API
-  // devolver erro em inglês que não diz à pessoa o que fazer.
-  const doc = soDigitos(documento || tenant.cpf_cnpj || "");
-  const problema = conferirDocumento(doc);
-  if (problema) return { erro: problema };
-  /* Um documento, uma conta (migração 045) — também aqui, senão a conta antiga
-   * sem CPF assinaria com o documento de outra. Antes do Asaas, para não abrir
-   * cliente lá com um documento que não vai ficar gravado aqui. */
-  if (await documentoEmUso(doc, tenantId)) {
-    return {
-      erro: `Esse CPF/CNPJ já está em outra conta. Fale com a gente pelo WhatsApp ${marca.whatsappVisivel} para juntar as duas.`,
-    };
-  }
-
   try {
-    const cliente = await garantirCliente({
-      tenantId,
-      nome: tenant.nome_estudio,
-      email: tenant.email,
-      cpfCnpj: doc,
-    });
-
-    // Guardar só depois do Asaas aceitar: documento recusado não deve ficar
-    // gravado como se fosse válido.
-    await consultar("update tenants set cpf_cnpj = $1, atualizado_em = now() where id = $2", [
-      doc,
-      tenantId,
-    ]);
-
-    // Primeiro vencimento quando o teste acabar; se ja acabou, em 3 dias.
-    const fimTrial = tenant.trial_ate ? new Date(tenant.trial_ate) : new Date();
-    const minimo = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-    const vencimento = fimTrial > minimo ? fimTrial : minimo;
-
-    /*
-     * O COMBO COM O ATOMATIZA (28/09/2026). Quem já assina o Atomatiza com o
-     * mesmo CPF/CNPJ entra aqui com a metade do desconto da Galeria — a outra
-     * metade o Atomatiza aplica na assinatura de lá, quando esta for paga. Sem
-     * resposta do Asaas, a assinatura nasce no preço cheio e a conferência do
-     * primeiro pagamento acerta: nunca travar a assinatura por causa do
-     * desconto. Ver `lib/combo.ts`.
-     */
-    const faixa = await faixaDoAtomatiza(doc, plano).catch(() => null);
-
-    /* O preço da fatura é o do CICLO: no anual são dez mensalidades cobradas de
-     * uma vez. A grade continua guardando só o mensal — o anual é derivado,
-     * nunca uma segunda tabela para dessincronizar. */
-    const precoDoCiclo = precoDoCicloComComboCentavos(plano, ciclo, faixa);
-
-    const assinatura = await criarAssinatura({
-      clienteAsaasId: cliente.id,
-      tenantId,
-      planoId: plano.id,
-      precoCentavos: precoDoCiclo,
-      ciclo,
-      descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa),
-      primeiroVencimento: vencimento,
+    const recusa = await escolherPlanoAntesDeAssinar(tenantId, planoIdBruto, await ipDaRequisicao());
+    if (recusa) return { erro: recusa };
+    const r = await assinarTenant(tenantId, {
+      documento,
+      ciclo: cicloDe(cicloBruto),
       forma: formaDaAssinatura(escolhaDaForma),
     });
-
-    /* O ciclo é gravado JUNTO com o id da assinatura, na mesma escrita. Se
-     * ficasse para depois, uma falha no meio deixaria uma assinatura anual
-     * marcada como mensal — e a próxima troca de plano recalcularia o split com
-     * reserva de um mês, mandando embora o dinheiro dos outros onze. */
-    await consultar(
-      `update tenants
-          set asaas_cliente_id = $1, asaas_assinatura_id = $2, ciclo_cobranca = $3,
-              combo_atomatiza = $4, assinatura_criada_em = now(), atualizado_em = now()
-        where id = $5`,
-      [cliente.id, assinatura.id, ciclo, descontoDaGaleriaCentavos(plano, faixa) > 0 ? faixa : null, tenantId],
-    );
-
+    if (!r.ok) return r.jaAssina ? undefined : { erro: r.erro };
     revalidatePath("/painel/conta");
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "nao consegui criar a assinatura" };
+  }
+}
+
+/**
+ * "Assinar o pacote": a Galeria daqui e o Atomatiza pela ponte, no mesmo
+ * clique. A ordem e as regras estão em `lib/pacote.ts` e `docs/pacote.md`.
+ *
+ * `galeriaAssinada` avisa a tela que, mesmo com erro, a assinatura daqui
+ * nasceu — e a página precisa recarregar para mostrar a fatura.
+ */
+export async function assinarPacoteAction(
+  documento: string,
+  cicloBruto: unknown,
+  escolhaDaForma: unknown,
+  faixaBruta: unknown,
+  aceitouTermos: boolean,
+  planoIdBruto?: unknown,
+): Promise<{ erro?: string; galeriaAssinada?: boolean; contaNova?: boolean }> {
+  const tenantId = await exigirTenant();
+  if (!ehFaixaAtomatiza(faixaBruta)) return { erro: "Escolha a faixa do Atomatiza." };
+  try {
+    const recusa = await escolherPlanoAntesDeAssinar(tenantId, planoIdBruto, await ipDaRequisicao());
+    if (recusa) return { erro: recusa };
+    const r = await assinarPacote(tenantId, {
+      faixa: faixaBruta,
+      ciclo: cicloDe(cicloBruto),
+      forma: escolhaDaForma,
+      documento,
+      aceitouTermos: aceitouTermos === true,
+    });
+    revalidatePath("/painel/conta");
+    if (!r.ok) return { erro: r.erro, galeriaAssinada: r.galeriaAssinada };
+    return { contaNova: r.atomatiza.contaNova };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "não consegui assinar o pacote" };
+  }
+}
+
+/** Quem já assina a Galeria acrescenta o Atomatiza, pela ponte. */
+export async function acrescentarAtomatizaAction(
+  cicloBruto: unknown,
+  escolhaDaForma: unknown,
+  faixaBruta: unknown,
+  aceitouTermos: boolean,
+): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  if (!ehFaixaAtomatiza(faixaBruta)) return { erro: "Escolha a faixa do Atomatiza." };
+  try {
+    const r = await acrescentarAtomatiza(tenantId, {
+      faixa: faixaBruta,
+      ciclo: cicloDe(cicloBruto),
+      forma: escolhaDaForma,
+      aceitouTermos: aceitouTermos === true,
+    });
+    revalidatePath("/painel/conta");
+    return r.ok ? {} : { erro: r.erro };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "não consegui acrescentar o Atomatiza" };
   }
 }
 
@@ -854,6 +864,7 @@ export async function cotarCancelamentoAction(): Promise<
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return { erro: "Conta não encontrada." };
   if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+  if (tenant.pacote_atomatiza_id) return { erro: RECADO_DO_PACOTE };
   try {
     const c = await cotarCancelamento(tenant);
     return {
@@ -907,6 +918,7 @@ export async function cancelarAssinaturaAction(
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return { erro: "Conta não encontrada." };
   if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+  if (tenant.pacote_atomatiza_id) return { erro: RECADO_DO_PACOTE };
 
   let devolucao: Awaited<ReturnType<typeof cotarCancelamento>> | null = null;
   if (devolverCentavos !== null) {
@@ -1599,6 +1611,26 @@ export async function moverFotoAction(form: FormData) {
 
   const { moverMediaNaOrdem } = await import("@/lib/medias");
   await moverMediaNaOrdem(galeriaId, tenantId, arrastado, alvo);
+  revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
+ * Várias fotos de uma vez: o arrastar com várias marcadas, e os botões "para o
+ * início" e "para o fim" da barra de seleção. Ver `moverBlocoNaOrdem`.
+ */
+export async function moverFotosAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const ids = String(form.get("media_ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 10_000);
+  const destino = String(form.get("destino") ?? "");
+  if (!galeriaId || ids.length === 0 || !destino) return;
+
+  const { moverBlocoNaOrdem } = await import("@/lib/medias");
+  await moverBlocoNaOrdem(galeriaId, tenantId, ids, destino);
   revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
 }
 

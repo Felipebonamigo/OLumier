@@ -17,9 +17,12 @@
  * é somar o que o Asaas registrou.
  *
  * De que produto é cada pagamento diz o `externalReference`, que os dois
- * sempre preenchem: `olumier:` é da Galeria, `atz:` é do Atomatiza. Pagamento
- * sem nenhum dos dois (uma cobrança lançada à mão no painel do Asaas) fica
- * numa coluna própria, em vez de engordar um dos lados.
+ * sempre preenchem: `olumier:` é da Galeria, `atz:` é do Atomatiza, `pacote:`
+ * é a fatura única dos dois (`docs/pacote.md`). Pagamento sem nenhum deles
+ * (uma cobrança lançada à mão no painel do Asaas) fica numa coluna própria, em
+ * vez de engordar um dos lados. O pacote também tem a sua: o split dele junta
+ * as fatias dos dois produtos numa linha por carteira, e separar de novo seria
+ * inventar número.
  *
  * ── A PORCENTAGEM DE CADA SÓCIO É A QUE ACONTECEU ─────────────────────────
  *
@@ -30,16 +33,36 @@
  * produto. Se o acordo mudar num lado e a configuração não, a diferença
  * aparece aqui.
  *
+ * ── A PARTE DO DONO DA CONTA ───────────────────────────────────────────────
+ *
+ * O Asaas não faz split para a própria carteira, então a fatia do Felipe —
+ * dono da conta principal — nunca aparece como repasse: fica na conta. Lida ao
+ * pé da letra, a tabela dizia "Felipe R$ 0,00" (Juan, 30/09/2026: "Felipe
+ * ganhando 0 reais"). Agora a linha dele mostra a parte que ficou na conta, e
+ * sai da linha da conta principal — a soma continua fechando no líquido:
+ *
+ *   · Galeria: pelo acordo de `config/socios.ts`, a partir do que os outros
+ *     sócios receberam na mesma cobrança (50/25/25: o dobro da Carol). É
+ *     estimativa — o Asaas arredonda cada fatia —, e a página diz isso.
+ *   · Atomatiza: tudo o que não foi repassado. Lá a divisão é sobre a receita,
+ *     sem reserva de custo, e a sobra é a fatia de quem é dono da conta.
+ *   · Pacote e sem produto: nada. No pacote a fatia do Felipe está misturada
+ *     com a reserva da Galeria; o "sem produto" não é dinheiro dos sócios.
+ *
+ * Se um dia o dono tiver carteira própria e receber repasse de verdade num
+ * produto, vale o repasse, e nada é estimado ali.
+ *
  * Tudo em centavos. Sem banco e sem rede: quem busca é `lib/asaas.ts`.
  */
 
-import { SOCIOS, OPERACAO } from "@/config/socios";
+import { SOCIOS, OPERACAO, DONO_DA_CONTA_PRINCIPAL } from "@/config/socios";
 
-export type Sistema = "galeria" | "atomatiza" | "outros";
-export const SISTEMAS: Sistema[] = ["galeria", "atomatiza", "outros"];
+export type Sistema = "galeria" | "atomatiza" | "pacote" | "outros";
+export const SISTEMAS: Sistema[] = ["galeria", "atomatiza", "pacote", "outros"];
 export const NOME_DO_SISTEMA: Record<Sistema, string> = {
   galeria: "Galeria Átomo",
   atomatiza: "Atomatiza",
+  pacote: "Pacote (os dois)",
   outros: "Sem produto",
 };
 
@@ -61,6 +84,9 @@ export interface PagamentoDoAsaas {
   billingType?: string | null;
   paymentDate?: string | null;
   clientPaymentDate?: string | null;
+  /** Quando o cartão foi aprovado. */
+  confirmedDate?: string | null;
+  dateCreated?: string | null;
   estimatedCreditDate?: string | null;
   externalReference?: string | null;
   description?: string | null;
@@ -76,6 +102,8 @@ const REPASSE_QUE_NAO_SAIU = new Set(["CANCELLED", "REFUSED", "BLOCKED_BY_VALUE_
 export function sistemaDaReferencia(referencia: string | null | undefined): Sistema {
   if (referencia?.startsWith("olumier:")) return "galeria";
   if (referencia?.startsWith("atz:")) return "atomatiza";
+  /* O mesmo prefixo nos dois repositórios: `pacote:<galeria>:<estúdio>`. */
+  if (referencia?.startsWith("pacote:")) return "pacote";
   return "outros";
 }
 
@@ -123,9 +151,11 @@ export interface Destino {
   tipo: TipoDoDestino;
   /** Sócio sem carteira configurada aqui: o que é dele não tem como aparecer na linha dele. */
   semCarteira?: boolean;
+  /** O dono da conta principal: a parte dele fica na conta, em vez de sair em repasse. */
+  donoDaConta?: boolean;
 }
 
-const porSistemaZerado = (): Record<Sistema, number> => ({ galeria: 0, atomatiza: 0, outros: 0 });
+const porSistemaZerado = (): Record<Sistema, number> => ({ galeria: 0, atomatiza: 0, pacote: 0, outros: 0 });
 
 export interface NumerosDoSistema {
   pagamentos: number;
@@ -168,7 +198,7 @@ export interface CaixaDoMes {
   pagamentos: LinhaDoPagamento[];
 }
 
-const FORMA: Record<string, string> = {
+export const FORMA: Record<string, string> = {
   PIX: "Pix",
   BOLETO: "Boleto",
   CREDIT_CARD: "Cartão",
@@ -185,10 +215,16 @@ const finalDaCarteira = (w: string) => `Carteira …${w.slice(-6)}`;
  * lista crua. Os três sócios aparecem sempre, mesmo com zero: "a Carol não
  * recebeu nada da Galeria" é informação, e linha que some não diz nada.
  */
-export function montarCaixa(pagamentos: PagamentoDoAsaas[], carteiras: Carteira[]): CaixaDoMes {
+export function montarCaixa(
+  pagamentos: PagamentoDoAsaas[],
+  carteiras: Carteira[],
+  /** Quais status contam. O padrão é o que caiu na conta; o "a receber" passa `CONFIRMED`. */
+  statusQueConta: ReadonlySet<string> = STATUS_RECEBIDO,
+): CaixaDoMes {
   const porSistema: Record<Sistema, NumerosDoSistema> = {
     galeria: numerosZerados(),
     atomatiza: numerosZerados(),
+    pacote: numerosZerados(),
     outros: numerosZerados(),
   };
 
@@ -196,11 +232,26 @@ export function montarCaixa(pagamentos: PagamentoDoAsaas[], carteiras: Carteira[
   const destinos = new Map<string, { destino: Destino; porSistema: Record<Sistema, number> }>();
   for (const s of SOCIOS) {
     const c = carteiras.find((x) => x.tipo === "socio" && x.nome === s.nome);
+    const dono = s.id === DONO_DA_CONTA_PRINCIPAL;
     destinos.set(c ? c.walletId : `socio:${s.id}`, {
-      destino: { chave: s.id, nome: s.nome, tipo: "socio", semCarteira: !c },
+      destino: {
+        chave: s.id,
+        nome: s.nome,
+        tipo: "socio",
+        /* Sem carteira, a parte do dono fica na conta do mesmo jeito: não é falta. */
+        semCarteira: !c && !dono,
+        ...(dono ? { donoDaConta: true } : {}),
+      },
       porSistema: porSistemaZerado(),
     });
   }
+  const dono = [...destinos.values()].find((d) => d.destino.donoDaConta) ?? null;
+  const socioDaCarteira = new Map(
+    carteiras.filter((c) => c.tipo === "socio").map((c) => [c.walletId, SOCIOS.find((s) => s.nome === c.nome)]),
+  );
+  const socioDono = SOCIOS.find((s) => s.id === DONO_DA_CONTA_PRINCIPAL);
+  /** A parte do dono que ficou na conta, por produto (ver o topo do arquivo). */
+  const doDonoNaConta = porSistemaZerado();
   const destinoDe = (walletId: string) => {
     let d = destinos.get(walletId);
     if (!d) {
@@ -220,13 +271,16 @@ export function montarCaixa(pagamentos: PagamentoDoAsaas[], carteiras: Carteira[
   const linhas: LinhaDoPagamento[] = [];
 
   for (const p of pagamentos) {
-    if (!STATUS_RECEBIDO.has(p.status)) continue;
+    if (!statusQueConta.has(p.status)) continue;
     const sistema = sistemaDaReferencia(p.externalReference);
     const bruto = centavos(p.value);
     const liquido = typeof p.netValue === "number" ? centavos(p.netValue) : bruto;
 
     const repasses: LinhaDoPagamento["repasses"] = [];
     let repassado = 0;
+    let donoRecebeu = false;
+    /* A fatia do dono pelo acordo, uma estimativa por sócio que recebeu. */
+    const pelosOutros: number[] = [];
     for (const r of p.split ?? []) {
       if (!r?.walletId) continue;
       const valor = centavosDoRepasse(r, liquido);
@@ -239,6 +293,21 @@ export function montarCaixa(pagamentos: PagamentoDoAsaas[], carteiras: Carteira[
       }
       d.porSistema[sistema] += valor;
       repassado += valor;
+      if (d === dono) donoRecebeu = true;
+      const socio = socioDaCarteira.get(r.walletId);
+      if (socio && socioDono && socio.id !== socioDono.id && socio.percentual > 0) {
+        pelosOutros.push((valor * socioDono.percentual) / socio.percentual);
+      }
+    }
+
+    if (dono && !donoRecebeu) {
+      const ficou = liquido - repassado;
+      let parte = 0;
+      if (sistema === "atomatiza") parte = ficou;
+      else if (sistema === "galeria" && pelosOutros.length > 0) {
+        parte = Math.round(pelosOutros.reduce((t, v) => t + v, 0) / pelosOutros.length);
+      }
+      doDonoNaConta[sistema] += Math.max(0, Math.min(ficou, parte));
     }
 
     const n = porSistema[sistema];
@@ -271,16 +340,36 @@ export function montarCaixa(pagamentos: PagamentoDoAsaas[], carteiras: Carteira[
     .sort((a, b) => ordem[a.destino.tipo] - ordem[b.destino.tipo])
     .map((d) => ({ ...d, totalCentavos: SISTEMAS.reduce((s, k) => s + d.porSistema[k], 0) }));
 
+  /* A parte do dono muda de linha: sai da conta principal e entra na dele. A
+     soma das linhas continua sendo o líquido. */
   const conta = porSistemaZerado();
-  for (const s of SISTEMAS) conta[s] = porSistema[s].naContaCentavos;
+  for (const s of SISTEMAS) conta[s] = porSistema[s].naContaCentavos - doDonoNaConta[s];
+  const linhaDoDono = lista.find((d) => d.destino.donoDaConta);
+  if (linhaDoDono) {
+    for (const s of SISTEMAS) linhaDoDono.porSistema[s] += doDonoNaConta[s];
+    linhaDoDono.totalCentavos = SISTEMAS.reduce((t, k) => t + linhaDoDono.porSistema[k], 0);
+  }
   lista.push({
-    destino: { chave: "conta", nome: "Ficou na conta principal", tipo: "conta" },
+    destino: { chave: "conta", nome: "Reserva de custo e o resto", tipo: "conta" },
     porSistema: conta,
-    totalCentavos: total.naContaCentavos,
+    totalCentavos: SISTEMAS.reduce((t, k) => t + conta[k], 0),
   });
 
   linhas.sort((a, b) => (b.dia ?? "").localeCompare(a.dia ?? ""));
   return { porSistema, total, destinos: lista, repassesQueNaoSairam, pagamentos: linhas };
+}
+
+/** Um pagamento de cartão aprovado, esperando o Asaas liberar. */
+export interface LinhaAReceber {
+  id: string;
+  sistema: Sistema;
+  descricao: string;
+  brutoCentavos: number;
+  liquidoCentavos: number;
+  /** Quando o cartão foi aprovado. */
+  aprovadoEm: string | null;
+  /** Quando o Asaas diz que o dinheiro cai na conta. */
+  caiEm: string | null;
 }
 
 export interface AReceber {
@@ -288,27 +377,80 @@ export interface AReceber {
   totalCentavos: number;
   /** A data de liberação mais distante — até quando o que foi pago no cartão termina de cair. */
   ultimaLiberacao: string | null;
+  /** Cada pagamento, do que cai primeiro para o que cai por último. */
+  pagamentos: LinhaAReceber[];
+  /** Quanto o dinheiro de cada cobrança espera, da aprovação até cair — a média, em dias. */
+  diasAteCair: number | null;
+  /** Quanto cai em cada mês ("2026-10"), em ordem. */
+  porMes: { mes: string; pagamentos: number; liquidoCentavos: number }[];
 }
 
-/** Cartão aprovado que o Asaas ainda não liberou (`CONFIRMED`). */
+const DIA_MS = 86_400_000;
+
+/**
+ * Cartão aprovado que o Asaas ainda não liberou (`CONFIRMED`).
+ *
+ * Juan, 30/09/2026, olhando o total: "é possível esse dado mostrar de onde tá
+ * vindo isso e quantas entradas pendentes de cada plataforma?" — e "quando ele
+ * libera?". Por isso a lista de cada pagamento, com a data que o PRÓPRIO Asaas
+ * informa (`estimatedCreditDate`), e a espera média calculada dessas datas, em
+ * vez de um prazo escrito aqui que pode mudar no contrato com o Asaas.
+ */
 export function somarAReceber(pagamentos: PagamentoDoAsaas[]): AReceber {
   const porSistema = {
     galeria: { pagamentos: 0, liquidoCentavos: 0 },
     atomatiza: { pagamentos: 0, liquidoCentavos: 0 },
+    pacote: { pagamentos: 0, liquidoCentavos: 0 },
     outros: { pagamentos: 0, liquidoCentavos: 0 },
   };
   let total = 0;
   let ultima: string | null = null;
+  const linhas: LinhaAReceber[] = [];
+  const esperas: number[] = [];
+  const meses = new Map<string, { pagamentos: number; liquidoCentavos: number }>();
   for (const p of pagamentos) {
     if (p.status !== "CONFIRMED") continue;
-    const s = porSistema[sistemaDaReferencia(p.externalReference)];
+    const sistema = sistemaDaReferencia(p.externalReference);
+    const s = porSistema[sistema];
     const liquido = typeof p.netValue === "number" ? centavos(p.netValue) : centavos(p.value);
     s.pagamentos += 1;
     s.liquidoCentavos += liquido;
     total += liquido;
-    if (p.estimatedCreditDate && (!ultima || p.estimatedCreditDate > ultima)) ultima = p.estimatedCreditDate;
+    const caiEm = p.estimatedCreditDate?.slice(0, 10) || null;
+    const aprovadoEm = (p.confirmedDate ?? p.clientPaymentDate ?? p.dateCreated)?.slice(0, 10) || null;
+    if (caiEm && (!ultima || caiEm > ultima)) ultima = caiEm;
+    if (caiEm && aprovadoEm) {
+      const dias = Math.round((Date.parse(`${caiEm}T12:00:00Z`) - Date.parse(`${aprovadoEm}T12:00:00Z`)) / DIA_MS);
+      if (Number.isFinite(dias) && dias >= 0) esperas.push(dias);
+    }
+    const chave = caiEm ? caiEm.slice(0, 7) : "";
+    const m = meses.get(chave) ?? { pagamentos: 0, liquidoCentavos: 0 };
+    m.pagamentos += 1;
+    m.liquidoCentavos += liquido;
+    meses.set(chave, m);
+    linhas.push({
+      id: p.id,
+      sistema,
+      descricao: p.description?.trim() || "(sem descrição)",
+      brutoCentavos: centavos(p.value),
+      liquidoCentavos: liquido,
+      aprovadoEm,
+      caiEm,
+    });
   }
-  return { porSistema, totalCentavos: total, ultimaLiberacao: ultima };
+  /* Sem data de liberação vai para o fim: é o que menos se sabe quando cai. */
+  linhas.sort((a, b) => (a.caiEm ?? "9999").localeCompare(b.caiEm ?? "9999") || a.id.localeCompare(b.id));
+  const porMes = [...meses.entries()]
+    .sort(([a], [b]) => (a || "9999").localeCompare(b || "9999"))
+    .map(([mes, v]) => ({ mes, ...v }));
+  return {
+    porSistema,
+    totalCentavos: total,
+    ultimaLiberacao: ultima,
+    pagamentos: linhas,
+    diasAteCair: esperas.length ? Math.round(esperas.reduce((t, d) => t + d, 0) / esperas.length) : null,
+    porMes,
+  };
 }
 
 // --- o mês ------------------------------------------------------------------
@@ -347,4 +489,87 @@ export function nomeDoMes(mes: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+// --- os sócios, um por um ------------------------------------------------------
+
+/** Os produtos da sociedade — o "sem produto" não é dinheiro dos sócios. */
+export const SISTEMAS_DA_SOCIEDADE: Sistema[] = ["galeria", "atomatiza", "pacote"];
+
+export interface ResumoDoSocio {
+  id: string;
+  nome: string;
+  /** A parte dele fica na conta principal, que é dele (ver o topo do arquivo). */
+  donoDaConta: boolean;
+  semCarteira: boolean;
+  /** O que ele levou no mês, por produto da sociedade. */
+  porSistema: Record<Sistema, number>;
+  totalCentavos: number;
+  /** O que vai levar quando o cartão já aprovado cair. */
+  aReceberCentavos: number;
+}
+
+export interface ResumoDaSociedade {
+  socios: ResumoDoSocio[];
+  /** Líquido dos produtos da sociedade (sem o "sem produto"). */
+  liquidoCentavos: number;
+  /** O que ficou na conta além da parte do dono: a reserva de custo da Galeria (e, no pacote, a parte do dono junto). */
+  reservaCentavos: number;
+  /** Repasse dos produtos para carteira que não é de sócio nem do caixa da operação. */
+  outrasCarteirasCentavos: number;
+  /** Caixa da operação, quando existe a carteira. */
+  operacaoCentavos: number;
+  /** O que não é da sociedade: cobranças sem produto na mesma conta do Asaas. */
+  foraDaSociedade: { pagamentos: number; liquidoCentavos: number; repassadoCentavos: number; naContaCentavos: number };
+}
+
+const somaDaSociedade = (porSistema: Record<Sistema, number>) =>
+  SISTEMAS_DA_SOCIEDADE.reduce((t, s) => t + porSistema[s], 0);
+
+/**
+ * O caixa lido por pessoa. Felipe, 01/10/2026, vendo a tabela por carteira:
+ * "as infos dos sócios não estão claras". A tabela misturava os sócios com a
+ * reserva de custo e com dinheiro que nem é da sociedade (uma inscrição de
+ * outro negócio cobrada pela mesma conta), e a porcentagem de cada célula era
+ * sobre o líquido — nunca batia com o acordo. Aqui cada sócio é uma linha:
+ * quanto levou, de qual produto e quanto ainda vem do cartão; o resto do
+ * dinheiro fica separado, com nome.
+ */
+export function resumirSociedade(caixa: CaixaDoMes, aReceber: CaixaDoMes | null): ResumoDaSociedade {
+  const socios: ResumoDoSocio[] = [];
+  let outrasCarteiras = 0;
+  let operacao = 0;
+  for (const d of caixa.destinos) {
+    if (d.destino.tipo === "desconhecida") outrasCarteiras += somaDaSociedade(d.porSistema);
+    if (d.destino.tipo === "operacao") operacao += somaDaSociedade(d.porSistema);
+    if (d.destino.tipo !== "socio") continue;
+    const vem = aReceber?.destinos.find((x) => x.destino.tipo === "socio" && x.destino.chave === d.destino.chave);
+    const porSistema = { ...d.porSistema, outros: 0 };
+    socios.push({
+      id: d.destino.chave,
+      nome: d.destino.nome,
+      donoDaConta: Boolean(d.destino.donoDaConta),
+      semCarteira: Boolean(d.destino.semCarteira),
+      porSistema,
+      totalCentavos: somaDaSociedade(porSistema),
+      aReceberCentavos: vem ? somaDaSociedade(vem.porSistema) : 0,
+    });
+  }
+  const conta = caixa.destinos.find((d) => d.destino.tipo === "conta");
+  const fora = caixa.porSistema.outros;
+  return {
+    socios,
+    liquidoCentavos: somaDaSociedade(
+      Object.fromEntries(SISTEMAS.map((s) => [s, caixa.porSistema[s].liquidoCentavos])) as Record<Sistema, number>,
+    ),
+    reservaCentavos: conta ? somaDaSociedade(conta.porSistema) : 0,
+    outrasCarteirasCentavos: outrasCarteiras,
+    operacaoCentavos: operacao,
+    foraDaSociedade: {
+      pagamentos: fora.pagamentos,
+      liquidoCentavos: fora.liquidoCentavos,
+      repassadoCentavos: fora.repassadoCentavos,
+      naContaCentavos: fora.naContaCentavos,
+    },
+  };
 }

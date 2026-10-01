@@ -37,6 +37,8 @@ import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 import { medirLogo } from "@/lib/logo-client";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
 import { EsquemaDoEstilo, EsquemaDoFormato } from "@/components/esquema-do-formato";
+import { CapasDasPastas, NomesDosVideos } from "@/components/entrega-no-design";
+import type { PastaNoDesign, VideoNoDesign } from "@/lib/entrega-no-design";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -429,6 +431,8 @@ export interface ConteudoDaGaleria {
   /** Grupos com arquivo: cada capítulo com algo dentro, mais as soltas. */
   grupos: number;
   videos: number;
+  /** Vídeos fora de capítulo — os que ficam na fileira "Episódios". */
+  videosSoltos: number;
   fotos: number;
 }
 
@@ -446,12 +450,23 @@ function SeletorDeFormato({
   ap,
   mudar,
   conteudo,
-}: PecaProps & { conteudo: ConteudoDaGaleria | null }) {
+  galeriaId,
+  videos,
+  pastas,
+  aoGravar,
+}: PecaProps & {
+  conteudo: ConteudoDaGaleria | null;
+  galeriaId: string;
+  videos: VideoNoDesign[];
+  pastas: PastaNoDesign[];
+  /** Um nome de vídeo ou uma capa de pasta gravou: a prévia recarrega. */
+  aoGravar: () => void;
+}) {
   const aviso =
     !conteudo
       ? null
       : ap.formato === "pastas" && conteudo.grupos < 2
-        ? "Esta galeria ainda não tem dois capítulos com fotos. Até ter, o cliente vê a galeria de sempre — crie os capítulos na aba Fotos (ou envie a pasta já separada em subpastas)."
+        ? "Esta galeria ainda não tem dois capítulos com fotos. Até ter, o cliente vê a galeria de sempre — crie os capítulos na aba Fotos e vídeos (ou envie a pasta já separada em subpastas)."
         : ap.formato === "stream" && conteudo.videos === 0
           ? "Esta galeria ainda não tem vídeo. Até ter, o cliente vê a galeria de sempre."
           : null;
@@ -512,18 +527,69 @@ function SeletorDeFormato({
           escolher={(id) => mudar({ ...ap, estiloStream: id })}
         />
       )}
-      {ap.formato === "pastas" && (
-        <p className="text-[11px] leading-snug text-texto-faint">
-          A capa de cada pasta é a primeira foto do capítulo. Para trocar, na aba Fotos passe o
-          mouse sobre a foto e clique em <strong>capa da pasta</strong>.
-        </p>
-      )}
+      {/*
+        A CAPA DE CADA PASTA, aqui (Juan, 30/09/2026: "adicionar opção de
+        escolher a capa de cada capítulo"). O botão na aba Fotos continua
+        existindo; este é o lugar onde se procura.
+      */}
+      {ap.formato === "pastas" && <CapasDasPastas galeriaId={galeriaId} pastas={pastas} aoGravar={aoGravar} />}
       {ap.formato === "stream" && (
-        <p className="text-[11px] leading-snug text-texto-faint">
-          Cada capítulo vira um bloco de episódios — fileira, temporada ou seção, conforme o estilo —, na ordem da aba Fotos. As fotos da entrega
-          continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio
-          — troque na aba Fotos se quiser outra.
-        </p>
+        <>
+          <div>
+            <Eixo eixo="capaStream" titulo="Capa do stream" ap={ap} mudar={mudar} />
+            <p className="mt-1.5 text-[11px] leading-snug text-texto-faint">
+              {ap.capaStream === "galeria"
+                ? "A capa é o desenho escolhido no grupo Capa, e o stream começa logo abaixo dela."
+                : "Cada estilo tem a própria capa. Para usar um desenho do grupo Capa (convite, arco…), escolha “A do grupo Capa”."}
+            </p>
+          </div>
+          {/* Só onde existe rolar de lado: Vitrine e Mostra já descem. */}
+          {(ap.estiloStream === "cinema" || ap.estiloStream === "episodios") && (
+            <div>
+              <Eixo eixo="rolagemStream" titulo="Os vídeos rolam" ap={ap} mudar={mudar} />
+              <p className="mt-1.5 text-[11px] leading-snug text-texto-faint">
+                {ap.estiloStream === "episodios"
+                  ? "Para baixo, todos os capítulos ficam abertos, um embaixo do outro, em vez das abas."
+                  : "Para baixo, cada bloco vira uma grade e nenhum vídeo fica escondido atrás da seta."}
+              </p>
+            </div>
+          )}
+          {/*
+            O "EPISÓDIOS" COM OUTRO NOME (Juan: "poder mudar o título/subtítulo
+            'Episódios'"). Vale para a fileira dos vídeos fora de capítulo —
+            a de capítulo tem o nome do capítulo, que se muda na aba Fotos.
+          */}
+          <div>
+            <span className="block text-xs font-medium text-texto-soft">Título dos vídeos</span>
+            <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+              {conteudo && conteudo.videosSoltos === 0 && conteudo.videos > 0
+                ? "Seus vídeos estão em capítulos: cada bloco usa o nome do capítulo (mude na aba Fotos e vídeos). Este título vale para vídeos fora de capítulo."
+                : "O nome do bloco dos vídeos fora de capítulo. Vazio mostra “Episódios”."}
+            </p>
+            <input
+              value={ap.nomeDosVideos}
+              onChange={(e) => mudar({ ...ap, nomeDosVideos: e.target.value.slice(0, 40) })}
+              maxLength={40}
+              placeholder="Episódios"
+              aria-label="Título dos vídeos"
+              className="mt-2 w-full max-w-xs rounded-lg border border-linha bg-void px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+            />
+            <input
+              value={ap.fraseDosVideos}
+              onChange={(e) => mudar({ ...ap, fraseDosVideos: e.target.value.slice(0, 120) })}
+              maxLength={120}
+              placeholder="Subtítulo (opcional) — ex.: o filme, o teaser e os bastidores"
+              aria-label="Subtítulo dos vídeos"
+              className="mt-2 w-full rounded-lg border border-linha bg-void px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+            />
+          </div>
+          <NomesDosVideos galeriaId={galeriaId} videos={videos} aoGravar={aoGravar} />
+          <p className="text-[11px] leading-snug text-texto-faint">
+            Os vídeos aparecem na ordem da aba Fotos e vídeos, e cada capítulo vira um bloco. As fotos da entrega
+            continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio —
+            troque na aba Vídeo se quiser outra.
+          </p>
+        </>
       )}
     </>
   );
@@ -649,6 +715,8 @@ function Eixo<K extends keyof typeof OPCOES>({
    manchete, desde que o fotógrafo tenha escolhido uma. Sobrou a mínima, que é
    só tipografia por definição — é o que o nome dela promete. */
 const CAPAS_SEM_FOTO: string[] = ["minima"];
+const nomeDoEstiloStream = (a: Aparencia) =>
+  OPCOES.estiloStream.find((o) => o.id === a.estiloStream)?.nome ?? a.estiloStream;
 const nomeDaCapa = (id: string) => OPCOES.capa.find((o) => o.id === id)?.nome ?? id;
 
 const GRUPOS = [
@@ -678,7 +746,13 @@ export function EditorAparencia({
   conteudo = null,
   logo = null,
   formatosLiberados = false,
+  videos = [],
+  pastas = [],
 }: {
+  /** Os vídeos e os capítulos da galeria, para o grupo Formato dar nome aos
+      vídeos e escolher a capa das pastas. Ver `lib/entrega-no-design.ts`. */
+  videos?: VideoNoDesign[];
+  pastas?: PastaNoDesign[];
   /** A conta vê Pastas e Stream? Sem isso o grupo Formato não aparece —
       ver `config/formatos-liberados.ts`. */
   formatosLiberados?: boolean;
@@ -1179,7 +1253,15 @@ export function EditorAparencia({
             </div>
           )}
           {grupo === "formato" && formatosLiberados && (
-            <SeletorDeFormato ap={ap} mudar={mudar} conteudo={conteudo} />
+            <SeletorDeFormato
+              ap={ap}
+              mudar={mudar}
+              conteudo={conteudo}
+              galeriaId={galeriaId}
+              videos={videos}
+              pastas={pastas}
+              aoGravar={() => router.refresh()}
+            />
           )}
           {grupo === "capa" && (
             <>
@@ -1209,7 +1291,9 @@ export function EditorAparencia({
                         <button
                           key={o.id}
                           type="button"
-                          onClick={() => mudar({ ...ap, capa: o.id })}
+                          onClick={() =>
+                            mudar({ ...ap, capa: o.id, ...(ap.formato === "stream" ? { capaStream: "galeria" as const } : {}) })
+                          }
                           className="rounded-md border border-linha-forte px-2.5 py-1 text-[11px] transition hover:bg-carbon-2"
                         >
                           usar {o.nome}
@@ -1218,7 +1302,41 @@ export function EditorAparencia({
                   </div>
                 </div>
               )}
-              <Eixo eixo="capa" titulo="Desenho da capa" ap={ap} mudar={mudar} />
+              {/*
+                NO STREAM, ESCOLHER A CAPA É USAR A CAPA (Juan, 30/09/2026:
+                "corrigir os formatos de CAPA quando o formato de entrega foi o
+                STREAM"). Com a capa própria da sala, os oito desenhos daqui não
+                faziam nada. Clicar num deles agora passa o stream para a capa
+                do grupo Capa — a prévia mostra o desenho clicado.
+              */}
+              {ap.formato === "stream" && formatosLiberados && (
+                <div className="rounded-lg border border-linha bg-carbon-2/60 px-3 py-2.5 text-[11px] leading-snug text-texto-soft">
+                  {ap.capaStream === "sala" ? (
+                    <>
+                      A entrega está em <strong>Stream</strong>, com a capa do estilo {nomeDoEstiloStream(ap)}.
+                      Escolher um desenho abaixo passa o stream a usar esse desenho.
+                    </>
+                  ) : (
+                    <>
+                      A entrega está em <strong>Stream</strong> e usa o desenho abaixo como capa; os vídeos
+                      começam logo depois dela.{" "}
+                      <button
+                        type="button"
+                        onClick={() => mudar({ ...ap, capaStream: "sala" })}
+                        className="text-acento-alto underline underline-offset-4"
+                      >
+                        voltar à capa do estilo {nomeDoEstiloStream(ap)}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              <Eixo
+                eixo="capa"
+                titulo="Desenho da capa"
+                ap={ap}
+                mudar={(novo) => mudar(novo.formato === "stream" ? { ...novo, capaStream: "galeria" } : novo)}
+              />
               <BarraDaLogo ap={ap} mudar={mudar} logo={logo} />
               {/* Junto do desenho da capa porque é a MESMA decisão vista de
                   outro lado: escolher "imersa" e depois "baixa" é dizer foto em

@@ -18,3 +18,24 @@ export function paraCampoDeData(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+/**
+ * Como o banco entrega uma coluna `date`: MEIO-DIA UTC daquele dia.
+ *
+ * ── O DEFEITO QUE ISTO FECHA (30/09/2026) ─────────────────────────────────
+ *
+ * Julia Flores: "se eu quero dia 26 ele aparece na capa dia 25". O driver
+ * entregava meia-noite no fuso do PROCESSO — no VPS, UTC: 26/09 00:00 UTC. Na
+ * véspera, toda data da tela passou a sair em Brasília (`config/fuso.ts`), e
+ * 00:00 UTC é 21:00 do dia 25 lá. Com o processo em Brasília (a máquina de
+ * quem desenvolve), o defeito some — por isso ele passou.
+ *
+ * Meio-dia UTC é o mesmo dia do calendário em qualquer fuso de −11 h a +11 h:
+ * na tela em Brasília (09:00), no formulário pelos campos locais
+ * (`paraCampoDeData`, com o processo em UTC, em Brasília ou em Tóquio) e no
+ * navegador de quem estiver viajando. A coluna continua `date`; só muda o
+ * instante que a representa aqui dentro. `scripts/testar-data-do-evento.mjs`.
+ */
+export function diaDoBanco(texto: string): Date {
+  return new Date(`${texto}T12:00:00Z`);
+}

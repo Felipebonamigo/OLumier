@@ -97,6 +97,7 @@ abaixo foi conferida no código desta data.*
 | 10 | Foto + filme | **escondida** até `VIDEO_LIBERADO` | `config/lancamentos.ts` |
 | 11 | Respiro | foto sangrando + "O trabalho é seu. A entrega também." | curadoria |
 | 12 | Planos (`#planos`) | montador real, sem a escolha Foto/Filme enquanto o vídeo não sai | `MontadorPlano` |
+| 12b | Atomatiza (30/09/2026, pedido do Juan) | bloco discreto embaixo dos planos: "Conheça também a Atomatiza", a proposta da marca e a faixa do desconto do combo; link para o site dela | `config/combo.ts` |
 | 13 | Três perguntas | espaço · vencimento · quem aparece mais | — |
 | 14 | Segurança | só mecanismos da página `/seguranca` | `/seguranca` |
 | 15 | FAQ | a ordem do briefing, respostas conferidas | — |

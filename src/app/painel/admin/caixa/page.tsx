@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { exigirAdmin, metadataDeAdmin } from "@/lib/portao-admin";
 import { asaasConfigurado, asaasEmProducao, pagamentosAReceber, pagamentosRecebidos } from "@/lib/asaas";
@@ -25,6 +25,9 @@ import {
   mesVizinho,
   montarCaixa,
   nomeDoMes,
+  resumirSociedade,
+  SISTEMAS_DA_SOCIEDADE,
+  type ResumoDaSociedade,
   somarAReceber,
   type CaixaDoMes,
   type AReceber,
@@ -62,7 +65,15 @@ const OK: Record<string, string> = {
 };
 
 type Leitura =
-  | { tipo: "ok"; caixa: CaixaDoMes; aReceber: AReceber; incompleto: boolean }
+  | {
+      tipo: "ok";
+      mes: string;
+      caixa: CaixaDoMes;
+      aReceber: AReceber;
+      /** O cartão aprovado, pelo mesmo caminho do caixa: quanto vai para cada carteira quando cair. */
+      aReceberPorCarteira: CaixaDoMes;
+      incompleto: boolean;
+    }
   | { tipo: "sem-asaas" }
   | { tipo: "erro"; mensagem: string };
 
@@ -73,8 +84,10 @@ async function lerAsaas(mes: string): Promise<Leitura> {
     const [recebidos, confirmados] = await Promise.all([pagamentosRecebidos(de, ate), pagamentosAReceber()]);
     return {
       tipo: "ok",
+      mes,
       caixa: montarCaixa(recebidos.pagamentos, carteirasConhecidas()),
       aReceber: somarAReceber(confirmados.pagamentos),
+      aReceberPorCarteira: montarCaixa(confirmados.pagamentos, carteirasConhecidas(), new Set(["CONFIRMED"])),
       incompleto: recebidos.incompleto || confirmados.incompleto,
     };
   } catch (e) {
@@ -169,6 +182,8 @@ export default async function CaixaDosSociosPage({
 
       {leitura.tipo === "ok" && <Receita leitura={leitura} />}
 
+      {leitura.tipo === "ok" && <AReceberNoCartao aReceber={leitura.aReceber} />}
+
       <Custos custos={custos.lista} tabelaOk={custos.ok} armazenamento={armazenamento} mes={mes} />
 
       <Resultado leitura={leitura} soma={soma} />
@@ -220,9 +235,12 @@ function Aviso({ children }: { children: ReactNode }) {
   );
 }
 
-/** Os produtos com dinheiro no mês. "Sem produto" só aparece se houver. */
+/** Galeria e Atomatiza sempre; o pacote e o "sem produto", só se houver. */
+const SEMPRE: Sistema[] = ["galeria", "atomatiza"];
+
+/** Os produtos com dinheiro no mês. */
 function sistemasComDinheiro(caixa: CaixaDoMes): Sistema[] {
-  return SISTEMAS.filter((s) => s !== "outros" || caixa.porSistema.outros.pagamentos > 0);
+  return SISTEMAS.filter((s) => SEMPRE.includes(s) || caixa.porSistema[s].pagamentos > 0);
 }
 
 /* Só a primeira letra: `capitalize` do CSS faria "Setembro De 2026". */
@@ -235,12 +253,13 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 function Receita({ leitura }: { leitura: Extract<Leitura, { tipo: "ok" }> }) {
   const { caixa, aReceber, incompleto } = leitura;
   const sistemas = sistemasComDinheiro(caixa);
+  const sociedade = resumirSociedade(caixa, leitura.aReceberPorCarteira);
 
   return (
     <>
       <Bloco
         titulo="O que entrou"
-        explicacao="Pagamentos que caíram na conta do Asaas no mês, já com o desconto do pacote. Pix e boleto caem no dia em que o cliente paga; cartão, quando o Asaas libera."
+        explicacao="Pagamentos que caíram na conta do Asaas no mês, já com o desconto do pacote. Pix e boleto caem no dia em que o cliente paga; cartão, quando o Asaas libera — até lá ele está em “A receber no cartão”, logo abaixo. Quem paga por ano só aparece no mês em que pagou."
       >
         {incompleto && (
           <Aviso>
@@ -253,7 +272,7 @@ function Receita({ leitura }: { leitura: Extract<Leitura, { tipo: "ok" }> }) {
               key={s}
               rotulo={NOME_DO_SISTEMA[s]}
               valor={formatarReais(caixa.porSistema[s].brutoCentavos)}
-              nota={plural(caixa.porSistema[s].pagamentos, "pagamento", "pagamentos")}
+              nota={`${plural(caixa.porSistema[s].pagamentos, "pagamento", "pagamentos")}${s === "outros" ? " · não é da sociedade" : ""}`}
             />
           ))}
           <Cartao
@@ -262,8 +281,8 @@ function Receita({ leitura }: { leitura: Extract<Leitura, { tipo: "ok" }> }) {
             nota={porcento(caixa.total.brutoCentavos ? caixa.total.taxaCentavos / caixa.total.brutoCentavos : 0)}
           />
           <Cartao
-            rotulo="Líquido"
-            valor={formatarReais(caixa.total.liquidoCentavos)}
+            rotulo="Líquido dos produtos"
+            valor={formatarReais(sociedade.liquidoCentavos)}
             nota="o que sobra para dividir"
             tom="ok"
           />
@@ -271,33 +290,265 @@ function Receita({ leitura }: { leitura: Extract<Leitura, { tipo: "ok" }> }) {
             rotulo="A receber no cartão"
             valor={formatarReais(aReceber.totalCentavos)}
             nota={
-              aReceber.ultimaLiberacao
-                ? `aprovado, cai até ${data(`${aReceber.ultimaLiberacao}T12:00:00`)}`
-                : "nada esperando"
+              aReceber.pagamentos.length > 0 ? (
+                <a href="#a-receber" className="underline underline-offset-2 hover:text-texto">
+                  {plural(aReceber.pagamentos.length, "pagamento aprovado", "pagamentos aprovados")} — ver de onde
+                </a>
+              ) : (
+                "nada esperando"
+              )
             }
           />
         </div>
       </Bloco>
 
-      <ParaOndeFoi caixa={caixa} sistemas={sistemas} />
+      <Socios caixa={caixa} sociedade={sociedade} mes={leitura.mes} />
     </>
   );
 }
 
-// ── 2. PARA ONDE FOI ────────────────────────────────────────────────────────
+// ── 2. OS SÓCIOS ────────────────────────────────────────────────────────────
+
+/**
+ * Um cartão por sócio — Felipe, 01/10/2026: "as infos dos sócios não estão
+ * claras". O porquê está em `resumirSociedade` (`lib/caixa-dos-socios.ts`).
+ */
+function Socios({ caixa, sociedade, mes }: { caixa: CaixaDoMes; sociedade: ResumoDaSociedade; mes: string }) {
+  const produtos = SISTEMAS_DA_SOCIEDADE.filter((s) => SEMPRE.includes(s) || caixa.porSistema[s].pagamentos > 0);
+  const dono = sociedade.socios.find((s) => s.donoDaConta)?.nome ?? null;
+  const fora = sociedade.foraDaSociedade;
+  const aReceber = sociedade.socios.reduce((t, s) => t + s.aReceberCentavos, 0);
+
+  /** De onde sai a porcentagem de cada produto, em palavras. */
+  const regra = (socioId: string, s: Sistema, centavos: number) => {
+    if (s === "galeria") {
+      const acordo = SOCIOS.find((x) => x.id === socioId)?.percentual;
+      return acordo !== undefined ? `acordo: ${acordo}% do lucro` : "";
+    }
+    const liquido = caixa.porSistema[s].liquidoCentavos;
+    if (s === "atomatiza") return liquido > 0 ? `${porcento(centavos / liquido)} do que entrou` : "";
+    return "as duas partes juntas";
+  };
+
+  const partes: { nome: string; centavos: number }[] = [
+    ...sociedade.socios.map((s) => ({ nome: s.nome, centavos: s.totalCentavos })),
+    { nome: "Reserva de custo", centavos: sociedade.reservaCentavos },
+    ...(sociedade.operacaoCentavos > 0 ? [{ nome: "Caixa da operação", centavos: sociedade.operacaoCentavos }] : []),
+    ...(sociedade.outrasCarteirasCentavos > 0
+      ? [{ nome: "Outras carteiras", centavos: sociedade.outrasCarteirasCentavos }]
+      : []),
+  ];
+
+  return (
+    <Bloco
+      titulo="Quanto cada sócio levou"
+      explicacao={`O que cada um recebeu em ${nomeDoMes(mes).split(" ")[0]}, dos pagamentos da Galeria e do Atomatiza que já caíram na conta. Embaixo de cada um, o que ainda vem do cartão já aprovado.`}
+    >
+      <div className="grid gap-3 md:grid-cols-3">
+        {sociedade.socios.map((s) => (
+          <div key={s.id} className="rounded-xl border border-linha bg-carbon p-4">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-base font-semibold">{s.nome}</h3>
+              <span className="text-xl font-semibold tabular-nums text-ok">{formatarReais(s.totalCentavos)}</span>
+            </div>
+            <p className="mt-0.5 text-[11px] text-texto-faint">
+              {s.donoDaConta
+                ? "fica na conta principal do Asaas, que é a dele"
+                : s.semCarteira
+                  ? "sem carteira do Asaas configurada: fica na conta principal"
+                  : `o Asaas repassa direto para a carteira de ${s.nome}`}
+            </p>
+            <ul className="mt-3 divide-y divide-linha text-sm">
+              {produtos.map((p) => (
+                <li key={p} className="flex items-baseline justify-between gap-3 py-1.5">
+                  <span>
+                    {NOME_DO_SISTEMA[p]}
+                    <span className="block text-[11px] text-texto-faint">{regra(s.id, p, s.porSistema[p])}</span>
+                  </span>
+                  <span className="tabular-nums">{formatarReais(s.porSistema[p])}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 border-t border-linha pt-2 text-xs text-texto-soft">
+              {s.aReceberCentavos > 0 ? (
+                <>
+                  + <strong className="tabular-nums">{formatarReais(s.aReceberCentavos)}</strong> quando o cartão
+                  aprovado cair
+                </>
+              ) : (
+                <span className="text-texto-faint">nada a receber do cartão</span>
+              )}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 rounded-xl border border-linha p-4 text-sm">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-texto-faint">Como o líquido fecha</p>
+        <p className="mt-2 tabular-nums leading-7">
+          <strong>{formatarReais(sociedade.liquidoCentavos)}</strong> dos produtos ={" "}
+          {partes.map((x, i) => (
+            <Fragment key={x.nome}>
+              {i > 0 && " + "}
+              <span className="whitespace-nowrap">
+                {x.nome} {formatarReais(x.centavos)}
+              </span>
+            </Fragment>
+          ))}
+        </p>
+        <ul className="mt-2 space-y-1 text-xs text-texto-faint">
+          {dono && (
+            <li>
+              {dono}: o Asaas não manda repasse para a própria conta, então a parte dele não sai — fica na conta
+              principal. Na Galeria ela é calculada pelo acordo a partir do que os outros receberam na mesma
+              cobrança (estimativa: o Asaas arredonda cada fatia); no Atomatiza é o que não foi repassado.
+            </li>
+          )}
+          <li>
+            Reserva de custo: a parte da Galeria que fica na conta para pagar o armazenamento (Backblaze e
+            Cloudflare), com a folga para o dólar e a taxa do cartão. O lucro que sobra é dividido{" "}
+            {SOCIOS.map((x) => `${x.nome} ${x.percentual}%`).join(", ")}.
+          </li>
+          <li>Atomatiza: a divisão é a configurada no servidor de lá, sobre o que entrou; não tem reserva.</li>
+          {caixa.porSistema.pacote.pagamentos > 0 && (
+            <li>
+              Pacote: uma fatura só com os dois produtos. A parte do {dono ?? "dono da conta"} no pacote fica junto
+              com a reserva, porque o Asaas não separa as duas.
+            </li>
+          )}
+          {aReceber > 0 && (
+            <li>
+              O que vem do cartão é o split que o Asaas já registrou nos pagamentos aprovados; entra na conta de
+              cada um na data em que o cartão cair (ver &ldquo;A receber no cartão&rdquo;).
+            </li>
+          )}
+          {caixa.repassesQueNaoSairam > 0 && (
+            <li className="text-erro">
+              {plural(caixa.repassesQueNaoSairam, "repasse foi cancelado ou recusado", "repasses foram cancelados ou recusados")}{" "}
+              pelo Asaas: o dinheiro ficou na conta principal. Confira no painel do Asaas.
+            </li>
+          )}
+        </ul>
+      </div>
+
+      {fora.pagamentos > 0 && (
+        <p className="mt-3 rounded-xl border border-linha bg-carbon/40 px-4 py-3 text-xs text-texto-soft">
+          <strong>Fora da sociedade:</strong> {plural(fora.pagamentos, "cobrança", "cobranças")} sem produto na
+          mesma conta do Asaas (lançadas à mão no painel de lá), {formatarReais(fora.liquidoCentavos)} líquidos —{" "}
+          {formatarReais(fora.repassadoCentavos)} repassados para outras carteiras e{" "}
+          {formatarReais(fora.naContaCentavos)} na conta principal. Não entra na conta dos sócios nem no resultado.
+        </p>
+      )}
+
+      <ParaOndeFoi caixa={caixa} sistemas={sistemasComDinheiro(caixa)} />
+    </Bloco>
+  );
+}
+
+// ── 2c. A RECEBER NO CARTÃO ─────────────────────────────────────────────────
+
+/**
+ * Juan, 30/09/2026, olhando o total a receber: "é possível esse dado mostrar
+ * de onde tá vindo isso e quantas entradas pendentes de cada plataforma?" e
+ * "quando ele libera?". Não depende do mês escolhido: é o que está aprovado
+ * e esperando hoje.
+ */
+function AReceberNoCartao({ aReceber }: { aReceber: AReceber }) {
+  const th = "px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest text-texto-faint";
+  const sistemas = SISTEMAS.filter((s) => SEMPRE.includes(s) || aReceber.porSistema[s].pagamentos > 0);
+  const linhas = aReceber.pagamentos.slice(0, LIMITE_DE_LINHAS);
+  const espera =
+    aReceber.diasAteCair !== null
+      ? ` Nestes, o Asaas libera em média ${plural(aReceber.diasAteCair, "dia", "dias")} depois da aprovação.`
+      : "";
+
+  return (
+    <section id="a-receber" className="scroll-mt-6">
+      <Bloco
+        titulo="A receber no cartão"
+        explicacao={`Cartão aprovado que o Asaas ainda não liberou: o cliente já pagou, o dinheiro ainda não está na conta. Cada pagamento cai na data que o próprio Asaas informa, e entra em “O que entrou” no mês em que cair.${espera} Isto é o que está esperando hoje, qualquer que seja o mês escolhido acima.`}
+      >
+        {aReceber.pagamentos.length === 0 ? (
+          <p className="text-sm text-texto-faint">Nenhum pagamento de cartão esperando liberação.</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              {sistemas.map((s) => (
+                <Cartao
+                  key={s}
+                  rotulo={NOME_DO_SISTEMA[s]}
+                  valor={formatarReais(aReceber.porSistema[s].liquidoCentavos)}
+                  nota={plural(aReceber.porSistema[s].pagamentos, "pagamento", "pagamentos")}
+                />
+              ))}
+              {aReceber.porMes.map((m) => (
+                <Cartao
+                  key={m.mes || "sem-data"}
+                  rotulo={m.mes ? `Cai em ${nomeDoMes(m.mes).split(" ")[0]}` : "Sem data do Asaas"}
+                  valor={formatarReais(m.liquidoCentavos)}
+                  nota={plural(m.pagamentos, "pagamento", "pagamentos")}
+                />
+              ))}
+            </div>
+
+            <div className="mt-4 overflow-x-auto rounded-xl border border-linha">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-linha bg-carbon text-left">
+                    <th className={th}>Cai em</th>
+                    <th className={th}>Produto</th>
+                    <th className={th}>Descrição</th>
+                    <th className={th}>Aprovado em</th>
+                    <th className={`${th} text-right`}>Pago</th>
+                    <th className={`${th} text-right`}>Líquido</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {linhas.map((p) => (
+                    <tr key={p.id} className="border-b border-linha align-top last:border-0">
+                      <td className="whitespace-nowrap px-4 py-2 font-mono text-xs tabular-nums">
+                        {p.caiEm ? data(`${p.caiEm}T12:00:00`) : "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-2 text-xs">{NOME_DO_SISTEMA[p.sistema]}</td>
+                      <td className="px-4 py-2 text-xs">{p.descricao}</td>
+                      <td className="whitespace-nowrap px-4 py-2 font-mono text-xs tabular-nums text-texto-faint">
+                        {p.aprovadoEm ? data(`${p.aprovadoEm}T12:00:00`) : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatarReais(p.brutoCentavos)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{formatarReais(p.liquidoCentavos)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {aReceber.pagamentos.length > LIMITE_DE_LINHAS && (
+              <p className="mt-2 text-xs text-texto-faint">
+                Mostrando os {LIMITE_DE_LINHAS} que caem primeiro, de {aReceber.pagamentos.length}. Os totais
+                contam todos.
+              </p>
+            )}
+          </>
+        )}
+      </Bloco>
+    </section>
+  );
+}
+
+// ── 2b. POR CARTEIRA, COMO O ASAAS REGISTROU ─────────────────────────────────
 
 function ParaOndeFoi({ caixa, sistemas }: { caixa: CaixaDoMes; sistemas: Sistema[] }) {
   const semCarteira = caixa.destinos.filter((d) => d.destino.semCarteira).map((d) => d.destino.nome);
   const temDesconhecida = caixa.destinos.some((d) => d.destino.tipo === "desconhecida");
-  const acordoDaGaleria = SOCIOS.map((s) => `${s.nome} ${s.percentual}%`).join(", ");
   const th = "px-4 py-2.5 font-mono text-[10px] uppercase tracking-widest text-texto-faint";
 
   return (
-    <Bloco
-      titulo="Para onde foi"
-      explicacao="O líquido de cada produto, dividido como o Asaas de fato repassou. A porcentagem é sobre o líquido daquele produto no mês."
-    >
-      <div className="overflow-x-auto rounded-xl border border-linha">
+    <details className="mt-4 rounded-xl border border-linha bg-carbon/40 p-4">
+      <summary className="cursor-pointer text-sm font-semibold">Ver por carteira, como o Asaas registrou</summary>
+      <p className="mt-1 text-xs text-texto-faint">
+        Cada carteira que recebeu dinheiro da conta no mês, por produto — inclusive o que não é da sociedade. A
+        porcentagem é sobre o líquido daquele produto.
+      </p>
+      <div className="mt-3 overflow-x-auto rounded-xl border border-linha">
         <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-linha bg-carbon text-left">
@@ -322,6 +573,12 @@ function ParaOndeFoi({ caixa, sistemas }: { caixa: CaixaDoMes; sistemas: Sistema
                   </span>
                   {d.destino.semCarteira && (
                     <span className="ml-2 text-[11px] text-texto-faint">sem carteira configurada aqui</span>
+                  )}
+                  {d.destino.donoDaConta && (
+                    <span className="block text-[11px] text-texto-faint">fica na conta principal, que é dele</span>
+                  )}
+                  {d.destino.tipo === "conta" && (
+                    <span className="block text-[11px] text-texto-faint">fica na conta principal</span>
                   )}
                 </td>
                 {sistemas.map((s) => (
@@ -362,15 +619,6 @@ function ParaOndeFoi({ caixa, sistemas }: { caixa: CaixaDoMes; sistemas: Sistema
       </div>
 
       <ul className="mt-3 max-w-3xl space-y-1 text-xs text-texto-faint">
-        <li>
-          Galeria Átomo: o acordo é {acordoDaGaleria} do lucro. A reserva de custo (o armazenamento, com a
-          folga para o dólar e para a taxa do cartão) fica na conta principal antes da divisão — por isso a
-          linha dela não é zero.
-        </li>
-        <li>
-          Atomatiza: a divisão é a configurada no servidor de lá, sobre a receita. O que não é repassado fica
-          na conta principal.
-        </li>
         {semCarteira.length > 0 && (
           <li className="text-alerta">
             Sem carteira do Asaas configurada na Galeria: {semCarteira.join(", ")}. O que o Atomatiza repassou
@@ -390,7 +638,7 @@ function ParaOndeFoi({ caixa, sistemas }: { caixa: CaixaDoMes; sistemas: Sistema
           </li>
         )}
       </ul>
-    </Bloco>
+    </details>
   );
 }
 
@@ -601,8 +849,10 @@ function Resultado({ leitura, soma }: { leitura: Leitura; soma: ReturnType<typeo
     );
   }
 
-  const { porSistema, total } = leitura.caixa;
-  const resultado = total.liquidoCentavos - soma.total;
+  const { porSistema } = leitura.caixa;
+  /* Só os produtos da sociedade: o "sem produto" não é dinheiro dos sócios. */
+  const liquido = resumirSociedade(leitura.caixa, null).liquidoCentavos;
+  const resultado = liquido - soma.total;
   const daGaleria = porSistema.galeria.liquidoCentavos - soma.galeria;
   const doAtomatiza = porSistema.atomatiza.liquidoCentavos - soma.atomatiza;
   const tom = (v: number): "ok" | "erro" => (v >= 0 ? "ok" : "erro");
@@ -610,10 +860,10 @@ function Resultado({ leitura, soma }: { leitura: Leitura; soma: ReturnType<typeo
   return (
     <Bloco
       titulo="Resultado do mês"
-      explicacao="Líquido do mês menos os custos de hoje. Cada produto aparece com o que é só dele; o que é dos dois sai uma vez, no total."
+      explicacao={`Líquido do mês menos os custos de hoje. Cada produto aparece com o que é só dele; o que é dos dois sai uma vez, no total.${porSistema.pacote.pagamentos > 0 ? " O pacote entra só no total: a fatura dele é dos dois produtos juntos." : ""}`}
     >
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Cartao rotulo="Líquido dos dois" valor={formatarReais(total.liquidoCentavos)} />
+        <Cartao rotulo="Líquido dos dois" valor={formatarReais(liquido)} />
         <Cartao rotulo="Custos dos dois" valor={formatarReais(soma.total)} />
         <Cartao
           rotulo="Resultado"

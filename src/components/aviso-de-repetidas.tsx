@@ -23,9 +23,13 @@
  * própria, a partir de uma heurística de nome e tamanho, é exatamente o tipo
  * de esperteza que não se desfaz.
  */
+import { VerNaGrade } from "@/components/ver-na-grade";
+
 export function AvisoDeRepetidas({
+  galeriaId,
   itens,
 }: {
+  galeriaId: string;
   itens: { nome: string; vezes: number; mesmoTamanho: boolean }[];
 }) {
   if (itens.length === 0) return null;
@@ -59,9 +63,19 @@ export function AvisoDeRepetidas({
         <>
           <p className="mt-1 text-xs leading-relaxed text-texto-soft">
             Estas subiram mais de uma vez — mesmo nome e mesmo tamanho. O casal vai ver cada
-            uma repetida na galeria e no arquivo .zip. Para resolver, marque a cópia extra na
-            grade abaixo e remova.
+            uma repetida na galeria e no arquivo .zip.
           </p>
+          {/* "Marque a cópia extra na grade abaixo" era o conselho até
+              01/10/2026 — e o Juan, com 4.000 fotos: "impossível eu achar".
+              Agora a grade mostra só elas, lado a lado, com um botão que marca
+              as cópias extras. */}
+          <VerNaGrade
+            galeriaId={galeriaId}
+            filtro="repetidas"
+            className="mt-2 rounded-md border border-alerta/60 px-2.5 py-1.5 text-xs font-medium text-alerta transition hover:bg-alerta/10"
+          >
+            ver as repetidas e apagar as cópias
+          </VerNaGrade>
           <ul className="mt-3 flex flex-wrap gap-1.5">
             {iguais.map((i) => (
               <li

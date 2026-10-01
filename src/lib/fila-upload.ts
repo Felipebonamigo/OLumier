@@ -11,8 +11,47 @@ import { compararNomeNatural } from "@/lib/ordem-natural";
  * queda de rede não pode parar a fila no arquivo 412) e não travar o navegador.
  */
 
-/** Quantos envios ao mesmo tempo. */
-export const PARALELOS = 3;
+/**
+ * Quantos envios ao mesmo tempo.
+ *
+ * ── DE 3 PARA 6 (30/09/2026) ─────────────────────────────────────────────
+ *
+ * O Juan, de Portland: "uns 10 minutos pra subir 300 fotos". Medido no
+ * navegador com rede de hotel simulada (20 Mbps de subida, 150 ms de
+ * latência) e 30 fotos de 24 MP: com 3 de cada vez, 1,48× o mínimo que a
+ * banda permite; com 6, 1,29×. Cada arquivo gasta idas e voltas que não são
+ * banda (preparar, confirmar, as miniaturas), e com três no ar a subida
+ * fica ociosa enquanto elas acontecem. Sem limite de rede, 3 e 6 empatam: aí
+ * quem manda é o processador — ver `MINIATURAS_JUNTAS`.
+ */
+export const PARALELOS = 6;
+
+/**
+ * Quantas fotos geram miniatura ao mesmo tempo. Separado de `PARALELOS` de
+ * propósito: gerar a miniatura decodifica a foto inteira (24 MP são ~100 MB
+ * de memória), e seis de uma vez num notebook modesto ou num iPad é aba que
+ * fecha sozinha. A rede aguenta seis; o processador fica em três.
+ */
+export const MINIATURAS_JUNTAS = 3;
+
+/**
+ * Um limitador: no máximo `n` chamadas de `fn` rodando ao mesmo tempo; as
+ * outras esperam a vez, na ordem em que chegaram.
+ */
+export function limitador(n: number) {
+  let ativos = 0;
+  const fila: Array<() => void> = [];
+  return async function <T>(fn: () => Promise<T>): Promise<T> {
+    if (ativos >= n) await new Promise<void>((vez) => fila.push(vez));
+    ativos++;
+    try {
+      return await fn();
+    } finally {
+      ativos--;
+      fila.shift()?.();
+    }
+  };
+}
 
 /**
  * A espera antes de cada nova tentativa: 2 s, 5 s, 15 s, 30 s, 60 s — quase
@@ -378,16 +417,34 @@ export async function manterAcordado(): Promise<() => void> {
   }
 }
 
+/** Um arquivo que já está na galeria (ou na fila), do jeito que a régua compara. */
+export interface ArquivoConhecido {
+  nome: string;
+  bytes: number;
+}
+
 /**
- * Separa o que já existe na galeria do que é novo, pelo NOME do arquivo.
+ * Separa o que já existe na galeria do que é novo, pelo NOME E TAMANHO.
  *
- * ── POR QUE PELO NOME, E NÃO PELO CONTEÚDO ────────────────────────────────
+ * ── POR QUE NOME E TAMANHO, E NÃO O CONTEÚDO ──────────────────────────────
  *
  * Comparar conteúdo seria mais exato e é a resposta errada aqui: para saber que
  * dois arquivos são iguais é preciso LER os dois, e a metade que está no bucket
- * custa banda e dinheiro para ser lida de volta. O nome resolve o caso real —
- * a pessoa arrasta a mesma pasta duas vezes, ou arrasta de novo depois de um
- * envio interrompido, e o exportador do Lightroom nomeia em sequência.
+ * custa banda e dinheiro para ser lida de volta. Nome e tamanho resolvem o caso
+ * real — a pessoa arrasta a mesma pasta duas vezes, ou arrasta de novo depois
+ * de um envio interrompido, e o exportador do Lightroom nomeia em sequência.
+ *
+ * ── E POR QUE NÃO SÓ O NOME (01/10/2026) ──────────────────────────────────
+ *
+ * Até aqui era só o nome. Juan, num casamento de 4.000 fotos em 15 capítulos,
+ * depois de a página travar e o envio parar: "fui botar pra subir de novo,
+ * subiu repetidas". Com duas câmeras, `DSC_0001.jpg` existe em capítulos
+ * diferentes sendo fotos diferentes — e a régua do nome punha centenas delas
+ * na pergunta de repetidas. Para não perder foto, a saída era "enviar mesmo
+ * assim", e as cópias de verdade subiam junto. Mesmo nome com OUTRO tamanho é
+ * outra foto e sobe sem perguntar; mesmo nome e mesmo tamanho é a mesma, e
+ * reenviar a pasta inteira depois de um travamento sobe só o que faltou. É a
+ * mesma régua do aviso de repetidas e da grade (`copiasRepetidas`).
  *
  * Sem diferenciar maiúscula de minúscula porque o Windows e o macOS também não:
  * `IMG_01.JPG` e `img_01.jpg` não coexistem no disco de onde a pasta saiu.
@@ -396,22 +453,77 @@ export async function manterAcordado(): Promise<() => void> {
  * quem arrasta a pasta com uma subpasta "selecionadas" dentro: os mesmos
  * arquivos aparecem duas vezes e subiriam os dois.
  */
-export function separarRepetidos<T extends { arquivo: { name: string } }>(
+export function separarRepetidos<T extends ArquivoComCaminho>(
   itens: T[],
-  jaNaGaleria: Iterable<string>,
+  jaNaGaleria: Iterable<ArquivoConhecido>,
 ): { novos: T[]; repetidos: T[] } {
+  const chave = (nome: string, bytes: number) => `${nome.toLowerCase()}\u0000${bytes}`;
   const vistos = new Set<string>();
-  for (const nome of jaNaGaleria) vistos.add(nome.toLowerCase());
+  for (const a of jaNaGaleria) vistos.add(chave(a.nome, a.bytes));
 
   const novos: T[] = [];
   const repetidos: T[] = [];
   for (const item of itens) {
-    const chave = item.arquivo.name.toLowerCase();
-    if (vistos.has(chave)) repetidos.push(item);
+    const k = chave(item.arquivo.name, tamanhoDe(item));
+    if (vistos.has(k)) repetidos.push(item);
     else {
-      vistos.add(chave);
+      vistos.add(k);
       novos.push(item);
     }
   }
   return { novos, repetidos };
+}
+
+/**
+ * AS LINHAS QUE A LISTA DO ENVIO DESENHA (01/10/2026).
+ *
+ * Juan mandou um casamento de 4.000 fotos em 15 capítulos, foi mexer no
+ * Design e "ficou tudo tão lagado que a página PAROU DE CARREGAR. Travou. Aí
+ * tive que recarregar. Nisso, parou o upload."
+ *
+ * Reproduzido com 4.005 arquivos: com a lista do envio ABERTA a página ficava
+ * 75–82% do tempo ocupada, cada clique esperava de 0,3 a 1,2 s, e o Design
+ * levou 96 s para abrir. Fechada, 0–3% e 0,4 s. A lista desenhava as 4.000
+ * linhas — e redesenhava todas a cada evento de progresso de cada um dos seis
+ * envios em paralelo, dezenas de vezes por segundo.
+ *
+ * Ninguém lê 4.000 linhas. A lista mostra o que está acontecendo AGORA (o que
+ * sobe e o que está tentando de novo), o que deu erro, os próximos da fila e
+ * os últimos que chegaram — e conta o resto. Com 4.000 ou com 40, são no
+ * máximo umas cinquenta linhas.
+ */
+export interface LinhasDaFila<T> {
+  linhas: T[];
+  maisEsperando: number;
+  maisEnviados: number;
+  maisComErro: number;
+  maisEmCurso: number;
+}
+
+export function linhasDaFila<T extends { situacao: string; tentativa: number }>(
+  fila: T[],
+  limites = { emCurso: 20, erros: 20, proximos: 5, enviados: 3 },
+): LinhasDaFila<T> {
+  const emCurso: T[] = [];
+  const erros: T[] = [];
+  const esperando: T[] = [];
+  const enviados: T[] = [];
+  for (const i of fila) {
+    if (i.situacao === "erro") erros.push(i);
+    else if (i.situacao === "pronto") enviados.push(i);
+    else if (i.situacao === "esperando" && i.tentativa === 0) esperando.push(i);
+    else emCurso.push(i);
+  }
+  return {
+    linhas: [
+      ...emCurso.slice(0, limites.emCurso),
+      ...erros.slice(0, limites.erros),
+      ...esperando.slice(0, limites.proximos),
+      ...enviados.slice(-limites.enviados).reverse(),
+    ],
+    maisEmCurso: Math.max(0, emCurso.length - limites.emCurso),
+    maisComErro: Math.max(0, erros.length - limites.erros),
+    maisEsperando: Math.max(0, esperando.length - limites.proximos),
+    maisEnviados: Math.max(0, enviados.length - limites.enviados),
+  };
 }

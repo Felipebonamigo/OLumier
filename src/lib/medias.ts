@@ -1,5 +1,6 @@
 import "server-only";
 import { consultar, consultarUm, emTransacao } from "./db";
+import { moverBloco, type DestinoDoBloco } from "./ordem-em-bloco";
 
 export interface Media {
   id: string;
@@ -33,6 +34,8 @@ export interface Media {
    * ficam sempre no r2 — ver `lib/armazem.ts`, que é quem decide de onde ler.
    */
   armazem: string;
+  /** Sobe a cada republicação na mesma chave (migração 039). */
+  versao: number;
 }
 
 /** O que aceitamos subir. Fora desta lista, recusamos antes de gerar a URL. */
@@ -440,6 +443,67 @@ export async function moverMediaNaOrdem(
   return true;
 }
 
+/**
+ * MOVE VÁRIAS FOTOS DE UMA VEZ — o arrastar com várias marcadas e os botões
+ * "para o início" / "para o fim" da barra de seleção (01/10/2026).
+ *
+ * A regra de onde cada uma vai mora em `lib/ordem-em-bloco.ts`, a MESMA que a
+ * tela usa para a pré-visualização. Aqui fica o que é de banco:
+ *
+ *   - a ordem atual é lida inteira (uma consulta, só `id` e `ordem`), porque o
+ *     grupo pode vir de qualquer lugar da galeria;
+ *   - as casas são as que JÁ existem: quem vai para a k-ésima posição recebe o
+ *     k-ésimo valor de `ordem`. Os buracos que a lixeira deixou ficam onde
+ *     estão, e só muda de linha quem de fato mudou de lugar;
+ *   - ordem repetida (galeria antiga, anterior ao lote de 23/09) não tem
+ *     "k-ésima casa" que preserve o desempate, e aí a galeria é renumerada de
+ *     0 a n-1 uma vez — a ordem que a tela mostra é a que fica.
+ *
+ * Os ids vêm do navegador: o `where` por galeria e estúdio é o que impede
+ * mover foto de outra galeria, ou para dentro de uma que não é de quem pede.
+ */
+export async function moverBlocoNaOrdem(
+  galeriaId: string,
+  tenantId: string,
+  ids: string[],
+  destino: DestinoDoBloco,
+): Promise<boolean> {
+  /* Mesmo desempate da grade (`ordem, criado_em`): é a ordem que a pessoa vê. */
+  const linhas = await consultar<{ id: string; ordem: number }>(
+    `select id, ordem from medias
+      where galeria_id = $1 and tenant_id = $2
+      order by ordem, criado_em, id`,
+    [galeriaId, tenantId],
+  );
+  const atual = linhas.map((l) => l.id);
+  const daqui = new Set(atual);
+  const bloco = ids.filter((id) => daqui.has(id));
+  if (bloco.length === 0) return false;
+  if (destino !== "inicio" && destino !== "fim" && !daqui.has(destino)) return false;
+
+  const nova = moverBloco(atual, bloco, destino);
+  if (nova.join() === atual.join()) return false;
+
+  const casas = linhas.map((l) => l.ordem);
+  const semRepetida = casas.every((c, i) => i === 0 || c > casas[i - 1]);
+  const casaDe = semRepetida ? (k: number) => casas[k] : (k: number) => k;
+  const ordemAntes = new Map(linhas.map((l) => [l.id, l.ordem]));
+  const mudou = nova
+    .map((id, k) => ({ id, ordem: casaDe(k) }))
+    .filter((x) => ordemAntes.get(x.id) !== x.ordem);
+  if (mudou.length === 0) return false;
+
+  await emTransacao(async (consultarNaTransacao) => {
+    await consultarNaTransacao(
+      `update medias m set ordem = v.ordem
+         from unnest($3::uuid[], $4::int[]) as v(id, ordem)
+        where m.id = v.id and m.galeria_id = $1 and m.tenant_id = $2`,
+      [galeriaId, tenantId, mudou.map((x) => x.id), mudou.map((x) => x.ordem)],
+    );
+  });
+  return true;
+}
+
 export async function apagarTodasAsMedias(
   galeriaId: string,
   tenantId: string,
@@ -531,6 +595,34 @@ export async function definirMiniatura(
       where id = $1 and tenant_id = $2 and tipo = 'video'
       returning id`,
     [mediaId, tenantId, chaveThumb, largura ?? null, altura ?? null, duracaoSeg ?? null],
+  );
+  return linhas.length > 0;
+}
+
+/**
+ * O nome do vídeo na tela do Stream (migração 055).
+ *
+ * Juan, 30/09/2026: "adicionar possibilidade de trocar o nome do arquivo que
+ * aparece na visualização". É só o nome de EXIBIÇÃO: o download continua
+ * chegando com `nome_original`.
+ *
+ * Texto vazio devolve o vídeo à regra de sempre (o título tirado do arquivo) —
+ * apagar o campo é o jeito natural de desfazer, e gravar "" seria um título
+ * invisível. Só vídeo, pela mesma razão de `definirMiniatura`: a trava mora no
+ * `where`, e não em quem chama.
+ */
+export async function definirTituloDoVideo(
+  galeriaId: string,
+  tenantId: string,
+  mediaId: string,
+  titulo: string,
+): Promise<boolean> {
+  const limpo = titulo.replace(/\s+/g, " ").trim().slice(0, 120);
+  const linhas = await consultar<{ id: string }>(
+    `update medias set titulo = $4
+      where id = $1 and galeria_id = $2 and tenant_id = $3 and tipo = 'video'
+      returning id`,
+    [mediaId, galeriaId, tenantId, limpo || null],
   );
   return linhas.length > 0;
 }

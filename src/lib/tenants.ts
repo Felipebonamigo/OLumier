@@ -45,6 +45,8 @@ export interface Tenant {
    * Liga o seletor de plataforma no painel. Ver `lib/ponte-atomatiza.ts`.
    */
   atomatiza_visto_em: Date | null;
+  /** Estúdio do Atomatiza da fatura única do pacote; nulo fora dele. Ver docs/pacote.md. */
+  pacote_atomatiza_id: string | null;
   /**
    * O maior plano já pago no período corrente — a base da diferença quando o
    * estúdio aumenta o plano. Nulo = vale o plano atual. Ver
@@ -151,10 +153,18 @@ export async function slugDisponivel(slug: string) {
   return !r;
 }
 
+/** O `senha_hash` de quem ainda não criou senha. Ver `criarTenant`. */
+export const HASH_DA_SENHA_PENDENTE = "sem-senha";
+
 export async function criarTenant(dados: {
   nomeEstudio: string;
   email: string;
-  senha: string;
+  /**
+   * null = conta SEM senha utilizável: a criada pelo pacote, a pedido do
+   * Atomatiza (`lib/pacote.ts`). O dono cria a senha pelo link do e-mail de
+   * boas-vindas — o mesmo caminho do "esqueci a senha".
+   */
+  senha: string | null;
   planoId: string;
   /** Só dígitos. Pedido no cadastro desde a migração 045 — único entre as contas. */
   cpfCnpj?: string | null;
@@ -181,7 +191,9 @@ export async function criarTenant(dados: {
     slug = `${base}-${i}`;
   }
 
-  const senhaHash = await gerarHashSenha(dados.senha);
+  /* `HASH_DA_SENHA_PENDENTE` não tem o formato `scrypt:` que `conferirSenha` exige: nenhuma
+   * senha digitada confere com ela, e o login fica fechado até o link. */
+  const senhaHash = dados.senha === null ? HASH_DA_SENHA_PENDENTE : await gerarHashSenha(dados.senha);
   /*
    * Uma quota só desde a unificação de 25/08/2026: galeria no ar e arquivo
    * somam no mesmo espaço. `quota_cofre_bytes` continua na tabela (a migração

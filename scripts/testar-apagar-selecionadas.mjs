@@ -182,7 +182,9 @@ await etapa("a barra cumpre o que a frase acima dela promete", async () => {
   /* E que ele use a rota em lote com a lista: um laço na rota de uma foto
      seriam N transações e N recontagens do espaço da galeria. */
   const acao = fonte.match(/async function apagarSelecionadas\([^]*?\n  \}/)?.[0] ?? "";
-  if (!/ids: \[\.\.\.selecao\]/.test(acao)) {
+  /* `marcadas` desde 01/10/2026: a seleção À VISTA no recorte da grade (um
+     capítulo, as repetidas). A escondida não pode ir junto para o apagar. */
+  if (!/ids: \[\.\.\.marcadas\]/.test(acao)) {
     throw new Error("o botão não manda a lista das selecionadas para a rota em lote");
   }
   return "promessa e botão juntos";
