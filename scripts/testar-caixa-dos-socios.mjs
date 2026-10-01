@@ -278,6 +278,43 @@ await etapa("a lista de pagamentos vem do mais recente para o mais antigo", () =
   igual(c.pagamentos.map((p) => p.id), ["pay_x", "pay_a2", "pay_a1", "pay_g1"], "ordem");
 });
 
+await etapa("por sócio: cada um com o que levou, o que vem do cartão, e o resto separado", () => {
+  const carteiras = caixa.carteirasConhecidas({
+    ASAAS_CARTEIRA_FELIPE: "w-propria", ASAAS_CARTEIRA_CAROL: "w-carol", ASAAS_CARTEIRA_SIRIUS: "w-sirius",
+  });
+  const recebidos = caixa.montarCaixa(
+    [
+      { id: "g", status: "RECEIVED", value: 79.99, netValue: 79, paymentDate: "2026-09-30", externalReference: "olumier:t",
+        split: [{ walletId: "w-carol", totalValue: 12.11 }, { walletId: "w-sirius", totalValue: 12.11 }] },
+      { id: "a", status: "RECEIVED", value: 59.9, netValue: 58.91, paymentDate: "2026-09-22", externalReference: "atz:sub:s",
+        split: [{ walletId: "w-carol", totalValue: 19.63 }, { walletId: "w-sirius", totalValue: 19.63 }] },
+      { id: "x", status: "RECEIVED", value: 250, netValue: 244.54, paymentDate: "2026-09-09",
+        split: [{ walletId: "w-fora", totalValue: 212.5 }] },
+    ],
+    carteiras,
+  );
+  const vem = caixa.montarCaixa(
+    [
+      { id: "c", status: "CONFIRMED", value: 159.99, netValue: 154.72, externalReference: "olumier:t2",
+        split: [{ walletId: "w-carol", totalValue: 25.1, status: "PENDING" }, { walletId: "w-sirius", totalValue: 25.1, status: "PENDING" }] },
+      { id: "r", status: "RECEIVED", value: 99, netValue: 97, externalReference: "olumier:t3" },
+    ],
+    carteiras,
+    new Set(["CONFIRMED"]),
+  );
+  const r = caixa.resumirSociedade(recebidos, vem);
+  igual(
+    r.socios.map((x) => [x.nome, x.donoDaConta, x.totalCentavos, x.aReceberCentavos]),
+    [["Felipe", true, 2422 + 1965, 5020], ["Carol", false, 1211 + 1963, 2510], ["Sirius", false, 1211 + 1963, 2510]],
+    "os três",
+  );
+  igual(r.liquidoCentavos, 7900 + 5891, "o líquido é só dos produtos");
+  igual(r.reservaCentavos, 7900 - 2422 - 2422, "a reserva da Galeria");
+  igual(r.socios.reduce((t, x) => t + x.totalCentavos, 0) + r.reservaCentavos, r.liquidoCentavos, "fecha");
+  igual(r.foraDaSociedade, { pagamentos: 1, liquidoCentavos: 24454, repassadoCentavos: 21250, naContaCentavos: 3204 }, "fora");
+  igual(r.outrasCarteirasCentavos, 0, "a carteira do outro negócio não conta como da sociedade");
+});
+
 // ---------------------------------------------------------------------------
 console.log("\nO mês\n");
 

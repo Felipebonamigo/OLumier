@@ -215,7 +215,12 @@ const finalDaCarteira = (w: string) => `Carteira …${w.slice(-6)}`;
  * lista crua. Os três sócios aparecem sempre, mesmo com zero: "a Carol não
  * recebeu nada da Galeria" é informação, e linha que some não diz nada.
  */
-export function montarCaixa(pagamentos: PagamentoDoAsaas[], carteiras: Carteira[]): CaixaDoMes {
+export function montarCaixa(
+  pagamentos: PagamentoDoAsaas[],
+  carteiras: Carteira[],
+  /** Quais status contam. O padrão é o que caiu na conta; o "a receber" passa `CONFIRMED`. */
+  statusQueConta: ReadonlySet<string> = STATUS_RECEBIDO,
+): CaixaDoMes {
   const porSistema: Record<Sistema, NumerosDoSistema> = {
     galeria: numerosZerados(),
     atomatiza: numerosZerados(),
@@ -266,7 +271,7 @@ export function montarCaixa(pagamentos: PagamentoDoAsaas[], carteiras: Carteira[
   const linhas: LinhaDoPagamento[] = [];
 
   for (const p of pagamentos) {
-    if (!STATUS_RECEBIDO.has(p.status)) continue;
+    if (!statusQueConta.has(p.status)) continue;
     const sistema = sistemaDaReferencia(p.externalReference);
     const bruto = centavos(p.value);
     const liquido = typeof p.netValue === "number" ? centavos(p.netValue) : bruto;
@@ -484,4 +489,87 @@ export function nomeDoMes(mes: string): string {
     year: "numeric",
     timeZone: "UTC",
   });
+}
+
+// --- os sócios, um por um ------------------------------------------------------
+
+/** Os produtos da sociedade — o "sem produto" não é dinheiro dos sócios. */
+export const SISTEMAS_DA_SOCIEDADE: Sistema[] = ["galeria", "atomatiza", "pacote"];
+
+export interface ResumoDoSocio {
+  id: string;
+  nome: string;
+  /** A parte dele fica na conta principal, que é dele (ver o topo do arquivo). */
+  donoDaConta: boolean;
+  semCarteira: boolean;
+  /** O que ele levou no mês, por produto da sociedade. */
+  porSistema: Record<Sistema, number>;
+  totalCentavos: number;
+  /** O que vai levar quando o cartão já aprovado cair. */
+  aReceberCentavos: number;
+}
+
+export interface ResumoDaSociedade {
+  socios: ResumoDoSocio[];
+  /** Líquido dos produtos da sociedade (sem o "sem produto"). */
+  liquidoCentavos: number;
+  /** O que ficou na conta além da parte do dono: a reserva de custo da Galeria (e, no pacote, a parte do dono junto). */
+  reservaCentavos: number;
+  /** Repasse dos produtos para carteira que não é de sócio nem do caixa da operação. */
+  outrasCarteirasCentavos: number;
+  /** Caixa da operação, quando existe a carteira. */
+  operacaoCentavos: number;
+  /** O que não é da sociedade: cobranças sem produto na mesma conta do Asaas. */
+  foraDaSociedade: { pagamentos: number; liquidoCentavos: number; repassadoCentavos: number; naContaCentavos: number };
+}
+
+const somaDaSociedade = (porSistema: Record<Sistema, number>) =>
+  SISTEMAS_DA_SOCIEDADE.reduce((t, s) => t + porSistema[s], 0);
+
+/**
+ * O caixa lido por pessoa. Felipe, 01/10/2026, vendo a tabela por carteira:
+ * "as infos dos sócios não estão claras". A tabela misturava os sócios com a
+ * reserva de custo e com dinheiro que nem é da sociedade (uma inscrição de
+ * outro negócio cobrada pela mesma conta), e a porcentagem de cada célula era
+ * sobre o líquido — nunca batia com o acordo. Aqui cada sócio é uma linha:
+ * quanto levou, de qual produto e quanto ainda vem do cartão; o resto do
+ * dinheiro fica separado, com nome.
+ */
+export function resumirSociedade(caixa: CaixaDoMes, aReceber: CaixaDoMes | null): ResumoDaSociedade {
+  const socios: ResumoDoSocio[] = [];
+  let outrasCarteiras = 0;
+  let operacao = 0;
+  for (const d of caixa.destinos) {
+    if (d.destino.tipo === "desconhecida") outrasCarteiras += somaDaSociedade(d.porSistema);
+    if (d.destino.tipo === "operacao") operacao += somaDaSociedade(d.porSistema);
+    if (d.destino.tipo !== "socio") continue;
+    const vem = aReceber?.destinos.find((x) => x.destino.tipo === "socio" && x.destino.chave === d.destino.chave);
+    const porSistema = { ...d.porSistema, outros: 0 };
+    socios.push({
+      id: d.destino.chave,
+      nome: d.destino.nome,
+      donoDaConta: Boolean(d.destino.donoDaConta),
+      semCarteira: Boolean(d.destino.semCarteira),
+      porSistema,
+      totalCentavos: somaDaSociedade(porSistema),
+      aReceberCentavos: vem ? somaDaSociedade(vem.porSistema) : 0,
+    });
+  }
+  const conta = caixa.destinos.find((d) => d.destino.tipo === "conta");
+  const fora = caixa.porSistema.outros;
+  return {
+    socios,
+    liquidoCentavos: somaDaSociedade(
+      Object.fromEntries(SISTEMAS.map((s) => [s, caixa.porSistema[s].liquidoCentavos])) as Record<Sistema, number>,
+    ),
+    reservaCentavos: conta ? somaDaSociedade(conta.porSistema) : 0,
+    outrasCarteirasCentavos: outrasCarteiras,
+    operacaoCentavos: operacao,
+    foraDaSociedade: {
+      pagamentos: fora.pagamentos,
+      liquidoCentavos: fora.liquidoCentavos,
+      repassadoCentavos: fora.repassadoCentavos,
+      naContaCentavos: fora.naContaCentavos,
+    },
+  };
 }
