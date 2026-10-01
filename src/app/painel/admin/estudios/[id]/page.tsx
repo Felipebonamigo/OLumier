@@ -13,8 +13,8 @@ import {
   CARENCIA_POS_TRIAL_DIAS,
 } from "@/config/trial";
 import { marca } from "@/config/marca";
-import { CONECTOR_PIXIESET_PRONTO } from "@/config/pixieset";
-import { permitirPixiesetAction, liberarFormatosAction } from "./actions";
+import { PLATAFORMAS } from "@/config/plataformas-de-origem";
+import { permitirLoginAction, liberarFormatosAction } from "./actions";
 import { ehAdmin } from "@/config/admin";
 import {
   Cartao,
@@ -186,53 +186,68 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
       </div>
 
       {/*
-        ── PERMITIR PIXIESET (30/09/2026) ──────────────────────────────────
+        ── PERMITIR PIXIESET / PIXELLU (30/09/2026) ────────────────────────
 
         Felipe: "crie essa opção, para liberar, lá no admin, um botão de
-        'permitir pixieset'". É a primeira escrita da ficha do estúdio: a ação
-        confere o admin de novo e registra quem apertou (ver `actions.ts` e
-        `lib/acesso-pixieset.ts`).
+        'permitir pixieset'" e, depois, "crie a opção Login com a conta do
+        Pixellu, igual foi feito para o pixieset, só eu posso habilitar pelo
+        menu admin". Uma linha por plataforma da lista de
+        `config/plataformas-de-origem.ts`; a ação confere o admin de novo e
+        registra quem apertou (ver `actions.ts` e `lib/acesso-plataforma.ts`).
 
         O recado diz o que o botão NÃO faz ainda: sem o conector, liberar só
         troca o texto que o estúdio lê. Sem isso, o admin liberaria achando
         que o fotógrafo já pode entrar.
       */}
       <Bloco
-        id="pixieset"
-        titulo="Importar do Pixieset"
-        explicacao="O “Entrar com a conta do Pixieset” da tela Importar galerias. Desligado para todo mundo, até ser liberado aqui."
+        id="outras-plataformas"
+        titulo="Importar de outra plataforma"
+        explicacao="O “Entrar com a conta” de cada plataforma, na tela Importar galerias. Desligado para todo mundo, até ser liberado aqui."
       >
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-linha bg-carbon px-4 py-3">
-          <div className="text-sm">
-            {e.pixieset_liberado_em ? (
-              <>
-                <span className="font-medium text-ok">Liberado</span>
-                <span className="text-texto-faint"> desde {dataHora(e.pixieset_liberado_em)}</span>
-              </>
-            ) : (
-              <span className="text-texto-soft">Não liberado</span>
-            )}
-            {!CONECTOR_PIXIESET_PRONTO && (
-              <p className="mt-1 text-xs text-texto-faint">
-                O conector ainda não existe: liberada, a conta só vê o recado de que foi liberada,
-                com o formulário desligado.
-              </p>
-            )}
-          </div>
-          <form action={permitirPixiesetAction}>
-            <input type="hidden" name="id" value={e.id} />
-            <input type="hidden" name="liberar" value={e.pixieset_liberado_em ? "0" : "1"} />
-            <button
-              type="submit"
-              className={
-                e.pixieset_liberado_em
-                  ? "rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
-                  : "rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
-              }
-            >
-              {e.pixieset_liberado_em ? "Bloquear Pixieset" : "Permitir Pixieset"}
-            </button>
-          </form>
+        <div className="flex flex-col gap-2">
+          {PLATAFORMAS.map((p) => {
+            const desde = e[p.coluna];
+            return (
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-linha bg-carbon px-4 py-3"
+              >
+                <div className="text-sm">
+                  <span className="font-medium">{p.nome}</span>
+                  <span className="mx-2 text-texto-faint">·</span>
+                  {desde ? (
+                    <>
+                      <span className="font-medium text-ok">Liberado</span>
+                      <span className="text-texto-faint"> desde {dataHora(desde)}</span>
+                    </>
+                  ) : (
+                    <span className="text-texto-soft">Não liberado</span>
+                  )}
+                  {!p.conectorPronto && (
+                    <p className="mt-1 text-xs text-texto-faint">
+                      O conector ainda não existe: liberada, a conta só vê o recado de que foi
+                      liberada, com o formulário desligado.
+                    </p>
+                  )}
+                </div>
+                <form action={permitirLoginAction}>
+                  <input type="hidden" name="id" value={e.id} />
+                  <input type="hidden" name="plataforma" value={p.id} />
+                  <input type="hidden" name="liberar" value={desde ? "0" : "1"} />
+                  <button
+                    type="submit"
+                    className={
+                      desde
+                        ? "rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
+                        : "rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
+                    }
+                  >
+                    {desde ? `Bloquear ${p.nome}` : `Permitir ${p.nome}`}
+                  </button>
+                </form>
+              </div>
+            );
+          })}
         </div>
       </Bloco>
 

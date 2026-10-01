@@ -26,7 +26,7 @@ export async function aparenciaPermitida(aparencia: Aparencia, tenantId: string)
 
 /**
  * Libera ou bloqueia Pastas e Stream para UM estúdio — o botão da ficha no
- * Admin. Mesma forma de `definirPixiesetLiberado`: só escreve quando o estado
+ * Admin. Mesma forma de `definirLoginLiberado` (lib/acesso-plataforma.ts): só escreve quando o estado
  * muda, e registra quem apertou na auditoria do estúdio.
  */
 export async function definirFormatosLiberados(

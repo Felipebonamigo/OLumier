@@ -89,6 +89,9 @@ export const ACOES = {
    * descreve — "quem liberou, e quando?" precisa de resposta. */
   PIXIESET_LIBERADO: "pixieset.liberado",
   PIXIESET_BLOQUEADO: "pixieset.bloqueado",
+  /* O mesmo, para o "Entrar com a conta do Pixellu" (migração 053). */
+  PIXELLU_LIBERADO: "pixellu.liberado",
+  PIXELLU_BLOQUEADO: "pixellu.bloqueado",
   /* O admin liberou ou bloqueou Pastas e Stream para este estúdio (migração
    * 054) — os formatos em validação pelos sócios. */
   FORMATOS_LIBERADOS: "formatos.liberados",
