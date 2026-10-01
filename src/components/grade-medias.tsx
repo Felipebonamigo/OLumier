@@ -63,6 +63,9 @@ export interface MediaExibida {
   baixadas?: number;
 }
 
+/** Quantos ladrilhos a grade desenha antes de medir a tela — ver "A GRADE É UMA JANELA". */
+const POR_VEZ = 240;
+
 export interface SecaoOpcao {
   id: string;
   nome: string;
@@ -490,46 +493,90 @@ export function GradeMedias({
   );
 
   /*
-   * ── QUEM ESTÁ PERTO DA TELA, NUMA CONTA SÓ (01/10/2026) ──────────────────
+   * ── A GRADE É UMA JANELA, NÃO A GALERIA INTEIRA (01/10/2026) ─────────────
    *
-   * Juan, no Mac, com 3.300 fotos em 20 capítulos: "no que desce um pouco a
-   * página já morre". Até aqui cada ladrilho tinha o seu IntersectionObserver
-   * para pedir a miniatura ao chegar perto — 3.300 alvos que o navegador
-   * reavalia a cada quadro da rolagem. No Chromium isso passa; o Safari refaz
-   * a conta de todos, e com `content-visibility` no meio.
+   * Juan, no Safari, com 3.300 fotos: "quando cheguei aqui nos capítulos, lag
+   * demais, e as funções param de funcionar (…). No que desce um pouco a
+   * página já morre." Felipe: "parece que o problema é por ser no Safari", e
+   * "carregar toda galeria aqui vai fazer o sistema travar".
    *
-   * Agora é UMA conta por quadro: os ladrilhos estão em ordem na grade, então
-   * uma busca binária pelas posições acha o primeiro e o último perto da tela
-   * (umas 12 leituras de posição para 3.300), e só esses pedem endereço. O
-   * guardado em `lib/miniaturas-do-painel.ts` não pede duas vezes.
+   * A grade desenhava os 3.300 ladrilhos de uma vez — uns 33 mil elementos. O
+   * Chromium aguenta (medido: 36 ms de atraso rolando 7.200 px); o Safari não,
+   * e aqui não há Safari para medir. O que vale para qualquer navegador é não
+   * pôr na página o que ninguém está vendo.
+   *
+   * Os ladrilhos têm todos a mesma altura, então a grade é contável: das
+   * colunas e da altura de uma linha sai quais linhas estão na tela. Desenha
+   * essas, mais uma tela acima e uma abaixo; o resto vira espaço vazio da
+   * mesma altura (a barra de rolagem não muda). Com 3.693 fotos ou com 300,
+   * a página tem as mesmas ~300.
+   *
+   * Nada do que age sobre a galeria depende disso: selecionar todas, o Shift,
+   * "para o início/fim", mover e apagar trabalham sobre os DADOS (`ordemNaTela`,
+   * `marcadas`). Durante um arrasto a janela só cresce — sumir com o ladrilho
+   * que está sendo arrastado cancelaria o arrasto.
    */
+  const recorte = `${filtro}|${termo}`;
+  const [janela, setJanela] = useState<{
+    recorte: string;
+    inicio: number;
+    fim: number;
+    antes: number;
+    depois: number;
+  }>({ recorte, inicio: 0, fim: POR_VEZ, antes: 0, depois: 0 });
+  const daJanela = useMemo(
+    () => (janela.recorte === recorte ? janela : { recorte, inicio: 0, fim: POR_VEZ, antes: 0, depois: 0 }),
+    [janela, recorte],
+  );
+  const desenhados = useMemo(
+    () => naGrade.slice(daJanela.inicio, daJanela.fim),
+    [naGrade, daJanela.inicio, daJanela.fim],
+  );
+  const arrastandoAgora = arrastando !== null || bloco !== null;
+
   const grade = useRef<HTMLUListElement>(null);
   useEffect(() => {
     if (!aberta) return;
     let quadro = 0;
     const conferir = () => {
       quadro = 0;
-      const filhos = grade.current?.children;
-      if (!filhos || filhos.length === 0) return;
-      const margem = window.innerHeight * 1.5;
-      const limite = window.innerHeight + margem;
-      let primeiro = filhos.length;
-      for (let lo = 0, hi = filhos.length - 1; lo <= hi; ) {
-        const meio = (lo + hi) >> 1;
-        if (filhos[meio].getBoundingClientRect().bottom >= -margem) {
-          primeiro = meio;
-          hi = meio - 1;
-        } else lo = meio + 1;
+      const ul = grade.current;
+      const umLadrilho = ul?.querySelector<HTMLElement>(":scope > li[data-ladrilho]");
+      if (!ul || !umLadrilho) return;
+      const estilo = getComputedStyle(ul);
+      const colunas = Math.max(1, estilo.gridTemplateColumns.split(" ").filter(Boolean).length);
+      const vao = parseFloat(estilo.rowGap) || 0;
+      const linha = umLadrilho.offsetHeight + vao;
+      if (linha <= vao) return;
+      const linhas = Math.ceil(naGrade.length / colunas);
+      /* Onde a grade estaria se tudo estivesse desenhado: o topo do <ul>
+         não muda com a janela, porque o espaço de cima ocupa o lugar. */
+      const topo = ul.getBoundingClientRect().top;
+      const tela = window.innerHeight;
+      /* Com a grade ainda longe, lá embaixo (20 capítulos e o envio em cima
+         dela), a conta da última linha dá NEGATIVA — e um `slice` com fim
+         negativo devolve quase tudo. Vista em 01/10/2026: 3.268 de 3.300
+         desenhados na abertura. Pelo menos uma linha, sempre. */
+      let l0 = Math.min(Math.max(0, Math.floor((-topo - tela) / linha)), linhas - 1);
+      let l1 = Math.max(l0, Math.min(linhas - 1, Math.ceil((tela * 2 - topo) / linha)));
+      if (arrastandoAgora) {
+        l0 = Math.min(l0, Math.floor(daJanela.inicio / colunas));
+        l1 = Math.max(l1, Math.ceil(daJanela.fim / colunas) - 1);
       }
-      let ultimo = primeiro - 1;
-      for (let lo = primeiro, hi = filhos.length - 1; lo <= hi; ) {
-        const meio = (lo + hi) >> 1;
-        if (filhos[meio].getBoundingClientRect().top <= limite) {
-          ultimo = meio;
-          lo = meio + 1;
-        } else hi = meio - 1;
+      const inicio = l0 * colunas;
+      const fim = Math.min(naGrade.length, (l1 + 1) * colunas);
+      const antes = l0 > 0 ? l0 * linha - vao : 0;
+      const depois = l1 < linhas - 1 ? (linhas - 1 - l1) * linha - vao : 0;
+      if (
+        inicio !== daJanela.inicio ||
+        fim !== daJanela.fim ||
+        Math.abs(antes - daJanela.antes) > 1 ||
+        Math.abs(depois - daJanela.depois) > 1
+      ) {
+        setJanela({ recorte, inicio, fim, antes, depois });
       }
-      for (let k = primeiro; k <= ultimo && k < naGrade.length; k++) {
+      /* Os endereços: só do que está desenhado (a janela já é "perto da tela"). */
+      for (let k = inicio; k < fim; k++) {
         const m = naGrade[k];
         pedirMiniatura(galeriaId, m.id, chaveDaMiniatura(m));
       }
@@ -545,7 +592,7 @@ export function GradeMedias({
       window.removeEventListener("scroll", agendar);
       window.removeEventListener("resize", agendar);
     };
-  }, [galeriaId, aberta, naGrade]);
+  }, [galeriaId, aberta, naGrade, recorte, daJanela, arrastandoAgora]);
 
   if (medias.length === 0) return null;
 
@@ -820,6 +867,12 @@ export function GradeMedias({
         `loading="lazy"` segura o DOWNLOAD da imagem e não o trabalho de layout
         e pintura, que o navegador refaz a cada rolada.
 
+        ── 01/10/2026: A JANELA SUBSTITUIU O `content-visibility` ──────────────
+        Com 3.300 fotos no Safari, nem pulando layout a página aguentou — os
+        33 mil elementos continuavam lá. Agora a grade só desenha o que está
+        perto da tela (ver "A GRADE É UMA JANELA"), e o resto deste comentário
+        é a história de como se chegou até aqui.
+
         `content-visibility: auto` é exatamente o remédio: o navegador pula
         layout e pintura do que está fora da tela, e `contain-intrinsic-size`
         diz a altura a reservar para a barra de rolagem não dançar. Duas linhas
@@ -842,7 +895,10 @@ export function GradeMedias({
         ref={grade}
         className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10"
       >
-        {naGrade.map((m) => (
+        {daJanela.antes > 0 && (
+          <li aria-hidden className="col-span-full" style={{ height: daJanela.antes }} />
+        )}
+        {desenhados.map((m) => (
           <Ladrilho
             key={m.id}
             m={m}
@@ -861,6 +917,9 @@ export function GradeMedias({
             removendo={removendo === m.id}
           />
         ))}
+        {daJanela.depois > 0 && (
+          <li aria-hidden className="col-span-full" style={{ height: daJanela.depois }} />
+        )}
       </ul>
       )}
     </section>
@@ -983,7 +1042,10 @@ const Ladrilho = memo(function Ladrilho({
         acoes.soltar();
       }}
       onDragEnd={acoes.soltar}
-      className={`group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto] ${
+      /* `data-ladrilho` é como a janela acha um ladrilho para medir a linha;
+         o `content-visibility` que morava aqui saiu com ela (01/10/2026). */
+      data-ladrilho=""
+      className={`group relative ${
         esmaecido ? "opacity-40" : ""
       }`}
     >
