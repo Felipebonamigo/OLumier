@@ -11,6 +11,7 @@ import {
   useSyncExternalStore,
   useTransition,
   type DragEvent,
+  type ReactNode,
   type RefObject,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -32,6 +33,14 @@ import {
   pedirMiniatura,
   type EnderecoDaMiniatura,
 } from "@/lib/miniaturas-do-painel";
+import {
+  ESTADO_INICIAL,
+  ID_DA_GRADE,
+  copiasRepetidas,
+  lerEstadoDaGrade,
+  mudarEstadoDaGrade,
+  ouvirEstadoDaGrade,
+} from "@/lib/filtro-da-grade";
 
 export interface MediaExibida {
   id: string;
@@ -97,8 +106,15 @@ export function GradeMedias({
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
   /* Aberta por padrão: quem acabou de subir quer VER o que subiu. Recolher é
    * para depois, quando a grade vira obstáculo entre a pessoa e o resto da
-   * página. */
-  const [aberta, setAberta] = useState(true);
+   * página. Mora em `lib/filtro-da-grade.ts` junto do recorte, porque o "ver
+   * as fotos" de um capítulo, lá na lista, precisa abrir a grade. */
+  const ouvirGrade = useCallback((avisar: () => void) => ouvirEstadoDaGrade(galeriaId, avisar), [galeriaId]);
+  const { filtro: filtroPedido, aberta } = useSyncExternalStore(
+    ouvirGrade,
+    () => lerEstadoDaGrade(galeriaId),
+    () => ESTADO_INICIAL,
+  );
+  const [busca, setBusca] = useState("");
   const [ocupado, iniciar] = useTransition();
   const router = useRouter();
 
@@ -118,16 +134,73 @@ export function GradeMedias({
     "entre elas" — reordenar a galeria muda o trecho, e tem de mudar.
   */
   const ancora = useRef<string | null>(null);
-  const ordemNaTela = useMemo(() => medias.map((m) => m.id), [medias]);
+
+  /*
+   * ── O RECORTE: UM CAPÍTULO, AS REPETIDAS, UM NOME (01/10/2026) ───────────
+   *
+   * Juan, com 4.000 fotos em 15 capítulos: "Subi 200 fotos em um capítulo X.
+   * Mas, 6 fotos repetiram, quero remover elas. Impossível eu achar (…). Eu não
+   * consigo ver apenas as fotos que estão dentro do capítulo X." O aviso de
+   * repetidas lá em cima mandava "marcar a cópia extra na grade abaixo" — numa
+   * grade de 4.000, a mesma agulha no mesmo palheiro.
+   *
+   * A grade mostra um recorte por vez. Repetida é mesmo nome E mesmo tamanho
+   * (`copiasRepetidas`); nessa visão elas vêm lado a lado, pelo nome, e um
+   * botão marca as cópias extras — a "apagar selecionadas" de sempre resolve.
+   *
+   * Capítulo que sumiu (apagado em outra aba) e repetidas já resolvidas voltam
+   * para "todas": recorte vazio por motivo velho parece galeria vazia.
+   */
+  const copias = useMemo(() => copiasRepetidas(medias), [medias]);
+  const filtro =
+    (filtroPedido.startsWith("cap:") && !secoes.some((s) => `cap:${s.id}` === filtroPedido)) ||
+    (filtroPedido === "repetidas" && copias.grupos === 0)
+      ? "todas"
+      : filtroPedido;
+  const termo = busca.trim().toLocaleLowerCase("pt-BR");
+  const visiveis = useMemo(() => {
+    let lista = medias;
+    if (filtro === "repetidas") {
+      lista = lista
+        .filter((m) => copias.repetidas.has(m.id))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR", { numeric: true }) || a.bytes - b.bytes);
+    } else if (filtro === "sem-capitulo") {
+      lista = lista.filter((m) => !m.secaoId);
+    } else if (filtro.startsWith("cap:")) {
+      const id = filtro.slice(4);
+      lista = lista.filter((m) => m.secaoId === id);
+    }
+    if (termo) lista = lista.filter((m) => m.nome.toLocaleLowerCase("pt-BR").includes(termo));
+    return lista;
+  }, [medias, filtro, termo, copias]);
+  const recortada = filtro !== "todas" || termo !== "";
+  const ordemNaTela = useMemo(() => visiveis.map((m) => m.id), [visiveis]);
+  const naTela = useMemo(() => new Set(ordemNaTela), [ordemNaTela]);
+  /*
+   * SÓ AGE SOBRE O QUE ESTÁ À VISTA. Marcar dez no capítulo X, trocar para o Y
+   * e apagar não pode levar as dez que sumiram da tela junto. A seleção
+   * escondida fica guardada (voltar ao X as mostra marcadas), mas não conta,
+   * não move e não apaga.
+   */
+  const marcadas = useMemo(() => new Set([...selecao].filter((id) => naTela.has(id))), [selecao, naTela]);
+  const porCapitulo = useMemo(() => {
+    const c = new Map<string | null, number>();
+    for (const m of medias) c.set(m.secaoId, (c.get(m.secaoId) ?? 0) + 1);
+    return c;
+  }, [medias]);
+  const recortar = (novo: string) => {
+    setSelecao(new Set());
+    mudarEstadoDaGrade(galeriaId, { filtro: novo, aberta: true });
+  };
 
   const alternarSelecao = (id: string, comShift = false) => {
-    const r = depoisDoClique(ordemNaTela, selecao, id, ancora.current, comShift);
+    const r = depoisDoClique(ordemNaTela, marcadas, id, ancora.current, comShift);
     ancora.current = r.ancora;
     setSelecao(r.selecao);
   };
 
   function moverPara(secaoId: string) {
-    const ids = [...selecao];
+    const ids = [...marcadas];
     iniciar(async () => {
       const f = new FormData();
       f.set("galeria_id", galeriaId);
@@ -236,7 +309,7 @@ export function GradeMedias({
   const [bloco, setBloco] = useState<string[] | null>(null);
   const destinoDoBloco = useRef<string | null>(null);
 
-  function moverSelecao(destino: DestinoDoBloco, ids = ordemNaTela.filter((id) => selecao.has(id))) {
+  function moverSelecao(destino: DestinoDoBloco, ids = ordemNaTela.filter((id) => marcadas.has(id))) {
     iniciar(async () => {
       const f = new FormData();
       f.set("galeria_id", galeriaId);
@@ -302,7 +375,9 @@ export function GradeMedias({
   }
 
   function comecarArrasto(id: string, e: DragEvent<HTMLLIElement>) {
-    if (ocupado || apagandoSelecao) {
+    /* Nas repetidas a ordem é a do NOME, para as cópias ficarem lado a lado:
+       arrastar ali mexeria numa ordem que não é a da galeria. */
+    if (ocupado || apagandoSelecao || filtro === "repetidas") {
       e.preventDefault();
       return;
     }
@@ -313,8 +388,8 @@ export function GradeMedias({
     e.dataTransfer.effectAllowed = "move";
     /* Marcada, com outras marcadas: vai o grupo, e o que o cursor
        carrega diz quantas. */
-    if (selecao.has(id) && selecao.size > 1) {
-      const grupo = ordemNaTela.filter((x) => selecao.has(x));
+    if (marcadas.has(id) && marcadas.size > 1) {
+      const grupo = ordemNaTela.filter((x) => marcadas.has(x));
       setBloco(grupo);
       destinoDoBloco.current = null;
       const etiqueta = document.createElement("div");
@@ -328,7 +403,7 @@ export function GradeMedias({
   }
 
   async function apagarSelecionadas() {
-    const quantas = selecao.size;
+    const quantas = marcadas.size;
     if (quantas === 0) return;
     if (!confirm(`Apagar ${quantas} ${quantas === 1 ? "arquivo" : "arquivos"}? Não dá para desfazer.`)) {
       return;
@@ -341,7 +416,7 @@ export function GradeMedias({
       const r = await fetch(`/api/galerias/${galeriaId}/medias`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [...selecao] }),
+        body: JSON.stringify({ ids: [...marcadas] }),
       });
       if (!r.ok) throw new Error();
       setSelecao(new Set());
@@ -414,7 +489,7 @@ export function GradeMedias({
     id ? (secoes.find((s) => s.id === id)?.nome ?? null) : null;
 
   return (
-    <section className="mt-8">
+    <section id={ID_DA_GRADE} className="mt-8 scroll-mt-4">
       {/*
         RECOLHER EXISTE POR CAUSA DO TAMANHO REAL.
 
@@ -439,7 +514,7 @@ export function GradeMedias({
         */}
         <button
           type="button"
-          onClick={() => setAberta((v) => !v)}
+          onClick={() => mudarEstadoDaGrade(galeriaId, { aberta: !aberta })}
           aria-expanded={aberta}
           className="flex items-center gap-2 rounded-lg border border-linha px-3 py-2 text-sm font-semibold transition hover:border-linha-forte hover:bg-carbon-2"
         >
@@ -467,15 +542,16 @@ export function GradeMedias({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => setSelecao(new Set(medias.map((m) => m.id)))}
-              className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon-2"
+              onClick={() => setSelecao(new Set(ordemNaTela))}
+              disabled={ordemNaTela.length === 0}
+              className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-40"
             >
-              selecionar todas
+              {recortada ? `selecionar estas ${ordemNaTela.length}` : "selecionar todas"}
             </button>
             <button
               type="button"
               onClick={() => setSelecao(new Set())}
-              disabled={selecao.size === 0}
+              disabled={marcadas.size === 0}
               className="rounded-md border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-40"
             >
               limpar
@@ -501,6 +577,63 @@ export function GradeMedias({
         )}
       </div>
 
+      {aberta && (
+        <div className="mt-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Mostrar na grade">
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => {
+              setSelecao(new Set());
+              setBusca(e.target.value);
+            }}
+            placeholder="buscar pelo nome do arquivo…"
+            aria-label="Buscar pelo nome do arquivo"
+            className="mr-1 w-full rounded-lg border border-linha bg-void px-3 py-1.5 text-xs placeholder:text-exemplo focus:border-acento focus:outline-none sm:w-56"
+          />
+          {(secoes.length > 0 || copias.grupos > 0) && (
+            <>
+              <Ficha ativa={filtro === "todas"} onClick={() => recortar("todas")}>
+                Todas · {medias.length}
+              </Ficha>
+              {secoes
+                .filter((s) => (porCapitulo.get(s.id) ?? 0) > 0)
+                .map((s) => (
+                  <Ficha key={s.id} ativa={filtro === `cap:${s.id}`} onClick={() => recortar(`cap:${s.id}`)}>
+                    {s.nome} · {porCapitulo.get(s.id)}
+                  </Ficha>
+                ))}
+              {secoes.length > 0 && (porCapitulo.get(null) ?? 0) > 0 && (
+                <Ficha ativa={filtro === "sem-capitulo"} onClick={() => recortar("sem-capitulo")}>
+                  Sem capítulo · {porCapitulo.get(null)}
+                </Ficha>
+              )}
+              {copias.grupos > 0 && (
+                <Ficha ativa={filtro === "repetidas"} alerta onClick={() => recortar("repetidas")}>
+                  Repetidas · {copias.extras.length}
+                </Ficha>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {aberta && filtro === "repetidas" && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-alerta/40 bg-alerta/5 px-3 py-2.5">
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-texto-soft">
+            {copias.extras.length} {copias.extras.length === 1 ? "cópia extra" : "cópias extras"} de{" "}
+            {copias.grupos} {copias.grupos === 1 ? "arquivo" : "arquivos"} — mesmo nome e mesmo tamanho,
+            lado a lado. Fica uma de cada: a que o cliente marcou ou baixou, ou a primeira da galeria.
+          </p>
+          <button
+            type="button"
+            onClick={() => setSelecao(new Set(copias.extras))}
+            className="rounded-md border border-alerta/60 px-2.5 py-1.5 text-xs font-medium text-alerta transition hover:bg-alerta/10"
+          >
+            marcar as cópias extras
+          </button>
+        </div>
+      )}
+
       {/*
         PARA QUE SERVE SELECIONAR — dito aqui, e não só quando já há seleção.
 
@@ -520,10 +653,10 @@ export function GradeMedias({
       )}
 
       {/* Barra de ações em lote — só aparece com algo selecionado. */}
-      {selecao.size > 0 && (
+      {marcadas.size > 0 && (
         <div className="sticky top-2 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-acento/40 bg-carbon-2 px-3 py-2.5 shadow-lg">
           <span className="text-sm font-medium">
-            {selecao.size} {selecao.size === 1 ? "selecionada" : "selecionadas"}
+            {marcadas.size} {marcadas.size === 1 ? "selecionada" : "selecionadas"}
           </span>
 
           <span className="ml-auto flex flex-wrap items-center gap-2">
@@ -592,7 +725,7 @@ export function GradeMedias({
               onClick={apagarSelecionadas}
               className="rounded-md border border-erro/40 px-2.5 py-1.5 text-xs text-erro transition hover:bg-erro/10 disabled:opacity-40"
             >
-              {apagandoSelecao ? "apagando…" : `apagar selecionadas (${selecao.size})`}
+              {apagandoSelecao ? "apagando…" : `apagar selecionadas (${marcadas.size})`}
             </button>
           </span>
         </div>
@@ -635,19 +768,26 @@ export function GradeMedias({
         fotos não dá para ver diferença nenhuma — ali já eram 60 fps dos dois
         lados. O defeito é de escala, e só aparece na escala dele
       */}
+      {aberta && recortada && ordemNaTela.length === 0 && (
+        <p className="mt-4 text-sm text-texto-faint">
+          {termo ? `Nenhum arquivo com “${busca.trim()}” no nome aqui.` : "Nada aqui."}
+        </p>
+      )}
       {aberta && (
       <ul className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10">
         {(ordemLocal
-          ? (ordemLocal.map((id) => porId.get(id)).filter(Boolean) as typeof medias)
-          : medias
+          ? (ordemLocal.map((id) => porId.get(id)).filter((m) => m && naTela.has(m.id)) as typeof medias)
+          : visiveis
         ).map((m) => (
           <Ladrilho
             key={m.id}
             m={m}
             galeriaId={galeriaId}
             acoes={acoes}
-            selecionada={selecao.has(m.id)}
-            capitulo={nomeSecao(m.secaoId)}
+            selecionada={marcadas.has(m.id)}
+            /* Recortada, a grade já diz de onde são as fotos: o rótulo volta
+               a ser o nome do arquivo, que é o que se procura ali. */
+            capitulo={recortada ? null : nomeSecao(m.secaoId)}
             ehCapa={capaId === m.id}
             ehCapaDaPasta={ehCapaDaPasta(m)}
             mostrarCapaDaPasta={mostrarCapaDaPasta}
@@ -1026,3 +1166,35 @@ const Ladrilho = memo(function Ladrilho({
     </li>
   );
 }, mesmoLadrilho);
+
+/** Uma ficha do recorte da grade. */
+function Ficha({
+  ativa,
+  alerta = false,
+  onClick,
+  children,
+}: {
+  ativa: boolean;
+  alerta?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={ativa}
+      className={`inline-flex min-h-8 items-center whitespace-nowrap rounded-full border px-3 text-xs transition ${
+        ativa
+          ? alerta
+            ? "border-alerta bg-alerta/15 font-medium text-alerta"
+            : "border-acento bg-acento/10 font-medium text-texto"
+          : alerta
+            ? "border-alerta/40 text-alerta hover:bg-alerta/10"
+            : "border-linha text-texto-soft hover:border-linha-forte hover:bg-carbon-2"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}

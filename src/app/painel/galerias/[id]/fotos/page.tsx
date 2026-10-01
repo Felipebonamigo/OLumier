@@ -220,7 +220,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
         que ESTÁ nela, e some quando não há repetida — aviso permanente vira
         mobília.
       */}
-      <AvisoDeRepetidas itens={repetidas} />
+      <AvisoDeRepetidas galeriaId={galeria.id} itens={repetidas} />
 
       <GradeMedias
         medias={exibidas}

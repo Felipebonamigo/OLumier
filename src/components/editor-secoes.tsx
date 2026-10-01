@@ -15,6 +15,7 @@ import {
 } from "@/app/painel/actions";
 import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
 import { nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
+import { verNaGrade } from "@/lib/filtro-da-grade";
 
 export interface SecaoResumo {
   id: string;
@@ -323,9 +324,21 @@ export function EditorSecoes({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{s.nome}</span>
-                  <span className="text-[11px] text-texto-faint">
-                    {s.total} {s.total === 1 ? "foto" : "fotos"}
-                  </span>
+                  {/* VER AS FOTOS DESTE CAPÍTULO (01/10/2026). Juan: "ainda não
+                      tem como visualizar as fotos que tem em cada capítulo". A
+                      contagem vira o caminho: a grade lá embaixo mostra só
+                      este capítulo, e a tela desce até ela. */}
+                  {s.total > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => verNaGrade(galeriaId, `cap:${s.id}`)}
+                      className="text-[11px] text-texto-faint underline decoration-dotted underline-offset-2 transition hover:text-acento"
+                    >
+                      ver as {s.total} {s.total === 1 ? "foto" : "fotos"}
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-texto-faint">0 fotos</span>
+                  )}
                 </span>
 
                 <span className="flex items-center gap-1">
@@ -552,7 +565,19 @@ export function EditorSecoes({
                     {temCapitulos ? nomeDoGrupoSolto(grupoSolto) : "Todas as fotos"}
                   </span>
                   <span className="text-[11px] text-texto-faint">
-                    {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                    {temCapitulos && semCapitulo > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => verNaGrade(galeriaId, "sem-capitulo")}
+                        className="underline decoration-dotted underline-offset-2 transition hover:text-acento"
+                      >
+                        ver as {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                      </button>
+                    ) : (
+                      <>
+                        {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                      </>
+                    )}
                     {temCapitulos
                       ? ` — ${semCapitulo === 1 ? "aparece" : "aparecem"} com esse nome, antes dos capítulos`
                       : " — numa sequência só, na ordem abaixo"}
