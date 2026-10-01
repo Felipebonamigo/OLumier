@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { METADADOS_DO_APP } from "@/config/app-instalado";
 import Link from "next/link";
 import { MarcaLockup } from "@/components/marca-tile";
 import { emailConfigurado } from "@/lib/email";
 import { FormEntrar } from "./form";
 
-export const metadata: Metadata = { title: "Entrar" };
+/* O ícone da tela de início e o app — ver `config/app-instalado.ts`. */
+export const metadata: Metadata = { title: "Entrar", ...METADADOS_DO_APP };
 
 export default async function EntrarPage({
   searchParams,

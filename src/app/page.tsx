@@ -1,6 +1,7 @@
 /* eslint-disable @next/next/no-img-element -- página institucional: as fotos e
  * os prints são estáticos de /public, servidos como estão. */
 import type { Metadata } from "next";
+import { METADADOS_DO_APP } from "@/config/app-instalado";
 import Link from "next/link";
 import { marca } from "@/config/marca";
 import { MarcaSimbolo, SeloBeta } from "@/components/marca-tile";
@@ -55,6 +56,8 @@ const DESCRICAO =
 export const metadata: Metadata = {
   title: `${marca.nome} — ${marca.tagline}`,
   description: DESCRICAO,
+  /* O ícone da tela de início e o app — ver `config/app-instalado.ts`. */
+  ...METADADOS_DO_APP,
 };
 
 const MENOR_ESPACO = ESPACOS[0];
