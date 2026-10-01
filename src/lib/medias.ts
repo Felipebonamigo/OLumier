@@ -34,6 +34,8 @@ export interface Media {
    * ficam sempre no r2 — ver `lib/armazem.ts`, que é quem decide de onde ler.
    */
   armazem: string;
+  /** Sobe a cada republicação na mesma chave (migração 039). */
+  versao: number;
 }
 
 /** O que aceitamos subir. Fora desta lista, recusamos antes de gerar a URL. */

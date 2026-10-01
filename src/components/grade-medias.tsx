@@ -1,6 +1,18 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+  type DragEvent,
+  type RefObject,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   definirCapaAction,
@@ -11,14 +23,29 @@ import {
 } from "@/app/painel/actions";
 import { depoisDoClique } from "@/lib/trecho-selecionado";
 import { moverBloco, type DestinoDoBloco } from "@/lib/ordem-em-bloco";
+import {
+  chaveDaMiniatura,
+  guardarMiniatura,
+  lerMiniatura,
+  observarMiniatura,
+  ouvirMiniatura,
+  pedirMiniatura,
+  type EnderecoDaMiniatura,
+} from "@/lib/miniaturas-do-painel";
 
 export interface MediaExibida {
   id: string;
   nome: string;
   tipo: "foto" | "video";
-  url: string;
+  /**
+   * A miniatura assinada — só nos ladrilhos da primeira tela. Os outros pedem
+   * o endereço quando chegam perto da tela: `lib/miniaturas-do-painel.ts`.
+   */
+  url?: string;
   /** O endereço do FILME. Só em vídeo — ver o comentário na aba Fotos. */
   urlFilme?: string;
+  /** Muda quando o arquivo é republicado na mesma chave. */
+  versao: number;
   /** Há miniatura de verdade? Sem ela o `poster` não pode ser desenhado. */
   temCapa?: boolean;
   bytes: number;
@@ -109,7 +136,6 @@ export function GradeMedias({
       f.set("secao_id", secaoId === "__nenhum" ? "" : secaoId);
       await moverMediasAction(f);
       setSelecao(new Set());
-      router.refresh();
     });
   }
 
@@ -129,7 +155,6 @@ export function GradeMedias({
       f.set("galeria_id", galeriaId);
       f.set("media_id", m.id);
       await definirCapaDaPastaAction(f);
-      router.refresh();
     } finally {
       setDefinindoCapa(null);
     }
@@ -142,7 +167,6 @@ export function GradeMedias({
       f.set("galeria_id", galeriaId);
       f.set("media_id", m.id);
       await definirCapaAction(f);
-      router.refresh();
     } finally {
       setDefinindoCapa(null);
     }
@@ -198,8 +222,8 @@ export function GradeMedias({
    * A ORDEM ENQUANTO O DEDO ANDA — igual à da lista de capítulos.
    *
    * `null` quer dizer "quem manda é a lista do servidor", e é o que faz a tela
-   * voltar sozinha ao certo depois do `router.refresh()`. Zerar antes da volta
-   * do servidor faria o ladrilho piscar no lugar antigo.
+   * voltar sozinha ao certo quando a resposta da ação chega. Zerar antes da
+   * volta do servidor faria o ladrilho piscar no lugar antigo.
    */
   const [ordemLocal, setOrdemLocal] = useState<string[] | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -219,7 +243,6 @@ export function GradeMedias({
       f.set("media_ids", ids.join(","));
       f.set("destino", destino);
       await moverFotosAction(f);
-      router.refresh();
       setOrdemLocal(null);
     });
   }
@@ -274,9 +297,34 @@ export function GradeMedias({
       f.set("arrastado", arrastada);
       f.set("alvo", alvo);
       await moverFotoAction(f);
-      router.refresh();
       setOrdemLocal(null);
     });
+  }
+
+  function comecarArrasto(id: string, e: DragEvent<HTMLLIElement>) {
+    if (ocupado || apagandoSelecao) {
+      e.preventDefault();
+      return;
+    }
+    setArrastando(id);
+    setOrdemLocal(medias.map((x) => x.id));
+    /* Sem `setData` o Firefox não inicia o arrasto. */
+    e.dataTransfer.setData("text/plain", id);
+    e.dataTransfer.effectAllowed = "move";
+    /* Marcada, com outras marcadas: vai o grupo, e o que o cursor
+       carrega diz quantas. */
+    if (selecao.has(id) && selecao.size > 1) {
+      const grupo = ordemNaTela.filter((x) => selecao.has(x));
+      setBloco(grupo);
+      destinoDoBloco.current = null;
+      const etiqueta = document.createElement("div");
+      etiqueta.textContent = `${grupo.length} fotos`;
+      etiqueta.style.cssText =
+        "position:fixed;top:-100px;left:0;padding:6px 10px;border-radius:999px;background:#111;color:#fff;font:600 12px system-ui";
+      document.body.appendChild(etiqueta);
+      e.dataTransfer.setDragImage(etiqueta, 10, 10);
+      setTimeout(() => etiqueta.remove(), 0);
+    }
   }
 
   async function apagarSelecionadas() {
@@ -318,6 +366,47 @@ export function GradeMedias({
       setRemovendo(null);
     }
   }
+
+  /*
+   * ── AS AÇÕES DO LADRILHO, ESTÁVEIS (01/10/2026) ──────────────────────────
+   *
+   * Juan, com galerias de até 4.577 arquivos: "tá tudo bem lagado". Medido
+   * numa de 3.000: marcar UMA foto levava de 640 a 880 ms para acender, porque
+   * cada clique redesenhava os 3.000 ladrilhos — eles eram desenhados aqui
+   * dentro, com funções novas a cada desenho.
+   *
+   * Agora cada ladrilho é um `Ladrilho` memorizado, e as funções que ele
+   * recebe são SEMPRE as mesmas: chamam a versão mais recente pela `ref`, que
+   * é atualizada depois de cada desenho. Marcar uma foto redesenha aquela foto.
+   */
+  const atuais = useRef<AcoesDoLadrilho | null>(null);
+  useLayoutEffect(() => {
+    atuais.current = {
+      marcar: alternarSelecao,
+      capa: definirCapa,
+      capaDaPasta: definirCapaDaPasta,
+      remover,
+      comecarArrasto,
+      cruzar: aoCruzar,
+      soltar: aoSoltar,
+    };
+  });
+  const acoes = useMemo<AcoesDoLadrilho>(
+    () => ({
+      marcar: (id, comShift) => atuais.current?.marcar(id, comShift),
+      capa: (m) => atuais.current?.capa(m),
+      capaDaPasta: (m) => atuais.current?.capaDaPasta(m),
+      remover: (m) => atuais.current?.remover(m),
+      comecarArrasto: (id, e) => atuais.current?.comecarArrasto(id, e),
+      cruzar: (id) => atuais.current?.cruzar(id),
+      soltar: () => atuais.current?.soltar(),
+    }),
+    [],
+  );
+  /* Durante o arrasto a ordem é refeita a cada ladrilho cruzado: procurar
+     cada id na lista inteira eram 9 milhões de comparações por passo. */
+  const porId = useMemo(() => new Map(medias.map((m) => [m.id, m])), [medias]);
+  const noBloco = useMemo(() => new Set(bloco ?? []), [bloco]);
 
   if (medias.length === 0) return null;
 
@@ -549,299 +638,391 @@ export function GradeMedias({
       {aberta && (
       <ul className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10">
         {(ordemLocal
-          ? (ordemLocal.map((id) => medias.find((m) => m.id === id)).filter(Boolean) as typeof medias)
+          ? (ordemLocal.map((id) => porId.get(id)).filter(Boolean) as typeof medias)
           : medias
-        ).map((m) => {
-          const selecionada = selecao.has(m.id);
-          const capitulo = nomeSecao(m.secaoId);
-          return (
-            <li
-              key={m.id}
-              /*
-                ARRASTAR PARA REORDENAR (28/09/2026).
-
-                Felipe: "quero adicionar as fotos analógicas que fiz no 'local'
-                certo, na ordem cronológica e não consigo arrastar". A ordem era
-                decidida no ENVIO e ponto — quem revela um filme depois não tinha
-                onde encaixá-lo.
-
-                Mesmo idioma da lista de capítulos: a ordem local manda enquanto
-                o dedo anda, o servidor recebe só o par (arrastada, alvo) e a
-                lista do servidor volta a mandar quando o `router.refresh()`
-                chega. E a conta do servidor usa o MESMO `splice` daqui — se as
-                duas discordassem, o ladrilho pularia de lugar ao recarregar.
-
-                `draggable` não existe no toque, e é por isso que o "mover para"
-                do menu continua: no celular ele é o único caminho.
-              */
-              draggable={!ocupado && !apagandoSelecao}
-              onDragStart={(e) => {
-                setArrastando(m.id);
-                setOrdemLocal(medias.map((x) => x.id));
-                /* Sem `setData` o Firefox não inicia o arrasto. */
-                e.dataTransfer.setData("text/plain", m.id);
-                e.dataTransfer.effectAllowed = "move";
-                /* Marcada, com outras marcadas: vai o grupo, e o que o cursor
-                   carrega diz quantas. */
-                if (selecao.has(m.id) && selecao.size > 1) {
-                  const grupo = ordemNaTela.filter((id) => selecao.has(id));
-                  setBloco(grupo);
-                  destinoDoBloco.current = null;
-                  const etiqueta = document.createElement("div");
-                  etiqueta.textContent = `${grupo.length} fotos`;
-                  etiqueta.style.cssText =
-                    "position:fixed;top:-100px;left:0;padding:6px 10px;border-radius:999px;background:#111;color:#fff;font:600 12px system-ui";
-                  document.body.appendChild(etiqueta);
-                  e.dataTransfer.setDragImage(etiqueta, 10, 10);
-                  setTimeout(() => etiqueta.remove(), 0);
-                }
-              }}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                aoCruzar(m.id);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                aoSoltar();
-              }}
-              onDragEnd={aoSoltar}
-              className={`group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto] ${
-                arrastando === m.id || bloco?.includes(m.id) ? "opacity-40" : ""
-              }`}
-            >
-              {/*
-                A MOLDURA ACENDE SOB O PONTEIRO (pedido do Juan em 05/09/2026).
-
-                "Senti falta de eu passar a seta aqui e a bordinha ficar
-                piscando pra mim conforme eu vou passando a seta." Havia reação
-                ao ponteiro — os botões capa/remover surgindo no canto —, mas em
-                CIMA da foto, e não em volta dela: quem varre uma grade de 600
-                fotos com o mouse não acompanha um botão de 11 px aparecendo,
-                acompanha a moldura.
-
-                `group-hover` e não `hover`: quem recebe o ponteiro é o ladrilho
-                inteiro, então passar pelo nome do arquivo, embaixo da foto,
-                também acende.
-
-                Acende MENOS forte que a selecionada (a cor pela metade, sem
-                anel): se os dois desenhassem a mesma borda, varrer a grade
-                pareceria ir selecionando foto por foto. E o `hover` do Tailwind
-                já vem dentro de `@media (hover: hover)`, então no celular nada
-                fica preso aceso depois do toque — `testar-hover-da-grade.mjs`
-                confere isso no CSS compilado, não na intenção.
-              */}
-              <div
-                className={`aspect-[4/5] overflow-hidden rounded-lg border bg-carbon-2 transition ${
-                  selecionada
-                    ? "border-acento ring-2 ring-acento/40"
-                    : "border-linha group-hover:border-acento/60"
-                }`}
-              >
-                {m.tipo === "foto" ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária
-                  <img
-                    src={m.url}
-                    alt={m.nome}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
-                ) : (
-                  /* `src` é o filme e `poster` é a capa: são dois endereços
-                     para duas coisas, e o HTML tem um atributo para cada uma.
-                     Sem capa o `poster` some — apontá-lo para o original
-                     mandaria o navegador desenhar um filme como imagem. */
-                  <video
-                    src={m.urlFilme ?? m.url}
-                    poster={m.temCapa ? m.url : undefined}
-                    className="h-full w-full object-cover"
-                    preload="metadata"
-                    controls
-                  />
-                )}
-              </div>
-
-              {/*
-                CLICAR NA FOTO SELECIONA.
-
-                A bolinha de 24px era o único alvo, e num casamento de 192 fotos
-                marcar cinquenta pela bolinha é um exercício de pontaria. A foto
-                inteira é o alvo óbvio — é onde a mão vai.
-
-                É uma camada por cima da imagem, e não um `onClick` no cartão:
-                dentro dele há botões (capa, remover) e um vídeo com controles, e
-                aninhar interativo dentro de interativo quebra teclado e leitor de
-                tela. Esta camada fica ABAIXO deles no empilhamento, então cada um
-                continua recebendo o próprio clique.
-
-                Vídeo fica de fora: ali o clique é play, e roubá-lo para marcar
-                faria o fotógrafo não conseguir assistir ao que subiu.
-              */}
-              {m.tipo === "foto" && (
-                <button
-                  type="button"
-                  /* O navegador pinta uma seleção de TEXTO entre dois cliques
-                     com shift. Sem isto, marcar um trecho de 300 fotos deixa
-                     meia grade azulada por baixo. */
-                  onMouseDown={(e) => {
-                    if (e.shiftKey) e.preventDefault();
-                  }}
-                  onClick={(e) => alternarSelecao(m.id, e.shiftKey)}
-                  aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
-                  aria-pressed={selecionada}
-                  className="absolute inset-x-0 top-0 aspect-[4/5] w-full cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-acento"
-                />
-              )}
-
-              {/* Bolinha de seleção — sempre visível, para ficar óbvio que dá para selecionar. */}
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  if (e.shiftKey) e.preventDefault();
-                }}
-                onClick={(e) => alternarSelecao(m.id, e.shiftKey)}
-                aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
-                aria-pressed={selecionada}
-                className={`absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-full border text-[11px] transition ${
-                  selecionada
-                    ? "border-acento bg-acento text-void"
-                    : "border-linha-forte bg-void/70 text-transparent hover:text-texto-faint"
-                }`}
-              >
-                ✓
-              </button>
-
-              {(capaId === m.id || (mostrarCapaDaPasta && ehCapaDaPasta(m))) && (
-                <span className="absolute left-9 top-1.5 z-10 flex flex-col items-start gap-1">
-                  {capaId === m.id && (
-                    <span className="rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
-                      capa
-                    </span>
-                  )}
-                  {mostrarCapaDaPasta && ehCapaDaPasta(m) && (
-                    <span className="whitespace-nowrap rounded-md bg-void/85 px-2 py-0.5 text-[10px] font-semibold text-acento-alto">
-                      capa da pasta
-                    </span>
-                  )}
-                </span>
-              )}
-
-              {/*
-                Marca do cliente, não do fotógrafo: ele não clica aqui, só lê.
-                O número aparece a partir de 2 porque, com uma pessoa só, "♥ 1"
-                em toda foto marcada vira ruído — o que importa ali é o coração.
-                Com duas ou mais, o número é a informação: foto escolhida pelos
-                dois é decisão tomada.
-              */}
-              {((m.favoritas ?? 0) > 0 || (m.baixadas ?? 0) > 0) && (
-                /*
-                  ── ANCORADO NA FOTO, E NÃO NO ITEM INTEIRO ────────────────
-                  A caixa da imagem não é `relative`, então um `absolute` aqui
-                  se mede contra o `<li>` — que inclui a linha do nome e do
-                  tamanho embaixo. Medido: a pastilha nascia 17 px ABAIXO da
-                  foto, em cima de "1.0 MiB".
-                  O coração de favorita tinha o mesmo defeito desde que nasceu;
-                  ele só não aparecia porque quase nenhuma galeria de teste
-                  tinha favorita marcada. Este invólucro repete o truque que o
-                  alvo de clique já usa — `inset-x-0 top-0 aspect-[4/5]` tem
-                  exatamente a altura da foto — e aí `items-end` encosta as duas
-                  pastilhas no rodapé da IMAGEM.
-                  `pointer-events-none` porque isto é leitura, não alvo: sem
-                  ele, o invólucro cobriria a foto inteira e mataria o clique
-                  que seleciona.
-                */
-                <span className="pointer-events-none absolute inset-x-0 top-0 flex aspect-[4/5] items-end justify-end p-1.5">
-                <span className="flex items-center gap-1">
-                  {(m.favoritas ?? 0) > 0 && (
-                    <span
-                      title={`${m.favoritas} ${m.favoritas === 1 ? "pessoa marcou" : "pessoas marcaram"} como favorita`}
-                      className="rounded-full bg-void/80 px-1.5 text-[10px] font-medium text-acento"
-                    >
-                      ♥{(m.favoritas ?? 0) > 1 ? ` ${m.favoritas}` : ""}
-                    </span>
-                  )}
-                  {/*
-                    O CONTADOR DE DOWNLOADS, ao lado do coração.
-
-                    Felipe, 23/09/2026: "e o numero de downloads de cada foto".
-                    Coração e seta respondem perguntas diferentes — "gostaram" e
-                    "levaram" —, e uma foto pode ter muito de um e nada do
-                    outro. Por isso são duas pastilhas e não uma.
-
-                    Aqui o número aparece SEMPRE, inclusive no 1, ao contrário
-                    do coração: baixar é um evento contável que se repete, e
-                    "alguém baixou" e "baixaram doze vezes" são notícias
-                    diferentes. O coração, não — ou a pessoa marcou, ou não.
-                  */}
-                  {(m.baixadas ?? 0) > 0 && (
-                    <span
-                      title={`${m.baixadas} download${m.baixadas === 1 ? "" : "s"} desta foto`}
-                      className="rounded-full bg-void/80 px-1.5 text-[10px] font-medium text-texto-soft"
-                    >
-                      ↓ {m.baixadas}
-                    </span>
-                  )}
-                </span>
-                </span>
-              )}
-
-              {/* EM PÉ, e não lado a lado: deitados eles somam 86 px e o
-                  ladrilho tem 116, então cobriam a bolinha de marcar (medido:
-                  7 px por cima dela). Empilhados ocupam 48 e sobram 32 px de
-                  folga até a bolinha, que continua legível com o ponteiro em
-                  cima — e é ela que diz se a foto está marcada. */}
-              <span className="absolute right-1.5 top-1.5 z-10 flex flex-col items-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-                {m.tipo === "foto" && capaId !== m.id && (
-                  <button
-                    type="button"
-                    onClick={() => definirCapa(m)}
-                    disabled={definindoCapa === m.id}
-                    aria-label={`Usar ${m.nome} como capa`}
-                    className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
-                  >
-                    {definindoCapa === m.id ? "…" : "capa"}
-                  </button>
-                )}
-                {/* Vídeo também pode ser a frente da pasta — a pasta do filme
-                    tem só vídeo —, desde que tenha pôster para mostrar. */}
-                {mostrarCapaDaPasta && m.secaoId && !ehCapaDaPasta(m) && (m.tipo === "foto" || m.temCapa) && (
-                  <button
-                    type="button"
-                    onClick={() => definirCapaDaPasta(m)}
-                    disabled={definindoCapa === `pasta:${m.id}`}
-                    aria-label={`Usar ${m.nome} como capa da pasta`}
-                    title="A frente deste capítulo quando a galeria é entregue em pastas"
-                    className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
-                  >
-                    {definindoCapa === `pasta:${m.id}` ? "…" : "capa da pasta"}
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => remover(m)}
-                  disabled={removendo === m.id}
-                  aria-label={`Remover ${m.nome}`}
-                  className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
-                >
-                  {removendo === m.id ? "…" : "remover"}
-                </button>
-              </span>
-
-              {/* Nome e tamanho lado a lado sobravam da grade grande: em 116 px
-                  o nome virava três letras e reticências. O tamanho passa para
-                  o `title`, junto do nome inteiro — que o `truncate` corta de
-                  todo jeito, e é o que faltava para saber QUAL arquivo é. */}
-              <div
-                title={`${m.nome} · ${formatar(m.bytes)}`}
-                className="mt-1 truncate text-[10px] text-texto-faint"
-              >
-                {capitulo ?? m.nome}
-              </div>
-            </li>
-          );
-        })}
+        ).map((m) => (
+          <Ladrilho
+            key={m.id}
+            m={m}
+            galeriaId={galeriaId}
+            acoes={acoes}
+            selecionada={selecao.has(m.id)}
+            capitulo={nomeSecao(m.secaoId)}
+            ehCapa={capaId === m.id}
+            ehCapaDaPasta={ehCapaDaPasta(m)}
+            mostrarCapaDaPasta={mostrarCapaDaPasta}
+            esmaecido={arrastando === m.id || noBloco.has(m.id)}
+            definindo={
+              definindoCapa === m.id ? "capa" : definindoCapa === `pasta:${m.id}` ? "pasta" : null
+            }
+            removendo={removendo === m.id}
+          />
+        ))}
       </ul>
       )}
     </section>
   );
 }
+
+interface AcoesDoLadrilho {
+  marcar: (id: string, comShift: boolean) => void;
+  capa: (m: MediaExibida) => void;
+  capaDaPasta: (m: MediaExibida) => void;
+  remover: (m: MediaExibida) => void;
+  comecarArrasto: (id: string, e: DragEvent<HTMLLIElement>) => void;
+  cruzar: (id: string) => void;
+  soltar: () => void;
+}
+
+interface PropsDoLadrilho {
+  m: MediaExibida;
+  galeriaId: string;
+  acoes: AcoesDoLadrilho;
+  selecionada: boolean;
+  capitulo: string | null;
+  ehCapa: boolean;
+  ehCapaDaPasta: boolean;
+  mostrarCapaDaPasta: boolean;
+  esmaecido: boolean;
+  definindo: "capa" | "pasta" | null;
+  removendo: boolean;
+}
+
+/*
+ * Redesenha só quando algo que ELE mostra mudou. A mídia chega como objeto
+ * novo a cada volta do servidor, então ela é comparada campo a campo — menos
+ * os endereços, que quem decide é `useEnderecoDaMiniatura`: o guardado vale
+ * mais que o recém-assinado, e é isso que segura a imagem no lugar.
+ */
+function mesmoLadrilho(a: PropsDoLadrilho, b: PropsDoLadrilho): boolean {
+  for (const k of Object.keys(a) as (keyof PropsDoLadrilho)[]) {
+    if (k === "m") continue;
+    if (a[k] !== b[k]) return false;
+  }
+  const x = a.m;
+  const y = b.m;
+  return (
+    x.id === y.id &&
+    x.nome === y.nome &&
+    x.tipo === y.tipo &&
+    x.bytes === y.bytes &&
+    x.secaoId === y.secaoId &&
+    x.favoritas === y.favoritas &&
+    x.baixadas === y.baixadas &&
+    x.versao === y.versao &&
+    x.temCapa === y.temCapa
+  );
+}
+
+/**
+ * O endereço do ladrilho: o guardado, se houver; senão o que veio da página
+ * (primeira tela); senão nenhum — e aí ele pede quando chegar perto da tela.
+ */
+function useEnderecoDaMiniatura(
+  galeriaId: string,
+  m: MediaExibida,
+  caixa: RefObject<HTMLLIElement | null>,
+): EnderecoDaMiniatura | undefined {
+  const chave = chaveDaMiniatura(m);
+  const ouvir = useCallback((avisar: () => void) => ouvirMiniatura(chave, avisar), [chave]);
+  const guardado = useSyncExternalStore(
+    ouvir,
+    () => lerMiniatura(chave),
+    () => undefined,
+  );
+  const { id, url, urlFilme } = m;
+  useEffect(() => {
+    if (url) guardarMiniatura(chave, { url, urlFilme });
+  }, [chave, url, urlFilme]);
+  useEffect(() => {
+    const el = caixa.current;
+    if (!el) return;
+    return observarMiniatura(el, () => pedirMiniatura(galeriaId, id, chave));
+  }, [galeriaId, id, chave, caixa]);
+  return guardado ?? (url ? { url, urlFilme } : undefined);
+}
+
+const Ladrilho = memo(function Ladrilho({
+  m,
+  galeriaId,
+  acoes,
+  selecionada,
+  capitulo,
+  ehCapa,
+  ehCapaDaPasta,
+  mostrarCapaDaPasta,
+  esmaecido,
+  definindo,
+  removendo,
+}: PropsDoLadrilho) {
+  const caixa = useRef<HTMLLIElement>(null);
+  const endereco = useEnderecoDaMiniatura(galeriaId, m, caixa);
+  return (
+    <li
+      ref={caixa}
+      /*
+        ARRASTAR PARA REORDENAR (28/09/2026).
+
+        Felipe: "quero adicionar as fotos analógicas que fiz no 'local'
+        certo, na ordem cronológica e não consigo arrastar". A ordem era
+        decidida no ENVIO e ponto — quem revela um filme depois não tinha
+        onde encaixá-lo.
+
+        Mesmo idioma da lista de capítulos: a ordem local manda enquanto
+        o dedo anda, o servidor recebe só o par (arrastada, alvo) e a
+        lista do servidor volta a mandar quando a resposta da ação
+        chega. E a conta do servidor usa o MESMO `splice` daqui — se as
+        duas discordassem, o ladrilho pularia de lugar ao recarregar.
+
+        `draggable` não existe no toque, e é por isso que o "mover para"
+        do menu continua: no celular ele é o único caminho.
+      */
+      /* Sempre arrastável: com a grade ocupada, quem recusa é
+         `comecarArrasto`. Um `draggable` que liga e desliga redesenhava
+         os 4.577 ladrilhos a cada clique da aba. */
+      draggable
+      onDragStart={(e) => acoes.comecarArrasto(m.id, e)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        acoes.cruzar(m.id);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        acoes.soltar();
+      }}
+      onDragEnd={acoes.soltar}
+      className={`group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto] ${
+        esmaecido ? "opacity-40" : ""
+      }`}
+    >
+      {/*
+        A MOLDURA ACENDE SOB O PONTEIRO (pedido do Juan em 05/09/2026).
+
+        "Senti falta de eu passar a seta aqui e a bordinha ficar
+        piscando pra mim conforme eu vou passando a seta." Havia reação
+        ao ponteiro — os botões capa/remover surgindo no canto —, mas em
+        CIMA da foto, e não em volta dela: quem varre uma grade de 600
+        fotos com o mouse não acompanha um botão de 11 px aparecendo,
+        acompanha a moldura.
+
+        `group-hover` e não `hover`: quem recebe o ponteiro é o ladrilho
+        inteiro, então passar pelo nome do arquivo, embaixo da foto,
+        também acende.
+
+        Acende MENOS forte que a selecionada (a cor pela metade, sem
+        anel): se os dois desenhassem a mesma borda, varrer a grade
+        pareceria ir selecionando foto por foto. E o `hover` do Tailwind
+        já vem dentro de `@media (hover: hover)`, então no celular nada
+        fica preso aceso depois do toque — `testar-hover-da-grade.mjs`
+        confere isso no CSS compilado, não na intenção.
+      */}
+      <div
+        className={`aspect-[4/5] overflow-hidden rounded-lg border bg-carbon-2 transition ${
+          selecionada
+            ? "border-acento ring-2 ring-acento/40"
+            : "border-linha group-hover:border-acento/60"
+        }`}
+      >
+        {m.tipo === "foto" ? (
+          // eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária
+          <img
+            src={endereco?.url}
+            alt={m.nome}
+            loading="lazy"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          /* `src` é o filme e `poster` é a capa: são dois endereços
+             para duas coisas, e o HTML tem um atributo para cada uma.
+             Sem capa o `poster` some — apontá-lo para o original
+             mandaria o navegador desenhar um filme como imagem. */
+          <video
+            src={endereco?.urlFilme ?? endereco?.url}
+            poster={m.temCapa ? endereco?.url : undefined}
+            className="h-full w-full object-cover"
+            preload="metadata"
+            controls
+          />
+        )}
+      </div>
+
+      {/*
+        CLICAR NA FOTO SELECIONA.
+
+        A bolinha de 24px era o único alvo, e num casamento de 192 fotos
+        marcar cinquenta pela bolinha é um exercício de pontaria. A foto
+        inteira é o alvo óbvio — é onde a mão vai.
+
+        É uma camada por cima da imagem, e não um `onClick` no cartão:
+        dentro dele há botões (capa, remover) e um vídeo com controles, e
+        aninhar interativo dentro de interativo quebra teclado e leitor de
+        tela. Esta camada fica ABAIXO deles no empilhamento, então cada um
+        continua recebendo o próprio clique.
+
+        Vídeo fica de fora: ali o clique é play, e roubá-lo para marcar
+        faria o fotógrafo não conseguir assistir ao que subiu.
+      */}
+      {m.tipo === "foto" && (
+        <button
+          type="button"
+          /* O navegador pinta uma seleção de TEXTO entre dois cliques
+             com shift. Sem isto, marcar um trecho de 300 fotos deixa
+             meia grade azulada por baixo. */
+          onMouseDown={(e) => {
+            if (e.shiftKey) e.preventDefault();
+          }}
+          onClick={(e) => acoes.marcar(m.id, e.shiftKey)}
+          aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
+          aria-pressed={selecionada}
+          className="absolute inset-x-0 top-0 aspect-[4/5] w-full cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-acento"
+        />
+      )}
+
+      {/* Bolinha de seleção — sempre visível, para ficar óbvio que dá para selecionar. */}
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          if (e.shiftKey) e.preventDefault();
+        }}
+        onClick={(e) => acoes.marcar(m.id, e.shiftKey)}
+        aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
+        aria-pressed={selecionada}
+        className={`absolute left-1.5 top-1.5 z-10 grid h-6 w-6 place-items-center rounded-full border text-[11px] transition ${
+          selecionada
+            ? "border-acento bg-acento text-void"
+            : "border-linha-forte bg-void/70 text-transparent hover:text-texto-faint"
+        }`}
+      >
+        ✓
+      </button>
+
+      {(ehCapa || (mostrarCapaDaPasta && ehCapaDaPasta)) && (
+        <span className="absolute left-9 top-1.5 z-10 flex flex-col items-start gap-1">
+          {ehCapa && (
+            <span className="rounded-md bg-acento px-2 py-0.5 text-[10px] font-semibold text-void">
+              capa
+            </span>
+          )}
+          {mostrarCapaDaPasta && ehCapaDaPasta && (
+            <span className="whitespace-nowrap rounded-md bg-void/85 px-2 py-0.5 text-[10px] font-semibold text-acento-alto">
+              capa da pasta
+            </span>
+          )}
+        </span>
+      )}
+
+      {/*
+        Marca do cliente, não do fotógrafo: ele não clica aqui, só lê.
+        O número aparece a partir de 2 porque, com uma pessoa só, "♥ 1"
+        em toda foto marcada vira ruído — o que importa ali é o coração.
+        Com duas ou mais, o número é a informação: foto escolhida pelos
+        dois é decisão tomada.
+      */}
+      {((m.favoritas ?? 0) > 0 || (m.baixadas ?? 0) > 0) && (
+        /*
+          ── ANCORADO NA FOTO, E NÃO NO ITEM INTEIRO ────────────────
+          A caixa da imagem não é `relative`, então um `absolute` aqui
+          se mede contra o `<li>` — que inclui a linha do nome e do
+          tamanho embaixo. Medido: a pastilha nascia 17 px ABAIXO da
+          foto, em cima de "1.0 MiB".
+          O coração de favorita tinha o mesmo defeito desde que nasceu;
+          ele só não aparecia porque quase nenhuma galeria de teste
+          tinha favorita marcada. Este invólucro repete o truque que o
+          alvo de clique já usa — `inset-x-0 top-0 aspect-[4/5]` tem
+          exatamente a altura da foto — e aí `items-end` encosta as duas
+          pastilhas no rodapé da IMAGEM.
+          `pointer-events-none` porque isto é leitura, não alvo: sem
+          ele, o invólucro cobriria a foto inteira e mataria o clique
+          que seleciona.
+        */
+        <span className="pointer-events-none absolute inset-x-0 top-0 flex aspect-[4/5] items-end justify-end p-1.5">
+        <span className="flex items-center gap-1">
+          {(m.favoritas ?? 0) > 0 && (
+            <span
+              title={`${m.favoritas} ${m.favoritas === 1 ? "pessoa marcou" : "pessoas marcaram"} como favorita`}
+              className="rounded-full bg-void/80 px-1.5 text-[10px] font-medium text-acento"
+            >
+              ♥{(m.favoritas ?? 0) > 1 ? ` ${m.favoritas}` : ""}
+            </span>
+          )}
+          {/*
+            O CONTADOR DE DOWNLOADS, ao lado do coração.
+
+            Felipe, 23/09/2026: "e o numero de downloads de cada foto".
+            Coração e seta respondem perguntas diferentes — "gostaram" e
+            "levaram" —, e uma foto pode ter muito de um e nada do
+            outro. Por isso são duas pastilhas e não uma.
+
+            Aqui o número aparece SEMPRE, inclusive no 1, ao contrário
+            do coração: baixar é um evento contável que se repete, e
+            "alguém baixou" e "baixaram doze vezes" são notícias
+            diferentes. O coração, não — ou a pessoa marcou, ou não.
+          */}
+          {(m.baixadas ?? 0) > 0 && (
+            <span
+              title={`${m.baixadas} download${m.baixadas === 1 ? "" : "s"} desta foto`}
+              className="rounded-full bg-void/80 px-1.5 text-[10px] font-medium text-texto-soft"
+            >
+              ↓ {m.baixadas}
+            </span>
+          )}
+        </span>
+        </span>
+      )}
+
+      {/* EM PÉ, e não lado a lado: deitados eles somam 86 px e o
+          ladrilho tem 116, então cobriam a bolinha de marcar (medido:
+          7 px por cima dela). Empilhados ocupam 48 e sobram 32 px de
+          folga até a bolinha, que continua legível com o ponteiro em
+          cima — e é ela que diz se a foto está marcada. */}
+      <span className="absolute right-1.5 top-1.5 z-10 flex flex-col items-end gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+        {m.tipo === "foto" && !ehCapa && (
+          <button
+            type="button"
+            onClick={() => acoes.capa(m)}
+            disabled={definindo === "capa"}
+            aria-label={`Usar ${m.nome} como capa`}
+            className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
+          >
+            {definindo === "capa" ? "…" : "capa"}
+          </button>
+        )}
+        {/* Vídeo também pode ser a frente da pasta — a pasta do filme
+            tem só vídeo —, desde que tenha pôster para mostrar. */}
+        {mostrarCapaDaPasta && m.secaoId && !ehCapaDaPasta && (m.tipo === "foto" || m.temCapa) && (
+          <button
+            type="button"
+            onClick={() => acoes.capaDaPasta(m)}
+            disabled={definindo === "pasta"}
+            aria-label={`Usar ${m.nome} como capa da pasta`}
+            title="A frente deste capítulo quando a galeria é entregue em pastas"
+            className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
+          >
+            {definindo === "pasta" ? "…" : "capa da pasta"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => acoes.remover(m)}
+          disabled={removendo}
+          aria-label={`Remover ${m.nome}`}
+          className="rounded-md bg-void/80 px-1.5 py-0.5 text-[10px] text-texto disabled:opacity-50"
+        >
+          {removendo ? "…" : "remover"}
+        </button>
+      </span>
+
+      {/* Nome e tamanho lado a lado sobravam da grade grande: em 116 px
+          o nome virava três letras e reticências. O tamanho passa para
+          o `title`, junto do nome inteiro — que o `truncate` corta de
+          todo jeito, e é o que faltava para saber QUAL arquivo é. */}
+      <div
+        title={`${m.nome} · ${formatar(m.bytes)}`}
+        className="mt-1 truncate text-[10px] text-texto-faint"
+      >
+        {capitulo ?? m.nome}
+      </div>
+    </li>
+  );
+}, mesmoLadrilho);

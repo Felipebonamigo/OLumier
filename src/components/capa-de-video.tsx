@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
+import { esquecerMiniaturasDe } from "@/lib/miniaturas-do-painel";
 
 /**
  * A capa de UM vídeo — escolhida do arquivo que está no computador.
@@ -88,6 +89,9 @@ export function CapaDeVideo({
       });
       if (!confirmacao.ok) throw new Error((await confirmacao.json()).erro ?? "Falha ao gravar.");
 
+      /* A capa nova mora na MESMA chave da antiga: sem isto, a aba Fotos
+         continuaria mostrando a guardada. Ver `lib/miniaturas-do-painel.ts`. */
+      esquecerMiniaturasDe(mediaId);
       router.refresh();
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não deu certo. Tente de novo.");
