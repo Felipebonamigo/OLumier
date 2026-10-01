@@ -266,6 +266,20 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         galeria={galeriaSlug}
         titulo={galeria.titulo}
         nomeEstudio={galeria.estudio_nome}
+        /*
+          A APARÊNCIA PUBLICADA, e só ela (01/10/2026).
+
+          O portão passou a desenhar com o tema, as fontes e o acabamento da
+          galeria — pedido do Juan e do Felipe: "o design da página que coloca a
+          senha tem que seguir o padrão escolhido pra galeria".
+
+          `lerAparencia(galeria.aparencia)` sem passar pelo rascunho nem pelo
+          `?ap=`: os dois são do DONO, e o dono nunca vê esta tela (ele entra na
+          própria galeria sem senha, na condição logo acima). Ler o rascunho
+          aqui seria mostrar ao casal um desenho que o fotógrafo ainda não
+          publicou.
+        */
+        aparencia={lerAparencia(galeria.aparencia)}
       />
     );
   }
