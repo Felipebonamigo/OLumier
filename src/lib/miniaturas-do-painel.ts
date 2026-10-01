@@ -17,7 +17,9 @@
  *    janela).
  *
  * Agora o servidor manda o endereço só da primeira tela, e o resto é pedido em
- * lote quando o ladrilho chega perto da tela (`/api/galerias/[id]/miniaturas`).
+ * lote quando o ladrilho chega perto da tela (`/api/galerias/[id]/miniaturas`;
+ * quem acha os que estão perto é a grade, numa conta só — ver
+ * `grade-medias.tsx`, "QUEM ESTÁ PERTO DA TELA").
  * O endereço fica guardado AQUI, fora do React, por 45 minutos — a assinatura
  * vale uma hora. Volta nenhuma do servidor troca o que já está desenhado, e o
  * navegador não baixa de novo o que já tem.
@@ -156,31 +158,4 @@ async function buscar(galeriaId: string, parte: [string, string][]) {
   setTimeout(() => {
     for (const [id, chave] of parte) pedirMiniatura(galeriaId, id, chave);
   }, 2000);
-}
-
-/* ── QUEM ESTÁ PERTO DA TELA ──────────────────────────────────────────────
- * Um observador só para a grade inteira. A margem pede uma tela e meia antes:
- * quem rola rápido encontra a miniatura já a caminho. Observa o `<li>`, e não
- * a imagem: o ladrilho tem `content-visibility: auto`, e o que mora DENTRO
- * dele fora da tela nem é diagramado. */
-let observador: IntersectionObserver | null = null;
-const aoAparecer = new Map<Element, () => void>();
-
-export function observarMiniatura(el: Element, fn: () => void): () => void {
-  if (typeof IntersectionObserver === "undefined") {
-    fn();
-    return () => {};
-  }
-  observador ??= new IntersectionObserver(
-    (entradas) => {
-      for (const e of entradas) if (e.isIntersecting) aoAparecer.get(e.target)?.();
-    },
-    { rootMargin: "1500px 0px" },
-  );
-  aoAparecer.set(el, fn);
-  observador.observe(el);
-  return () => {
-    observador?.unobserve(el);
-    aoAparecer.delete(el);
-  };
 }

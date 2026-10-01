@@ -12,7 +12,6 @@ import {
   useTransition,
   type DragEvent,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -28,7 +27,6 @@ import {
   chaveDaMiniatura,
   guardarMiniatura,
   lerMiniatura,
-  observarMiniatura,
   ouvirMiniatura,
   pedirMiniatura,
   type EnderecoDaMiniatura,
@@ -482,6 +480,72 @@ export function GradeMedias({
      cada id na lista inteira eram 9 milhões de comparações por passo. */
   const porId = useMemo(() => new Map(medias.map((m) => [m.id, m])), [medias]);
   const noBloco = useMemo(() => new Set(bloco ?? []), [bloco]);
+  /* O que a grade desenha, na ordem: a do arrasto enquanto ele dura. */
+  const naGrade = useMemo(
+    () =>
+      ordemLocal
+        ? (ordemLocal.map((id) => porId.get(id)).filter((m) => m && naTela.has(m.id)) as MediaExibida[])
+        : visiveis,
+    [ordemLocal, porId, naTela, visiveis],
+  );
+
+  /*
+   * ── QUEM ESTÁ PERTO DA TELA, NUMA CONTA SÓ (01/10/2026) ──────────────────
+   *
+   * Juan, no Mac, com 3.300 fotos em 20 capítulos: "no que desce um pouco a
+   * página já morre". Até aqui cada ladrilho tinha o seu IntersectionObserver
+   * para pedir a miniatura ao chegar perto — 3.300 alvos que o navegador
+   * reavalia a cada quadro da rolagem. No Chromium isso passa; o Safari refaz
+   * a conta de todos, e com `content-visibility` no meio.
+   *
+   * Agora é UMA conta por quadro: os ladrilhos estão em ordem na grade, então
+   * uma busca binária pelas posições acha o primeiro e o último perto da tela
+   * (umas 12 leituras de posição para 3.300), e só esses pedem endereço. O
+   * guardado em `lib/miniaturas-do-painel.ts` não pede duas vezes.
+   */
+  const grade = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (!aberta) return;
+    let quadro = 0;
+    const conferir = () => {
+      quadro = 0;
+      const filhos = grade.current?.children;
+      if (!filhos || filhos.length === 0) return;
+      const margem = window.innerHeight * 1.5;
+      const limite = window.innerHeight + margem;
+      let primeiro = filhos.length;
+      for (let lo = 0, hi = filhos.length - 1; lo <= hi; ) {
+        const meio = (lo + hi) >> 1;
+        if (filhos[meio].getBoundingClientRect().bottom >= -margem) {
+          primeiro = meio;
+          hi = meio - 1;
+        } else lo = meio + 1;
+      }
+      let ultimo = primeiro - 1;
+      for (let lo = primeiro, hi = filhos.length - 1; lo <= hi; ) {
+        const meio = (lo + hi) >> 1;
+        if (filhos[meio].getBoundingClientRect().top <= limite) {
+          ultimo = meio;
+          lo = meio + 1;
+        } else hi = meio - 1;
+      }
+      for (let k = primeiro; k <= ultimo && k < naGrade.length; k++) {
+        const m = naGrade[k];
+        pedirMiniatura(galeriaId, m.id, chaveDaMiniatura(m));
+      }
+    };
+    const agendar = () => {
+      if (!quadro) quadro = requestAnimationFrame(conferir);
+    };
+    agendar();
+    window.addEventListener("scroll", agendar, { passive: true });
+    window.addEventListener("resize", agendar);
+    return () => {
+      cancelAnimationFrame(quadro);
+      window.removeEventListener("scroll", agendar);
+      window.removeEventListener("resize", agendar);
+    };
+  }, [galeriaId, aberta, naGrade]);
 
   if (medias.length === 0) return null;
 
@@ -774,15 +838,14 @@ export function GradeMedias({
         </p>
       )}
       {aberta && (
-      <ul className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10">
-        {(ordemLocal
-          ? (ordemLocal.map((id) => porId.get(id)).filter((m) => m && naTela.has(m.id)) as typeof medias)
-          : visiveis
-        ).map((m) => (
+      <ul
+        ref={grade}
+        className="mt-4 grid grid-cols-3 gap-1.5 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-7 xl:grid-cols-8 2xl:grid-cols-10"
+      >
+        {naGrade.map((m) => (
           <Ladrilho
             key={m.id}
             m={m}
-            galeriaId={galeriaId}
             acoes={acoes}
             selecionada={marcadas.has(m.id)}
             /* Recortada, a grade já diz de onde são as fotos: o rótulo volta
@@ -816,7 +879,6 @@ interface AcoesDoLadrilho {
 
 interface PropsDoLadrilho {
   m: MediaExibida;
-  galeriaId: string;
   acoes: AcoesDoLadrilho;
   selecionada: boolean;
   capitulo: string | null;
@@ -856,13 +918,10 @@ function mesmoLadrilho(a: PropsDoLadrilho, b: PropsDoLadrilho): boolean {
 
 /**
  * O endereço do ladrilho: o guardado, se houver; senão o que veio da página
- * (primeira tela); senão nenhum — e aí ele pede quando chegar perto da tela.
+ * (primeira tela); senão nenhum — e quem pede, quando ele chega perto da
+ * tela, é a grade (uma conta só para todos; ver "QUEM ESTÁ PERTO DA TELA").
  */
-function useEnderecoDaMiniatura(
-  galeriaId: string,
-  m: MediaExibida,
-  caixa: RefObject<HTMLLIElement | null>,
-): EnderecoDaMiniatura | undefined {
+function useEnderecoDaMiniatura(m: MediaExibida): EnderecoDaMiniatura | undefined {
   const chave = chaveDaMiniatura(m);
   const ouvir = useCallback((avisar: () => void) => ouvirMiniatura(chave, avisar), [chave]);
   const guardado = useSyncExternalStore(
@@ -870,21 +929,15 @@ function useEnderecoDaMiniatura(
     () => lerMiniatura(chave),
     () => undefined,
   );
-  const { id, url, urlFilme } = m;
+  const { url, urlFilme } = m;
   useEffect(() => {
     if (url) guardarMiniatura(chave, { url, urlFilme });
   }, [chave, url, urlFilme]);
-  useEffect(() => {
-    const el = caixa.current;
-    if (!el) return;
-    return observarMiniatura(el, () => pedirMiniatura(galeriaId, id, chave));
-  }, [galeriaId, id, chave, caixa]);
   return guardado ?? (url ? { url, urlFilme } : undefined);
 }
 
 const Ladrilho = memo(function Ladrilho({
   m,
-  galeriaId,
   acoes,
   selecionada,
   capitulo,
@@ -895,11 +948,9 @@ const Ladrilho = memo(function Ladrilho({
   definindo,
   removendo,
 }: PropsDoLadrilho) {
-  const caixa = useRef<HTMLLIElement>(null);
-  const endereco = useEnderecoDaMiniatura(galeriaId, m, caixa);
+  const endereco = useEnderecoDaMiniatura(m);
   return (
     <li
-      ref={caixa}
       /*
         ARRASTAR PARA REORDENAR (28/09/2026).
 
