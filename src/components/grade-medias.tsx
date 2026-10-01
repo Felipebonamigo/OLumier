@@ -7,8 +7,10 @@ import {
   definirCapaDaPastaAction,
   moverMediasAction,
   moverFotoAction,
+  moverFotosAction,
 } from "@/app/painel/actions";
 import { depoisDoClique } from "@/lib/trecho-selecionado";
+import { moverBloco, type DestinoDoBloco } from "@/lib/ordem-em-bloco";
 
 export interface MediaExibida {
   id: string;
@@ -201,8 +203,33 @@ export function GradeMedias({
    */
   const [ordemLocal, setOrdemLocal] = useState<string[] | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
+  /*
+   * VÁRIAS DE UMA VEZ (01/10/2026). Vitória: "tentei selecionar todas que eu
+   * queria e quando arrastei só deu pra fazer de uma em uma". Arrastar uma foto
+   * MARCADA, com outras marcadas junto, leva o grupo inteiro — para antes da
+   * foto onde ele for solto. A regra é `moverBloco`, a mesma do servidor.
+   */
+  const [bloco, setBloco] = useState<string[] | null>(null);
+  const destinoDoBloco = useRef<string | null>(null);
+
+  function moverSelecao(destino: DestinoDoBloco, ids = ordemNaTela.filter((id) => selecao.has(id))) {
+    iniciar(async () => {
+      const f = new FormData();
+      f.set("galeria_id", galeriaId);
+      f.set("media_ids", ids.join(","));
+      f.set("destino", destino);
+      await moverFotosAction(f);
+      router.refresh();
+      setOrdemLocal(null);
+    });
+  }
 
   function aoCruzar(alvoId: string) {
+    if (bloco) {
+      destinoDoBloco.current = alvoId;
+      setOrdemLocal(moverBloco(ordemNaTela, bloco, alvoId));
+      return;
+    }
     if (!arrastando || arrastando === alvoId) return;
     const atual = (ordemLocal ?? medias.map((m) => m.id)).slice();
     const de = atual.indexOf(arrastando);
@@ -215,6 +242,16 @@ export function GradeMedias({
   function aoSoltar() {
     const arrastada = arrastando;
     setArrastando(null);
+    if (bloco) {
+      /* `onDrop` e `onDragEnd` chamam os dois; o segundo chega sem bloco. */
+      const grupo = bloco;
+      const destino = destinoDoBloco.current;
+      setBloco(null);
+      destinoDoBloco.current = null;
+      const previsto = destino ? moverBloco(ordemNaTela, grupo, destino) : ordemNaTela;
+      if (!destino || previsto.join() === ordemNaTela.join()) return setOrdemLocal(null);
+      return moverSelecao(destino, grupo);
+    }
     if (!arrastada || !ordemLocal) return;
     const original = medias.map((m) => m.id);
     if (ordemLocal.join() === original.join()) return setOrdemLocal(null);
@@ -385,10 +422,11 @@ export function GradeMedias({
       */}
       {aberta && (
         <p className="mt-1.5 text-xs text-texto-faint">
-          Selecionar serve para agir em várias de uma vez: mover para um capítulo, ou remover.
-          Clique na foto (ou na bolinha) para marcar. Para pegar um trecho inteiro, clique na
-          primeira e, segurando <kbd className="rounded border border-linha px-1">Shift</kbd>,
-          clique na última.
+          Selecionar serve para agir em várias de uma vez: levar para o início ou o fim, mover
+          para um capítulo, ou remover — e arrastar uma das marcadas leva todas juntas. Clique na
+          foto (ou na bolinha) para marcar. Para pegar um trecho inteiro, clique na primeira e,
+          segurando <kbd className="rounded border border-linha px-1">Shift</kbd>, clique na
+          última.
         </p>
       )}
 
@@ -400,6 +438,28 @@ export function GradeMedias({
           </span>
 
           <span className="ml-auto flex flex-wrap items-center gap-2">
+            {/*
+              PARA O INÍCIO / PARA O FIM (01/10/2026). Vitória: "eu gosto de
+              selecionar minhas favoritas e colocar como as primeiras da
+              galeria". Marcar e clicar, sem arrastar — e no celular, onde não
+              existe arrastar, é o único caminho.
+            */}
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => moverSelecao("inicio")}
+              className="rounded-md border border-linha px-2.5 py-1.5 text-xs transition hover:border-acento hover:bg-acento/5 disabled:opacity-40"
+            >
+              para o início
+            </button>
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => moverSelecao("fim")}
+              className="rounded-md border border-linha px-2.5 py-1.5 text-xs transition hover:border-acento hover:bg-acento/5 disabled:opacity-40"
+            >
+              para o fim
+            </button>
             <label className="text-xs text-texto-soft" htmlFor="mover-para">
               mover para
             </label>
@@ -521,6 +581,20 @@ export function GradeMedias({
                 /* Sem `setData` o Firefox não inicia o arrasto. */
                 e.dataTransfer.setData("text/plain", m.id);
                 e.dataTransfer.effectAllowed = "move";
+                /* Marcada, com outras marcadas: vai o grupo, e o que o cursor
+                   carrega diz quantas. */
+                if (selecao.has(m.id) && selecao.size > 1) {
+                  const grupo = ordemNaTela.filter((id) => selecao.has(id));
+                  setBloco(grupo);
+                  destinoDoBloco.current = null;
+                  const etiqueta = document.createElement("div");
+                  etiqueta.textContent = `${grupo.length} fotos`;
+                  etiqueta.style.cssText =
+                    "position:fixed;top:-100px;left:0;padding:6px 10px;border-radius:999px;background:#111;color:#fff;font:600 12px system-ui";
+                  document.body.appendChild(etiqueta);
+                  e.dataTransfer.setDragImage(etiqueta, 10, 10);
+                  setTimeout(() => etiqueta.remove(), 0);
+                }
               }}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -533,7 +607,7 @@ export function GradeMedias({
               }}
               onDragEnd={aoSoltar}
               className={`group relative [contain-intrinsic-size:auto_170px] [content-visibility:auto] ${
-                arrastando === m.id ? "opacity-40" : ""
+                arrastando === m.id || bloco?.includes(m.id) ? "opacity-40" : ""
               }`}
             >
               {/*

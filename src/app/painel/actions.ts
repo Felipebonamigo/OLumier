@@ -1615,6 +1615,26 @@ export async function moverFotoAction(form: FormData) {
 }
 
 /**
+ * Várias fotos de uma vez: o arrastar com várias marcadas, e os botões "para o
+ * início" e "para o fim" da barra de seleção. Ver `moverBlocoNaOrdem`.
+ */
+export async function moverFotosAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const ids = String(form.get("media_ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 10_000);
+  const destino = String(form.get("destino") ?? "");
+  if (!galeriaId || ids.length === 0 || !destino) return;
+
+  const { moverBlocoNaOrdem } = await import("@/lib/medias");
+  await moverBlocoNaOrdem(galeriaId, tenantId, ids, destino);
+  revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
  * O caminho de volta: as fotos do capítulo voltam a ser "sem capítulo".
  *
  * Par do `moverSoltasAction` acima, pedido em 28/09/2026. O capítulo continua
