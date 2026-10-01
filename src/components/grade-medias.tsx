@@ -201,7 +201,7 @@ export function GradeMedias({
 
   async function apagarTodas() {
     const resposta = prompt(
-      `Apagar TODAS as ${medias.length} fotos desta galeria? Não dá para desfazer.\n\n` +
+      `Apagar TODOS os ${medias.length} arquivos desta galeria, fotos e vídeos? Não dá para desfazer.\n\n` +
         `Para confirmar, digite ${medias.length}:`,
     );
     if (resposta?.trim() !== String(medias.length)) return;
@@ -330,7 +330,7 @@ export function GradeMedias({
   async function apagarSelecionadas() {
     const quantas = selecao.size;
     if (quantas === 0) return;
-    if (!confirm(`Apagar ${quantas} ${quantas === 1 ? "foto" : "fotos"}? Não dá para desfazer.`)) {
+    if (!confirm(`Apagar ${quantas} ${quantas === 1 ? "arquivo" : "arquivos"}? Não dá para desfazer.`)) {
       return;
     }
     setApagandoSelecao(true);

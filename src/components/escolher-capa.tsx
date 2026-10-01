@@ -161,7 +161,7 @@ export function EscolherCapa({
           {!erro && !fotos && <p className="text-sm text-texto-faint">carregando as fotos…</p>}
           {fotos?.length === 0 && (
             <p className="text-sm text-texto-faint">
-              Esta galeria ainda não tem foto. Envie as fotos na aba Fotos e volte aqui.
+              Esta galeria ainda não tem foto. Envie as fotos na aba Fotos e vídeos e volte aqui.
             </p>
           )}
           {visiveis && visiveis.length > 0 && (

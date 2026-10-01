@@ -122,7 +122,7 @@ export function EnviarArquivos({
         some no celular.
       */}
       <h2 id="titulo-envio" className="text-sm font-semibold">
-        Enviar fotos
+        Enviar fotos e vídeos
       </h2>
       <p className="mt-0.5 text-xs text-texto-faint">
         Daqui as fotos e os vídeos vão direto do seu navegador para o armazenamento — sem passar
@@ -131,7 +131,7 @@ export function EnviarArquivos({
 
       {secoes.length > 0 && (
         <label className="mb-3 mt-4 flex flex-wrap items-center gap-2 text-sm">
-          {/* "Para" e não "Enviar para": com o `<h2>Enviar fotos</h2>` uma
+          {/* "Para" e não "Enviar para": com o `<h2>Enviar fotos e vídeos</h2>` uma
               linha acima, o verbo repetido é o eco que o Felipe chamou de feio.
               Sob o título, o rótulo continua inequívoco. */}
           <span className="text-texto-soft">Para o capítulo:</span>

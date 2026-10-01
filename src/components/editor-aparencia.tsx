@@ -466,7 +466,7 @@ function SeletorDeFormato({
     !conteudo
       ? null
       : ap.formato === "pastas" && conteudo.grupos < 2
-        ? "Esta galeria ainda não tem dois capítulos com fotos. Até ter, o cliente vê a galeria de sempre — crie os capítulos na aba Fotos (ou envie a pasta já separada em subpastas)."
+        ? "Esta galeria ainda não tem dois capítulos com fotos. Até ter, o cliente vê a galeria de sempre — crie os capítulos na aba Fotos e vídeos (ou envie a pasta já separada em subpastas)."
         : ap.formato === "stream" && conteudo.videos === 0
           ? "Esta galeria ainda não tem vídeo. Até ter, o cliente vê a galeria de sempre."
           : null;
@@ -563,7 +563,7 @@ function SeletorDeFormato({
             <span className="block text-xs font-medium text-texto-soft">Título dos vídeos</span>
             <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
               {conteudo && conteudo.videosSoltos === 0 && conteudo.videos > 0
-                ? "Seus vídeos estão em capítulos: cada bloco usa o nome do capítulo (mude na aba Fotos). Este título vale para vídeos fora de capítulo."
+                ? "Seus vídeos estão em capítulos: cada bloco usa o nome do capítulo (mude na aba Fotos e vídeos). Este título vale para vídeos fora de capítulo."
                 : "O nome do bloco dos vídeos fora de capítulo. Vazio mostra “Episódios”."}
             </p>
             <input
@@ -585,9 +585,9 @@ function SeletorDeFormato({
           </div>
           <NomesDosVideos galeriaId={galeriaId} videos={videos} aoGravar={aoGravar} />
           <p className="text-[11px] leading-snug text-texto-faint">
-            Os vídeos aparecem na ordem da aba Fotos, e cada capítulo vira um bloco. As fotos da entrega
+            Os vídeos aparecem na ordem da aba Fotos e vídeos, e cada capítulo vira um bloco. As fotos da entrega
             continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio —
-            troque na aba Fotos se quiser outra.
+            troque na aba Vídeo se quiser outra.
           </p>
         </>
       )}

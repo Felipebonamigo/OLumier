@@ -26,7 +26,10 @@ import { usePathname } from "next/navigation";
 const ABAS = [
   {
     id: "fotos",
-    nome: "Fotos",
+    /* "e vídeos" desde 01/10/2026 — Juan: "precisamos corrigir tudo que fala
+       'adicionar foto' para 'adicionar mídia', ou adicionar foto/vídeo". O
+       filme sobe por aqui desde agosto, e a aba dizia que era só foto. */
+    nome: "Fotos e vídeos",
     desc: "Enviar, organizar em capítulos",
     /* Traço da foto com a montanha — o mesmo desenho do ícone de imagem. */
     caminho: "M3 5.5h18v13H3zM3 15l5-4 4 3 3-3 6 5",

@@ -16,7 +16,7 @@ import { GradeMedias, type MediaExibida } from "@/components/grade-medias";
 import { EditorSecoes } from "@/components/editor-secoes";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 
-export const metadata: Metadata = { title: "Fotos da galeria" };
+export const metadata: Metadata = { title: "Fotos e vídeos da galeria" };
 export const dynamic = "force-dynamic";
 
 /** Ladrilhos que cabem numa tela grande (10 colunas × 8 linhas). */
@@ -189,7 +189,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
           {/* A mesma régua do `<h2>` do bloco de envio, porque este cartão
               ocupa o lugar dele — duas escalas no mesmo slot fariam a tela
               parecer que trocou de assunto, e não de estado. */}
-          <h2 className="text-sm font-semibold">Confirme seu e-mail para enviar fotos</h2>
+          <h2 className="text-sm font-semibold">Confirme seu e-mail para enviar fotos e vídeos</h2>
           <p className="mt-1.5 max-w-prose text-sm text-texto-soft">
             O link foi para <strong className="font-normal text-texto">{tenant?.email}</strong>. Se
             não chegou, veja o lixo eletrônico — ou peça outro no aviso do topo desta página. Assim
