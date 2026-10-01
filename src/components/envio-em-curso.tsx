@@ -27,6 +27,7 @@ import {
   ordenarNaturalPorCaminho,
   itemAceito,
   tamanhoDe,
+  linhasDaFila,
 } from "@/lib/fila-upload";
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
 import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio } from "@/lib/velocidade-regras";
@@ -228,8 +229,36 @@ export function ProvedorDeEnvio({
   const paradoRef = useRef(false);
   const router = useRouter();
 
-  const atualizar = (id: string, mudanca: Partial<ItemFila>) =>
-    setFila((f) => f.map((i) => (i.id === id ? { ...i, ...mudanca } : i)));
+  /*
+   * ── O PROGRESSO NÃO PODE REDESENHAR A FILA INTEIRA (01/10/2026) ──────────
+   *
+   * Cada evento de progresso de cada um dos seis envios virava uma fila nova
+   * — com 4.000 arquivos, dezenas de cópias de 4.000 itens por segundo, e um
+   * redesenho de tudo que lê o envio. Ver `linhasDaFila` para o que isso fez
+   * com a página do Juan.
+   *
+   * Agora: o progresso de um arquivo atualiza a tela no máximo quatro vezes
+   * por segundo (100% e as mudanças de situação passam sempre), e uma mudança
+   * que não muda nada devolve a MESMA fila — o React nem redesenha.
+   */
+  const ultimoProgresso = useRef(new Map<string, number>());
+  const atualizar = (id: string, mudanca: Partial<ItemFila>) => {
+    const soProgresso = Object.keys(mudanca).length === 1 && mudanca.progresso !== undefined;
+    if (soProgresso && mudanca.progresso! < 100) {
+      const agora = performance.now();
+      if (agora - (ultimoProgresso.current.get(id) ?? -Infinity) < 250) return;
+      ultimoProgresso.current.set(id, agora);
+    }
+    setFila((f) => {
+      const k = f.findIndex((i) => i.id === id);
+      if (k < 0) return f;
+      const atual = f[k];
+      if ((Object.keys(mudanca) as (keyof ItemFila)[]).every((c) => atual[c] === mudanca[c])) return f;
+      const nova = f.slice();
+      nova[k] = { ...atual, ...mudanca };
+      return nova;
+    });
+  };
 
   // Relógio só enquanto a fila roda — alimenta a estimativa de tempo restante.
   useEffect(() => {
@@ -883,6 +912,8 @@ function BarraDeEnvio({
 }) {
   const [aberta, setAberta] = useState(false);
   const pct = fila.length ? (enviados / fila.length) * 100 : 0;
+  /* Só quando aberta: fechada, a barra não precisa nem separar a fila. */
+  const resumo = aberta ? linhasDaFila(fila) : null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-linha bg-carbon/95 backdrop-blur">
@@ -962,9 +993,9 @@ function BarraDeEnvio({
           />
         </div>
 
-        {aberta && (
+        {resumo && (
           <ul className="mt-2.5 flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-            {fila.map((item) => (
+            {resumo.linhas.map((item) => (
               <li key={item.id} className="text-xs">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 flex-1 truncate">{item.nome}</span>
@@ -1008,6 +1039,21 @@ function BarraDeEnvio({
                 </div>
               </li>
             ))}
+            {(resumo.maisEmCurso > 0 ||
+              resumo.maisComErro > 0 ||
+              resumo.maisEsperando > 0 ||
+              resumo.maisEnviados > 0) && (
+              <li className="text-xs text-texto-faint">
+                {[
+                  resumo.maisEmCurso > 0 && `mais ${resumo.maisEmCurso} tentando de novo`,
+                  resumo.maisComErro > 0 && `mais ${resumo.maisComErro} com erro`,
+                  resumo.maisEsperando > 0 && `mais ${resumo.maisEsperando} na fila`,
+                  resumo.maisEnviados > 0 && `mais ${resumo.maisEnviados} já enviados`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </li>
+            )}
           </ul>
         )}
       </div>

@@ -204,7 +204,7 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
            nomes — a lista já foi consultada acima, então não custa consulta
            nenhuma, e mandar a mídia inteira para o cliente seria pagar por
            dado que ele não usa. */
-        nomesNaGaleria={medias.map((m) => m.nome_original)}
+        arquivosNaGaleria={medias.map((m) => ({ nome: m.nome_original, bytes: Number(m.bytes) }))}
       />
       )}
 

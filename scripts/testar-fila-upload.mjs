@@ -408,9 +408,10 @@ await etapa("o portão para a fila e o resto não sobe", async () => {
   return "2 de 6";
 });
 
-await etapa("separa os nomes que já estão na galeria", () => {
-  const itens = ["a.jpg", "B.JPG", "c.jpg"].map((nome) => ({ arquivo: { name: nome } }));
-  const { novos, repetidos } = mod.separarRepetidos(itens, ["b.jpg"]);
+await etapa("separa o que já está na galeria — nome e tamanho", () => {
+  const item = (name, size = 100) => ({ arquivo: { name, size } });
+  const itens = [item("a.jpg"), item("B.JPG"), item("c.jpg")];
+  const { novos, repetidos } = mod.separarRepetidos(itens, [{ nome: "b.jpg", bytes: 100 }]);
   if (repetidos.length !== 1 || repetidos[0].arquivo.name !== "B.JPG") {
     throw new Error(`repetidos veio ${JSON.stringify(repetidos.map((r) => r.arquivo.name))}`);
   }
@@ -418,15 +419,60 @@ await etapa("separa os nomes que já estão na galeria", () => {
   return "sem diferenciar maiúscula de minúscula";
 });
 
+/* Juan, 01/10/2026: duas câmeras, `DSC_0001.jpg` em capítulos diferentes. Pelo
+   nome só, a régua mandava foto diferente para a pergunta de repetidas — e a
+   saída para não perder foto era "enviar mesmo assim", com as cópias juntas. */
+await etapa("mesmo nome com outro tamanho é outra foto, e sobe", () => {
+  const itens = [
+    { arquivo: { name: "DSC_0001.jpg", size: 5_000_000 } },
+    { arquivo: { name: "DSC_0001.jpg", size: 6_200_000 } },
+  ];
+  const { novos, repetidos } = mod.separarRepetidos(itens, [{ nome: "DSC_0001.jpg", bytes: 7_000_000 }]);
+  if (novos.length !== 2 || repetidos.length !== 0) {
+    throw new Error(`novos ${novos.length}, repetidos ${repetidos.length} — esperava 2 e 0`);
+  }
+  return "duas câmeras, duas fotos";
+});
+
 /* Duas cópias na MESMA pasta arrastada também são repetição: subiriam as duas
    e a galeria mostraria a foto duas vezes, que é o que o Juan quer evitar. */
-await etapa("dois arquivos de mesmo nome na mesma leva contam como repetidos", () => {
-  const itens = ["a.jpg", "a.jpg", "b.jpg"].map((nome) => ({ arquivo: { name: nome } }));
+await etapa("dois arquivos iguais na mesma leva contam como repetidos", () => {
+  const itens = ["a.jpg", "a.jpg", "b.jpg"].map((nome) => ({ arquivo: { name: nome, size: 9 } }));
   const { novos, repetidos } = mod.separarRepetidos(itens, []);
   if (novos.length !== 2 || repetidos.length !== 1) {
     throw new Error(`novos ${novos.length}, repetidos ${repetidos.length} — esperava 2 e 1`);
   }
   return "a segunda cópia é a repetida";
+});
+
+await etapa("o arquivo de dentro do ZIP compara pelo tamanho de dentro", () => {
+  const doZip = { arquivo: { name: "x.jpg", size: 0 }, deZip: { bytes: 321 } };
+  const { repetidos } = mod.separarRepetidos([doZip], [{ nome: "x.jpg", bytes: 321 }]);
+  if (repetidos.length !== 1) throw new Error("o marcador do ZIP (tamanho 0) escapou da régua");
+});
+
+/* Juan, 01/10/2026: 4.000 arquivos na fila, a lista aberta, e a página parou.
+   A lista redesenhava as 4.000 linhas a cada progresso. */
+await etapa("a lista do envio mostra no máximo umas cinquenta linhas", () => {
+  const fila = [
+    ...Array.from({ length: 3000 }, () => ({ situacao: "esperando", tentativa: 0 })),
+    ...Array.from({ length: 6 }, () => ({ situacao: "enviando", tentativa: 0 })),
+    ...Array.from({ length: 2 }, () => ({ situacao: "esperando", tentativa: 2 })),
+    ...Array.from({ length: 40 }, () => ({ situacao: "erro", tentativa: 3 })),
+    ...Array.from({ length: 950 }, (_, k) => ({ situacao: "pronto", tentativa: 0, k })),
+  ];
+  const r = mod.linhasDaFila(fila);
+  if (r.linhas.length > 60) throw new Error(`${r.linhas.length} linhas`);
+  const conta = (s) => r.linhas.filter((l) => l.situacao === s).length;
+  if (conta("enviando") !== 6) throw new Error("o que está subindo agora sumiu da lista");
+  if (r.linhas.filter((l) => l.tentativa > 0 && l.situacao === "esperando").length !== 2) {
+    throw new Error("o que está tentando de novo sumiu");
+  }
+  if (r.maisComErro !== 20 || r.maisEsperando !== 2995 || r.maisEnviados !== 947) {
+    throw new Error(`contagens ${r.maisComErro}/${r.maisEsperando}/${r.maisEnviados}`);
+  }
+  if (r.linhas.at(-1).k !== 947) throw new Error("os enviados mostrados não são os últimos");
+  return `${r.linhas.length} linhas para ${fila.length} arquivos`;
 });
 
 console.log("\nPasta arrastada:\n");
