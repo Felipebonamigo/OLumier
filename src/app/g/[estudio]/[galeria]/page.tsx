@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
@@ -38,7 +39,7 @@ import { GaleriaCapa } from "@/components/galeria-capa";
 import {
   lerAparencia,
   AMOSTRA_PREVIA,
-  variaveisDoTema,
+  variaveisDaEntrega,
   variaveisDeForma,
   FONTES_TEXTO,
 } from "@/config/aparencia";
@@ -55,6 +56,9 @@ import {
 import { GaleriaPastas, VoltarAsPastas, type PastaDaEntrega } from "@/components/galeria-pastas";
 import { GaleriaStream, type FileiraDoStream } from "@/components/galeria-stream";
 import { AncoraDeChegada } from "@/components/ancora-de-chegada";
+import { aparenciaPermitida } from "@/lib/acesso-formatos";
+import { configDoRecado } from "@/config/recado";
+import { escolherCapa, urlDaCapa } from "@/lib/capa-publica";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -112,7 +116,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
    * aparece por cima do título, e era mais um lugar dizendo a marca errada.
    */
   const dataEvento = g.data_evento
-    ? new Date(g.data_evento).toLocaleDateString("pt-BR", {
+    ? new Date(g.data_evento).toLocaleDateString("pt-BR", { timeZone: FUSO,
         day: "2-digit",
         month: "long",
         year: "numeric",
@@ -134,7 +138,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     robots: { index: false, follow: false },
     /* A logo do estúdio na aba só quando a capa a mostra: "nenhuma" tira a
        assinatura da galeria inteira, e a aba é parte dela. */
-    icons: await iconeDoEstudio(lerAparencia(g.aparencia).logo === "nenhuma" ? null : g.estudio_logo),
+    ...(await iconeDoEstudio(lerAparencia(g.aparencia).logo === "nenhuma" ? null : g.estudio_logo)),
     description: descricao,
     openGraph: {
       type: "website",
@@ -274,6 +278,20 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         galeria={galeriaSlug}
         titulo={galeria.titulo}
         nomeEstudio={galeria.estudio_nome}
+        /*
+          A APARÊNCIA PUBLICADA, e só ela (01/10/2026).
+
+          O portão passou a desenhar com o tema, as fontes e o acabamento da
+          galeria — pedido do Juan e do Felipe: "o design da página que coloca a
+          senha tem que seguir o padrão escolhido pra galeria".
+
+          `lerAparencia(galeria.aparencia)` sem passar pelo rascunho nem pelo
+          `?ap=`: os dois são do DONO, e o dono nunca vê esta tela (ele entra na
+          própria galeria sem senha, na condição logo acima). Ler o rascunho
+          aqui seria mostrar ao casal um desenho que o fotógrafo ainda não
+          publicou.
+        */
+        aparencia={lerAparencia(galeria.aparencia)}
       />
     );
   }
@@ -324,6 +342,10 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       /* Parâmetro ilegível não derruba a prévia: vale o que está gravado. */
     }
   }
+  /* Pastas e Stream só para contas liberadas (30/09/2026) — inclusive na
+     prévia do dono: o que ele não pode entregar, ele não deve ver pronto.
+     Galeria de sempre não consulta nada. Ver `config/formatos-liberados.ts`. */
+  aparencia = await aparenciaPermitida(aparencia, galeria.tenant_id);
 
   /*
    * ── A AMOSTRA DA PRÉVIA (31/08/2026) ─────────────────────────────────────
@@ -369,6 +391,41 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const escolhidas = new Set(pedidas);
 
   /*
+   * ── COM CAPÍTULO, A GALERIA ABRE NO PRIMEIRO (30/09/2026) ──────────────
+   *
+   * Juan, sobre a galeria de uma storymaker: "assim que abre a galeria ele tá
+   * aparecendo todos os capítulos. Os vídeos dela estão separados em 3
+   * capítulos, mas assim que abre aparece tudo junto, deveria mostrar apenas o
+   * do capítulo".
+   *
+   * O corte por capítulo já valia em qualquer tamanho desde 21/09 — o que
+   * faltava era o PADRÃO. Sem `?cap=`, `fatiarGaleria` recebia `undefined` e
+   * devolvia a galeria inteira; acima de 600 itens a barra escolhia o primeiro
+   * capítulo por conta, e abaixo não. O produto mudava de natureza entre 599 e
+   * 601 itens, e quem tem 8 vídeos caía no lado errado: três capítulos
+   * empilhados viram uma tira alta, e o capítulo deixa de significar alguma
+   * coisa.
+   *
+   * Decisão do Felipe em 30/09: o mesmo comportamento em qualquer tamanho.
+   *
+   * ── AS TRÊS RESSALVAS ─────────────────────────────────────────────────
+   *
+   * 1. Só quando há capítulo COM FOTO. Abrir num capítulo vazio entregaria uma
+   *    galeria que parece não ter nada — pior do que o que se está consertando.
+   * 2. Nunca sobre uma BUSCA (`?fotos=`). A busca por rosto e o "ver só as
+   *    favoritas" respondem sobre a galeria inteira; prendê-las ao capítulo de
+   *    abertura devolveria um subconjunto silencioso, e o convidado veria 1 de
+   *    3 acreditando que são todas.
+   * 3. Nunca na amostra da prévia, que é outro corte e menor.
+   *
+   * `scripts/testar-abre-no-primeiro-capitulo.mjs` prende as três.
+   */
+  const secoes = await listarSecoes(galeria.id);
+  const primeiroComFoto = secoes.find((s) => (s.total ?? 0) > 0)?.id ?? null;
+  const capPadrao =
+    !cap && !amostrando && escolhidas.size === 0 ? primeiroComFoto : null;
+
+  /*
    * ── O `?cap=` ACEITA O APELIDO E O ID (16/09/2026) ─────────────────────
    *
    * O link de hoje leva `cap=cerimonia`; o de ontem leva o UUID da seção. Os
@@ -401,6 +458,19 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     recorte: pedidas.length > 0,
     verGaleria: ver === "galeria",
   };
+  /*
+   * O recado do cliente (migração 058) — lido da linha que já veio, sem consulta
+   * nova. Desligado é o estado de toda galeria já entregue.
+   *
+   * `null` quando desligado, e não o objeto com `ativo: false`: ele é prop de
+   * componente de cliente, e prop de cliente viaja serializada no HTML público.
+   * Com o objeto inteiro, as perguntas do fotógrafo ("o preço ficou dentro do que
+   * você esperava?") ficavam legíveis no código-fonte da página de quem tem o
+   * link — mesmo com o recurso desligado, e mesmo depois de ele desligar.
+   */
+  const configRecado = configDoRecado(galeria);
+  const recado = configRecado.ativo ? configRecado : null;
+
   const tela = telaDaEntrega(aparencia.formato, conteudo, pedidoDaTela);
   const volta = voltaDaGaleria(aparencia.formato, conteudo, pedidoDaTela);
   /* O que fica da consulta nos links que esta página monta: o que é do dono
@@ -430,7 +500,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        * parâmetro é que seria o problema — o cliente conta quantas fotos já tem
        * para pedir as próximas, e ele nasceria contando errado.
        */
-      fatiarGaleria(todasAsMedias, capSecaoId, FOTOS_POR_TELA);
+      fatiarGaleria(todasAsMedias, capSecaoId ?? capPadrao, FOTOS_POR_TELA);
 
   const medias = amostrando ? todasAsMedias.slice(0, AMOSTRA_PREVIA) : fatia.itens;
 
@@ -463,7 +533,19 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const enderecoBase =
     (await headers()).get(CAMINHO_PUBLICO) ?? `/g/${estudio}/${galeriaSlug}`;
 
-  const soUmCapitulo = !amostrando && Boolean(capSecaoId);
+  /*
+   * O capítulo PADRÃO conta aqui também (30/09/2026).
+   *
+   * Sem isto, `pedacoDaGaleria` ficava falso na galeria pequena que passou a
+   * abrir no primeiro capítulo — e o que decide se um capítulo SEM foto
+   * carregada continua na barra é justamente ele. O efeito foi imediato no
+   * teste: abrindo a galeria, "Cerimônia" e "Festa" sumiam das pastilhas e a
+   * pessoa ficava PRESA no primeiro capítulo, sem caminho de volta.
+   *
+   * É a mesma razão pela qual a galeria fatiada já mantinha as seções vazias e
+   * escondidas: o menu precisa enxergar o capítulo antes de a foto dele chegar.
+   */
+  const soUmCapitulo = !amostrando && Boolean(capSecaoId ?? capPadrao);
   const pedacoDaGaleria = fatiada || soUmCapitulo;
 
   /*
@@ -556,7 +638,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   const bytesDaGaleria = todasAsMedias.reduce((soma, m) => soma + Number(m.bytes), 0);
 
   const dataEvento = galeria.data_evento
-    ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", {
+    ? new Date(galeria.data_evento).toLocaleDateString("pt-BR", { timeZone: FUSO,
         day: "2-digit",
         month: "long",
         year: "numeric",
@@ -592,7 +674,6 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * lightbox continua percorrendo a galeria INTEIRA de ponta a ponta, mesmo
    * quem abriu uma foto no meio da "Festa" chega no "Making Of" pela seta.
    */
-  const secoes = await listarSecoes(galeria.id);
   const indicePorId = new Map(medias.map((m, i) => [m.id, i]));
 
   const semCapitulo = medias
@@ -689,13 +770,11 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * lista inteira, mostrava a certa. Assinar essa URL não desfaz a economia da
    * amostra: é UMA foto, que a capa ia assinar de qualquer jeito.
    */
-  const capa =
-    todasAsMedias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
-    medias.find((m) => m.tipo === "foto");
+  const capa = escolherCapa(todasAsMedias, galeria.capa_media_id, medias);
   const urlCapa = galeria.capa_chave
     ? await urlDeLeitura(galeria.capa_chave, VALIDADE)
     : capa
-      ? await urlDaDerivada(capa.chave_preview, capa.chave, armazemDe(capa.armazem), VALIDADE)
+      ? await urlDaCapa(capa, VALIDADE)
       : null;
 
   /*
@@ -763,7 +842,15 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
   /* Os grupos na ordem da galeria — as soltas primeiro, depois os capítulos
      na ordem do painel —, a mesma de `capitulos` e do menu. */
-  const grupos: { id: string; apelido: string; nome: string; capaId: string | null; medias: MediaPublica[] }[] = [];
+  const grupos: {
+    id: string;
+    apelido: string;
+    nome: string;
+    capaId: string | null;
+    /** Capa enviada como arquivo (migração 057) — vence a foto escolhida. */
+    capaChave: string | null;
+    medias: MediaPublica[];
+  }[] = [];
   if (tela !== "galeria") {
     const soltas = todasAsMedias.filter((m) => !m.secao_id);
     if (soltas.length) {
@@ -772,13 +859,23 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         apelido: "sem-capitulo",
         nome: nomeDoGrupoSolto(galeria.grupo_solto),
         capaId: null,
+        /* As soltas não são um capítulo: não há linha em `secoes` onde
+           guardar uma capa própria delas. A primeira foto segue valendo. */
+        capaChave: null,
         medias: soltas,
       });
     }
     for (const sec of secoes) {
       const doGrupo = todasAsMedias.filter((m) => m.secao_id === sec.id);
       if (doGrupo.length) {
-        grupos.push({ id: sec.id, apelido: sec.slug, nome: sec.nome, capaId: sec.capa_media_id ?? null, medias: doGrupo });
+        grupos.push({
+          id: sec.id,
+          apelido: sec.slug,
+          nome: sec.nome,
+          capaId: sec.capa_media_id ?? null,
+          capaChave: sec.capa_chave ?? null,
+          medias: doGrupo,
+        });
       }
     }
   }
@@ -793,9 +890,19 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             const escolhida = g.capaId ? g.medias.find((m) => m.id === g.capaId && temImagem(m)) : undefined;
             const capaDaPasta =
               escolhida ?? g.medias.find((m) => m.tipo === "foto") ?? g.medias.find(temImagem);
-            const atras = g.medias.filter((m) => m !== capaDaPasta && temImagem(m)).slice(0, 2);
+            /* Três atrás da capa: a Pilha usa duas, o Índice e o Mosaico usam as
+               três. Miniatura, não visualizador — são imagens pequenas. */
+            const atras = g.medias.filter((m) => m !== capaDaPasta && temImagem(m)).slice(0, 3);
+            /* Arquivo enviado vence a foto escolhida (migração 057): é uma
+               imagem que NÃO está na entrega, então não sai de `g.medias` —
+               só a frente troca, e as três de trás continuam sendo fotos do
+               capítulo. */
             const imagens = await Promise.all([
-              ...(capaDaPasta ? [imagemDa(capaDaPasta, true)] : []),
+              ...(g.capaChave
+                ? [urlDeLeitura(g.capaChave, VALIDADE)]
+                : capaDaPasta
+                  ? [imagemDa(capaDaPasta, true)]
+                  : []),
               ...atras.map((m) => imagemDa(m, false)),
             ]);
             const fotosDaPasta = g.medias.filter((m) => m.tipo === "foto").length;
@@ -833,16 +940,23 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     fileiras = await Promise.all(
       comVideo.map(async (g) => ({
         id: g.id,
-        /* Com uma fileira só, o nome do grupo das soltas ("Outras fotos")
-           não diz nada sobre vídeos: vira "Episódios". */
-        nome: comVideo.length === 1 && g.id === "sem-capitulo" ? "Episódios" : g.nome,
+        /* A fileira dos vídeos soltos leva o nome que o fotógrafo escreveu
+           no Design (Juan, 30/09/2026: "poder mudar o título 'Episódios'").
+           Sem nome escrito e com uma fileira só, o nome do grupo das soltas
+           ("Outras fotos") não diz nada sobre vídeos: vira "Episódios".
+           Capítulo continua com o nome do capítulo. */
+        nome:
+          g.id !== "sem-capitulo"
+            ? g.nome
+            : aparencia.nomeDosVideos || (comVideo.length === 1 ? "Episódios" : g.nome),
+        frase: g.id === "sem-capitulo" && aparencia.fraseDosVideos ? aparencia.fraseDosVideos : undefined,
         episodios: await Promise.all(
           g.medias
             .filter((m) => m.tipo === "video")
             .map(async (m) => ({
               id: m.id,
               numero: ++numero,
-              titulo: tituloDoEpisodio(m.nome_original),
+              titulo: m.titulo ?? tituloDoEpisodio(m.nome_original),
               nomeDoArquivo: m.nome_original,
               duracao: m.duracao_seg,
               poster: m.chave_thumb ? await urlDeLeitura(m.chave_thumb, VALIDADE) : null,
@@ -867,6 +981,34 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     fundoDoStream = urlCapa ?? fileiras[0]?.episodios.find((e) => e.poster)?.poster ?? null;
   }
 
+  /* A entrega em stream, desenhada com a capa da própria sala ou embaixo da
+     capa do grupo Capa — ver `CapaDoStream`. */
+  const streamDaEntrega =
+    tela === "stream" ? (
+      <GaleriaStream
+        galeriaId={galeria.id}
+        aparencia={aparencia}
+        titulo={galeria.titulo}
+        subtitulo={galeria.subtitulo}
+        dataFormatada={dataEvento}
+        estudio={galeria.estudio_nome}
+        logoUrl={urlLogo}
+        logoLargura={galeria.estudio_logo_largura}
+        logoAltura={galeria.estudio_logo_altura}
+        fundo={fundoDoStream}
+        focoX={galeria.capa_foco_x}
+        focoY={galeria.capa_foco_y}
+        fileiras={fileiras}
+        fotos={{
+          total: fotosNaGaleria,
+          amostra: amostraDeFotos,
+          href: `${comConsulta({ ver: "galeria" })}#conteudo`,
+        }}
+        permiteDownload={galeria.permite_download}
+        identificado={Boolean(eu)}
+      />
+    ) : null;
+
   return (
     /*
      * O tema vive em variáveis CSS neste elemento. Assim a galeria pode ser
@@ -876,7 +1018,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     <main
       className="min-h-dvh"
       style={{
-        ...variaveisDoTema(aparencia),
+        /* O tema, e a sala escura quando a entrega é o stream em Cinema —
+           ver `variaveisDaEntrega`. */
+        ...variaveisDaEntrega(aparencia, tela),
         ...variaveisDeForma(aparencia),
         background: "var(--g-fundo)",
         color: "var(--g-texto)",
@@ -912,62 +1056,59 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       {fonteDoEstudio && (
         <style>{`@font-face{font-family:"${FAMILIA_PROPRIA}";src:url("${fonteDoEstudio}");font-display:swap}`}</style>
       )}
-      {tela === "stream" ? (
+      {tela === "stream" && aparencia.capaStream === "sala" ? (
         /*
-          O STREAM TRAZ A PRÓPRIA CAPA: a tela de cinema É a capa — foto de
+          A SALA TRAZ A PRÓPRIA CAPA: a tela de cinema É a capa — foto de
           fundo, logo, título na letra da galeria e o botão de assistir. Duas
           capas seguidas empurrariam os episódios para a segunda tela.
         */
-        <GaleriaStream
-          galeriaId={galeria.id}
-          aparencia={aparencia}
-          titulo={galeria.titulo}
-          subtitulo={galeria.subtitulo}
-          dataFormatada={dataEvento}
-          estudio={galeria.estudio_nome}
-          logoUrl={urlLogo}
-          logoLargura={galeria.estudio_logo_largura}
-          logoAltura={galeria.estudio_logo_altura}
-          fundo={fundoDoStream}
-          focoX={galeria.capa_foco_x}
-          focoY={galeria.capa_foco_y}
-          fileiras={fileiras}
-          fotos={{
-            total: fotosNaGaleria,
-            amostra: amostraDeFotos,
-            href: `${comConsulta({ ver: "galeria" })}#conteudo`,
-          }}
-          permiteDownload={galeria.permite_download}
-          identificado={Boolean(eu)}
-        />
+        streamDaEntrega
       ) : (
         <>
-      {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
-        <GaleriaCapa
-          aparencia={aparencia}
-          dados={{
-            titulo: galeria.titulo,
-            subtitulo: galeria.subtitulo,
-            dataFormatada: dataEvento,
-            estudio: galeria.estudio_nome,
-            logoUrl: urlLogo,
-            logoLargura: galeria.estudio_logo_largura,
-            logoAltura: galeria.estudio_logo_altura,
-            urlImagem: urlCapa,
-            /*
-             * ESCOLHIDA, e não herdada.
-             *
-             * A capa jornal só mostra foto quando o fotógrafo apontou uma — o
-             * arquivo enviado ou a foto marcada. A terceira via desta página (a
-             * primeira foto da galeria, quando ninguém escolheu nada) NÃO conta:
-             * se contasse, toda galeria que hoje usa o preset Revista ganharia
-             * uma foto de capa da noite para o dia, incluindo as já entregues.
-             */
-            capaEscolhida: Boolean(galeria.capa_chave || galeria.capa_media_id),
-            focoX: galeria.capa_foco_x,
-            focoY: galeria.capa_foco_y,
-          }}
-        />
+          {/* A marca em destaque é a do fotógrafo. A nossa assina discreta no rodapé. */}
+          <GaleriaCapa
+            aparencia={aparencia}
+            dados={{
+              titulo: galeria.titulo,
+              subtitulo: galeria.subtitulo,
+              dataFormatada: dataEvento,
+              estudio: galeria.estudio_nome,
+              logoUrl: urlLogo,
+              logoLargura: galeria.estudio_logo_largura,
+              logoAltura: galeria.estudio_logo_altura,
+              /* No stream sem capa escolhida, o pôster do primeiro vídeo —
+                 a mesma régua do fundo da sala (`fundoDoStream`). */
+              urlImagem: tela === "stream" ? fundoDoStream : urlCapa,
+              /*
+               * ESCOLHIDA, e não herdada.
+               *
+               * A capa jornal só mostra foto quando o fotógrafo apontou uma — o
+               * arquivo enviado ou a foto marcada. A terceira via desta página (a
+               * primeira foto da galeria, quando ninguém escolheu nada) NÃO conta:
+               * se contasse, toda galeria que hoje usa o preset Revista ganharia
+               * uma foto de capa da noite para o dia, incluindo as já entregues.
+               */
+              capaEscolhida: Boolean(galeria.capa_chave || galeria.capa_media_id),
+              focoX: galeria.capa_foco_x,
+              focoY: galeria.capa_foco_y,
+              chamada: tela === "stream" ? "Ver os vídeos" : undefined,
+            }}
+          />
+          {/*
+            O STREAM COM A CAPA DO GRUPO CAPA (Juan, 30/09/2026: "corrigir os
+            formatos de CAPA quando o formato de entrega foi o STREAM"). A sala
+            começa embaixo, sem a capa dela. `id="fotos"` é o alvo do "Ver os
+            vídeos" das capas que têm chamada; a camada com fundo cobre a capa
+            fixa. `relative` SEM `z-index`: vir depois da capa no documento já
+            a põe por cima, e um `z-10` aqui criaria um contexto de
+            empilhamento que prenderia o player (`fixed`, z-60) embaixo do
+            rodapé.
+          */}
+          {tela === "stream" && (
+            <div id="fotos" className="relative scroll-mt-4" style={{ background: "var(--g-fundo)" }}>
+              {streamDaEntrega}
+            </div>
+          )}
         </>
       )}
 
@@ -1054,6 +1195,8 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               permiteDownload={false}
               galeriaId={galeria.id}
               aparencia={aparencia}
+              /* Sem recado nesta tela: são fotos de exemplo, e um convite aqui
+                 gravaria um recado de verdade na galeria do próprio fotógrafo. */
               capitulos={[]}
               modoProvavel={modoProvavel}
             enderecoBase={enderecoBase}
@@ -1077,11 +1220,13 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             permiteDownload={galeria.permite_download}
             galeriaId={galeria.id}
             aparencia={aparencia}
+            recado={recado}
             capitulos={capitulos}
             modoProvavel={modoProvavel}
             enderecoBase={enderecoBase}
             buscaPorRosto={buscaPorRosto}
             bytesDaGaleria={bytesDaGaleria}
+            totalNaGaleria={todasAsMedias.length}
             recorte={escolhidas.size > 0 && !amostrando}
             /* O capítulo aberto vale em qualquer galeria, fatiada ou não —
                ver `capituloAberto` em galeria-cliente. */

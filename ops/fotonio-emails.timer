@@ -1,0 +1,27 @@
+[Unit]
+Description=Olumier - enviar os e-mails da galeria que venceram hoje
+
+[Timer]
+# 12:15 UTC = 09:15 em Brasilia. O servidor roda em Etc/UTC (`timedatectl`), e
+# este arquivo ja nasceu errado uma vez: "09:15" aqui virou 06:15 no horario de
+# quem recebe o e-mail.
+#
+# O sufixo de fuso no OnCalendar (`... America/Sao_Paulo`) resolveria sozinho e
+# NAO e usado de proposito: ele existe a partir do systemd 252, e este servidor
+# tem o 249. Em 249 o sufixo e lido como erro de sintaxe e a unidade nao carrega
+# -- ou seja, o jeito "certo" desligaria o envio em silencio.
+#
+# O preco: no horario de verao brasileiro, se ele voltar, isto sai as 10:15. Um
+# e-mail de lembranca de casamento chegando uma hora depois nao e defeito.
+#
+# De manha, e nao de madrugada: "sua galeria esta pronta" e "amanha faz um ano"
+# sao mensagens que a pessoa le e quer abrir na hora. E-mail que chega as 4h30
+# fica no fim da caixa junto com propaganda.
+#
+# Depois do backup (03:40), do cofre (04:30) e da limpeza (04:50): nada aqui
+# depende deles, mas nenhuma rodada pesada esta em pe as 9h15.
+OnCalendar=*-*-* 12:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

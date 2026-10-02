@@ -1,15 +1,15 @@
 import { ImageResponse } from "next/og";
+import { escolherCapa } from "@/lib/capa-publica";
 import { marca } from "@/config/marca";
 import { lerAparencia, variaveisDoTema } from "@/config/aparencia";
-import { armazemDe } from "@/lib/armazem";
 import { comAlfa, fotoParaOCartao } from "@/lib/cartao-de-link";
 import { buscarGaleriaPublica, listarMediasPublicas } from "@/lib/galerias-publicas";
 
 /*
- * Por que a foto passa por `fotoParaOCartao` e não entra direto: o satori não
- * desenha WebP, e toda derivada do produto é WebP. A história, e o teto de
- * memória, moram em `lib/cartao-de-link.ts` — que a vitrine do estúdio usa
- * também desde 26/09/2026.
+ * Por que a capa passa por `fotoParaOCartao` e não entra direto: o satori não
+ * desenha WebP (e toda derivada do produto é WebP), nem vídeo. A história, a
+ * regra do pôster e o teto de memória moram em `lib/cartao-de-link.ts` — que a
+ * vitrine do estúdio usa também desde 26/09/2026.
  */
 
 /*
@@ -55,12 +55,12 @@ export default async function Image({ params }: Props) {
   if (podeMostrarFoto && galeria) {
     try {
       const medias = await listarMediasPublicas(galeria.id);
-      const capa =
-        medias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
-        medias.find((m) => m.tipo === "foto");
+      const capa = escolherCapa(medias, galeria.capa_media_id);
 
       if (capa) {
-        capaEmbutida = await fotoParaOCartao(capa.chave_preview, capa.chave, armazemDe(capa.armazem));
+        /* Foto ou pôster do filme, com a queda para o original só na foto — a
+           regra mora em `fotoParaOCartao`, que a vitrine usa também. */
+        capaEmbutida = await fotoParaOCartao(capa);
       }
     } catch {
       /* Listar pode falhar; nada disso derruba o cartão. Sem foto, o quadro

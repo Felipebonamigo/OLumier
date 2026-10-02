@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { METADADOS_DO_APP } from "@/config/app-instalado";
 import { MINIMO_SENHA } from "@/lib/senha";
 import Link from "next/link";
 import { MarcaLockup } from "@/components/marca-tile";
@@ -8,12 +9,16 @@ import { FormCadastrar } from "./form";
 
 /* A promessa da descrição é a do formulário logo abaixo ("sem cartão agora"),
    e não uma nova: cartão de link que promete o que a página não diz é o
-   primeiro lugar em que o cliente desconfia. */
-export const metadata: Metadata = metadadosDaCasa({
-  titulo: "Criar conta",
-  descricao: `Crie a conta do seu estúdio na ${marca.nome} e teste grátis, sem cartão: suba uma entrega de verdade e mande o link para o seu cliente.`,
-  caminho: "/cadastrar",
-});
+   primeiro lugar em que o cliente desconfia. O ícone da tela de início e o
+   app vêm de `config/app-instalado.ts`. */
+export const metadata: Metadata = {
+  ...metadadosDaCasa({
+    titulo: "Criar conta",
+    descricao: `Crie a conta do seu estúdio na ${marca.nome} e teste grátis, sem cartão: suba uma entrega de verdade e mande o link para o seu cliente.`,
+    caminho: "/cadastrar",
+  }),
+  ...METADADOS_DO_APP,
+};
 
 export default function CadastrarPage() {
   return (

@@ -45,6 +45,8 @@ export interface Tenant {
    * Liga o seletor de plataforma no painel. Ver `lib/ponte-atomatiza.ts`.
    */
   atomatiza_visto_em: Date | null;
+  /** Estúdio do Atomatiza da fatura única do pacote; nulo fora dele. Ver docs/pacote.md. */
+  pacote_atomatiza_id: string | null;
   /**
    * O maior plano já pago no período corrente — a base da diferença quando o
    * estúdio aumenta o plano. Nulo = vale o plano atual. Ver
@@ -73,6 +75,8 @@ export interface Tenant {
   arquivos_limpos_em: Date | null;
   /** Liberado no admin para o login do Pixieset (migração 052). Nulo = não. */
   pixieset_liberado_em: Date | null;
+  /** Liberado no admin para o login do Pixellu (migração 053). Nulo = não. */
+  pixellu_liberado_em: Date | null;
   /* O calendário da conta encerrada (migração 052). Quem os escreve é só
      `lib/contas-encerradas.ts`. */
   retencao_aviso_em: Date | null;
@@ -102,6 +106,19 @@ export interface Galeria {
      O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
   aparencia_rascunho: unknown;
   capa_media_id: string | null;
+  /* O recado do cliente (migração 058) — a configuração CRUA, como está no
+     banco. Quem junta as regras (estrelas sem pergunta não liga nada, convite
+     vazio usa o padrão) é `configDoRecado` em `lib/recados.ts`. */
+  recado_ativo: boolean;
+  recado_estrelas: boolean;
+  recado_convite: string | null;
+  recado_perguntas: unknown;
+  /* Os e-mails da galeria (migração 059): a chave dos lembretes, o desenho
+     escolhido e o recado do fotógrafo no e-mail de entrega. A FILA não mora
+     aqui — é `emails_da_galeria`, uma linha por e-mail agendado. */
+  email_lembretes: boolean;
+  email_template: string | null;
+  email_mensagem: string | null;
   /** De onde a galeria veio, quando não nasceu no painel — ver migração 047. */
   origem: string | null;
   origem_ref: string | null;
@@ -151,10 +168,18 @@ export async function slugDisponivel(slug: string) {
   return !r;
 }
 
+/** O `senha_hash` de quem ainda não criou senha. Ver `criarTenant`. */
+export const HASH_DA_SENHA_PENDENTE = "sem-senha";
+
 export async function criarTenant(dados: {
   nomeEstudio: string;
   email: string;
-  senha: string;
+  /**
+   * null = conta SEM senha utilizável: a criada pelo pacote, a pedido do
+   * Atomatiza (`lib/pacote.ts`). O dono cria a senha pelo link do e-mail de
+   * boas-vindas — o mesmo caminho do "esqueci a senha".
+   */
+  senha: string | null;
   planoId: string;
   /** Só dígitos. Pedido no cadastro desde a migração 045 — único entre as contas. */
   cpfCnpj?: string | null;
@@ -181,7 +206,9 @@ export async function criarTenant(dados: {
     slug = `${base}-${i}`;
   }
 
-  const senhaHash = await gerarHashSenha(dados.senha);
+  /* `HASH_DA_SENHA_PENDENTE` não tem o formato `scrypt:` que `conferirSenha` exige: nenhuma
+   * senha digitada confere com ela, e o login fica fechado até o link. */
+  const senhaHash = dados.senha === null ? HASH_DA_SENHA_PENDENTE : await gerarHashSenha(dados.senha);
   /*
    * Uma quota só desde a unificação de 25/08/2026: galeria no ar e arquivo
    * somam no mesmo espaço. `quota_cofre_bytes` continua na tabela (a migração
@@ -645,9 +672,18 @@ export async function destruirGaleria(
   }>("select chave, chave_thumb, chave_preview, armazem from medias where galeria_id = $1", [
     galeriaId,
   ]);
+  /* As capas de capítulo enviadas como arquivo (migração 057). Mesma razão de
+     a capa da galeria estar aqui: não são linha em `medias`, e quem não as
+     juntar deixa arquivo pago sem dono — a varredura reconhece a coluna desde
+     02/10/2026 e por isso NÃO vai recolhê-las depois. */
+  const capasDePasta = await consultar<{ capa_chave: string }>(
+    "select capa_chave from secoes where galeria_id = $1 and capa_chave is not null",
+    [galeriaId],
+  );
   const quantos =
     medias.reduce((n, m) => n + [m.chave, m.chave_thumb, m.chave_preview].filter(Boolean).length, 0) +
-    (antes?.capa_chave ? 1 : 0);
+    (antes?.capa_chave ? 1 : 0) +
+    capasDePasta.length;
 
   const apagou = await consultar<{ id: string }>(
     "delete from galerias where id = $1 returning id",
@@ -680,10 +716,14 @@ export async function destruirGaleria(
   if (r.falhou) {
     console.error(`[destruirGaleria] arquivos da galeria ${galeriaId} podem ter ficado no armazém: ${r.falhou}`);
   }
-  if (antes?.capa_chave) {
+  const avulsas = [
+    ...(antes?.capa_chave ? [antes.capa_chave] : []),
+    ...capasDePasta.map((c) => c.capa_chave),
+  ];
+  if (avulsas.length > 0) {
     const { apagarObjetos } = await import("./r2");
-    await apagarObjetos([antes.capa_chave]).catch((e) =>
-      console.error(`[destruirGaleria] a capa da galeria ${galeriaId} pode ter ficado no bucket:`, e),
+    await apagarObjetos(avulsas).catch((e) =>
+      console.error(`[destruirGaleria] capas da galeria ${galeriaId} podem ter ficado no bucket:`, e),
     );
   }
 }

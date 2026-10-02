@@ -5,7 +5,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { enderecoDaBarra, enderecoNaGaleria } from "@/lib/endereco-na-galeria";
 import { GaleriaGrade } from "./galeria-grade";
-import type { Aparencia } from "@/config/aparencia";
+import { fonteDaDespedida, type Aparencia } from "@/config/aparencia";
+import { chegouAoFim } from "@/lib/fim-da-galeria";
+import type { ConfigDoRecado } from "@/config/recado";
+import { FONTES_TEXTO, FONTES_TITULO } from "@/config/aparencia";
+import { RecadoNaGaleria } from "@/components/recado-na-galeria";
 import {
   entregarTudo,
   entregouUmaFoto,
@@ -124,6 +128,15 @@ const VALE_NO_CACHE = 4 * 3600 * 1000;
 
 const GLIFO_SOBRE_FOTO = "drop-shadow(0 1px 1.5px rgba(0,0,0,.85)) drop-shadow(0 0 6px rgba(0,0,0,.45))";
 
+/**
+ * Até quantos vídeos um capítulo pode ter e ainda sair grande.
+ *
+ * Seis é a conta de duas fileiras na grade "normal" com as colunas pela metade
+ * (três por fileira): o capítulo cabe na tela sem virar rolagem. Acima disso é
+ * uma lista de filmes, e lista se lê melhor pequena.
+ */
+const VIDEOS_GRANDES_ATE = 6;
+
 export function GaleriaCliente({
   itens: itensIniciais,
   permiteDownload,
@@ -136,10 +149,12 @@ export function GaleriaCliente({
   selecaoInicial,
   buscaPorRosto = null,
   fatia = null,
+  totalNaGaleria,
   capituloAberto = null,
   enderecoBase,
   recorte = false,
   eu: euInicial = null,
+  recado = null,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
@@ -161,6 +176,8 @@ export function GaleriaCliente({
    * de quase toda galeria: nada muda de comportamento.
    */
   fatia?: { total: number; capituloAtivo: string | null } | null;
+  /** Quantas mídias a galeria TEM, independente do que esta tela mostra. */
+  totalNaGaleria?: number;
   /**
    * O capítulo aberto (`?cap=`), pelo ID — ou `null` na galeria inteira.
    *
@@ -184,6 +201,12 @@ export function GaleriaCliente({
    * baixar as oferece antes da galeria inteira.
    */
   recorte?: boolean;
+  /**
+   * O recado do cliente, quando o fotógrafo pediu nesta galeria (migração 058).
+   * Null = o símbolo não existe e nada muda — é o estado de toda galeria já
+   * entregue.
+   */
+  recado?: ConfigDoRecado | null;
   /** Quem se identificou por e-mail nesta galeria. Null = ninguém ainda. */
   eu?: { email: string | null; nome: string | null } | null;
   /**
@@ -245,7 +268,32 @@ export function GaleriaCliente({
      resultado da selfie. `router.push` e não `location.href`: o Next troca só
      o que mudou, e é o caminho que o próprio framework pede. */
   const router = useRouter();
-  const caminho = usePathname();
+  const caminhoDaBarra = usePathname();
+
+  /*
+   * ── O CAMINHO QUE NÃO SOME COM A LIMPEZA DA BARRA (29/09/2026) ──────────
+   *
+   * Desde 29/09 o capítulo é apagado do endereço assim que ele abre (o
+   * `replaceState` logo abaixo). `usePathname()` passa a dizer o endereço da
+   * GALERIA, e todo `router.push(caminho)` daqui para baixo mandava a pessoa
+   * para fora do capítulo em que ela estava:
+   *
+   *   - "ver só as favoritas" e o "limpar" dele;
+   *   - o "encontrar minhas fotos", que volta com `?fotos=`.
+   *
+   * Juan, 29/09/2026: "a galeria está trocando de capítulo sozinha". Era isto.
+   *
+   * `caminho` passa a ser o endereço REAL do que está aberto — com o capítulo
+   * quando há um —, montado do que o servidor informou e não do que a barra
+   * mostra. A barra continua limpa para copiar; a navegação continua dentro do
+   * capítulo.
+   */
+  const caminho = useMemo(() => {
+    const cap = capituloAberto
+      ? capitulos.find((c) => c.id === capituloAberto)?.apelido
+      : null;
+    return cap ? enderecoNaGaleria(enderecoBase, "", { cap }) : caminhoDaBarra;
+  }, [capituloAberto, capitulos, enderecoBase, caminhoDaBarra]);
 
   /*
    * ── O CAPÍTULO NÃO FICA NA BARRA (29/09/2026) ───────────────────────────
@@ -405,6 +453,84 @@ export function GaleriaCliente({
     }
   }
 
+  /*
+   * ── O RECADO DO CLIENTE (01/10/2026) ────────────────────────────────────
+   *
+   * Juan: "no menu, junto da área das favoritas, vai ter algum símbolo (…)
+   * clicando ali, as pessoas poderão adicionar um feedback por escrito, ou
+   * preencher um formulário de 0 a 5 estrelas".
+   *
+   * A identificação é a MESMA do resto da galeria (`pessoas_da_galeria`): quem
+   * já disse quem é para favoritar ou baixar não é perguntado de novo. É por
+   * isso que a tela do recado recebe `eu` e uma função daqui, em vez de falar
+   * com a rota `eu` por conta própria — duas identificações paralelas para a
+   * mesma pessoa é o defeito que a migração 033 veio consertar.
+   */
+  /*
+   * QUAIS CAPÍTULOS SAEM MAIORES — decidido sobre o capítulo INTEIRO.
+   *
+   * A conta morava no `render`, sobre `cap.indices` — e ali `cap` é o recorte do
+   * DESENHO POR PARTES, não o capítulo. Num capítulo de 20 vídeos que vem depois
+   * de 55 fotos, a primeira leva desenha 5 deles: "5 vídeos, todos vídeo" dava
+   * verdadeiro, os 20 saíam com o dobro da largura, e o tamanho mudava embaixo do
+   * dedo quando o resto era desenhado.
+   *
+   * `fatia` fica de fora inteira: ali `indices` é só o que já chegou do servidor,
+   * e um capítulo que parece ter 4 vídeos pode ter 40 vindo pela rede.
+   */
+  const capitulosDeVideo = useMemo(() => {
+    const ids = new Set<string>();
+    if (fatia) return ids;
+    for (const c of capitulos) {
+      const quantos = c.indices.length;
+      if (quantos === 0 || quantos > VIDEOS_GRANDES_ATE) continue;
+      if (c.indices.every((i) => itens[i]?.tipo === "video")) ids.add(c.id);
+    }
+    return ids;
+  }, [capitulos, itens, fatia]);
+
+  const [recadoAberto, setRecadoAberto] = useState(false);
+
+  /** Diz quem é, para o recado. Devolve a mensagem de erro, ou null. */
+  async function dizerQuemSouParaRecado(dados: { nome: string; email: string }) {
+    try {
+      const r = await fetch(`/api/g/${galeriaId}/eu`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...dados, motivo: "recado" }),
+      });
+      const d = await r.json();
+      if (!r.ok) return d?.erro ?? "Não consegui guardar. Tente de novo.";
+      setEu(d.pessoa);
+      /* A lista dela vem na resposta, como no caminho das favoritas: quem se
+         identifica aqui não pode perder o que já havia escolhido. */
+      setFavoritas(new Set<string>(d.favoritas ?? []));
+      return null;
+    } catch {
+      return "Não consegui guardar. Confira sua conexão.";
+    }
+  }
+
+  /** Manda o recado. Devolve a mensagem de erro, ou null. */
+  async function mandarRecado(dados: {
+    texto: string;
+    notas: Record<string, number>;
+    autoriza: boolean;
+  }) {
+    try {
+      const r = await fetch(`/api/g/${galeriaId}/recado`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dados),
+      });
+      if (r.ok) return null;
+      const d = await r.json().catch(() => null);
+      return d?.erro ?? "Não consegui enviar o recado. Tente de novo.";
+    } catch {
+      return "Não consegui enviar o recado. Confira sua conexão.";
+    }
+  }
+
   const [selecao, setSelecao] = useState(selecaoInicial);
   const [fechando, setFechando] = useState(false);
 
@@ -461,7 +587,23 @@ export function GaleriaCliente({
    * precisa do número inteiro é a prova de entrega: baixar as 600 de uma
    * galeria de 2.108 não pode contar como ter levado o casamento.
    */
-  const totalDaGaleria = fatia?.total ?? itens.length;
+  /*
+   * ── O TOTAL DA GALERIA NÃO É O DA TELA (30/09/2026) ────────────────────
+   *
+   * Isto era `fatia?.total ?? itens.length`, e funcionava enquanto a galeria
+   * pequena mostrasse tudo: sem fatia, o que está na tela É a galeria.
+   *
+   * Deixou de ser verdade quando a galeria passou a abrir no primeiro capítulo
+   * em qualquer tamanho. Numa galeria de 4 fotos com dois capítulos, o menu
+   * passou a oferecer "Todas as fotos num zip (3)" — o casal clicaria em
+   * "todas" e levaria três quartos do casamento achando que levou tudo.
+   * `testar-download-por-pasta` pegou na primeira rodada.
+   *
+   * `totalNaGaleria` vem do servidor e é sempre o acervo inteiro. A fatia
+   * continua respondendo outra pergunta — quanto ainda vem pela rede — e é
+   * por isso que ela não serve aqui: elas coincidiam por acaso.
+   */
+  const totalDaGaleria = totalNaGaleria ?? fatia?.total ?? itens.length;
 
   /**
    * Baixa um zip montado no servidor — ver `api/g/[id]/zip`.
@@ -1154,6 +1296,19 @@ export function GaleriaCliente({
    */
   const [buscando, setBuscando] = useState(false);
   const [acabou, setAcabou] = useState(!fatia);
+  /*
+   * A REDE CAIU — e não é a mesma coisa que acabar.
+   *
+   * Até 02/10/2026 a falha era marcada como `acabou`, porque tudo o que
+   * `carregarMais` precisava era parar de tentar. Só que `acabou` passou a
+   * decidir coisa visível (a saída do capítulo, a despedida do fotógrafo), e aí
+   * 4G caindo no salão virava "Obrigado por escolher o nosso olhar para esse dia
+   * inesquecível" no meio de uma entrega com metade das fotos por vir.
+   *
+   * Agora são dois fatos, e quem os combina é `chegouAoFim` — com teste, porque
+   * este caso só acontece no navegador de outra pessoa.
+   */
+  const [falhou, setFalhou] = useState(false);
   /* As fotos chegam agrupadas por capítulo (`listarMediasPublicas`): só o
      capítulo da última foto que chegou pode ter mais a caminho. Os de antes
      já vieram inteiros e fecham a última fileira sem esperar a galeria toda. */
@@ -1164,6 +1319,7 @@ export function GaleriaCliente({
 
   const carregarMais = useCallback(async () => {
     if (buscando || acabou) return;
+    setFalhou(false);
     setBuscando(true);
     try {
       const busca = new URLSearchParams();
@@ -1177,10 +1333,10 @@ export function GaleriaCliente({
       if (d.fotos.length === 0 || d.restantes === 0) setAcabou(true);
       if (d.fotos.length > 0) setExtras((atual) => [...atual, ...d.fotos]);
     } catch {
-      /* Rede caiu no meio da rolagem: para de tentar sozinho e deixa o botão.
-         Insistir em laço numa conexão ruim é o que trava o celular do
-         convidado no salão. */
-      setAcabou(true);
+      /* Rede caiu no meio da rolagem: para de tentar sozinho e deixa o botão —
+         que agora existe de verdade, logo abaixo da grade. Insistir em laço numa
+         conexão ruim é o que trava o celular do convidado no salão. */
+      setFalhou(true);
     } finally {
       setBuscando(false);
     }
@@ -1192,7 +1348,9 @@ export function GaleriaCliente({
        `faltaDesenhar` nas dependências é o que faz este efeito rodar de novo
        quando ela entra. Sem isso ele olhava uma vez, não achava nada, e a
        galeria fatiada parava nas primeiras 600 fotos. */
-    if (!alvo || acabou || faltaDesenhar) return;
+    /* `falhou` também desliga o observador: é ele que impede o laço numa
+       conexão ruim. Quem decide tentar de novo é a pessoa, no botão. */
+    if (!alvo || acabou || falhou || faltaDesenhar) return;
     /*
      * `rootMargin` de 800 px embaixo: o pedido sai quando o fim está a uma
      * dobra de distância, não quando já chegou. É a diferença entre a galeria
@@ -1206,7 +1364,7 @@ export function GaleriaCliente({
     );
     observador.observe(alvo);
     return () => observador.disconnect();
-  }, [carregarMais, acabou, faltaDesenhar]);
+  }, [carregarMais, acabou, falhou, faltaDesenhar]);
 
 
   /*
@@ -1262,13 +1420,25 @@ export function GaleriaCliente({
     const i = comFoto.findIndex((c) => c.id === capituloAtivo);
     if (i < 0) return null;
     const proximo = comFoto[i + 1] ?? null;
+    /* `ultimo` existe para o recado: pedir o recado no fim do "Making Of", com a
+       "Festa" inteira por ver, é queimar a única chance de pedir. Quem está num
+       capítulo do meio continua recebendo a saída, que é o que ele resolve. */
     return proximo
       ? {
           texto: `Próximo capítulo: ${proximo.nome}`,
           para: enderecoNaGaleria(enderecoBase, "", { cap: proximo.apelido }),
+          ultimo: false,
         }
-      : { texto: "Ver a galeria inteira", para: enderecoNaGaleria(enderecoBase, "", { cap: null }) };
+      : {
+          texto: "Ver a galeria inteira",
+          para: enderecoNaGaleria(enderecoBase, "", { cap: null }),
+          ultimo: true,
+        };
   }, [capitulos, capituloAtivo]);
+
+  const voltarAoInicio = aparencia.voltarAoInicio === "sim";
+  /* A galeria acabou DE VERDADE? Ver `lib/fim-da-galeria.ts` — e o teste. */
+  const noFim = chegouAoFim({ fatiada: Boolean(fatia), acabou, falhou, faltaDesenhar });
 
   const fimDaGaleria = (
     <>
@@ -1280,12 +1450,32 @@ export function GaleriaCliente({
       ) : fatia && !acabou ? (
         <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
           {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
+          {falhou && !buscando && (
+            /* O BOTÃO QUE O COMENTÁRIO DO `catch` PROMETIA desde sempre e que
+               não existia: a rolagem parava, nada aparecia, e a galeria
+               simplesmente terminava mais curta do que é. Dizer que faltam
+               fotos é mais importante do que o botão — sem o recado, a pessoa
+               não tem motivo para tentar. */
+            <span className="inline-flex flex-col items-center gap-2">
+              <span style={{ color: "var(--g-tenue)" }}>
+                A conexão falhou e ainda faltam fotos desta entrega.
+              </span>
+              <button
+                type="button"
+                onClick={() => void carregarMais()}
+                className="rounded-[var(--g-pilula,9999px)] px-4 py-2 text-xs transition"
+                style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
+              >
+                Carregar mais fotos
+              </button>
+            </span>
+          )}
         </div>
       ) : null}
       {/* Só depois que as fotos deste capítulo acabaram: oferecer a saída no
           meio do carregamento é convidar a pessoa a sair antes de ver o que
           ainda está vindo. */}
-      {saidaDoCapitulo && (!fatia || acabou) && !faltaDesenhar && (
+      {saidaDoCapitulo && noFim && (
         <div className="my-10 text-center">
           <Link
             href={saidaDoCapitulo.para}
@@ -1297,8 +1487,105 @@ export function GaleriaCliente({
           </Link>
         </div>
       )}
+      {/*
+        ── A DESPEDIDA, E A VOLTA AO INÍCIO (01/10/2026) ───────────────────
+
+        Juan: "no final da galeria uma frase editável, por exemplo 'obrigado por
+        escolher o nosso olhar para esse dia inesquecível'. Acho que vai mostrar
+        um cuidado a mais." Felipe: "isso eu acho bom".
+
+        As duas coisas só aparecem depois que as fotos acabaram DE VERDADE: numa
+        galeria fatiada, `acabou` é a última remessa, e `faltaDesenhar` é a fila
+        de desenho. Despedir-se no meio do carregamento seria dizer "é só isso"
+        tendo mais 600 fotos vindo.
+
+        Quem não escreveu frase e não ligou o botão não ganha nada novo no fim —
+        é o que a galeria já entregue continua sendo.
+      */}
+      {/*
+        O CONVITE NO FIM DA ENTREGA (Juan, 01/10/2026: "modo menu + botão no fim
+        da galeria").
+
+        Só no fim de verdade — `noFim` —, e só quando não há capítulo seguinte:
+        ver `ultimo` em `saidaDoCapitulo`. Quem viu a entrega inteira é quem tem
+        o que dizer.
+      */}
+      {recado?.ativo && noFim && (!saidaDoCapitulo || saidaDoCapitulo.ultimo) && (
+        <div className="mt-12 text-center">
+          {/*
+            O CONVITE ESCRITO PELO FOTÓGRAFO, e não só o botão.
+
+            Juan pediu "mensagem personalizável". Guardá-la dentro da tela que só
+            abre depois do clique faria a frase dele existir para quem já decidiu
+            escrever — e o convite é justamente o que faz decidir. Aqui ela
+            aparece para quem chegou ao fim, com a letra da galeria.
+          */}
+          <p
+            className="mx-auto mb-4 max-w-xl text-balance px-6 text-sm leading-relaxed"
+            style={{ color: "var(--g-suave)", fontFamily: fonteDaDespedida(aparencia) }}
+          >
+            {recado.convite}
+          </p>
+          <button
+            type="button"
+            onClick={() => setRecadoAberto(true)}
+            className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
+            style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
+          >
+            ✉ Deixar um recado
+          </button>
+        </div>
+      )}
+      {noFim && (aparencia.despedida || voltarAoInicio) && (
+        <div className="mb-14 mt-16 flex flex-col items-center gap-6 px-6 text-center">
+          {aparencia.despedida && (
+            <p
+              className="max-w-2xl text-balance text-lg leading-relaxed sm:text-xl"
+              style={{ color: "var(--g-texto)", fontFamily: fonteDaDespedida(aparencia) }}
+            >
+              {aparencia.despedida}
+            </p>
+          )}
+          {voltarAoInicio && (
+            <button
+              type="button"
+              onClick={() =>
+                window.scrollTo({
+                  top: 0,
+                  /* Rolagem animada é o ponto do botão — mas quem pediu menos
+                     movimento no sistema recebe o salto seco. */
+                  behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+                    ? "auto"
+                    : "smooth",
+                })
+              }
+              className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
+              style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
+            >
+              <span aria-hidden>↑</span>
+              Volte ao início
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
+
+  const telaDoRecado =
+    recado?.ativo && recadoAberto ? (
+      <RecadoNaGaleria
+        convite={recado.convite}
+        escrito={recado.escrito}
+        estrelas={recado.estrelas}
+        perguntas={recado.perguntas}
+        fonteTitulo={FONTES_TITULO[aparencia.tipografia]}
+        fonteTexto={FONTES_TEXTO[aparencia.fonteTexto]}
+        identificado={Boolean(eu)}
+        identificar={dizerQuemSouParaRecado}
+        mandar={mandarRecado}
+        aoFechar={() => setRecadoAberto(false)}
+      />
+    ) : null;
 
   // Arrastar para o lado troca de foto — o gesto que todo app de fotos tem.
   const swipe = useSwipe(proximo, anterior);
@@ -1345,7 +1632,9 @@ export function GaleriaCliente({
         enderecoBase={enderecoBase}
         capitulos={capitulos}
         fatia={fatia}
+        capituloAberto={capituloAtivo}
         tocarSlideshow={ordemVisivel.length > 1 ? tocarSlideshow : null}
+        recado={recado?.ativo ? () => setRecadoAberto(true) : null}
         favoritas={
           /* Sem escolha aberta e sem nenhuma marcada não há o que oferecer, e
              um menu com só o recado "escolha encerrada" dentro é enfeite. */
@@ -1851,6 +2140,18 @@ export function GaleriaCliente({
             <GaleriaGrade
               aparencia={aparencia}
               quantidade={cap.indices.length}
+              /*
+                ── CAPÍTULO DE VÍDEO SAI MAIOR (Juan, 30/09/2026) ───────────
+
+                "Os vídeos dela estão separados em 3 capítulos (…) e, como são
+                poucos vídeos, acho que podemos aumentar a visualização deles."
+
+                As duas condições são estreitas de propósito. MISTO cresceria
+                junto com as fotos — trinta fotos gigantes é a queixa contrária,
+                e é para isso que existe densidade. MUITOS vira lista, e lista
+                grande em cartão grande só vira rolagem.
+              */
+              maiores={capitulosDeVideo.has(cap.id)}
               /* O fim do que está desenhado só é o fim do capítulo quando o
                  desenho por partes chegou até ele E nenhuma foto dele ainda
                  vem pela rede. Ver `fileirasDeColunas`. */
@@ -2097,6 +2398,7 @@ export function GaleriaCliente({
       {/* A sentinela fica DEPOIS de todos os capítulos, e só uma vez: é o fim da
           rolagem, não o fim de cada seção. Ver `fimDaGaleria`. */}
       {fimDaGaleria}
+      {telaDoRecado}
 
       {/*
         Tela cheia. Tudo aqui é pintado com o tema DA GALERIA (--g-*), nunca com

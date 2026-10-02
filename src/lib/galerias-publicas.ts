@@ -40,6 +40,15 @@ export interface GaleriaPublica {
   capa_foco_y: number;
   /** Busca por rosto ligada pelo fotógrafo (migração 028). */
   rostos_ativos: boolean;
+  /*
+   * O recado do cliente (migração 058). Vem NESTA consulta, e não numa à parte,
+   * porque é assim que as 512 galerias que nunca vão ligar recado não pagam nada
+   * por ele existir — quem junta as regras é `configDoRecado`.
+   */
+  recado_ativo: boolean;
+  recado_estrelas: boolean;
+  recado_convite: string | null;
+  recado_perguntas: unknown;
   /**
    * Como o grupo das fotos sem capítulo se chama nesta galeria (migração 037).
    * Nulo = "Outras fotos". Ver `nomeDoGrupoSolto`.
@@ -83,6 +92,7 @@ export async function buscarGaleriaPublica(
   return consultarUm<GaleriaPublica>(
     `select g.id, g.tenant_id, g.titulo, g.subtitulo, g.data_evento, g.estado, g.senha_hash,
             g.permite_download, g.publicada, g.expira_em, g.aparencia, g.aparencia_rascunho, g.capa_media_id, g.capa_chave, g.capa_foco_x, g.capa_foco_y, g.rostos_ativos, g.grupo_solto,
+            g.recado_ativo, g.recado_estrelas, g.recado_convite, g.recado_perguntas,
             t.nome_estudio as estudio_nome, t.slug as estudio_slug, t.site as estudio_site,
             t.logo_chave as estudio_logo, t.cor_destaque as estudio_cor,
             t.logo_largura as estudio_logo_largura, t.logo_altura as estudio_logo_altura,
@@ -122,6 +132,8 @@ export async function listarMediasPublicas(galeriaId: string) {
     versao: number;
     /** Só vídeo, e só os enviados depois de 30/09/2026 — ver o formato Stream. */
     duracao_seg: number | null;
+    /** O nome que o fotógrafo escreveu para a tela (migração 055), ou null. */
+    titulo: string | null;
   }>(
     /*
      * A ordem já sai agrupada por capítulo (seções pela ordem definida pelo
@@ -130,7 +142,7 @@ export async function listarMediasPublicas(galeriaId: string) {
      */
     `select m.id, m.chave, m.chave_thumb, m.chave_preview, m.nome_original,
             m.tipo, m.bytes, m.largura, m.altura, m.secao_id, m.armazem, m.versao,
-            m.duracao_seg
+            m.duracao_seg, m.titulo
        from medias m
        left join secoes s on s.id = m.secao_id
       where m.galeria_id = $1 and m.pronto

@@ -1,5 +1,6 @@
 import "server-only";
-import { urlDaDerivada, urlDoOriginal, type Armazem } from "./armazem";
+import { armazemDe, urlDoOriginal } from "./armazem";
+import { urlDaCapa, type MediaParaCapa } from "./capa-publica";
 
 /**
  * O QUE OS CARTÕES DE LINK DO ESTÚDIO TÊM EM COMUM — a foto e o véu.
@@ -54,36 +55,37 @@ async function embutirSeDesenhavel(url: string): Promise<string | null> {
 }
 
 /**
- * A foto pronta para o satori, ou `null` — nunca um erro.
+ * A capa pronta para o satori, ou `null` — nunca um erro.
  *
- * A FOTO É BAIXADA AQUI, e não entregue ao renderizador como endereço. Passar a
- * URL assinada e deixar o satori buscá-la parecia mais simples e tinha um modo
- * de falhar que derruba tudo: derivada que não existe mais no balde devolve
- * 404, o renderizador estoura, e a rota inteira responde com conexão fechada.
- * Buscando aqui, o 404 vira `null` e o quadro neutro entra no lugar. O
+ * A IMAGEM É BAIXADA AQUI, e não entregue ao renderizador como endereço.
+ * Passar a URL assinada e deixar o satori buscá-la parecia mais simples e tinha
+ * um modo de falhar que derruba tudo: derivada que não existe mais no balde
+ * devolve 404, o renderizador estoura, e a rota inteira responde com conexão
+ * fechada. Buscando aqui, o 404 vira `null` e o quadro neutro entra no lugar. O
  * `AbortSignal` fecha o outro buraco: bucket lento não pode segurar a rota até
  * o robô cansar de esperar.
  *
- * A derivada é WebP, e o satori não a desenha (ver `DESENHAVEIS`). Então a
- * segunda tentativa é o ORIGINAL, que é o arquivo que o fotógrafo enviou —
- * JPEG, na prática. Custa uma segunda busca, e só na primeira vez que alguém
- * desdobra o link: o que o WhatsApp guarda é o PNG pronto. Derivada nula já cai
- * no original pela própria `urlDaDerivada`; o `if` evita repetir a busca.
+ * A primeira tentativa é a imagem que `urlDaCapa` escolhe: a derivada da foto,
+ * ou o PÔSTER do filme (02/10/2026, o filme como capa). A derivada é WebP, e o
+ * satori não a desenha (ver `DESENHAVEIS`); então a segunda tentativa é o
+ * ORIGINAL — o arquivo que o fotógrafo enviou, JPEG na prática. Custa uma
+ * segunda busca, e só na primeira vez que alguém desdobra o link: o que o
+ * WhatsApp guarda é o PNG pronto.
+ *
+ * SÓ FOTO cai no original: o "original" de um vídeo é o .mp4, que o satori não
+ * desenha e que custaria a saída do arquivo inteiro para descobrir isso. Vídeo
+ * tem o pôster ou não tem capa. E sem `chave_preview` a primeira tentativa já
+ * foi o original — o `if` evita repetir a mesma busca.
  *
  * Validade curta de propósito: o link só precisa viver o tempo desta
  * requisição, aqui dentro, e nunca sai deste processo.
  */
-export async function fotoParaOCartao(
-  derivada: string | null,
-  original: string,
-  armazem: Armazem,
-): Promise<string | null> {
+export async function fotoParaOCartao(capa: MediaParaCapa): Promise<string | null> {
   try {
-    const daDerivada = await embutirSeDesenhavel(
-      await urlDaDerivada(derivada, original, armazem, 120),
-    );
-    if (daDerivada || !derivada) return daDerivada;
-    return await embutirSeDesenhavel(await urlDoOriginal(original, armazem, 120));
+    const primeira = await urlDaCapa(capa, 120);
+    const embutida = primeira ? await embutirSeDesenhavel(primeira) : null;
+    if (embutida || capa.tipo !== "foto" || !capa.chave_preview) return embutida;
+    return await embutirSeDesenhavel(await urlDoOriginal(capa.chave, armazemDe(capa.armazem), 120));
   } catch {
     /* Assinar ou baixar pode falhar; nada disso derruba o cartão. Sem foto, o
        quadro neutro ainda diz de quem é. */

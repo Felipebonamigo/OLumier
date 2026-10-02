@@ -17,16 +17,22 @@ import type { RostoMedido } from "@/lib/rostos-client";
 import { enviarEmPartes } from "@/lib/multipart-client";
 import {
   PARALELOS,
+  MINIATURAS_JUNTAS,
+  limitador,
   type ArquivoComCaminho,
+  type ArquivoConhecido,
   comRetentativa,
+  erroDefinitivo,
   emParaleloDeFila,
   manterAcordado,
   ordenarNaturalPorCaminho,
   itemAceito,
   tamanhoDe,
+  linhasDaFila,
 } from "@/lib/fila-upload";
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
-import { garantirSecoesAction } from "@/app/painel/actions";
+import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio } from "@/lib/velocidade-regras";
+import { encaixarNaOrdemDaPastaAction, garantirSecoesAction } from "@/app/painel/actions";
 
 /**
  * O ENVIO QUE SOBREVIVE À TROCA DE ABA.
@@ -74,6 +80,12 @@ export interface ItemFila {
   progresso: number;
   situacao: Situacao;
   tentativa: number;
+  /** Esperando a rede voltar — a tentativa não está sendo gasta. */
+  semRede?: boolean;
+  /** Por que a última tentativa falhou — aparece junto do "tentando de novo". */
+  motivo?: string;
+  /** O original foi pelo caminho alternativo (R2), porque o B2 não aceitou. */
+  alternativo?: boolean;
   erro?: string;
   /** Quantos rostos a busca por rosto guardou desta foto. */
   rostos?: number;
@@ -91,6 +103,13 @@ export interface OpcoesDeEnvio {
   destino?: string;
   /** A busca por rosto está ligada: cada foto é medida durante o envio. */
   rostosAtivos: boolean;
+  /**
+   * Os arquivos DESTA pasta que já estavam na galeria — os que a pergunta das
+   * repetidas pulou (vazio em "Enviar mesmo assim", que manda todos). Presente,
+   * o envio põe a pasta na ordem dela quando a fila secar: o que faltava volta
+   * para o meio, e não para o fim. Ver `lib/encaixe-da-pasta.ts`.
+   */
+  encaixarCom?: ArquivoComCaminho[];
 }
 
 interface Envio {
@@ -105,10 +124,16 @@ interface Envio {
   pausar: () => void;
   retomar: () => void;
   parar: () => void;
+  /** Põe de volta na fila o que desistiu — sem arrastar a pasta de novo. */
+  reenviarFalhas: () => void;
   limparConcluidos: () => void;
 }
 
 const Contexto = createContext<Envio | null>(null);
+
+/* Um só para a aba inteira: a importação e a aba Fotos dividem o mesmo
+   processador. Ver `MINIATURAS_JUNTAS`. */
+const vezDaMiniatura = limitador(MINIATURAS_JUNTAS);
 
 /** A fila desta galeria. Fora do provedor não existe envio — e isso é um erro. */
 export function useEnvio(): Envio {
@@ -144,11 +169,16 @@ function enviarComProgresso(
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable) aoProgredir(Math.round((e.loaded / e.total) * 100));
     });
-    xhr.addEventListener("load", () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`falha no envio (HTTP ${xhr.status})`)),
-    );
+    xhr.addEventListener("load", () => {
+      if (xhr.status >= 200 && xhr.status < 300) return resolve();
+      /* O armazém responde em XML com um código ("AccessDenied",
+         "SignatureDoesNotMatch", teto de armazenamento…). É esse código que
+         diz a nós o que houve — "HTTP 403" sozinho não diz. */
+      const codigo = /<Code>([^<]{1,80})<\/Code>/.exec(xhr.responseText ?? "")?.[1];
+      reject(new Error(`o armazenamento recusou (HTTP ${xhr.status}${codigo ? ` · ${codigo}` : ""})`));
+    });
+    /* Sem resposta nenhuma: a conexão caiu, ou a resposta veio sem permissão
+       de CORS e o navegador a escondeu. Daqui não dá para saber qual. */
     xhr.addEventListener("error", () => reject(new Error("conexão interrompida")));
     xhr.addEventListener("abort", () => reject(new Error("envio cancelado")));
     xhr.send(arquivo);
@@ -207,8 +237,36 @@ export function ProvedorDeEnvio({
   const paradoRef = useRef(false);
   const router = useRouter();
 
-  const atualizar = (id: string, mudanca: Partial<ItemFila>) =>
-    setFila((f) => f.map((i) => (i.id === id ? { ...i, ...mudanca } : i)));
+  /*
+   * ── O PROGRESSO NÃO PODE REDESENHAR A FILA INTEIRA (01/10/2026) ──────────
+   *
+   * Cada evento de progresso de cada um dos seis envios virava uma fila nova
+   * — com 4.000 arquivos, dezenas de cópias de 4.000 itens por segundo, e um
+   * redesenho de tudo que lê o envio. Ver `linhasDaFila` para o que isso fez
+   * com a página do Juan.
+   *
+   * Agora: o progresso de um arquivo atualiza a tela no máximo quatro vezes
+   * por segundo (100% e as mudanças de situação passam sempre), e uma mudança
+   * que não muda nada devolve a MESMA fila — o React nem redesenha.
+   */
+  const ultimoProgresso = useRef(new Map<string, number>());
+  const atualizar = (id: string, mudanca: Partial<ItemFila>) => {
+    const soProgresso = Object.keys(mudanca).length === 1 && mudanca.progresso !== undefined;
+    if (soProgresso && mudanca.progresso! < 100) {
+      const agora = performance.now();
+      if (agora - (ultimoProgresso.current.get(id) ?? -Infinity) < 250) return;
+      ultimoProgresso.current.set(id, agora);
+    }
+    setFila((f) => {
+      const k = f.findIndex((i) => i.id === id);
+      if (k < 0) return f;
+      const atual = f[k];
+      if ((Object.keys(mudanca) as (keyof ItemFila)[]).every((c) => atual[c] === mudanca[c])) return f;
+      const nova = f.slice();
+      nova[k] = { ...atual, ...mudanca };
+      return nova;
+    });
+  };
 
   // Relógio só enquanto a fila roda — alimenta a estimativa de tempo restante.
   useEffect(() => {
@@ -277,6 +335,47 @@ export function ProvedorDeEnvio({
     medidor?: (bitmap: ImageBitmap) => Promise<RostoMedido[]>;
   };
   const pendentes = useRef<Tarefa[]>([]);
+  /*
+   * O QUE DESISTIU, GUARDADO PARA O "REENVIAR" (30/09/2026).
+   *
+   * A Alícia viu uma fileira de "conexão interrompida" e o único caminho era
+   * arrastar a pasta de novo — e descobrir quais tinham subido. A tarefa
+   * inteira fica aqui (o arquivo aberto, o capítulo, a posição na galeria),
+   * então reenviar é devolvê-la à fila, na mesma ordem de antes.
+   */
+  const falhas = useRef(new Map<string, Tarefa>());
+  /*
+   * A MEDIDA DE CADA ARQUIVO (30/09/2026, migração 053).
+   *
+   * Felipe: "temos que ter velocidade e funcionar". O envio vai direto para o
+   * armazém, e o servidor não via nem a velocidade nem as desistências — da
+   * Alícia soubemos por foto. Cada arquivo que termina vira uma medida; elas
+   * vão juntas, de tempos em tempos, e o painel de administração mostra.
+   * Mandar e esquecer: falhar aqui não pode atrapalhar envio nenhum.
+   */
+  const medidas = useRef<MedidaDeEnvio[]>([]);
+  const enviarMedidas = useCallback(() => {
+    if (medidas.current.length === 0) return;
+    const lote = medidas.current.splice(0, LOTE_MAXIMO_DE_MEDIDAS);
+    fetch("/api/envio/medidas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ medidas: lote }),
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
+  const anotar = useCallback(
+    (m: MedidaDeEnvio) => {
+      medidas.current.push(m);
+      if (medidas.current.length >= 25) enviarMedidas();
+    },
+    [enviarMedidas],
+  );
+  /* Quem fecha a aba no meio ainda manda o que já mediu. */
+  useEffect(() => {
+    window.addEventListener("pagehide", enviarMedidas);
+    return () => window.removeEventListener("pagehide", enviarMedidas);
+  }, [enviarMedidas]);
   const trabalhandoRef = useRef(false);
   /*
    * A ORDEM continua de onde parou entre lotes.
@@ -303,6 +402,8 @@ export function ProvedorDeEnvio({
    * motivo: enquanto houver arquivo subindo, é tudo o mesmo envio.
    */
   const loteAtual = useRef<string | null>(null);
+  /* As pastas a pôr na ordem quando a fila secar, por galeria e lote. */
+  const encaixes = useRef(new Map<string, { galeriaId: string; lote: string; pasta: ArquivoConhecido[] }>());
 
   const enviarUm = useCallback(
     async (tarefa: Tarefa) => {
@@ -326,6 +427,19 @@ export function ProvedorDeEnvio({
       );
       let preparado: Preparo | null = null;
       let arquivo = tarefa.arquivo;
+      /* O tempo do envio do ORIGINAL na tentativa que deu certo — a parte que
+         depende da rede. Ver `medidas`. */
+      let envioMs: number | null = null;
+      /*
+       * O CAMINHO ALTERNATIVO (30/09/2026). A Alícia ficou com "0 de 38": o
+       * PUT do original para o B2 caía SEMPRE na máquina dela, com 675 fotos
+       * já enviadas antes. Depois de duas falhas no armazém, a mídia pendente é
+       * solta e o arquivo pede outra vaga, agora no R2 (ver a rota de upload).
+       * Uma vez só por arquivo: se o R2 também falhar, é a rede dela, e a
+       * retentativa segue como sempre.
+       */
+      let alternativo = false;
+      let falhasNoArmazem = 0;
 
       try {
         /* Fora da retentativa: um ZIP que não abre este arquivo não abre na
@@ -347,7 +461,8 @@ export function ProvedorDeEnvio({
              * lê 128 KB do começo do arquivo, o outro decodifica a imagem.
              */
             const [derivadas, tiradaEm] = await Promise.all([
-              gerarDerivadas(arquivo, { medirRostos: tarefa.medidor }),
+              /* Na vez do processador: seis no ar, três gerando miniatura. */
+              vezDaMiniatura(() => gerarDerivadas(arquivo, { medirRostos: tarefa.medidor })),
               dataDaFoto(arquivo),
             ]);
 
@@ -384,21 +499,25 @@ export function ProvedorDeEnvio({
                   /* E o lote é o que impede a base da posição de subir no meio
                      do envio. Ver `criarMediaPendente` e a migração 038. */
                   lote: tarefa.lote ?? undefined,
+                  /* Quantos arquivos este lote já tem na fila: o servidor
+                     reserva a faixa inteira, e outro envio para a mesma
+                     galeria começa depois dela (migração 061). */
+                  ate: proximoIndice.current.get(tarefa.galeriaId),
+                  alternativo: alternativo || undefined,
                 }),
               });
-              const corpo = await preparo.json();
+              const corpo = await preparo.json().catch(() => ({}));
               if (!preparo.ok) {
-                // Sem espaço, tipo recusado ou grande demais: insistir não resolve.
-                // Nem e-mail por confirmar (403): o que resolve é o clique no link.
-                if (
+                /* Sem espaço (507), tipo recusado, grande demais, e-mail por
+                   confirmar, assinatura vencida, galeria no cofre, sessão
+                   expirada: insistir não resolve, e a pessoa precisa ler o
+                   motivo AGORA, não depois de dois minutos de "tentando de
+                   novo". Só 408 e 429 (e o 5xx) valem outra tentativa. */
+                const definitivo =
                   preparo.status === 507 ||
-                  preparo.status === 415 ||
-                  preparo.status === 413 ||
-                  preparo.status === 403
-                ) {
-                  throw Object.assign(new Error(corpo.erro), { definitivo: true });
-                }
-                throw new Error(corpo.erro ?? "não foi possível preparar o envio");
+                  (preparo.status >= 400 && preparo.status < 500 && preparo.status !== 408 && preparo.status !== 429);
+                const mensagem = corpo.erro ?? `não foi possível preparar o envio (HTTP ${preparo.status})`;
+                throw definitivo ? erroDefinitivo(mensagem) : new Error(mensagem);
               }
               preparado = corpo;
             }
@@ -430,18 +549,33 @@ export function ProvedorDeEnvio({
               : Promise.resolve();
 
             // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
+            const inicioDoEnvio = performance.now();
             if (dados.emPartes) {
               await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
                 atualizar(tarefa.item.id, { progresso: pct }),
               );
             } else {
-              await enviarComProgresso(
-                dados.url,
-                arquivo,
-                (pct) => atualizar(tarefa.item.id, { progresso: pct }),
-                dados.mime,
-              );
+              try {
+                await enviarComProgresso(
+                  dados.url,
+                  arquivo,
+                  (pct) => atualizar(tarefa.item.id, { progresso: pct }),
+                  dados.mime,
+                );
+              } catch (e) {
+                falhasNoArmazem++;
+                if (!alternativo && falhasNoArmazem >= 2) {
+                  /* Solta a vaga no armazém principal e a próxima tentativa
+                     pede outra no alternativo. */
+                  await fetch(`/api/medias/${dados.mediaId}/confirmar`, { method: "DELETE" }).catch(() => {});
+                  preparado = null;
+                  alternativo = true;
+                  atualizar(tarefa.item.id, { alternativo: true });
+                }
+                throw e;
+              }
             }
+            envioMs = performance.now() - inicioDoEnvio;
             await derivadasSubindo;
 
             // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
@@ -474,10 +608,18 @@ export function ProvedorDeEnvio({
               }
             }
           },
-          (tentativa) => atualizar(tarefa.item.id, { tentativa, situacao: "esperando", progresso: 0 }),
+          (tentativa, semRede, erro) =>
+            atualizar(tarefa.item.id, {
+              tentativa,
+              semRede,
+              situacao: "esperando",
+              progresso: 0,
+              motivo: erro instanceof Error ? erro.message : undefined,
+            }),
         );
 
-        atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100 });
+        atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false, motivo: undefined });
+        anotar({ galeriaId: tarefa.galeriaId, bytes: arquivo.size, ms: envioMs, ok: true, erro: null });
       } catch (e) {
         /*
          * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
@@ -492,11 +634,22 @@ export function ProvedorDeEnvio({
         }
         atualizar(tarefa.item.id, {
           situacao: "erro",
+          semRede: false,
           erro: e instanceof Error ? e.message : "falhou",
+        });
+        falhas.current.set(tarefa.item.id, tarefa);
+        anotar({
+          galeriaId: tarefa.galeriaId,
+          bytes: arquivo.size,
+          ms: null,
+          ok: false,
+          /* "também pelo R2" separa, no painel, a rede de quem envia (os dois
+             caminhos falharam) de um problema só do B2. */
+          erro: `${e instanceof Error ? e.message : "falhou"}${alternativo ? " (também pelo R2)" : ""}`,
         });
       }
     },
-    [],
+    [anotar],
   );
 
   const trabalhar = useCallback(async () => {
@@ -514,6 +667,7 @@ export function ProvedorDeEnvio({
       async () => (paradoRef.current ? "parar" : pausadoRef.current ? "esperar" : "seguir"),
     );
     soltar();
+    enviarMedidas();
 
     trabalhandoRef.current = false;
     setRodando(false);
@@ -523,6 +677,8 @@ export function ProvedorDeEnvio({
     /* O que ficou em "esperando" quando alguém parou não vai subir: dizer isso
        é melhor que deixar a linha girando para sempre. */
     if (paradoRef.current) {
+      /* O que não chegou a sair também pode ser reenviado depois. */
+      for (const t of pendentes.current) falhas.current.set(t.item.id, t);
       pendentes.current = [];
       setFila((f) =>
         f.map((i) =>
@@ -532,8 +688,15 @@ export function ProvedorDeEnvio({
         ),
       );
     }
+    /* Uma ida por pasta que pulou repetidas; falhar aqui só deixa as novas no
+       fim do capítulo, como era antes — o envio já terminou. */
+    const aEncaixar = [...encaixes.current.values()];
+    encaixes.current.clear();
+    for (const e of aEncaixar) {
+      await encaixarNaOrdemDaPastaAction(e.galeriaId, e.lote, e.pasta).catch(() => 0);
+    }
     router.refresh();
-  }, [enviarUm, router]);
+  }, [enviarUm, enviarMedidas, router]);
 
   const enfileirar = useCallback(
     async (brutos: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => {
@@ -636,6 +799,19 @@ export function ProvedorDeEnvio({
       });
       proximoIndice.current.set(alvo, base + lote.length);
 
+      /* A pasta inteira, na MESMA ordem do envio — as que sobem e as que já
+         estavam lá —, para o encaixe do fim. */
+      if (opcoes.encaixarCom && loteAtual.current) {
+        const chave = `${alvo}:${loteAtual.current}`;
+        const ja = encaixes.current.get(chave);
+        const pasta = ordenarNaturalPorCaminho([...itens, ...opcoes.encaixarCom.filter(itemAceito)]).map((it) => ({
+          nome: it.arquivo.name,
+          bytes: tamanhoDe(it),
+        }));
+        if (ja) ja.pasta.push(...pasta);
+        else encaixes.current.set(chave, { galeriaId: alvo, lote: loteAtual.current, pasta });
+      }
+
       pendentes.current.push(...lote);
       setFila((f) => [...f, ...lote.map((t) => t.item)]);
       void trabalhar();
@@ -663,9 +839,28 @@ export function ProvedorDeEnvio({
         pausadoRef.current = false;
         setPausado(false);
       },
-      limparConcluidos: () => setFila([]),
+      reenviarFalhas: () => {
+        const lista = [...falhas.current.values()].sort((a, b) => a.indice - b.indice);
+        if (lista.length === 0) return;
+        falhas.current.clear();
+        const ids = new Set(lista.map((t) => t.item.id));
+        setFila((f) =>
+          f.map((i) =>
+            ids.has(i.id)
+              ? { ...i, situacao: "esperando", progresso: 0, tentativa: 0, semRede: false, motivo: undefined, alternativo: false, erro: undefined }
+              : i,
+          ),
+        );
+        paradoRef.current = false;
+        pendentes.current.push(...lista);
+        void trabalhar();
+      },
+      limparConcluidos: () => {
+        falhas.current.clear();
+        setFila([]);
+      },
     }),
-    [fila, rodando, pausado, avisoRostos, enfileirar],
+    [fila, rodando, pausado, avisoRostos, enfileirar, trabalhar],
   );
 
   const enviados = fila.filter((i) => i.situacao === "pronto").length;
@@ -709,6 +904,7 @@ export function ProvedorDeEnvio({
           aoPausar={valor.pausar}
           aoRetomar={valor.retomar}
           aoParar={valor.parar}
+          aoReenviar={valor.reenviarFalhas}
           aoLimpar={valor.limparConcluidos}
         />
       )}
@@ -733,6 +929,7 @@ function BarraDeEnvio({
   aoPausar,
   aoRetomar,
   aoParar,
+  aoReenviar,
   aoLimpar,
 }: {
   fila: ItemFila[];
@@ -744,10 +941,13 @@ function BarraDeEnvio({
   aoPausar: () => void;
   aoRetomar: () => void;
   aoParar: () => void;
+  aoReenviar: () => void;
   aoLimpar: () => void;
 }) {
   const [aberta, setAberta] = useState(false);
   const pct = fila.length ? (enviados / fila.length) * 100 : 0;
+  /* Só quando aberta: fechada, a barra não precisa nem separar a fila. */
+  const resumo = aberta ? linhasDaFila(fila) : null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-linha bg-carbon/95 backdrop-blur">
@@ -798,6 +998,16 @@ function BarraDeEnvio({
                 </button>
               </>
             ) : (
+              <>
+                {comErro > 0 && (
+                  <button
+                    type="button"
+                    onClick={aoReenviar}
+                    className="rounded-lg border border-acento px-3 py-1.5 text-xs text-acento-alto transition hover:bg-acento/10"
+                  >
+                    Reenviar {comErro === 1 ? "o que falhou" : `os ${comErro} que falharam`}
+                  </button>
+                )}
               <button
                 type="button"
                 onClick={aoLimpar}
@@ -805,6 +1015,7 @@ function BarraDeEnvio({
               >
                 Fechar
               </button>
+              </>
             )}
           </div>
         </div>
@@ -816,9 +1027,9 @@ function BarraDeEnvio({
           />
         </div>
 
-        {aberta && (
+        {resumo && (
           <ul className="mt-2.5 flex max-h-56 flex-col gap-2 overflow-y-auto pr-1">
-            {fila.map((item) => (
+            {resumo.linhas.map((item) => (
               <li key={item.id} className="text-xs">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="min-w-0 flex-1 truncate">{item.nome}</span>
@@ -831,12 +1042,20 @@ function BarraDeEnvio({
                         {item.rostos !== undefined &&
                           ` · ${item.rostos} ${item.rostos === 1 ? "rosto" : "rostos"}`}
                       </span>
-                    ) : item.tentativa > 0 ? (
-                      <span className="text-alerta">tentando de novo ({item.tentativa})…</span>
+                    ) : item.semRede ? (
+                      <span className="text-alerta">sem internet — continua quando voltar</span>
+                    ) : item.tentativa > 0 && item.situacao === "esperando" ? (
+                      <span className="text-alerta">
+                        tentando de novo ({item.tentativa})…
+                        {item.motivo && ` ${item.motivo}`}
+                        {item.alternativo && " · agora por outro caminho"}
+                      </span>
                     ) : item.situacao === "preparando" ? (
                       "preparando…"
                     ) : (
-                      `${item.progresso}% · ${formatarBytesCurto(item.bytes)}`
+                      `${item.progresso}% · ${formatarBytesCurto(item.bytes)}${
+                        item.tentativa > 0 ? ` · tentativa ${item.tentativa + 1}` : ""
+                      }${item.alternativo ? " · outro caminho" : ""}`
                     )}
                   </span>
                 </div>
@@ -854,6 +1073,21 @@ function BarraDeEnvio({
                 </div>
               </li>
             ))}
+            {(resumo.maisEmCurso > 0 ||
+              resumo.maisComErro > 0 ||
+              resumo.maisEsperando > 0 ||
+              resumo.maisEnviados > 0) && (
+              <li className="text-xs text-texto-faint">
+                {[
+                  resumo.maisEmCurso > 0 && `mais ${resumo.maisEmCurso} tentando de novo`,
+                  resumo.maisComErro > 0 && `mais ${resumo.maisComErro} com erro`,
+                  resumo.maisEsperando > 0 && `mais ${resumo.maisEsperando} na fila`,
+                  resumo.maisEnviados > 0 && `mais ${resumo.maisEnviados} já enviados`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </li>
+            )}
           </ul>
         )}
       </div>

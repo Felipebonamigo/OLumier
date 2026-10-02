@@ -89,8 +89,11 @@ const QUALIDADE_PREVIEW = 0.9;
  * O laço para quando o próximo passo passaria do alvo — daí o `/ 2 >= alvo`.
  * Sem ele, uma foto de 700 px pedindo 640 faria uma volta inútil por 350 e
  * subiria de novo, que é perder nitidez para ganhar nada.
+ *
+ * Devolve o CANVAS, não o arquivo: a miniatura da grade sai do canvas do
+ * preview (ver `gerarDerivadas`), e codificar é outro passo (`codificar`).
  */
-async function redimensionar(bitmap: ImageBitmap, alvo: number, qualidade: number): Promise<Blob> {
+function reduzir(bitmap: ImageBitmap | HTMLCanvasElement, alvo: number): HTMLCanvasElement {
   const escala = Math.min(1, alvo / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * escala));
   const h = Math.max(1, Math.round(bitmap.height * escala));
@@ -128,10 +131,17 @@ async function redimensionar(bitmap: ImageBitmap, alvo: number, qualidade: numbe
   canvas.width = w;
   canvas.height = h;
   ctx.drawImage(origem, 0, 0, w, h);
+  return canvas;
+}
 
+async function codificar(canvas: HTMLCanvasElement, qualidade: number): Promise<Blob> {
   const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/webp", qualidade));
   if (!blob || blob.size === 0) throw new Error("falha ao gerar WebP");
   return blob;
+}
+
+async function redimensionar(bitmap: ImageBitmap, alvo: number, qualidade: number): Promise<Blob> {
+  return codificar(reduzir(bitmap, alvo), qualidade);
 }
 
 /**
@@ -392,9 +402,23 @@ export async function gerarDerivadas(
     // from-image respeita a orientação EXIF — foto de celular não vira deitada.
     const bitmap = await createImageBitmap(arquivo, { imageOrientation: "from-image" });
     try {
+      /*
+       * A MINIATURA SAI DO PREVIEW, NÃO DO ORIGINAL (30/09/2026).
+       *
+       * Juan, de Portland, subindo 300 fotos. Medido no Chromium, 24 MP: o
+       * preview custa 582 ms, e a miniatura feita do ORIGINAL mais 269 ms —
+       * ela refazia do zero a primeira redução, a mais cara (24 MP → 6 MP),
+       * que o preview acabara de fazer. Feita do canvas do preview (2048 px,
+       * já reduzido por metades), são 75 ms, com o mesmo peso (43 KB) e a
+       * mesma redução por metades que protege o grão (ver acima). Uns 20% a
+       * menos de processador por foto, que é o que manda quando a internet é
+       * rápida.
+       */
+      const telaDoPreview = reduzir(bitmap, TAMANHO_PREVIEW);
+      const telaDaMiniatura = reduzir(telaDoPreview, TAMANHO_THUMB);
       const [thumb, preview] = await Promise.all([
-        redimensionar(bitmap, TAMANHO_THUMB, QUALIDADE_THUMB),
-        redimensionar(bitmap, TAMANHO_PREVIEW, QUALIDADE_PREVIEW),
+        codificar(telaDaMiniatura, QUALIDADE_THUMB),
+        codificar(telaDoPreview, QUALIDADE_PREVIEW),
       ]);
       const derivadas: Derivadas = { thumb, preview, largura: bitmap.width, altura: bitmap.height };
 

@@ -3,33 +3,38 @@ import type { Metadata } from "next";
 import { urlDeLeitura } from "./r2";
 
 /**
- * O ÍCONE DA ABA nas páginas do estúdio: a logo dele, ou nenhum.
+ * O ÍCONE DA ABA nas páginas do estúdio: a logo dele, quando houver.
  *
- * ── POR QUE NÃO O NOSSO (26/09/2026) ──────────────────────────────────────
+ * ── POR QUE A LOGO (26/09/2026) ───────────────────────────────────────────
  *
- * Sem isto, a vitrine e a galeria herdam o `icon.svg` do layout raiz — o átomo
- * da plataforma. No subdomínio do estúdio o pedido nem chegava a ele: o proxy
- * reescrevia `/icon.svg` como se fosse o endereço de uma galeria, e cada visita
- * pagava uma renderização inteira da rota de galeria, com consulta ao banco,
- * para devolver um 404. A aba ficava sem ícone por acidente.
+ * A vitrine e a galeria herdam o `icon.svg` do layout raiz — o átomo da
+ * plataforma. Quando o estúdio tem logo, a aba de cada entrega passa a mostrar
+ * a marca DELE: é a estratégia de marca ("a Galeria Átomo fica por trás, a
+ * marca do fotógrafo fica na frente") chegando até o canto da aba.
  *
- * Consertar só o proxy poria o átomo na aba de toda entrega — a marca do
- * fornecedor na frente da do estúdio, que é justamente o que a galeria existe
- * para não fazer. Então a página diz o que quer: a logo do estúdio quando ela
- * aparece na página, e lista vazia quando não — e lista vazia, para o Next,
- * quer dizer "não pendure o ícone do layout".
+ * ── E SEM LOGO, O FAVICON DE SEMPRE (02/10/2026) ──────────────────────────
+ *
+ * A primeira versão devolvia "nenhum ícone" para estúdio sem logo, para o átomo
+ * não aparecer. O merge com o master trouxe `testar-app-instalado.mjs`, que
+ * exige o contrário com razão: a galeria pode não levar o ícone de APP da
+ * plataforma (tela de início, manifesto), mas não pode ficar com a aba sem
+ * ícone nenhum — aba sem ícone parece página quebrada. Então, sem logo, a
+ * página não declara nada e herda o favicon do layout.
+ *
+ * Devolve um pedaço de metadado para espalhar, e não `icons: undefined`: chave
+ * presente com valor vazio é o tipo de detalhe que muda de sentido entre
+ * versões do Next.
  *
  * A logo mora num bucket sem endereço público, então vai com link assinado, da
  * mesma validade que a página usa para desenhá-la.
  */
-export async function iconeDoEstudio(logoChave: string | null): Promise<Metadata["icons"]> {
-  if (logoChave) {
-    try {
-      return { icon: await urlDeLeitura(logoChave, 6 * 3600) };
-    } catch {
-      /* Assinar não depende de rede, mas depende de credencial configurada. Sem
-         ela, a aba fica sem ícone — metadado nunca derruba a página. */
-    }
+export async function iconeDoEstudio(logoChave: string | null): Promise<Pick<Metadata, "icons">> {
+  if (!logoChave) return {};
+  try {
+    return { icons: { icon: await urlDeLeitura(logoChave, 6 * 3600) } };
+  } catch {
+    /* Assinar não depende de rede, mas depende de credencial configurada. Sem
+       ela, fica o favicon do layout — metadado nunca derruba a página. */
+    return {};
   }
-  return { icon: [] };
 }

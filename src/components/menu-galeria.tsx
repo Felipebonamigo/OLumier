@@ -26,7 +26,10 @@ import { usePathname } from "next/navigation";
 const ABAS = [
   {
     id: "fotos",
-    nome: "Fotos",
+    /* "e vídeos" desde 01/10/2026 — Juan: "precisamos corrigir tudo que fala
+       'adicionar foto' para 'adicionar mídia', ou adicionar foto/vídeo". O
+       filme sobe por aqui desde agosto, e a aba dizia que era só foto. */
+    nome: "Fotos e vídeos",
     desc: "Enviar, organizar em capítulos",
     /* Traço da foto com a montanha — o mesmo desenho do ícone de imagem. */
     caminho: "M3 5.5h18v13H3zM3 15l5-4 4 3 3-3 6 5",
@@ -60,6 +63,25 @@ const ABAS = [
     /* Retângulo com o triângulo de play — o mesmo desenho do selo do vídeo. */
     caminho: "M3 6.5h18v11H3zM10 9.5l5 2.5-5 2.5z",
     soComVideo: true,
+  },
+  {
+    /*
+      ── A ÁREA DE RECADOS (01/10/2026) ────────────────────────────────────
+
+      Juan: "disponibilizar uma área de feedbacks (…) montado e organizado lá na
+      área de feedbacks da organização da galeria". Montar o pedido e ler as
+      respostas são o mesmo assunto, e por isso é UMA aba e não um interruptor
+      na Entrega com a leitura em outro lugar.
+
+      Permanente, ao contrário da aba Vídeo: aquela depende de um fato da
+      galeria (ter filme), esta depende de uma decisão que o fotógrafo só pode
+      tomar se encontrar onde tomá-la.
+    */
+    id: "recados",
+    nome: "Recados",
+    desc: "O que o casal achou",
+    /* Balão de fala com três pontos — o desenho universal de recado. */
+    caminho: "M4 5.5h16v10H9l-4 3.5v-3.5H4zM9 10.5h.01M12.5 10.5h.01M16 10.5h.01",
   },
   {
     id: "atividade",

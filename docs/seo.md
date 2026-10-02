@@ -39,7 +39,7 @@ prontidão para buscadores de IA). O que depende do branch
 - **Vitrine do estúdio com cara de site dele.** Título sem o nosso nome, cartão
   com a foto do topo (`e/[estudio]/opengraph-image.tsx`), canônico no endereço
   dele (domínio próprio verificado, senão o subdomínio), `robots.txt` e
-  `sitemap.xml` próprios, ícone da aba com a logo dele (ou nenhum), `<h1>` com
+  `sitemap.xml` próprios, ícone da aba com a logo dele (sem logo, o favicon de sempre), `<h1>` com
   o nome em texto e descrição tirada da frase ou do "sobre" que ele escreveu.
 - **Galeria e capítulo**: a aba não termina em "· Galeria Átomo", e o link de um
   capítulo desdobra com a foto (antes, sem imagem nenhuma).

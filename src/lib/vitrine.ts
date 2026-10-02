@@ -49,6 +49,8 @@ export type GaleriaDaVitrine = {
   capa_preview: string | null;
   capa_original: string | null;
   capa_armazem: string | null;
+  /** `foto` ou `video` — o filme pode ser capa desde 02/10/2026. */
+  capa_tipo: string | null;
 };
 
 /**
@@ -79,16 +81,24 @@ export async function galeriasDaVitrine(tenantId: string) {
      * `chave_preview` entrou junto com a vitrine: a mesma foto que vira cartão
      * de 300px na grade vira fundo de tela cheia na capa, e a miniatura esticada
      * a 1600px fica visivelmente mole.
+     *
+     * E a capa marcada só vale se PODE ser capa (02/10/2026): é a regra de
+     * `podeSerCapa` em `lib/capa-publica.ts`, escrita em SQL — foto sempre,
+     * filme só com pôster. Sem ela, um filme sem pôster escolhido como capa
+     * faria a vitrine (e o cartão dela) pedir o .mp4 inteiro como se fosse
+     * imagem: retângulo vazio para quem abre, e a saída do arquivo cobrada.
      */
     `select g.slug, g.titulo, g.subtitulo, g.data_evento,
             case when cm.chave is not null then cm.chave_thumb   else pm.chave_thumb   end as capa_thumb,
             case when cm.chave is not null then cm.chave_preview else pm.chave_preview end as capa_preview,
             case when cm.chave is not null then cm.chave         else pm.chave         end as capa_original,
-            case when cm.chave is not null then cm.armazem       else pm.armazem       end as capa_armazem
+            case when cm.chave is not null then cm.armazem       else pm.armazem       end as capa_armazem,
+            case when cm.chave is not null then cm.tipo          else pm.tipo          end as capa_tipo
        from galerias g
        left join medias cm on cm.id = g.capa_media_id and cm.pronto
+            and (cm.tipo = 'foto' or (cm.tipo = 'video' and cm.chave_thumb is not null))
        left join lateral (
-         select chave, chave_thumb, chave_preview, armazem from medias
+         select chave, chave_thumb, chave_preview, armazem, tipo from medias
           where galeria_id = g.id and pronto and tipo = 'foto'
           order by ordem limit 1
        ) pm on true

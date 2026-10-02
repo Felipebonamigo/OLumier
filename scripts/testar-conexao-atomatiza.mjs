@@ -31,6 +31,29 @@ import { createHmac } from "node:crypto";
 
 await exigirBancoDeTeste();
 
+/*
+ * ── SEM A CHAVE, ISTO É "NÃO RODOU", E NÃO "QUEBROU" (30/09/2026) ────────
+ *
+ * `AVISOS_ENC_KEY` cifra o segredo do canal em repouso. Sem ela `temCripto` é
+ * falso e `registrarCanal` levanta erro — de propósito, porque gravar segredo
+ * em claro seria pior do que não gravar. Só que este arquivo então REPROVAVA
+ * por configuração ausente, e o portão do deploy recusava publicar por um
+ * defeito que não existe no código.
+ *
+ * A regra da suíte já é essa e está escrita em `testar-tudo.mjs`, sobre o
+ * servidor de desenvolvimento: "sem ele, o resultado é PULADO em vez de
+ * vermelho, para não confundir 'não rodou' com 'quebrou'".
+ *
+ * ⚠ O preço é real e fica dito em voz alta: onde a chave não existe, o canal de
+ * avisos NÃO é conferido por ninguém. Quem tiver a chave no ambiente roda tudo
+ * e pode reprovar normalmente.
+ */
+if (!process.env.AVISOS_ENC_KEY) {
+  console.log("  ⚠ AVISOS_ENC_KEY ausente — pulado (o canal de avisos não foi conferido)");
+  process.exit(0);
+}
+
+
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();

@@ -18,7 +18,7 @@
  */
 export const VERSOES_LEGAIS = {
   termos: "2026-09-30",
-  privacidade: "2026-09-30",
+  privacidade: "2026-10-02",
 } as const;
 
 /** "2026-09-30" → "30 de setembro de 2026", sem depender do fuso do servidor. */
@@ -35,16 +35,18 @@ export function dataPorExtenso(versao: string): string {
  * Quem opera o serviço, como aparece nos Termos e na Privacidade.
  *
  * Até 30/09/2026 era só o nome de uma pessoa física, escrito à mão nas duas
- * páginas. Decisão do Felipe: passa a ser o MEI. O `cnpj` fica nulo até o
- * número ser informado — as páginas mostram só o nome enquanto isso, e não um
- * CNPJ inventado. Quando a sociedade virar LTDA, é aqui que muda, e muda a
- * versão dos dois textos junto (é outra parte no contrato).
+ * páginas. Decisão do Felipe: passa a ser o MEI. Nome e CNPJ copiados do
+ * cadastro dele no Asaas ("Dados comerciais", 30/09/2026): a razão social do
+ * MEI é o próprio CNPJ-base seguido do nome, e é assim que ela aparece aqui.
+ * Quando a sociedade virar LTDA, é aqui que muda, e muda a versão dos dois
+ * textos junto (é outra parte no contrato).
  *
- * Formato do CNPJ: "00.000.000/0000-00". `testar-textos-legais.mjs` confere.
+ * Formato do CNPJ: "00.000.000/0000-00". `testar-textos-legais.mjs` confere
+ * o formato e os dígitos verificadores.
  */
 export const OPERADOR: { nome: string; cnpj: string | null } = {
-  nome: "Felipe Carboni Bonamigo",
-  cnpj: null,
+  nome: "68.185.754 Felipe Carboni Bonamigo",
+  cnpj: "68.185.754/0001-05",
 };
 
 /** "Fulano, CNPJ 00.000.000/0000-00" — ou só o nome, sem CNPJ informado. */

@@ -158,13 +158,18 @@ try {
       for (const faixa of FAIXAS) {
         const d = C.divisaoDoDesconto(m.espacoGb, faixa);
         if (d.galeria + d.atomatiza !== d.pacote) throw new Error(`${m.espacoGb}/${faixa}: a soma não fecha`);
-        const exato = (d.pacote * g) / (g + ATOMATIZA[faixa]);
+        // O TB adicional fica fora da proporção: vale o preço do plano até 1 TB.
+        const base = montar({ segmento: "foto", espacoGb: Math.min(m.espacoGb, 1000) }).precoCentavos;
+        void g;
+        const exato = (d.pacote * base) / (base + ATOMATIZA[faixa]);
         if (Math.abs(d.galeria - exato) > 0.5) throw new Error(`${m.espacoGb}/${faixa}: ${d.galeria} longe de ${exato}`);
         pares++;
       }
     }
-    // O exemplo do Felipe: 5 TB + Solo — o pacote cede R$ 29,99, 6% de cada lado.
-    igual(C.divisaoDoDesconto(5000, "solo"), { galeria: 2640, atomatiza: 359, pacote: 2999 }, "5 TB + Solo");
+    // 30/09/2026: "no plano é no máximo 1 TB, depois é TB adicional — aí é
+    // separado". 5 TB + Solo dividem como 1 TB + Solo; os 4 TB a mais ficam fora.
+    igual(C.divisaoDoDesconto(5000, "solo"), C.divisaoDoDesconto(1000, "solo"), "5 TB divide como 1 TB");
+    igual(C.divisaoDoDesconto(1000, "solo"), { galeria: 2000, atomatiza: 999, pacote: 2999 }, "1 TB + Solo");
     igual(C.divisaoDoDesconto(250, "solo"), { galeria: 909, atomatiza: 1090, pacote: 1999 }, "250 GB + Solo");
     return `${pares} pares`;
   });
@@ -191,7 +196,8 @@ try {
     igual(C.linhaDaGaleria(500), "500", "500 GB");
     igual(C.linhaDaGaleria(5000), "1000", "5 TB");
     const dois = planoPorId("g:foto:2000");
-    igual(C.descontoDaGaleriaCentavos(dois, "estudio"), 2500, "2 TB + Estúdio: R$ 49,99 × 199,99 ÷ 399,89");
+    // O TB adicional fica fora: 2 TB + Estúdio divide como 1 TB + Estúdio (R$ 49,99 × 119,99 ÷ 319,89).
+    igual(C.descontoDaGaleriaCentavos(dois, "estudio"), 1875, "2 TB + Estúdio");
     igual(C.descontoDaGaleriaCentavos(planoPorId("foto-100"), "estudio"), 0, "foto-100 (antigo)");
     igual(C.descontoDaGaleriaCentavos(planoPorId("g:foto:250"), null), 0, "sem Atomatiza");
   });
@@ -474,7 +480,9 @@ try {
     if (!/startsWith\(PREFIXO_DIFERENCA_ATOMATIZA\)/.test(fonte)) {
       throw new Error("a diferença de uma troca de faixa no Atomatiza não confere o combo aqui");
     }
-    if (!/after\(\(\) =>\s*recalcularCombo\(tenantId/.test(fonte)) {
+    // `after(() => recalcularCombo(...))`, ou o bloco que confere o combo e
+    // depois avisa o pagamento (`lib/aviso-de-pagamento.ts`, 30/09/2026).
+    if (!/after\((?:\(\) =>|async \(\) => \{)\s*(?:await )?recalcularCombo\(tenantId/.test(fonte)) {
       throw new Error("o nosso pagamento não confere o combo — um aviso perdido do Atomatiza nunca se acertaria");
     }
     if (!/\.catch\(/.test(fonte.slice(gatilhoDeLa, gatilhoDeLa + 200))) {

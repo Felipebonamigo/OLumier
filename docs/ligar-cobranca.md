@@ -30,9 +30,10 @@
 >
 >    Efeito colateral conhecido: os scripts do servidor, que carregam o mesmo
 >    arquivo com `node --env-file`, leem a chave COM a barra (`\$aact…`). Hoje
->    eles só conferem se a chave existe (`asaasConfigurado`), então funcionam;
->    um script novo que chame a API do Asaas por esse caminho precisa tirar a
->    barra antes.
+>    eles só conferem se a chave existe (`asaasConfigurado`), então funcionam.
+>    Desde 30/09/2026 quem fala com a API tira a barra sozinho
+>    (`chaveDoAsaas` em `src/lib/asaas.ts`) — foi o que travou a primeira
+>    rodada de `scripts/conferir-pagamentos.mjs` no servidor.
 >
 > Com a cobrança ligada: teste vencido não envia mais (`situacaoDoTenant`), a
 > galeria dele sai do ar 15 dias depois (`galeriasNoAr`), e a limpeza de testes

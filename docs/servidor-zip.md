@@ -116,9 +116,20 @@ de uma queda, continua de onde parou em vez de recomeçar 20 GB. Em fluxo
 ### Tolerância a falha na montagem
 
 Cada original tem três tentativas com espera crescente. Uma URL vencida (6 h se
-passaram) renova o manifesto sem gastar tentativa. `ZIP_BUSCAS_PARALELAS` (4)
-originais são abertos à frente do que está sendo escrito, porque o B2 está a
-150–220 ms daqui e cada foto é um pedido novo.
+passaram) renova o manifesto sem gastar tentativa. `ZIP_BUSCAS_PARALELAS` (8)
+originais **descem inteiros** à frente do que está sendo escrito, ao mesmo
+tempo, até somarem `ZIP_MEMORIA_A_FRENTE_MB` (256): o B2 está a 150–220 ms
+daqui e cada foto é um pedido novo. Até 30/09/2026 eles eram só *abertos* à
+frente — o corpo esperava a vez, e o ZIP descia do B2 uma foto por vez: 326
+KB/s montando contra 2,4 MB/s do disco, na mesma galeria; depois da troca,
+11,6 MB/s montando. Arquivo acima de 64 MB (vídeo) continua só aberto, e
+desce em fluxo na vez dele.
+
+A memória dessas buscas tem um segundo teto, do **servidor inteiro**:
+`ZIP_MEMORIA_TOTAL_MB` (1024), dividido entre todas as montagens que estiverem
+andando. Com várias galerias montando juntas, quem chega com o teto cheio
+desce só a foto da vez e a seguinte — mais devagar, nunca sem memória. Baixar
+do disco não usa nada disto; só montar.
 
 ## Instalar
 
@@ -162,6 +173,35 @@ originais são abertos à frente do que está sendo escrito, porque o B2 está a
 Atualizar o código depois: rodar o mesmo script de novo (ele faz `git reset
 --hard origin/master` e reinicia). O `systemctl restart` espera os downloads
 em andamento terminarem (`TimeoutStopSec=6h`).
+
+## A rede, para download longe (30/09/2026)
+
+Uma fotógrafa testou uma galeria de 527 MB e viu **270–470 KB/s** com a
+internet dela normal. Não há freio nosso; o que explica é a distância com a
+configuração de fábrica do Linux:
+
+- o Caddy entrega por **HTTP/3** (QUIC, sobre UDP) quando o navegador aceita,
+  e o quic-go precisa de ~7 MB de buffer de UDP — o Linux dá ~200 KB. A
+  ~250 ms de ida e volta até o sul do Brasil, isso é um teto de ~800 KB/s, e
+  a perda de pacote no caminho derruba para metade;
+- em TCP, o **cubic** (padrão) desaba com pouca perda num caminho longo; o
+  **BBR** não.
+
+`ops/ajustar-rede-zip.sh` liga BBR com a fila `fq`, abre os buffers de TCP
+(até 64 MB) e de UDP, e desliga o HTTP/3 no Caddy desta máquina — TCP com
+BBR é o caminho previsível para um arquivo de horas numa conexão só. O
+instalador chama o script no passo 7; numa máquina que já está no ar, basta:
+
+```
+cd /opt/fotonio-zip && git fetch --depth 1 origin master && git reset --hard origin/master
+bash ops/ajustar-rede-zip.sh
+```
+
+Não derruba download em andamento. Para medir, baixar a mesma galeria duas
+vezes de um computador no Brasil: a segunda sai do disco e mostra só a
+entrega. Se ainda ficar baixo, o próximo degrau é a **localização**: um
+servidor em Ashburn (EUA, leste) fica ao lado do B2 (`us-east-005`) e a
+~120 ms do Brasil, contra ~250 ms da Alemanha.
 
 ## Acompanhar
 

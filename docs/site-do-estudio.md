@@ -110,7 +110,9 @@ de link dizia "Galeria Átomo", a aba terminava em "· Galeria Átomo", e
   `app/e/[estudio]/regras-para-robos` e `mapa-do-site` — nomes neutros porque o
   Next trata caminho terminado em `/sitemap.xml` como rota especial. O sitemap
   lista só a vitrine.
-- **Ícone da aba.** A logo do estúdio, ou nenhum — nunca o átomo da plataforma
+- **Ícone da aba.** A logo do estúdio quando ela existe; sem logo, o favicon de
+  sempre — a aba não pode ficar sem ícone (`testar-app-instalado.mjs`), e o
+  ícone de APP da plataforma nunca vai para a página do estúdio
   (`lib/icone-do-estudio.ts`).
 - **`<h1>` com texto e descrição do estúdio (29/09/2026).** Com logo, o nome vai
   também em texto dentro do `<h1>` (só para leitor de tela e buscador). A

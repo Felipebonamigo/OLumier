@@ -47,9 +47,15 @@ export interface PedidoCriado {
  * mesmo tempo dobram a janela de exposição sem servir para nada, já que a
  * pessoa vai usar o mais recente.
  */
-export async function criarPedido(tenantId: string, origem?: string): Promise<PedidoCriado> {
+export async function criarPedido(
+  tenantId: string,
+  origem?: string,
+  /* Uma hora serve para quem pediu agora e está com o e-mail aberto. O convite
+   * do pacote (`lib/pacote.ts`) chega sem ninguém esperar por ele, e usa mais. */
+  validadeMs = VALIDADE_MS,
+): Promise<PedidoCriado> {
   const token = gerarToken();
-  const expiraEm = new Date(Date.now() + VALIDADE_MS);
+  const expiraEm = new Date(Date.now() + validadeMs);
 
   await consultar(
     "update recuperacoes set usado_em = now() where tenant_id = $1 and usado_em is null",

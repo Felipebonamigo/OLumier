@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import Link from "next/link";
 import { sessaoAtual } from "@/lib/auth";
 import { listarGalerias, listarLixeira, formatarBytes, PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
@@ -7,12 +8,22 @@ import { ListaGalerias } from "@/components/lista-galerias";
 import { buscarTenantPorId } from "@/lib/tenants";
 import { diasAteArquivar } from "@/config/prazos";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { capasDoPainel } from "@/lib/capas-do-painel";
+import { COOKIE_VISAO, lerVisao } from "@/config/visao-galerias";
 
 export const metadata: Metadata = { title: "Galerias" };
 export const dynamic = "force-dynamic";
 
 const formatarData = (d: Date | null) =>
-  d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : null;
+  d ? new Date(d).toLocaleDateString("pt-BR", { timeZone: FUSO, day: "2-digit", month: "short", year: "numeric" }) : null;
+
+/* O mês da visão "por mês": o do evento, ou o da criação para quem não tem
+   data — a mesma conta que ordena a lista (`coalesce(data_evento, criado_em)`). */
+const rotuloDoMes = (d: Date) => {
+  const t = new Date(d).toLocaleDateString("pt-BR", { timeZone: FUSO, month: "long", year: "numeric" });
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
 
 export default async function PainelPage({
   searchParams,
@@ -38,6 +49,13 @@ export default async function PainelPage({
      um link quebrado. Uma consulta a mais nesta página, não por galeria. */
   const estudio = await buscarTenantPorId(tenantId);
   const lixeira = await listarLixeira(tenantId);
+  /* As capas vêm sempre, qualquer que seja a forma de ver: trocar de forma é
+     na tela, sem voltar aqui. Ver `lib/capas-do-painel.ts`. */
+  const capas = await capasDoPainel(
+    tenantId,
+    galerias.map((g) => g.id),
+  );
+  const visao = lerVisao((await cookies()).get(COOKIE_VISAO)?.value);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
@@ -109,6 +127,7 @@ export default async function PainelPage({
         </div>
       ) : (
         <ListaGalerias
+          visaoInicial={visao}
           busca={busca}
           pagina={tela.pagina}
           paginas={tela.paginas}
@@ -124,6 +143,8 @@ export default async function PainelPage({
             origem: g.origem,
             diasAteCofre: diasAteArquivar(g.expira_em),
             dataFormatada: formatarData(g.data_evento),
+            mes: rotuloDoMes(g.data_evento ?? g.criado_em),
+            capa: capas.get(g.id) ?? null,
             arquivos: g.total_medias ?? 0,
             tamanho: formatarBytes(g.bytes_total),
           }))}

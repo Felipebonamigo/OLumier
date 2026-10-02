@@ -24,6 +24,9 @@ export interface DadosCapa {
   focoY: number;
   /** O fotógrafo APONTOU uma capa (não é a primeira foto por falta de escolha). */
   capaEscolhida: boolean;
+  /** O texto da chamada das capas que têm uma ("Ver galeria"). No Stream com a
+      capa do grupo Capa ela leva aos vídeos, e diz isso. */
+  chamada?: string;
 }
 
 /*
@@ -475,18 +478,40 @@ export function GaleriaCapa({
         className={`flex min-h-[var(--g-capa-h,78vh)] flex-col ${grudada}`}
         style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
-        <img
-          src={urlImagem}
-          alt=""
-          fetchPriority="high"
-          style={foco}
-          /* `min-h-0` junto do `flex-1`: sem ele, a altura natural da imagem
-             vira o piso do item flex e a foto se recusa a encolher — o bloco de
-             texto é empurrado para fora do cabeçalho, que é o defeito que esta
-             capa existe para não ter. */
-          className="min-h-0 w-full flex-1 object-cover"
-        />
+        {/*
+          A FOTO NUMA CAIXA, E A CAIXA COM O QUE SOBRA (01/10/2026).
+
+          Juan: "Cartaz no formato 'pastas' tá bugado" — o vídeo dele era a tela
+          inteira tomada pela foto. Medido em 1440×900 com uma capa em pé: o
+          cabeçalho saía com 2.380 px, a foto sozinha com 2.159. Deitada daria
+          960 px de foto mais o texto, numa tela de 900. Não era das Pastas: era
+          a cartaz em qualquer formato, só mais visível ali, onde as pastas
+          ficavam três telas abaixo.
+
+          O `min-h-0 flex-1` que estava na própria `<img>` não segurava: o
+          cabeçalho só tem ALTURA MÍNIMA, e num contêiner sem altura definida a
+          altura natural da imagem (largura da tela × proporção da foto) é o que
+          decide quanto ele cresce. Dentro de uma caixa, com a imagem em
+          `absolute`, a foto deixa de ter altura própria: a caixa fica com o que
+          sobra de `--g-capa-h` depois do texto, e a foto se corta nela pelo
+          foco escolhido.
+
+          O piso (40% da altura escolhida) é para a foto nunca sumir: com a
+          capa "baixa" numa tela deitada, o texto sozinho pode passar da altura
+          pedida — aí o cabeçalho cresce, em vez de a foto virar uma linha. É
+          fração do eixo, e não um vh cravado, pela mesma regra de
+          `testar-eixos-forma.mjs`.
+        */}
+        <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.4)] w-full flex-1">
+          {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
+          <img
+            src={urlImagem}
+            alt=""
+            fetchPriority="high"
+            style={foco}
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        </div>
         <div className={`px-6 py-10 sm:py-12 ${alinharTexto}`}>
           <Rotulo />
           <div className="mt-2">
@@ -687,7 +712,7 @@ export function GaleriaCapa({
                 borderBottom: "1px solid var(--g-destaque)",
               }}
             >
-              Ver galeria
+              {dados.chamada ?? "Ver galeria"}
             </a>
           </div>
         </div>

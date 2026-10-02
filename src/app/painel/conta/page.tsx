@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
 import { buscarTenantPorId, formatarBytes } from "@/lib/tenants";
 import { usoPorEstado } from "@/lib/cofre";
-import { planoPorId, formatarReais } from "@/config/planos";
-import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza } from "@/config/combo";
+import { planoPorId, formatarReais, cicloDe, precoDoCicloCentavos, ESPACOS, montar, type Segmento } from "@/config/planos";
+import { NOME_DA_FAIXA, descontoDaGaleriaCentavos, ehFaixaAtomatiza, planoEntraNoCombo, precosDoPacote } from "@/config/combo";
+import { situacaoNoAtomatiza } from "@/lib/pacote";
+import { RECADO_DO_PACOTE } from "@/lib/troca-de-plano";
+import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
+import { AcrescentarAtomatiza } from "@/components/acrescentar-atomatiza";
+import type { OfertaDoPacote, Tamanho } from "@/components/assinatura-botao";
 import {
   asaasConfigurado,
   asaasEmProducao,
@@ -135,7 +141,39 @@ export default async function ContaPage() {
    * a coluna só é gravada junto com o valor no Asaas (ver `lib/combo.ts`). */
   const faixaDoCombo = ehFaixaAtomatiza(tenant.combo_atomatiza) ? tenant.combo_atomatiza : null;
   const descontoDoCombo = plano ? descontoDaGaleriaCentavos(plano, faixaDoCombo) : 0;
+  /* A próxima fatura já sai com o desconto? Compara com o preço cheio do
+   * ciclo: a fatura emitida antes do combo entrar pode ainda estar no cheio
+   * (subir não mexe na fatura emitida; baixar mexe — ver `recalcularCombo`). */
+  const faturaComCombo =
+    descontoDoCombo > 0 && plano && cobranca
+      ? Math.round(cobranca.value * 100) < precoDoCicloCentavos(plano.precoCentavos, cicloDe(tenant.ciclo_cobranca))
+      : false;
   const situacaoEnvio = situacaoDoTenant(tenant, asaasConfigurado());
+
+  /* O PACOTE COM O ATOMATIZA (`docs/pacote.md`). Só com a cobrança ligada, um
+   * plano da grade e o CPF/CNPJ da conta — é por ele que a ponte pergunta. Sem
+   * resposta de lá (null), a oferta não aparece: sem saber se a conta existe,
+   * a tela prometeria o que talvez não cumpra. */
+  const atomatiza =
+    asaasConfigurado() && tenant.cpf_cnpj ? await situacaoNoAtomatiza(tenant.cpf_cnpj) : null;
+  const oferta: OfertaDoPacote | null = atomatiza
+    ? {
+        precos: plano && planoEntraNoCombo(plano) ? precosDoPacote(plano) : null,
+        atomatiza,
+        email: tenant.email,
+        urlAtomatiza: URL_ATOMATIZA,
+      }
+    : null;
+
+  /* A grade para escolher o tamanho no próprio formulário de assinar, no tipo
+   * de trabalho que a conta já tem (foto, se o plano for antigo). */
+  const segmento = (plano?.id.startsWith("g:") ? plano.id.split(":")[1] : "foto") as Segmento;
+  const tamanhos: Tamanho[] = tenant.asaas_assinatura_id
+    ? []
+    : ESPACOS.map((e) => {
+        const p = montar({ segmento, espacoGb: e.gb });
+        return { planoId: p.id, gb: e.gb, precoCentavos: p.precoCentavos, pacote: precosDoPacote(p) };
+      });
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-10">
@@ -155,30 +193,59 @@ export default async function ContaPage() {
           {plano ? (
             <>
               {plano.nome} —{" "}
+              {descontoDoCombo > 0 && (
+                <>
+                  <s className="text-texto-faint">{formatarReais(plano.precoCentavos)}</s>{" "}
+                </>
+              )}
               <strong className="text-texto">{formatarReais(plano.precoCentavos - descontoDoCombo)}</strong>
               /mês
-              {descontoDoCombo > 0 && faixaDoCombo && (
-                <span className="mt-1 block text-xs text-ok">
-                  Combo com o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]}: {formatarReais(descontoDoCombo)} a
-                  menos por mês, enquanto as duas assinaturas estiverem em dia.
-                </span>
-              )}
             </>
           ) : (
             tenant.plano_id
           )}
         </p>
 
-        <PlanoConta
-          planoAtual={tenant.plano_id}
-          temAssinatura={Boolean(tenant.asaas_assinatura_id)}
-        />
+        {/* O DESCONTO DO COMBO, explicado (30/09/2026 — Felipe: "mostre em tela
+            também, explicando que tem o desconto por ter assinatura do
+            Atomatiza"). Uma linha verde miúda passava despercebida, e quem
+            paga precisa saber por que o valor é outro — e o que o mantém. */}
+        {/* A FATURA ÚNICA DO PACOTE (`docs/pacote.md`): a próxima cobrança
+            mostra o total dos dois, e o quadro diz de onde ele vem. */}
+        {plano && faixaDoCombo && tenant.pacote_atomatiza_id && (
+          <div className="mt-3 rounded-lg border border-ok/40 bg-ok/10 px-4 py-3">
+            <p className="text-sm font-medium text-ok">Pacote com o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]}</p>
+            <p className="mt-1 text-xs text-texto-soft">
+              Uma fatura só com os dois produtos. A Galeria sai por{" "}
+              {formatarReais(plano.precoCentavos - descontoDoCombo)} em vez de {formatarReais(plano.precoCentavos)} por
+              mês, e o Atomatiza também tem o desconto dele. A parte de cada produto é separada no pagamento.
+            </p>
+          </div>
+        )}
+
+        {plano && descontoDoCombo > 0 && faixaDoCombo && !tenant.pacote_atomatiza_id && (
+          <div className="mt-3 rounded-lg border border-ok/40 bg-ok/10 px-4 py-3">
+            <p className="text-sm font-medium text-ok">Desconto do combo com o Atomatiza</p>
+            <p className="mt-1 text-xs text-texto-soft">
+              Você também assina o Atomatiza {NOME_DA_FAIXA[faixaDoCombo]} com o mesmo CPF/CNPJ, então a Galeria sai
+              por {formatarReais(plano.precoCentavos - descontoDoCombo)} em vez de {formatarReais(plano.precoCentavos)}:{" "}
+              {formatarReais(descontoDoCombo)} a menos por mês. O Atomatiza aplica a parte dele do desconto na
+              assinatura de lá. Vale enquanto as duas assinaturas estiverem em dia.
+            </p>
+          </div>
+        )}
+
+        {tenant.pacote_atomatiza_id ? (
+          <p className="mt-3 text-xs text-texto-faint">{RECADO_DO_PACOTE}</p>
+        ) : (
+          <PlanoConta planoAtual={tenant.plano_id} temAssinatura={Boolean(tenant.asaas_assinatura_id)} />
+        )}
 
         {diferencaAberta && (
           <div className="mt-4 rounded-lg border border-alerta/40 bg-alerta/10 px-4 py-3">
             <p className="text-xs text-texto-soft">
               Diferença da troca de plano · {formatarReais(Math.round(diferencaAberta.value * 100))} · vence em{" "}
-              {new Date(`${diferencaAberta.dueDate}T12:00:00`).toLocaleDateString("pt-BR")}
+              {new Date(`${diferencaAberta.dueDate}T12:00:00`).toLocaleDateString("pt-BR", { timeZone: FUSO })}
             </p>
             {diferencaAberta.invoiceUrl && (
               <a
@@ -197,8 +264,13 @@ export default async function ContaPage() {
           <div className="mt-4 rounded-lg border border-linha bg-void px-4 py-3">
             <p className="text-xs text-texto-soft">
               Próxima cobrança em{" "}
-              {new Date(cobranca.dueDate).toLocaleDateString("pt-BR")} ·{" "}
+              {new Date(cobranca.dueDate).toLocaleDateString("pt-BR", { timeZone: FUSO })} ·{" "}
               {formatarReais(Math.round(cobranca.value * 100))}
+              {tenant.pacote_atomatiza_id ? (
+                <span className="text-ok"> · pacote Galeria + Atomatiza</span>
+              ) : (
+                faturaComCombo && <span className="text-ok"> · já com o desconto do combo</span>
+              )}
             </p>
             {/* A promessa só aparece quando dá para mostrar EM QUAL cartão —
                 prometer "automático" sem provar faria quem paga por Pix parar
@@ -226,7 +298,14 @@ export default async function ContaPage() {
                `MESES_PAGOS_NO_ANO`, para não existir um segundo lugar guardando
                preço — e para o desconto na tela nunca discordar do cobrado. */
             precoMensalCentavos={plano?.precoCentavos ?? 0}
+            pacote={oferta}
+            tamanhos={tamanhos}
+            planoAtual={tenant.plano_id}
           />
+        )}
+
+        {tenant.asaas_assinatura_id && oferta && !oferta.atomatiza.assinatura && (
+          <AcrescentarAtomatiza oferta={oferta} anual={cicloDe(tenant.ciclo_cobranca) === "anual"} />
         )}
 
         {/* Aviso só quando a cobrança está ligada mas o split não foi configurado:

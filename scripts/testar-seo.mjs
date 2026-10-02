@@ -525,18 +525,15 @@ await etapa("arquivo pedido no endereço do estúdio não vira galeria", async (
 
 const vitrine = (await pegarComo("/", hostEstudio)).corpo;
 
-await etapa("a aba da vitrine é do estúdio: o nome dele, e nunca o nosso ícone", () => {
+await etapa("a aba da vitrine tem o nome do estúdio, sem o nosso", () => {
+  /* O ícone da aba é conferido na etapa da logo, mais abaixo: sem logo vale o
+     favicon do layout, que `testar-app-instalado.mjs` exige que não suma. */
   if (titulo(vitrine) !== nomeEstudio) {
     throw new Error(`<title> é "${titulo(vitrine)}", esperava "${nomeEstudio}"`);
   }
-  /* O estúdio da bancada não tem logo: a aba fica sem ícone, e não com o
-     átomo do layout raiz (ver `lib/icone-do-estudio.ts`). */
-  if (/<link rel="icon"[^>]*icon\.svg/.test(vitrine)) {
-    throw new Error("a vitrine pendura o icon.svg da plataforma na aba do estúdio");
-  }
 });
 
-await etapa("com logo, o <h1> da vitrine ainda diz o nome em texto", async () => {
+await etapa("com logo, o <h1> da vitrine diz o nome em texto e a aba mostra a logo", async () => {
   /* Medido no ar em 29/09/2026: a vitrine com logo tinha um <h1> só com a
      imagem dentro — "h1 vazio" para todo robô que não lê imagem. A chave não
      precisa existir no armazém: a página só assina o link. */
@@ -547,6 +544,11 @@ await etapa("com logo, o <h1> da vitrine ainda diz o nome em texto", async () =>
     if (!h1.includes("<img")) throw new Error("a logo não está no <h1>");
     const texto = h1.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     if (texto !== nomeEstudio) throw new Error(`o texto do <h1> é "${texto}"`);
+    /* A aba é a marca do estúdio também (`lib/icone-do-estudio.ts`) — e o
+       átomo do layout não fica pendurado ao lado dela. */
+    const icones = [...html.matchAll(/<link rel="icon"[^>]*>/g)].map((m) => m[0]);
+    if (!icones.some((i) => i.includes("logos/teste-seo.png"))) throw new Error("a aba não mostra a logo");
+    if (icones.some((i) => i.includes("icon.svg"))) throw new Error("o átomo continua na aba ao lado da logo");
   } finally {
     await db.query("update tenants set logo_chave = null where id = $1", [g.estudio.id]);
   }
@@ -613,6 +615,30 @@ await etapa("a vitrine diz quem é o estúdio — e o contato só quando a pági
     }
   } finally {
     await db.query("update tenants set site = '{}'::jsonb where id = $1", [g.estudio.id]);
+  }
+});
+
+await etapa("filme sem pôster escolhido como capa não vira imagem na vitrine", async () => {
+  /*
+   * O filme pode ser capa desde 02/10/2026 (`lib/capa-publica.ts`), mas só com
+   * pôster. A consulta da vitrine é outra — mora em `lib/vitrine.ts` — e sem a
+   * mesma regra ela mandaria o .mp4 inteiro para um <img> e para o cartão do
+   * link. A chave não precisa existir no armazém: o que se mede é se ela
+   * aparece na página.
+   */
+  const chave = `${g.estudio.id}/${g.id}/filme-sem-poster.mp4`;
+  const { rows: [filme] } = await db.query(
+    `insert into medias (galeria_id, tenant_id, chave, nome_original, tipo, mime, bytes, ordem, pronto)
+     values ($1, $2, $3, 'filme.mp4', 'video', 'video/mp4', 1000, 99, true) returning id`,
+    [g.id, g.estudio.id, chave],
+  );
+  await db.query("update galerias set capa_media_id = $1 where id = $2", [filme.id, g.id]);
+  try {
+    const html = (await pegarComo("/", hostEstudio)).corpo;
+    if (html.includes("filme-sem-poster.mp4")) throw new Error("a vitrine pediu o .mp4 como imagem");
+  } finally {
+    await db.query("update galerias set capa_media_id = null where id = $1", [g.id]);
+    await db.query("delete from medias where id = $1", [filme.id]);
   }
 });
 

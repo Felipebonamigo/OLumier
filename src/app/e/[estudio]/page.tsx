@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { notFound, permanentRedirect } from "next/navigation";
 import { resolverEstudio } from "@/lib/endereco";
 import { marca } from "@/config/marca";
@@ -89,7 +90,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description: descricao,
     },
     twitter: { card: "summary_large_image", title: t.nome_estudio, description: descricao },
-    icons: await iconeDoEstudio(t.logo_chave),
+    ...(await iconeDoEstudio(t.logo_chave)),
   };
 }
 
@@ -494,7 +495,7 @@ function Galerias({
                 >
                   {[
                     g.data_evento
-                      ? new Date(g.data_evento).toLocaleDateString("pt-BR", {
+                      ? new Date(g.data_evento).toLocaleDateString("pt-BR", { timeZone: FUSO,
                           month: "long",
                           year: "numeric",
                         })

@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { consultarUm } from "@/lib/db";
 import {
   esquecerPessoa,
   favoritasDaPessoa,
@@ -7,7 +6,7 @@ import {
   pessoaPorEmail,
   pessoaPorNomeOuEmail,
 } from "@/lib/favoritas";
-import { temAcessoLiberado } from "@/lib/galerias-publicas";
+import { galeriaLiberada } from "@/lib/acesso-galeria-publica";
 
 /**
  * "Quem é você nesta galeria" — o e-mail que separa uma lista de favoritas da
@@ -25,19 +24,6 @@ import { temAcessoLiberado } from "@/lib/galerias-publicas";
  * cofre, e a senha quando houver. Identificar-se não abre nada que o link já
  * não abrisse — só diz de quem é a lista.
  */
-async function galeriaLiberada(id: string) {
-  const galeria = await consultarUm<{ id: string; senha_hash: string | null; estado: string }>(
-    "select id, senha_hash, estado from galerias where id = $1 and publicada",
-    [id],
-  );
-  if (!galeria) return { ok: false as const, status: 404 };
-  if (galeria.estado !== "online") return { ok: false as const, status: 409 };
-  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
-    return { ok: false as const, status: 401 };
-  }
-  return { ok: true as const };
-}
-
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -67,8 +53,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
    * O `motivo` vem da tela que pediu. Ausente, vale a regra estrita — quem não
    * disse por que está identificando cai no caso que preserva a lista.
    */
+  /*
+   * ── QUEM ACEITA SÓ O NOME, E POR QUÊ (recado entrou em 02/10/2026) ──────
+   *
+   * FAVORITAR exige e-mail: a lista tem de ser a mesma no celular e no notebook,
+   * e só o e-mail atravessa dois aparelhos.
+   *
+   * BAIXAR aceita nome — "pelo menos um dos dois" (Felipe, 23/09/2026).
+   *
+   * RECADO aceita nome pela mesma razão do download: é um ato único, não uma
+   * lista que precisa ser reencontrada. E a tela dele diz, em letra grande, "Seu
+   * e-mail (opcional)" — sem esta linha, a Tia Marta escrevia o nome, deixava o
+   * e-mail em branco como a tela permite, e levava um 400 dizendo "e-mail
+   * inválido" sem ter como passar.
+   */
   const pessoa =
-    corpo.motivo === "baixar"
+    corpo.motivo === "baixar" || corpo.motivo === "recado"
       ? await pessoaPorNomeOuEmail(id, { email: corpo.email, nome: corpo.nome })
       : await pessoaPorEmail(id, String(corpo.email ?? ""), corpo.nome ?? null);
 

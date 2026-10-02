@@ -46,7 +46,7 @@ export default async function ConfirmarEmailPage({
 
   const titulo = resultado.ok ? "E-mail confirmado" : RECADOS[resultado.motivo].titulo;
   const texto = resultado.ok
-    ? `Pronto: ${resultado.nomeEstudio} já pode enviar fotos.`
+    ? `Pronto: ${resultado.nomeEstudio} já pode enviar fotos e vídeos.`
     : RECADOS[resultado.motivo].texto;
 
   return (

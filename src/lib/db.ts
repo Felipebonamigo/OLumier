@@ -1,4 +1,15 @@
-import { Pool } from "pg";
+import { Pool, types } from "pg";
+import { diaDoBanco } from "./datas";
+
+/* Coluna `date` (OID 1082) é DIA, não instante: vem como meio-dia UTC. Ver
+   `diaDoBanco`. As outras seguem o conversor padrão do driver. */
+const TIPO_DATE = 1082;
+const conversores = {
+  getTypeParser: ((oid: number, formato?: "text" | "binary") =>
+    oid === TIPO_DATE && formato !== "binary"
+      ? diaDoBanco
+      : types.getTypeParser(oid, formato)) as typeof types.getTypeParser,
+};
 
 /**
  * Pool do Postgres. Em dev o Next recarrega módulos a cada edição, então o pool
@@ -18,6 +29,7 @@ export function pool(): Pool {
   }
   globalThis._pgPool ??= new Pool({
     connectionString: process.env.DATABASE_URL,
+    types: conversores,
     max: 10,
     idleTimeoutMillis: 30_000,
     // Conexão ociosa não segura o processo. Sem isto todo script que consulta

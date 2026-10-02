@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { FUSO } from "@/config/fuso";
 import { notFound, redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { contarMediasProntas, galeriaDoPainel } from "@/lib/galeria-painel";
@@ -11,6 +12,10 @@ import { BuscaPorRosto } from "@/components/busca-por-rosto";
 import { diasAteArquivar, mesesEquivalentes } from "@/config/prazos";
 import { apagarGaleriaAction } from "../../../actions";
 import { decifrarSenha } from "@/lib/senha-da-galeria";
+import { AvisarPorEmail } from "@/components/avisar-por-email";
+import { emailsDaGaleria } from "@/lib/emails-da-galeria";
+import { lerTemplate } from "@/config/email-da-galeria";
+import { data as dataNaTela } from "@/lib/data-na-tela";
 
 export const metadata: Metadata = { title: "Entrega da galeria" };
 export const dynamic = "force-dynamic";
@@ -38,6 +43,7 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
      endereço apaga o anterior, mas estes ainda abrem, e a tela não pode
      escondê-los de quem precisa apagá-los. Ver `lib/endereco-galeria.ts`. */
   const apelidos = await apelidosDaGaleria(galeria.id);
+  const emails = await emailsDaGaleria(galeria.id);
 
   // Só pesa quando a busca está ligada; desligada, os dois números são zero.
   const rostos = galeria.rostos_ativos ? await resumoDeRostos(galeria.id) : { rostos: 0, fotos: 0 };
@@ -80,7 +86,7 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
         ativa={galeria.rostos_ativos}
         ligadaEm={
           galeria.rostos_ligados_em
-            ? new Date(galeria.rostos_ligados_em).toLocaleDateString("pt-BR", {
+            ? new Date(galeria.rostos_ligados_em).toLocaleDateString("pt-BR", { timeZone: FUSO,
                 day: "2-digit",
                 month: "2-digit",
                 year: "numeric",
@@ -98,6 +104,32 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
         mesesAtual={mesesEquivalentes(galeria.expira_em)}
         diasRestantes={diasAteArquivar(galeria.expira_em)}
         arquivadaEm={galeria.arquivada_em ? String(galeria.arquivada_em) : null}
+      />
+
+{/*
+        AVISAR O CLIENTE vem depois do prazo e antes de apagar, e a ordem é a
+        leitura: esta aba desce de "o link existe" para "o cliente recebeu" e só
+        então para "não existe mais". E-mail de entrega no topo da tela seria
+        oferecer avisar antes de a galeria estar pronta para ser avisada.
+      */}
+      <AvisarPorEmail
+        galeriaId={galeria.id}
+        publicada={galeria.publicada}
+        temDataDeEvento={Boolean(galeria.data_evento)}
+        config={{
+          lembretes: galeria.email_lembretes,
+          template: lerTemplate(galeria.email_template),
+          mensagem: galeria.email_mensagem ?? "",
+        }}
+        agendados={emails.map((e) => ({
+          id: e.id,
+          tipo: e.tipo,
+          para: e.para,
+          nome: e.nome,
+          quando: e.agendadoPara,
+          enviado: e.enviadoEm ? dataNaTela(e.enviadoEm) : null,
+          erro: e.erro,
+        }))}
       />
 
       <section className="mt-12 border-t border-linha pt-6">

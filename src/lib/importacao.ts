@@ -121,12 +121,27 @@ export function nomeEData(bruto: string): { nome: string; data: string | null } 
  * nascerem com o MESMO nome sugerido — e linhas de mesmo nome viram uma
  * galeria só. As formas cobertas são as de quem numera partes; o "-2" solto
  * fica, porque "Ensaio-2" pode ser mesmo o segundo ensaio.
+ *
+ * ── O PIXIESET (01/10/2026) ───────────────────────────────────────────────
+ *
+ * Juan baixou uma galeria grande de lá e veio em três:
+ * `miristraidecor-photo-download-1of3.zip`, `-2of3` e `-3of3`. "Como isso
+ * influencia no envio de vários zips de uma vez?" Influenciava: nenhuma das
+ * formas acima tinha "1of3" sem o "part", e as três viravam três galerias.
+ *
+ * "1of3" sozinho é seguro de tirar — "N de M" não é nome de ensaio (com dois
+ * algarismos no máximo, para "Festa 15 de 2025" ficar inteiro). E o
+ * `-photo-download` / `-video-download` que o Pixieset põe em todo ZIP sai
+ * junto: é o que faz as fotos e os vídeos da mesma coleção, baixados em ZIPs
+ * separados, caírem na MESMA galeria.
  */
 export function nomeDoZip(arquivo: string): string {
   return arquivo
     .replace(/\.zip$/i, "")
     .replace(/\s*[-_ ]\s*(part|parte)\s*\d+(\s*(of|de)\s*\d+)?$/i, "")
+    .replace(/\s*[-_ ]\s*\d{1,2}\s*(of|de)\s*\d{1,2}$/i, "")
     .replace(/\s*\(\d+\)$/, "")
+    .replace(/[-_ ](photo|video)s?[-_ ]download$/i, "")
     .trim();
 }
 

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useOptimistic, useState, useTransition } from "react";
 import {
   criarSecaoAction,
   apagarTodosOsCapitulosAction,
@@ -16,6 +15,7 @@ import {
 } from "@/app/painel/actions";
 import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
 import { nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
+import { verNaGrade } from "@/lib/filtro-da-grade";
 
 export interface SecaoResumo {
   id: string;
@@ -39,9 +39,21 @@ const SOLTAS = "sem-capitulo";
  * Apagar um capítulo NÃO apaga as fotos dele — elas voltam para "sem capítulo".
  * Isso é dito na tela, porque a dúvida aparece na hora de clicar.
  */
+/** O que a tela já mostra enquanto o servidor confirma. Ver `executar`. */
+type Previa = { tipo: "criar"; nome: string } | { tipo: "apagar"; id: string } | { tipo: "apagarTodos" };
+
+function aplicarPrevia(atual: SecaoResumo[], p: Previa): SecaoResumo[] {
+  if (p.tipo === "apagarTodos") return [];
+  if (p.tipo === "apagar") return atual.filter((s) => s.id !== p.id);
+  const nome = p.nome.trim();
+  /* Nome repetido o servidor recusa — e a tela não promete o que não vai ter. */
+  if (!nome || atual.some((s) => s.nome.toLowerCase() === nome.toLowerCase())) return atual;
+  return [...atual, { id: `novo:${nome}`, nome, total: 0 }];
+}
+
 export function EditorSecoes({
   galeriaId,
-  secoes,
+  secoes: secoesDoServidor,
   semCapitulo,
   grupoSolto,
   sugestoes,
@@ -68,7 +80,20 @@ export function EditorSecoes({
   const [aviso, setAviso] = useState<string | null>(null);
   /* O segundo tempo do "apagar todos": ver o comentário lá embaixo. */
   const [confirmandoTudo, setConfirmandoTudo] = useState(false);
-  const router = useRouter();
+  /*
+   * ── O CAPÍTULO APARECE NA HORA (01/10/2026) ─────────────────────────────
+   *
+   * Juan: "cada exclusão / criação de um capítulo novo tá…" — lento. Numa
+   * galeria de 3.000 fotos a volta do servidor levava 3 s com a rede dele
+   * (Portland, VPN), e a lista ficava parada esse tempo todo: parecia que o
+   * clique não tinha pegado, e a vontade é clicar de novo.
+   *
+   * Criar e apagar já mudam a lista no clique. Se o servidor recusar, a lista
+   * volta sozinha ao que ele disser — `useOptimistic` só vale enquanto a ação
+   * está em curso. Os botões das linhas ficam travados nesse meio-tempo
+   * (`ocupado`), então ninguém renomeia um capítulo que ainda não existe.
+   */
+  const [secoes, mostrarAntes] = useOptimistic(secoesDoServidor, aplicarPrevia);
 
   /*
    * ── ARRASTAR PARA REORDENAR (11/09/2026) ────────────────────────────────
@@ -81,7 +106,7 @@ export function EditorSecoes({
    * item que o cursor cruza, então a linha acompanha o dedo em vez de saltar
    * no fim; ao soltar, ela vai inteira para o servidor. Enquanto for `null`,
    * quem manda é a lista que veio do servidor — é o que faz a tela voltar
-   * sozinha ao certo depois do `router.refresh()`.
+   * sozinha ao certo quando a resposta da ação chega.
    *
    * As SETAS FICAM. `draggable` do HTML não existe no toque, e elas também são
    * o caminho de quem usa teclado; trocá-las por arrastar tiraria de uns para
@@ -138,12 +163,15 @@ export function EditorSecoes({
        `erro`, que é a ação não ter acontecido. */
     acao: (f: FormData) => Promise<{ erro?: string; aviso?: string } | void>,
     campos: Record<string, string>,
-    /* Roda DEPOIS do `router.refresh()`. Existe por causa do arrasto: a lista
-       desenhada à mão precisa ser descartada quando a do servidor chega, e só
-       aqui dá para saber que ela já chegou. */
+    /* Roda DEPOIS da resposta, que já traz a página nova (a ação revalida).
+       Existe por causa do arrasto: a lista desenhada à mão precisa ser
+       descartada quando a do servidor chega, e só aqui dá para saber que ela
+       já chegou. */
     aoTerminar?: () => void,
+    previa?: Previa,
   ) =>
     iniciar(async () => {
+      if (previa) mostrarAntes(previa);
       const f = new FormData();
       f.set("galeria_id", galeriaId);
       for (const [k, v] of Object.entries(campos)) f.set(k, v);
@@ -152,7 +180,13 @@ export function EditorSecoes({
       /* `aviso` não é erro: a ordenação FUNCIONOU, e o recado é sobre o que ela
          não pôde saber (foto sem data da câmera). Ver `ordenarFotosDaSecaoAction`. */
       setAviso(r?.aviso ?? null);
-      router.refresh();
+      /*
+       * Sem `router.refresh()` aqui desde 01/10/2026: toda ação desta lista
+       * chama `revalidatePath`, e a resposta da ação JÁ traz a página
+       * redesenhada. O `refresh` pedia a mesma página uma segunda vez — numa
+       * galeria de 3.000 fotos, mais 2 MB e mais meio segundo de servidor a
+       * cada clique.
+       */
       aoTerminar?.();
     });
 
@@ -242,8 +276,11 @@ export function EditorSecoes({
               aoSoltar();
             }}
             onDragEnd={aoSoltar}
+            /* `novo:` é o capítulo que a tela já mostra e o servidor ainda não
+               criou (ver `mostrarAntes`): aparece, mas sem nada clicável. */
+            inert={s.id.startsWith("novo:")}
             className={`flex flex-wrap items-center gap-2 px-3 py-2.5 ${
-              arrastando === s.id ? "opacity-40" : ""
+              arrastando === s.id || s.id.startsWith("novo:") ? "opacity-40" : ""
             } ${editando === s.id ? "" : "cursor-grab active:cursor-grabbing"}`}
           >
             {editando === s.id ? (
@@ -287,9 +324,21 @@ export function EditorSecoes({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{s.nome}</span>
-                  <span className="text-[11px] text-texto-faint">
-                    {s.total} {s.total === 1 ? "foto" : "fotos"}
-                  </span>
+                  {/* VER AS FOTOS DESTE CAPÍTULO (01/10/2026). Juan: "ainda não
+                      tem como visualizar as fotos que tem em cada capítulo". A
+                      contagem vira o caminho: a grade lá embaixo mostra só
+                      este capítulo, e a tela desce até ela. */}
+                  {s.total > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => verNaGrade(galeriaId, `cap:${s.id}`)}
+                      className="text-[11px] text-texto-faint underline decoration-dotted underline-offset-2 transition hover:text-acento"
+                    >
+                      ver as {s.total} {s.total === 1 ? "foto" : "fotos"}
+                    </button>
+                  ) : (
+                    <span className="text-[11px] text-texto-faint">0 fotos</span>
+                  )}
                 </span>
 
                 <span className="flex items-center gap-1">
@@ -431,7 +480,8 @@ export function EditorSecoes({
                         s.total > 0
                           ? `Apagar o capítulo “${s.nome}”?\n\nAs ${s.total} fotos NÃO são apagadas — elas voltam para "sem capítulo".`
                           : `Apagar o capítulo “${s.nome}”?`;
-                      if (confirm(aviso)) executar(apagarSecaoAction, { secao_id: s.id });
+                      if (confirm(aviso))
+                        executar(apagarSecaoAction, { secao_id: s.id }, undefined, { tipo: "apagar", id: s.id });
                     }}
                     className="rounded-md border border-erro/40 px-2 py-1 text-xs text-erro transition hover:bg-erro/10"
                   >
@@ -515,7 +565,19 @@ export function EditorSecoes({
                     {temCapitulos ? nomeDoGrupoSolto(grupoSolto) : "Todas as fotos"}
                   </span>
                   <span className="text-[11px] text-texto-faint">
-                    {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                    {temCapitulos && semCapitulo > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => verNaGrade(galeriaId, "sem-capitulo")}
+                        className="underline decoration-dotted underline-offset-2 transition hover:text-acento"
+                      >
+                        ver as {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                      </button>
+                    ) : (
+                      <>
+                        {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                      </>
+                    )}
                     {temCapitulos
                       ? ` — ${semCapitulo === 1 ? "aparece" : "aparecem"} com esse nome, antes dos capítulos`
                       : " — numa sequência só, na ordem abaixo"}
@@ -689,7 +751,18 @@ export function EditorSecoes({
         capítulos é a oferta. Então o título muda e, lá embaixo, a linha das
         fotos sobe para cima do vazio.
       */}
-      <h2 className="text-sm font-semibold">{temCapitulos ? "Capítulos" : "Ordem das fotos"}</h2>
+      <h2 className="text-sm font-semibold">
+        {temCapitulos ? "Capítulos" : "Ordem das fotos"}
+        {/* Enquanto o servidor confirma, os botões da lista ficam travados — e
+            travado sem aviso é o "clico em renomear, nada acontece" do Juan
+            (01/10/2026). Dizer que está salvando é o que separa "espere" de
+            "quebrou". */}
+        {ocupado && (
+          <span role="status" className="ml-2 text-xs font-normal text-texto-faint">
+            salvando…
+          </span>
+        )}
+      </h2>
       <p className="mt-0.5 text-xs text-texto-faint">
         {temCapitulos
           ? "Dividem a galeria em momentos. O cliente ganha um menu para pular direto ao que quer ver."
@@ -716,7 +789,7 @@ export function EditorSecoes({
           onChange={(e) => setNovo(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && novo.trim()) {
-              executar(criarSecaoAction, { nome: novo });
+              executar(criarSecaoAction, { nome: novo }, undefined, { tipo: "criar", nome: novo });
               setNovo("");
             }
           }}
@@ -728,7 +801,7 @@ export function EditorSecoes({
           type="button"
           disabled={ocupado || !novo.trim()}
           onClick={() => {
-            executar(criarSecaoAction, { nome: novo });
+            executar(criarSecaoAction, { nome: novo }, undefined, { tipo: "criar", nome: novo });
             setNovo("");
           }}
           className="rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2 disabled:opacity-40"
@@ -765,7 +838,7 @@ export function EditorSecoes({
                 /* `aria-label` e não `title`: `title` não existe no toque, e é
                    no celular que o Juan mexe nisso. */
                 aria-label={`Criar o capítulo ${nome}`}
-                onClick={() => executar(criarSecaoAction, { nome })}
+                onClick={() => executar(criarSecaoAction, { nome }, undefined, { tipo: "criar", nome })}
                 /* `min-h-9` (36 px), e não os ~26 px que o texto pediria: no
                    celular as fichas ficam lado a lado e errar a vizinha CRIA
                    CAPÍTULO — é a reclamação do Juan de novo, em escala menor. */
@@ -815,7 +888,7 @@ export function EditorSecoes({
               type="button"
               disabled={ocupado}
               onClick={() => {
-                executar(apagarTodosOsCapitulosAction, {});
+                executar(apagarTodosOsCapitulosAction, {}, undefined, { tipo: "apagarTodos" });
                 setConfirmandoTudo(false);
               }}
               className="rounded-lg border border-alerta/60 px-3 py-1 text-xs text-alerta transition hover:bg-alerta/15 disabled:opacity-40"

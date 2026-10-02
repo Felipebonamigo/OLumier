@@ -243,6 +243,30 @@ export type Alinhamento = "centro" | "esquerda";
  *
  * `rola` é o que toda capa faz desde sempre, e continua sendo o padrão.
  */
+/**
+ * A FRASE DE DESPEDIDA, no fim da galeria.
+ *
+ * Juan, 01/10/2026: "no final da galeria uma frase editável, por exemplo
+ * 'obrigado por escolher o nosso olhar para esse dia inesquecível' — algo onde
+ * consiga editar com a frase que queremos e fonte. Acho que vai mostrar um
+ * cuidado a mais". Felipe: "isso eu acho bom".
+ *
+ * A fonte reusa as duas famílias que a galeria já escolheu, como `fonteDetalhe`
+ * faz com as letrinhas da capa. Uma terceira família só para uma frase seria um
+ * eixo novo para ninguém.
+ */
+export type FonteDaDespedida = "titulo" | "texto";
+
+/**
+ * O botão de voltar ao começo, no fim da galeria.
+ *
+ * Felipe aprovou; Juan disse "eu não colocaria, mas entendo quem goste" — e é
+ * exatamente por isso que é ESCOLHA, e não decisão nossa sobre a galeria de
+ * todo mundo. Nasce desligado: nenhuma galeria entregue ganha um botão que o
+ * fotógrafo não pediu.
+ */
+export type VoltarAoInicio = "nao" | "sim";
+
 export type CapaFixa = "rola" | "fixa";
 
 export type LinhasTitulo = "auto" | "uma" | "duas" | "tres";
@@ -395,6 +419,82 @@ export type CartaoDoLink = "sobreposto" | "foto";
 export type Formato = "galeria" | "pastas" | "stream";
 
 /**
+ * A CARA DAS PASTAS E DO STREAM (30/09/2026).
+ *
+ * Felipe, depois de ver os dois formatos no ar: "vamos pensar em estilos para
+ * pastas e stream". A galeria tem capa, grade e densidade para escolher; os
+ * formatos novos nasceram com um desenho só cada um — e um desenho só é a
+ * mesma entrega para todo fotógrafo, que é o que a marca pede para não
+ * existir (`docs/estrategia-de-marca.md`, §9).
+ *
+ * PASTAS
+ *   pilha     a capa na frente e duas cópias atrás, que se abrem em leque — o
+ *             maço de fotos na mesa. O primeiro desenho, e o padrão.
+ *   capas     cada pasta é um cartaz: a foto grande, alta, com o nome escrito
+ *             sobre ela. A foto manda; é a mais "revista".
+ *   indice    um sumário: número grande, nome na letra do título e uma tira
+ *             de fotos ao lado. Tipográfico, como o índice de um livro.
+ *   mosaico   uma folha de contato por pasta: a capa e três fotos em grade,
+ *             o capítulo mostrado pelo que tem dentro.
+ *
+ * STREAM — quatro salas, cada uma na linha de um serviço de streaming que o
+ * cliente já sabe usar (Felipe: "um dos formatos pode ser igual Netflix, e
+ * outros parecidos com streamings"). Os NOMES na tela são nossos e neutros:
+ * a entrega é do fotógrafo, e ela não pode anunciar a marca de ninguém.
+ *
+ *   cinema    a sala escura das plataformas de série: capa em tela cheia
+ *             alinhada à esquerda, botão branco de assistir, fileiras que
+ *             rolam de lado com o título sobre o cartão. É o único que IGNORA
+ *             o tema claro — sala de cinema clara não existe. O padrão.
+ *   episodios a página de uma série: capa dividida, os capítulos como
+ *             temporadas em abas e a lista de episódios um embaixo do outro,
+ *             com número, duração e quanto já foi visto.
+ *   vitrine   a linha das lojas de filme mais limpas: o destaque num cartão
+ *             grande e arredondado, e os outros em cartões largos, com muito
+ *             respiro. Segue o tema — no claro fica branca e calma.
+ *   mostra    o programa de festival: os títulos grandes, em lista, na letra
+ *             da galeria; a imagem aparece ao passar o mouse. O mais
+ *             tipográfico, para o filmmaker que é autor.
+ *
+ * Os dois andam JUNTO do formato, e não dos estilos: são a estrutura da
+ * entrega vista de perto. Ver `EIXOS_DA_ESTRUTURA`.
+ */
+export type EstiloPastas = "pilha" | "capas" | "indice" | "mosaico";
+export type EstiloStream = "cinema" | "episodios" | "vitrine" | "mostra";
+
+/**
+ * O QUE O JUAN PEDIU DEPOIS DE VER O STREAM (30/09/2026):
+ *
+ *   "Corrigir os formatos de CAPA quando o formato de entrega foi o STREAM."
+ *   "Adicionar opção de escolher 'scrollar' para baixo também, além dessa de
+ *    scrollar para o lado."
+ *   "Poder mudar o título/subtítulo 'Episódios'."
+ *
+ * CAPA DO STREAM. Cada sala nasceu com a capa própria (a tela de cinema, a
+ * capa dividida…), e o grupo Capa do Design continuava lá, oferecendo oito
+ * desenhos que no Stream não faziam nada — o fotógrafo escolhia "Convite" e a
+ * prévia não mudava. Agora são duas escolhas:
+ *
+ *   sala     a capa própria do estilo, como nasceu. O padrão — quem já
+ *            escolheu o Stream continua vendo o que viu.
+ *   galeria  o desenho escolhido no grupo Capa (imersa, convite, arco…), e a
+ *            sala começa logo abaixo, sem a própria capa.
+ *
+ * Escolher um desenho no grupo Capa com o formato em Stream passa a capa para
+ * `galeria` sozinho: clicar em "Convite" e ver o Convite é a resposta que a
+ * tela devia desde o começo (ver `editor-aparencia.tsx`).
+ *
+ * ROLAGEM. As fileiras da sala Cinema rolam de lado, como nos serviços de
+ * streaming. `baixo` mostra tudo em grade, sem esconder episódio nenhum atrás
+ * de uma seta — melhor para quem entrega poucos filmes, e para quem acha que
+ * rolar de lado é coisa de catálogo. Na sala Episódios, `baixo` troca as abas
+ * de temporada por todos os capítulos, um embaixo do outro. Vitrine e Mostra
+ * já rolam para baixo; ali o eixo não aparece.
+ */
+export type CapaDoStream = "sala" | "galeria";
+export type RolagemDoStream = "lado" | "baixo";
+
+/**
  * Quantas fotos a prévia do editor desenha.
  *
  * A prévia é a galeria pública de verdade, renderizada no tamanho de uma tela
@@ -505,6 +605,10 @@ export interface Aparencia {
   linhasTitulo: LinhasTitulo;
   /** A capa gruda no topo e a galeria passa por cima. Ver `CapaFixa`. */
   capaFixa: CapaFixa;
+  /** A frase do fim da galeria. Vazia é o normal, e é o que toda galeria tem. */
+  despedida: string;
+  despedidaFonte: FonteDaDespedida;
+  voltarAoInicio: VoltarAoInicio;
   /** Porcentagem do tamanho próprio da capa: 100 é o de sempre. Ver `TAMANHO_TITULO`. */
   tamanhoTitulo: number;
   /** Porcentagem da área de referência da logo, ou `null` para a regra antiga. Ver `TAMANHO_LOGO`. */
@@ -528,6 +632,22 @@ export interface Aparencia {
   cartao: CartaoDoLink;
   /** Galeria, pastas ou stream. Ver `Formato`. */
   formato: Formato;
+  /** Como as pastas se desenham. Ver `EstiloPastas`. */
+  estiloPastas: EstiloPastas;
+  /** Como o stream se desenha. Ver `EstiloStream`. */
+  estiloStream: EstiloStream;
+  /** A capa própria da sala, ou a do grupo Capa. Ver `CapaDoStream`. */
+  capaStream: CapaDoStream;
+  /** Fileiras de lado, ou tudo em grade para baixo. Ver `RolagemDoStream`. */
+  rolagemStream: RolagemDoStream;
+  /**
+   * O nome da fileira dos vídeos soltos, no lugar de "Episódios" — e a frase
+   * embaixo dele. Texto livre, como o `rotulo`. Vazio é "Episódios" e nenhuma
+   * frase, que é o que o Stream sempre desenhou. Vídeo DENTRO de capítulo
+   * continua na fileira com o nome do capítulo.
+   */
+  nomeDosVideos: string;
+  fraseDosVideos: string;
   /** Ausente na maioria das galerias: só existe quando alguém escolheu uma cor. */
   cores?: CoresProprias;
 }
@@ -588,12 +708,24 @@ export const APARENCIA_PADRAO: Aparencia = {
   tamanhoLogo: null,
   /* `rola` é o que toda capa faz desde sempre. Ver `CapaFixa`. */
   capaFixa: "rola",
+  /* Vazia e desligado: galeria entregue não ganha nada no fim sem alguém pedir. */
+  despedida: "",
+  despedidaFonte: "titulo",
+  voltarAoInicio: "nao",
   /* `sobreposto` é o cartão de sempre. Ver o comentário de `CartaoDoLink`:
      o modo limpo é escolha, não correção. */
   cartao: "sobreposto",
   rotulo: "",
   /* `galeria` é a estrutura de toda entrega até 30/09/2026. Ver `Formato`. */
   formato: "galeria",
+  /* Os primeiros desenhos de cada formato — quem já escolheu pastas ou stream
+     continua vendo exatamente o que viu. */
+  estiloPastas: "pilha",
+  estiloStream: "cinema",
+  capaStream: "sala",
+  rolagemStream: "lado",
+  nomeDosVideos: "",
+  fraseDosVideos: "",
 };
 
 /**
@@ -712,6 +844,11 @@ export function lerAparencia(bruto: unknown): Aparencia {
     alinhamento: valida(o.alinhamento, OPCOES.alinhamento.map((x) => x.id), APARENCIA_PADRAO.alinhamento),
     linhasTitulo: valida(o.linhasTitulo, OPCOES.linhasTitulo.map((x) => x.id), APARENCIA_PADRAO.linhasTitulo),
     capaFixa: valida(o.capaFixa, OPCOES.capaFixa.map((x) => x.id), APARENCIA_PADRAO.capaFixa),
+    /* 160: cabe a frase do exemplo do Juan com folga, e não cabe um parágrafo.
+       Apara em vez de recusar, pela mesma regra do `rotulo`. */
+    despedida: textoLivre(o.despedida, 160),
+    despedidaFonte: valida(o.despedidaFonte, OPCOES.despedidaFonte.map((x) => x.id), APARENCIA_PADRAO.despedidaFonte),
+    voltarAoInicio: valida(o.voltarAoInicio, OPCOES.voltarAoInicio.map((x) => x.id), APARENCIA_PADRAO.voltarAoInicio),
     /*
      * A barrinha é NÚMERO, e por isso não passa por `valida` — não há lista de
      * valores certos entre 60 e 180. Apara para dentro da faixa em vez de
@@ -737,11 +874,24 @@ export function lerAparencia(bruto: unknown): Aparencia {
     rotulo: typeof o.rotulo === "string" ? o.rotulo.trim().slice(0, 40) : APARENCIA_PADRAO.rotulo,
     cartao: valida(o.cartao, OPCOES.cartao.map((x) => x.id), APARENCIA_PADRAO.cartao),
     formato: valida(o.formato, OPCOES.formato.map((x) => x.id), APARENCIA_PADRAO.formato),
+    estiloPastas: valida(o.estiloPastas, OPCOES.estiloPastas.map((x) => x.id), APARENCIA_PADRAO.estiloPastas),
+    estiloStream: valida(o.estiloStream, OPCOES.estiloStream.map((x) => x.id), APARENCIA_PADRAO.estiloStream),
+    capaStream: valida(o.capaStream, OPCOES.capaStream.map((x) => x.id), APARENCIA_PADRAO.capaStream),
+    rolagemStream: valida(o.rolagemStream, OPCOES.rolagemStream.map((x) => x.id), APARENCIA_PADRAO.rolagemStream),
+    /* Texto livre, com teto, pela mesma regra do `rotulo`: apara em vez de
+       recusar. 40 é um nome de fileira; 120 é uma frase, não um parágrafo. */
+    nomeDosVideos: textoLivre(o.nomeDosVideos, 40),
+    fraseDosVideos: textoLivre(o.fraseDosVideos, 120),
     /* Só entra quando sobrou alguma cor válida. Galeria sem cor própria não
        ganha um `cores: {}` — é o que mantém `presetEquivalente` e a comparação
        "sujo/publicado" do editor iguais ao que eram. */
     ...(cores ? { cores } : {}),
   };
+}
+
+/** Texto escrito pelo fotógrafo: espaço repetido vira um, e o resto é aparado. */
+function textoLivre(v: unknown, teto: number): string {
+  return typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, teto) : "";
 }
 
 /**
@@ -979,6 +1129,14 @@ export const OPCOES = {
      ajuda de cada um fala do RESULTADO na capa, não do mecanismo. */
   /* Os rótulos falam do que a pessoa VÊ, não do CSS: "sobe junto" e "fica no
      lugar" descrevem a rolagem, que é onde a diferença aparece. */
+  despedidaFonte: [
+    { id: "titulo", nome: "A do nome do casal", desc: "A mesma letra do título da capa" },
+    { id: "texto", nome: "A do texto", desc: "A letra do corpo da galeria" },
+  ],
+  voltarAoInicio: [
+    { id: "nao", nome: "Não mostrar", desc: "A galeria termina na despedida" },
+    { id: "sim", nome: "Mostrar", desc: "Um botão para subir de volta ao começo" },
+  ],
   capaFixa: [
     { id: "rola", nome: "Sobe junto", desc: "A capa sai da tela conforme você rola" },
     { id: "fixa", nome: "Fica no lugar", desc: "As fotos passam por cima da capa" },
@@ -998,7 +1156,27 @@ export const OPCOES = {
   formato: [
     { id: "galeria", nome: "Galeria", desc: "Tudo numa rolagem só, capítulo depois de capítulo" },
     { id: "pastas", nome: "Pastas", desc: "Cada capítulo vira uma pasta com capa; as fotos ficam dentro" },
-    { id: "stream", nome: "Stream", desc: "Os vídeos em tela de cinema, com fileiras e próximo episódio" },
+    { id: "stream", nome: "Stream", desc: "Os vídeos como num serviço de streaming, com próximo episódio" },
+  ],
+  estiloPastas: [
+    { id: "pilha", nome: "Pilha", desc: "A capa na frente e cópias atrás, que se abrem em leque" },
+    { id: "capas", nome: "Capas", desc: "Cada pasta é um cartaz: foto alta com o nome por cima" },
+    { id: "indice", nome: "Índice", desc: "Um sumário: número, nome grande e uma tira de fotos" },
+    { id: "mosaico", nome: "Mosaico", desc: "Folha de contato: a capa e três fotos de cada pasta" },
+  ],
+  estiloStream: [
+    { id: "cinema", nome: "Cinema", desc: "Sala escura: capa em tela cheia e fileiras que rolam de lado" },
+    { id: "episodios", nome: "Episódios", desc: "Página de série: capítulos como temporadas e a lista de episódios" },
+    { id: "vitrine", nome: "Vitrine", desc: "Cartões grandes e arredondados, o filme principal em destaque" },
+    { id: "mostra", nome: "Mostra", desc: "Programa de festival: títulos grandes em lista, a imagem no hover" },
+  ],
+  capaStream: [
+    { id: "sala", nome: "A do estilo", desc: "A capa própria do estilo do stream" },
+    { id: "galeria", nome: "A do grupo Capa", desc: "O desenho escolhido em Capa — imersa, convite, arco…" },
+  ],
+  rolagemStream: [
+    { id: "lado", nome: "Para o lado", desc: "Fileiras que rolam de lado, como num serviço de streaming" },
+    { id: "baixo", nome: "Para baixo", desc: "Tudo à mostra, em grade, um bloco embaixo do outro" },
   ],
 } as const;
 
@@ -1051,19 +1229,19 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Banca de jornal: fundo claro, letra grande e tudo de canto vivo.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Terrosa, manuscrita e de cantos macios. Clima de ateliê.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     /*
@@ -1099,13 +1277,13 @@ export const PRESETS: Preset[] = [
     id: "marfim",
     nome: "Marfim",
     desc: "Creme e manuscrita, fotos rentes. É o desenho da nossa página inicial.",
-    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho e de canto vivo.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     /*
@@ -1122,7 +1300,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -1145,25 +1323,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, foto em arco e cantos bem macios. Clima de papel timbrado.",
-    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto, destaques grandes e canto vivo, como editorial de moda.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro, com a foto grande e limpa.",
-    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco, muito espaço e cantos arredondados. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
   },
 ];
 
@@ -1206,18 +1384,33 @@ export function presetEquivalente(a: Aparencia): string | null {
  * das chaves não decidir nada — o editor espalha objetos, e `{...ap, cores}`
  * põe a cor no fim de um e no meio do outro.
  */
+/**
+ * Os eixos que são a ESTRUTURA da entrega, e não a cara dela: o formato e o
+ * desenho de cada formato. Andam juntos — um estilo aplicado não mexe em
+ * nenhum deles, e a comparação "está no meu padrão?" não olha para eles.
+ */
+export const EIXOS_DA_ESTRUTURA = [
+  "formato",
+  "estiloPastas",
+  "estiloStream",
+  "capaStream",
+  "rolagemStream",
+  "nomeDosVideos",
+  "fraseDosVideos",
+] as const;
+
 /*
  * O FORMATO FICA FORA DA COMPARAÇÃO (30/09/2026): estilo é cara, formato é
  * estrutura (ver `Formato`). Uma entrega em Stream com a cara exata do padrão
  * do estúdio ESTÁ no padrão — e o cartão dele tem de dizer isso.
  */
 export function mesmaAparencia(a: unknown, b: unknown): boolean {
-  const semFormato = (x: unknown) => {
-    const { formato: _formato, ...resto } = lerAparencia(x);
-    void _formato;
-    return JSON.stringify(resto);
+  const semEstrutura = (x: unknown) => {
+    const lida: Record<string, unknown> = { ...lerAparencia(x) };
+    for (const eixo of EIXOS_DA_ESTRUTURA) delete lida[eixo];
+    return JSON.stringify(lida);
   };
-  return semFormato(a) === semFormato(b);
+  return semEstrutura(a) === semEstrutura(b);
 }
 
 /**
@@ -1229,7 +1422,37 @@ export function mesmaAparencia(a: unknown, b: unknown): boolean {
  * nem ter olhado para ele.
  */
 export function comFormatoDe(estilo: Aparencia, atual: Aparencia): Aparencia {
-  return { ...estilo, formato: atual.formato };
+  const estrutura = Object.fromEntries(EIXOS_DA_ESTRUTURA.map((eixo) => [eixo, atual[eixo]]));
+  return { ...estilo, ...estrutura } as Aparencia;
+}
+
+/**
+ * A aparência com que a galeria NOVA nasce, com o formato escolhido na
+ * criação por cima do estilo (30/09/2026).
+ *
+ * Felipe, olhando a etapa de estilo: "deveria aqui ter a opção para
+ * selecionar os 3 tipos". O formato é decisão que o fotógrafo já traz ao
+ * criar — o filme do casamento é Stream antes de existir.
+ *
+ * A escolha feita AGORA vence a que veio no estilo (o padrão do estúdio pode
+ * trazer um formato): é a mesma regra de `aparenciaInicialDaGaleria`, em que
+ * a decisão mais perto desta galeria ganha. A tela já abre marcada no formato
+ * do padrão, então quem não mexe continua recebendo o do padrão.
+ *
+ *   `inicial`  o que `aparenciaInicialDaGaleria` devolveu — null quando a
+ *              galeria nasceria no padrão do código
+ *   `pedido`   o texto do formulário; fora da lista, não muda nada
+ *
+ * Devolve null só quando não há nada a gravar: sem estilo e em Galeria, que
+ * é exatamente o `'{}'` de sempre.
+ */
+export function aparenciaComFormato(inicial: unknown | null, pedido: string): unknown | null {
+  const formato = OPCOES.formato.find((o) => o.id === pedido)?.id;
+  if (!formato) return inicial;
+  if (inicial === null || inicial === undefined) {
+    return formato === APARENCIA_PADRAO.formato ? null : { formato };
+  }
+  return { ...lerAparencia(inicial), formato };
 }
 
 // --- tradução para CSS --------------------------------------------------------
@@ -1361,6 +1584,55 @@ export function variaveisDeForma(a: Aparencia): Record<string, string> {
   };
 }
 
+/**
+ * A SALA ESCURA do estilo Cinema do stream (30/09/2026).
+ *
+ * É o único desenho que não segue o tema: a sala das plataformas de série é
+ * escura por definição, e "igual Netflix" num fundo branco não é igual a
+ * nada. Cinzas neutros, sem o âmbar da casa — o botão de assistir é branco
+ * com texto preto, que é o que o cliente reconhece. A LETRA continua sendo a
+ * da galeria, e a logo continua sendo a do estúdio: a sala é escura, mas é a
+ * sala do fotógrafo.
+ *
+ * Quem escolheu o tema noite (ou cores próprias escuras) já está no escuro,
+ * e aí o tema dele vale — ver `variaveisDaEntrega`.
+ */
+export const SALA_ESCURA: Record<string, string> = {
+  "--g-fundo": "#0b0b0c",
+  "--g-superficie": "#1a1a1c",
+  "--g-texto": "#f5f5f5",
+  "--g-suave": "#b3b3b3",
+  "--g-tenue": "#7c7c7c",
+  "--g-linha": "rgba(255,255,255,.14)",
+  "--g-destaque": "#f5f5f5",
+  "--g-sobre-destaque": "#0b0b0c",
+};
+
+/**
+ * As variáveis de cor da página inteira, pela tela que ela mostra. Igual a
+ * `variaveisDoTema` em tudo, menos no Stream em Cinema com fundo claro, que
+ * vira a sala escura — a página INTEIRA, rodapé incluído, senão sobraria uma
+ * faixa branca embaixo da sala.
+ */
+export function variaveisDaEntrega(a: Aparencia, tela: "galeria" | "pastas" | "stream"): Record<string, string> {
+  const doTema = variaveisDoTema(a);
+  if (tela !== "stream" || a.estiloStream !== "cinema") return doTema;
+  const fundo = doTema["--g-fundo"] ?? "#000000";
+  return luminanciaHex(fundo) < 0.2 ? doTema : { ...doTema, ...SALA_ESCURA };
+}
+
+/** Luminância relativa de um `#rrggbb` (0 = preto, 1 = branco). */
+function luminanciaHex(hex: string): number {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return 0;
+  const n = parseInt(m[1], 16);
+  const canal = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * canal((n >> 16) & 255) + 0.7152 * canal((n >> 8) & 255) + 0.0722 * canal(n & 255);
+}
+
 export function variaveisDoTema(a: Aparencia): Record<string, string> {
   const base = TEMAS[a.tema];
   const c = a.cores;
@@ -1450,6 +1722,16 @@ export function fonteDoDetalhe(a: Aparencia): string | null {
   if (a.fonteDetalhe === "titulo") return FONTES_TITULO[a.tipografia];
   if (a.fonteDetalhe === "texto") return FONTES_TEXTO[a.fonteTexto];
   return null;
+}
+
+/*
+ * A fonte da despedida. Mesma forma do `fonteDoDetalhe`: escolhe entre as duas
+ * famílias que a galeria já tem — a do nome do casal ou a do corpo do texto.
+ * Aqui sempre devolve uma, porque a frase é do fotógrafo e tem de sair na letra
+ * dele, não na do navegador.
+ */
+export function fonteDaDespedida(a: Aparencia): string {
+  return a.despedidaFonte === "texto" ? FONTES_TEXTO[a.fonteTexto] : FONTES_TITULO[a.tipografia];
 }
 
 export const FONTES_TITULO: Record<Tipografia, string> = {

@@ -113,6 +113,33 @@ export default function PrivacidadePage() {
         <li>o navegador e sistema operacional informados pelo aparelho.</li>
       </ul>
       <p>
+        Em algumas galerias o visitante <strong>se identifica</strong> — digitando o nome, o e-mail,
+        ou os dois. Isso acontece quando ele escolhe fotos favoritas, quando baixa a entrega pela
+        primeira vez e quando deixa um recado para o fotógrafo. É ele quem digita, e serve para uma
+        coisa só: o fotógrafo saber de quem é cada escolha, cada download e cada recado. Não há
+        senha, não há conta e não há confirmação — não é um cadastro.
+      </p>
+      <ul>
+        <li>
+          <strong>nome e e-mail</strong>, como a pessoa os escreveu, guardados dentro daquela
+          galeria;
+        </li>
+        <li>
+          as <strong>fotos marcadas</strong> como favoritas e o que foi baixado, ligados a essa
+          identificação;
+        </li>
+        <li>
+          o <strong>recado</strong>, quando o fotógrafo pede um — o texto, as notas e, se a pessoa
+          marcar, a autorização para ele usar a frase como depoimento. Só o fotógrafo dono da
+          galeria lê os recados.
+        </li>
+      </ul>
+      <p>
+        Nada disso é obrigatório: quem não quiser se identificar continua vendo a galeria inteira.
+        Para sair, basta usar o <strong>“não sou eu”</strong> na própria galeria — ou pedir ao
+        fotógrafo, que é o controlador desses dados. Quando a galeria é apagada, isso vai com ela.
+      </p>
+      <p>
         Não usamos rastreadores de publicidade, não temos pixel de rede social e não vendemos dado
         nenhum para ninguém.
       </p>

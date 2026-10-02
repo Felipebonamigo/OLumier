@@ -18,7 +18,8 @@ import {
   temPesoLeve,
   comFormatoDe,
   type Aparencia,
-  type Formato,
+  type EstiloPastas,
+  type EstiloStream,
   type ViewportPrevia,
 } from "@/config/aparencia";
 import {
@@ -35,6 +36,9 @@ import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { useAvisoDeSaida } from "@/lib/aviso-de-saida-client";
 import { medirLogo } from "@/lib/logo-client";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
+import { EsquemaDoEstilo, EsquemaDoFormato } from "@/components/esquema-do-formato";
+import { CapasDasPastas, NomesDosVideos } from "@/components/entrega-no-design";
+import type { PastaNoDesign, VideoNoDesign } from "@/lib/entrega-no-design";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -427,55 +431,9 @@ export interface ConteudoDaGaleria {
   /** Grupos com arquivo: cada capítulo com algo dentro, mais as soltas. */
   grupos: number;
   videos: number;
+  /** Vídeos fora de capítulo — os que ficam na fileira "Episódios". */
+  videosSoltos: number;
   fotos: number;
-}
-
-/**
- * O esquema de cada formato — uma tela em miniatura, e não um ícone.
- *
- * A estratégia de marca pede para DEMONSTRAR, não declarar (§9): "pastas" e
- * "stream" escritos numa pastilha fazem a pessoa imaginar; o desenho da tela
- * que o cliente vai ver responde antes de ela perguntar. A prévia ao lado
- * mostra a galeria de verdade — isto é só o mapa para escolher.
- */
-function EsquemaDoFormato({ formato }: { formato: Formato }) {
-  const bloco = "rounded-[2px] bg-texto-faint/30";
-  if (formato === "pastas") {
-    return (
-      <div className="grid h-full grid-cols-3 gap-1.5 p-2" aria-hidden>
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="flex flex-col gap-1">
-            <div className="relative flex-1">
-              <span className={`absolute inset-0 translate-x-[3px] -translate-y-[3px] ${bloco} opacity-50`} />
-              <span className="absolute inset-0 rounded-[2px] bg-texto-faint/60" />
-            </div>
-            <span className={`h-1 w-3/4 ${bloco}`} />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (formato === "stream") {
-    return (
-      <div className="flex h-full flex-col gap-1 bg-void/60 p-2" aria-hidden>
-        <div className="relative flex-1 rounded-[2px] bg-texto-faint/40">
-          <span className="absolute bottom-1 left-1 h-1 w-6 rounded-full bg-acento" />
-        </div>
-        <div className="flex gap-1">
-          {[0, 1, 2, 3].map((i) => (
-            <span key={i} className={`h-3 flex-1 ${bloco} ${i === 3 ? "opacity-40" : ""}`} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="grid h-full grid-cols-4 gap-1 p-2" aria-hidden>
-      {Array.from({ length: 8 }, (_, i) => (
-        <span key={i} className={bloco} />
-      ))}
-    </div>
-  );
 }
 
 /**
@@ -492,12 +450,23 @@ function SeletorDeFormato({
   ap,
   mudar,
   conteudo,
-}: PecaProps & { conteudo: ConteudoDaGaleria | null }) {
+  galeriaId,
+  videos,
+  pastas,
+  aoGravar,
+}: PecaProps & {
+  conteudo: ConteudoDaGaleria | null;
+  galeriaId: string;
+  videos: VideoNoDesign[];
+  pastas: PastaNoDesign[];
+  /** Um nome de vídeo ou uma capa de pasta gravou: a prévia recarrega. */
+  aoGravar: () => void;
+}) {
   const aviso =
     !conteudo
       ? null
       : ap.formato === "pastas" && conteudo.grupos < 2
-        ? "Esta galeria ainda não tem dois capítulos com fotos. Até ter, o cliente vê a galeria de sempre — crie os capítulos na aba Fotos (ou envie a pasta já separada em subpastas)."
+        ? "Esta galeria ainda não tem dois capítulos com fotos. Até ter, o cliente vê a galeria de sempre — crie os capítulos na aba Fotos e vídeos (ou envie a pasta já separada em subpastas)."
         : ap.formato === "stream" && conteudo.videos === 0
           ? "Esta galeria ainda não tem vídeo. Até ter, o cliente vê a galeria de sempre."
           : null;
@@ -536,20 +505,142 @@ function SeletorDeFormato({
           {aviso}
         </p>
       )}
+      {/*
+        A CAPA DE CADA PASTA — e a posição é o pedido.
+
+        30/09/2026 ela saiu da aba Fotos para cá, porque "existia e ninguém
+        achou". 01/10/2026 Juan voltou: "dificuldade em alterar a capa das
+        pastas, fazer ser mais fácil, VISÍVEL NO COMEÇO DA PÁGINA". Estava no
+        fim do grupo, depois dos cartões de formato, dos cartões de estilo e dos
+        nomes dos vídeos — achável por quem rolasse.
+
+        Agora é a primeira coisa depois de escolher o formato. Acima da escolha
+        do formato não dá: perguntar a capa das pastas antes de a entrega ser em
+        pastas seria perguntar sobre uma tela que ninguém vai ver.
+      */}
+      {ap.formato === "pastas" && <CapasDasPastas galeriaId={galeriaId} pastas={pastas} aoGravar={aoGravar} />}
+      {/*
+        O ESTILO DO FORMATO, logo abaixo dele (30/09/2026): "vamos pensar em
+        estilos para pastas e stream". Só aparece o do formato escolhido —
+        quatro cartões de pasta numa entrega em Stream seriam uma pergunta
+        sobre uma tela que ninguém vai ver. A prévia ao lado mostra a escolha.
+      */}
       {ap.formato === "pastas" && (
-        <p className="text-[11px] leading-snug text-texto-faint">
-          A capa de cada pasta é a primeira foto do capítulo. Para trocar, na aba Fotos passe o
-          mouse sobre a foto e clique em <strong>capa da pasta</strong>.
-        </p>
+        <EstilosDoFormato
+          titulo="Estilo das pastas"
+          opcoes={OPCOES.estiloPastas}
+          atual={ap.estiloPastas}
+          escolher={(id) => mudar({ ...ap, estiloPastas: id })}
+        />
       )}
       {ap.formato === "stream" && (
-        <p className="text-[11px] leading-snug text-texto-faint">
-          Cada capítulo vira uma fileira de episódios, na ordem da aba Fotos. As fotos da entrega
-          continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio
-          — troque na aba Fotos se quiser outra.
-        </p>
+        <EstilosDoFormato
+          titulo="Estilo do stream"
+          opcoes={OPCOES.estiloStream}
+          atual={ap.estiloStream}
+          escolher={(id) => mudar({ ...ap, estiloStream: id })}
+        />
+      )}
+      {ap.formato === "stream" && (
+        <>
+          <div>
+            <Eixo eixo="capaStream" titulo="Capa do stream" ap={ap} mudar={mudar} />
+            <p className="mt-1.5 text-[11px] leading-snug text-texto-faint">
+              {ap.capaStream === "galeria"
+                ? "A capa é o desenho escolhido no grupo Capa, e o stream começa logo abaixo dela."
+                : "Cada estilo tem a própria capa. Para usar um desenho do grupo Capa (convite, arco…), escolha “A do grupo Capa”."}
+            </p>
+          </div>
+          {/* Só onde existe rolar de lado: Vitrine e Mostra já descem. */}
+          {(ap.estiloStream === "cinema" || ap.estiloStream === "episodios") && (
+            <div>
+              <Eixo eixo="rolagemStream" titulo="Os vídeos rolam" ap={ap} mudar={mudar} />
+              <p className="mt-1.5 text-[11px] leading-snug text-texto-faint">
+                {ap.estiloStream === "episodios"
+                  ? "Para baixo, todos os capítulos ficam abertos, um embaixo do outro, em vez das abas."
+                  : "Para baixo, cada bloco vira uma grade e nenhum vídeo fica escondido atrás da seta."}
+              </p>
+            </div>
+          )}
+          {/*
+            O "EPISÓDIOS" COM OUTRO NOME (Juan: "poder mudar o título/subtítulo
+            'Episódios'"). Vale para a fileira dos vídeos fora de capítulo —
+            a de capítulo tem o nome do capítulo, que se muda na aba Fotos.
+          */}
+          <div>
+            <span className="block text-xs font-medium text-texto-soft">Título dos vídeos</span>
+            <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+              {conteudo && conteudo.videosSoltos === 0 && conteudo.videos > 0
+                ? "Seus vídeos estão em capítulos: cada bloco usa o nome do capítulo (mude na aba Fotos e vídeos). Este título vale para vídeos fora de capítulo."
+                : "O nome do bloco dos vídeos fora de capítulo. Vazio mostra “Episódios”."}
+            </p>
+            <input
+              value={ap.nomeDosVideos}
+              onChange={(e) => mudar({ ...ap, nomeDosVideos: e.target.value.slice(0, 40) })}
+              maxLength={40}
+              placeholder="Episódios"
+              aria-label="Título dos vídeos"
+              className="mt-2 w-full max-w-xs rounded-lg border border-linha bg-void px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+            />
+            <input
+              value={ap.fraseDosVideos}
+              onChange={(e) => mudar({ ...ap, fraseDosVideos: e.target.value.slice(0, 120) })}
+              maxLength={120}
+              placeholder="Subtítulo (opcional) — ex.: o filme, o teaser e os bastidores"
+              aria-label="Subtítulo dos vídeos"
+              className="mt-2 w-full rounded-lg border border-linha bg-void px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+            />
+          </div>
+          <NomesDosVideos galeriaId={galeriaId} videos={videos} aoGravar={aoGravar} />
+          <p className="text-[11px] leading-snug text-texto-faint">
+            Os vídeos aparecem na ordem da aba Fotos e vídeos, e cada capítulo vira um bloco. As fotos da entrega
+            continuam lá, num botão “Ver as fotos”. A capa de cada vídeo é a que ele ganhou no envio —
+            troque na aba Vídeo se quiser outra.
+          </p>
+        </>
       )}
     </>
+  );
+}
+
+/** Os cartões de estilo de um formato — esquema, nome e o que ele faz. */
+function EstilosDoFormato<T extends EstiloPastas | EstiloStream>({
+  titulo,
+  opcoes,
+  atual,
+  escolher,
+}: {
+  titulo: string;
+  opcoes: readonly { id: T; nome: string; desc: string }[];
+  atual: T;
+  escolher: (id: T) => void;
+}) {
+  return (
+    <div>
+      <span className="block text-xs font-medium text-texto-soft">{titulo}</span>
+      <div className="mt-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {opcoes.map((op) => {
+          const ativo = atual === op.id;
+          return (
+            <button
+              key={op.id}
+              type="button"
+              aria-pressed={ativo}
+              onClick={() => escolher(op.id)}
+              className={`rounded-lg border p-2.5 text-left transition ${
+                ativo ? "border-acento bg-acento/5" : "border-linha hover:border-acento hover:bg-acento/5"
+              }`}
+            >
+              <span className="mb-2 block h-16 overflow-hidden rounded-md border border-linha bg-carbon-2">
+                <EsquemaDoEstilo estilo={op.id} />
+              </span>
+              <span className="block text-sm font-medium">{op.nome}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-texto-faint">{op.desc}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -632,6 +723,8 @@ function Eixo<K extends keyof typeof OPCOES>({
    manchete, desde que o fotógrafo tenha escolhido uma. Sobrou a mínima, que é
    só tipografia por definição — é o que o nome dela promete. */
 const CAPAS_SEM_FOTO: string[] = ["minima"];
+const nomeDoEstiloStream = (a: Aparencia) =>
+  OPCOES.estiloStream.find((o) => o.id === a.estiloStream)?.nome ?? a.estiloStream;
 const nomeDaCapa = (id: string) => OPCOES.capa.find((o) => o.id === id)?.nome ?? id;
 
 const GRUPOS = [
@@ -645,6 +738,9 @@ const GRUPOS = [
   { id: "tipografia", nome: "Tipografia" },
   { id: "cor", nome: "Cor" },
   { id: "grade", nome: "Grade" },
+  /* O fim da entrega é um lugar, como a capa: a última coisa que o casal vê.
+     Separado porque nenhum dos outros grupos é sobre onde a galeria acaba. */
+  { id: "fim", nome: "Fim" },
 ] as const;
 type Grupo = (typeof GRUPOS)[number]["id"];
 
@@ -660,7 +756,17 @@ export function EditorAparencia({
   slotCapa,
   conteudo = null,
   logo = null,
+  formatosLiberados = false,
+  videos = [],
+  pastas = [],
 }: {
+  /** Os vídeos e os capítulos da galeria, para o grupo Formato dar nome aos
+      vídeos e escolher a capa das pastas. Ver `lib/entrega-no-design.ts`. */
+  videos?: VideoNoDesign[];
+  pastas?: PastaNoDesign[];
+  /** A conta vê Pastas e Stream? Sem isso o grupo Formato não aparece —
+      ver `config/formatos-liberados.ts`. */
+  formatosLiberados?: boolean;
   /** O que a galeria tem hoje — só para o grupo Formato avisar quando a
       escolha não tem com o que trabalhar (pastas sem capítulo, stream sem
       vídeo). Null = não sabemos, e aí nada é dito. */
@@ -959,7 +1065,7 @@ export function EditorAparencia({
             Editar
           </span>
           <ul className="-mx-1 mt-2 flex gap-1 overflow-x-auto px-1 sm:mx-0 sm:flex-col sm:overflow-visible sm:px-0">
-            {GRUPOS.map((g) => {
+            {GRUPOS.filter((g) => g.id !== "formato" || formatosLiberados).map((g) => {
               const ativo = grupo === g.id;
               return (
                 <li key={g.id} className="shrink-0 sm:shrink">
@@ -1157,8 +1263,16 @@ export function EditorAparencia({
               })}
             </div>
           )}
-          {grupo === "formato" && (
-            <SeletorDeFormato ap={ap} mudar={mudar} conteudo={conteudo} />
+          {grupo === "formato" && formatosLiberados && (
+            <SeletorDeFormato
+              ap={ap}
+              mudar={mudar}
+              conteudo={conteudo}
+              galeriaId={galeriaId}
+              videos={videos}
+              pastas={pastas}
+              aoGravar={() => router.refresh()}
+            />
           )}
           {grupo === "capa" && (
             <>
@@ -1188,7 +1302,9 @@ export function EditorAparencia({
                         <button
                           key={o.id}
                           type="button"
-                          onClick={() => mudar({ ...ap, capa: o.id })}
+                          onClick={() =>
+                            mudar({ ...ap, capa: o.id, ...(ap.formato === "stream" ? { capaStream: "galeria" as const } : {}) })
+                          }
                           className="rounded-md border border-linha-forte px-2.5 py-1 text-[11px] transition hover:bg-carbon-2"
                         >
                           usar {o.nome}
@@ -1197,7 +1313,41 @@ export function EditorAparencia({
                   </div>
                 </div>
               )}
-              <Eixo eixo="capa" titulo="Desenho da capa" ap={ap} mudar={mudar} />
+              {/*
+                NO STREAM, ESCOLHER A CAPA É USAR A CAPA (Juan, 30/09/2026:
+                "corrigir os formatos de CAPA quando o formato de entrega foi o
+                STREAM"). Com a capa própria da sala, os oito desenhos daqui não
+                faziam nada. Clicar num deles agora passa o stream para a capa
+                do grupo Capa — a prévia mostra o desenho clicado.
+              */}
+              {ap.formato === "stream" && formatosLiberados && (
+                <div className="rounded-lg border border-linha bg-carbon-2/60 px-3 py-2.5 text-[11px] leading-snug text-texto-soft">
+                  {ap.capaStream === "sala" ? (
+                    <>
+                      A entrega está em <strong>Stream</strong>, com a capa do estilo {nomeDoEstiloStream(ap)}.
+                      Escolher um desenho abaixo passa o stream a usar esse desenho.
+                    </>
+                  ) : (
+                    <>
+                      A entrega está em <strong>Stream</strong> e usa o desenho abaixo como capa; os vídeos
+                      começam logo depois dela.{" "}
+                      <button
+                        type="button"
+                        onClick={() => mudar({ ...ap, capaStream: "sala" })}
+                        className="text-acento-alto underline underline-offset-4"
+                      >
+                        voltar à capa do estilo {nomeDoEstiloStream(ap)}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              <Eixo
+                eixo="capa"
+                titulo="Desenho da capa"
+                ap={ap}
+                mudar={(novo) => mudar(novo.formato === "stream" ? { ...novo, capaStream: "galeria" } : novo)}
+              />
               <BarraDaLogo ap={ap} mudar={mudar} logo={logo} />
               {/* Junto do desenho da capa porque é a MESMA decisão vista de
                   outro lado: escolher "imersa" e depois "baixa" é dizer foto em
@@ -1315,6 +1465,45 @@ export function EditorAparencia({
               <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
               <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
               <Eixo eixo="canto" titulo="Canto das fotos" ap={ap} mudar={mudar} />
+            </>
+          )}
+          {/*
+            ── O FIM DA GALERIA (01/10/2026) ─────────────────────────────────
+
+            Juan: "no final da galeria uma frase editável, por exemplo
+            'obrigado por escolher o nosso olhar para esse dia inesquecível' —
+            algo onde consiga editar com a frase que queremos e fonte. Acho que
+            vai mostrar um cuidado a mais." Felipe: "isso eu acho bom".
+
+            Vazio é o padrão, e é o certo: galeria já entregue não ganha frase
+            nossa no fim. A fonte escolhe entre as duas famílias que a galeria
+            já tem — uma terceira só para uma frase seria um eixo para ninguém.
+
+            O botão de voltar é escolha porque o próprio Juan dividiu opinião
+            ("eu não colocaria, mas entendo quem goste").
+          */}
+          {grupo === "fim" && (
+            <>
+              <div>
+                <span className="block text-xs font-medium text-texto-soft">Frase de despedida</span>
+                <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+                  Aparece depois da última foto, com a letra da galeria. Vazio não mostra nada.
+                </p>
+                <textarea
+                  value={ap.despedida}
+                  onChange={(e) => mudar({ ...ap, despedida: e.target.value.slice(0, 160) })}
+                  maxLength={160}
+                  rows={2}
+                  placeholder="Obrigado por escolher o nosso olhar para esse dia inesquecível"
+                  aria-label="Frase de despedida"
+                  className="mt-2 w-full resize-none rounded-lg border border-linha bg-void px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+                />
+              </div>
+              {/* A fonte só decide algo quando existe frase para desenhar. */}
+              {ap.despedida.trim() !== "" && (
+                <Eixo eixo="despedidaFonte" titulo="Fonte da despedida" ap={ap} mudar={mudar} />
+              )}
+              <Eixo eixo="voltarAoInicio" titulo="Botão “Volte ao início”" ap={ap} mudar={mudar} />
             </>
           )}
         </div>

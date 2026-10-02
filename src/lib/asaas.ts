@@ -13,7 +13,10 @@ import type { PagamentoDoAsaas } from "./caixa-dos-socios";
  * para o próprio Asaas aplicar sobre o líquido. O porquê inteiro está em
  * `montarFatias` e em `scripts/testar-split.mjs`.
  */
-function montarFatiaAsaas(f: FatiaSocio) {
+/** O que o split precisa de uma fatia: a carteira e quanto (fixo ou %). */
+export type FatiaParaOAsaas = Pick<FatiaSocio, "carteira" | "centavos" | "percentual">;
+
+function montarFatiaAsaas(f: FatiaParaOAsaas) {
   return f.percentual !== undefined
     ? { walletId: f.carteira, percentualValue: f.percentual }
     : { walletId: f.carteira, fixedValue: f.centavos / 100 };
@@ -52,6 +55,24 @@ function base(): string {
 
 export const asaasConfigurado = () => Boolean(process.env.ASAAS_API_KEY);
 
+/**
+ * A chave, sem o escape do `$`.
+ *
+ * No servidor a chave mora no `.env.production` escrita `\$aact_…`: o Next lê
+ * `$palavra` como variável e, sem a barra, a chave chegava vazia ao app (ver
+ * `docs/ligar-cobranca.md`, passo 3). Só que os scripts do servidor carregam o
+ * mesmo arquivo com `node --env-file`, que NÃO expande nada e entrega a barra
+ * junto — e o Asaas responde "A chave de API fornecida é inválida". Foi o que
+ * derrubou a primeira `scripts/conferir-pagamentos.mjs` em 30/09/2026.
+ *
+ * Chave do Asaas não tem barra invertida, então tirar `\` de antes de um `$` só
+ * desfaz o escape: o app (que já recebe sem barra) não muda, e os scripts
+ * passam a mandar a chave de verdade.
+ */
+export function chaveDoAsaas(): string | undefined {
+  return process.env.ASAAS_API_KEY?.replace(/\\\$/g, "$");
+}
+
 export const asaasEmProducao = () => process.env.ASAAS_AMBIENTE === "producao";
 
 /**
@@ -69,7 +90,7 @@ function segmento(id: string): string {
 }
 
 async function chamar<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
-  const chave = process.env.ASAAS_API_KEY;
+  const chave = chaveDoAsaas();
   if (!chave) throw new Error("ASAAS_API_KEY não configurada");
 
   const r = await fetch(`${base()}${caminho}`, {
@@ -165,7 +186,7 @@ function normalizada(carteira: string): string {
 }
 
 /** As fatias sem a da própria conta. Pura, para o teste cobrir sem rede. */
-export function semACarteiraDaConta(fatias: FatiaSocio[], propria: string | null): FatiaSocio[] {
+export function semACarteiraDaConta<F extends FatiaParaOAsaas>(fatias: F[], propria: string | null): F[] {
   if (!propria) return fatias;
   return fatias.filter((f) => normalizada(f.carteira) !== propria);
 }
@@ -195,7 +216,7 @@ export function recusaPelaPropriaCarteira(e: unknown): boolean {
  * dizer, é repetida.
  */
 async function comSplit<T>(
-  fatias: FatiaSocio[],
+  fatias: FatiaParaOAsaas[],
   enviar: (split: FatiaAsaas[]) => Promise<T>,
 ): Promise<T> {
   const conta = base();
@@ -426,6 +447,57 @@ export interface ClienteDoDocumento {
   deleted?: boolean;
 }
 
+/**
+ * Os clientes da conta com este e-mail — só para diagnóstico
+ * (`scripts/conferir-combo.mjs`). O combo liga as contas pelo CPF/CNPJ; quando
+ * não liga, o e-mail costuma achar o cadastro do Atomatiza feito com OUTRO
+ * documento (o CNPJ da empresa lá, o CPF aqui).
+ */
+export async function clientesDoEmail(email: string): Promise<(ClienteDoDocumento & { name?: string; email?: string })[]> {
+  const r = await chamar<{ data?: (ClienteDoDocumento & { name?: string; email?: string })[] }>(
+    `/customers?email=${encodeURIComponent(email)}&limit=100`,
+  );
+  return (r.data ?? []).filter((c) => !c.deleted);
+}
+
+/** Todas as cobranças de um cliente — avulsas e de assinatura —, só para diagnóstico. */
+export async function cobrancasDoCliente(clienteId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  subscription?: string | null;
+  externalReference?: string | null;
+  description?: string | null;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    subscription?: string | null; externalReference?: string | null; description?: string | null;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/payments?customer=${encodeURIComponent(clienteId)}&limit=100`);
+  return r.data ?? [];
+}
+
+/** Todas as cobranças de uma assinatura, com situação — só para diagnóstico. */
+export async function cobrancasDaAssinatura(assinaturaId: string): Promise<{
+  id: string;
+  status?: string;
+  value?: number;
+  dueDate?: string;
+  billingType?: string;
+  confirmedDate?: string | null;
+  paymentDate?: string | null;
+}[]> {
+  const r = await chamar<{ data?: {
+    id: string; status?: string; value?: number; dueDate?: string; billingType?: string;
+    confirmedDate?: string | null; paymentDate?: string | null;
+  }[] }>(`/subscriptions/${segmento(assinaturaId)}/payments?limit=100`);
+  return r.data ?? [];
+}
+
 /** Os clientes da conta com este CPF/CNPJ — o nosso e o do Atomatiza. */
 export async function clientesDoDocumento(documento: string): Promise<ClienteDoDocumento[]> {
   const r = await chamar<{ data?: ClienteDoDocumento[] }>(
@@ -436,6 +508,22 @@ export async function clientesDoDocumento(documento: string): Promise<ClienteDoD
 
 export async function buscarCliente(clienteId: string): Promise<ClienteDoDocumento> {
   return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`);
+}
+
+/**
+ * Troca o CPF/CNPJ do NOSSO cliente no Asaas. Só por `scripts/trocar-documento.mjs`:
+ * trocar de documento não é autoatendimento — é o que prende o teste grátis e o
+ * combo à pessoa. Recusa o cliente que não tem a nossa referência.
+ */
+export async function trocarDocumentoDoCliente(clienteId: string, documento: string): Promise<ClienteDoDocumento> {
+  const cliente = await buscarCliente(clienteId);
+  if (!cliente.externalReference?.startsWith(PREFIXO)) {
+    throw new Error(`o cliente ${clienteId} não é da Galeria (ref ${cliente.externalReference ?? "-"})`);
+  }
+  return chamar<ClienteDoDocumento>(`/customers/${segmento(clienteId)}`, {
+    method: "POST",
+    body: JSON.stringify({ cpfCnpj: documento.replace(/\D/g, "") }),
+  });
 }
 
 export async function assinaturasDoCliente(clienteId: string): Promise<AssinaturaAsaas[]> {
@@ -451,6 +539,18 @@ export async function temCobrancaVencida(assinaturaId: string): Promise<boolean>
     `/subscriptions/${segmento(assinaturaId)}/payments?status=OVERDUE&limit=1`,
   );
   return (r.data?.length ?? 0) > 0;
+}
+
+/**
+ * Só a descrição da assinatura — sem mexer em valor nem split. Usada pelo
+ * pacote para tirar a marca `· pacote` quando o outro lado recusou
+ * (`lib/pacote.ts`).
+ */
+export async function trocarDescricaoDaAssinatura(assinaturaId: string, descricao: string): Promise<void> {
+  await chamar(`/subscriptions/${segmento(assinaturaId)}`, {
+    method: "PUT",
+    body: JSON.stringify({ description: descricao }),
+  });
 }
 
 /** Os estados de cobrança em que o dinheiro entrou (cartão, Pix/boleto, em mãos). */
@@ -480,13 +580,20 @@ export async function temCobrancaPaga(assinaturaId: string): Promise<boolean> {
  */
 export async function ultimaCobrancaPaga(
   assinaturaId: string,
-): Promise<{ id: string; centavos: number } | null> {
+): Promise<{
+  id: string;
+  centavos: number;
+  confirmedDate: string | null;
+  clientPaymentDate: string | null;
+  paymentDate: string | null;
+} | null> {
   const r = await chamar<{
     data?: {
       id: string;
       status?: string;
       value?: number;
       confirmedDate?: string | null;
+      clientPaymentDate?: string | null;
       paymentDate?: string | null;
       dueDate?: string | null;
     }[];
@@ -495,7 +602,55 @@ export async function ultimaCobrancaPaga(
   if (pagas.length === 0) return null;
   const quando = (c: (typeof pagas)[number]) => c.confirmedDate ?? c.paymentDate ?? c.dueDate ?? "";
   const ultima = pagas.reduce((a, b) => (quando(b) > quando(a) ? b : a));
-  return { id: ultima.id, centavos: Math.round((ultima.value ?? 0) * 100) };
+  return {
+    id: ultima.id,
+    centavos: Math.round((ultima.value ?? 0) * 100),
+    // As datas vão junto para a conferência de pagamentos perdidos contar o
+    // período do mesmo jeito que o webhook (`pagoAteDepoisDoAviso`).
+    confirmedDate: ultima.confirmedDate ?? null,
+    clientPaymentDate: ultima.clientPaymentDate ?? null,
+    paymentDate: ultima.paymentDate ?? null,
+  };
+}
+
+/**
+ * A assinatura ÚNICA do pacote (`docs/pacote.md`, "Fatura única"): uma
+ * fatura por ciclo com a Galeria e o Atomatiza juntos. O split já vem montado
+ * (`juntarSplit`, em `lib/pacote.ts`): as partes dos sócios dos dois produtos.
+ * Procura antes de criar pela referência, como `criarAssinatura`.
+ */
+export async function criarAssinaturaDoPacote(dados: {
+  clienteAsaasId: string;
+  tenantId: string;
+  estudioAtomatizaId: string;
+  /** O TOTAL do ciclo: a nossa parte e a do Atomatiza. */
+  precoCentavos: number;
+  ciclo: Ciclo;
+  descricao: string;
+  primeiroVencimento: Date;
+  forma: FormaAssinatura;
+  fatias: FatiaParaOAsaas[];
+}): Promise<AssinaturaAsaas> {
+  const referencia = referenciaDoPacote(dados.tenantId, dados.estudioAtomatizaId);
+  const existentes = await chamar<{ data: AssinaturaAsaas[] }>(
+    `/subscriptions?externalReference=${encodeURIComponent(referencia)}`,
+  );
+  const viva = existentes.data?.find((a) => a.status === "ACTIVE" && !a.deleted);
+  if (viva) return viva;
+
+  return comSplit(dados.fatias, (split) => chamar<AssinaturaAsaas>("/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({
+      customer: dados.clienteAsaasId,
+      billingType: dados.forma,
+      value: dados.precoCentavos / 100,
+      nextDueDate: dados.primeiroVencimento.toISOString().slice(0, 10),
+      cycle: dados.ciclo === "anual" ? "YEARLY" : "MONTHLY",
+      description: dados.descricao,
+      externalReference: referencia,
+      split,
+    }),
+  }));
 }
 
 export async function cancelarAssinatura(assinaturaId: string) {
@@ -514,9 +669,21 @@ export async function proximaCobranca(assinaturaId: string) {
   return r.data?.[0] ?? null;
 }
 
+/**
+ * A FATURA ÚNICA DO PACOTE (`docs/pacote.md`): `pacote:<conta aqui>:<estúdio
+ * no Atomatiza>`. É dos dois produtos ao mesmo tempo — os dois webhooks a
+ * tratam, cada um pela sua parte da referência.
+ */
+export const PREFIXO_PACOTE = "pacote:";
+export const referenciaDoPacote = (tenantId: string, estudioAtomatizaId: string) =>
+  `${PREFIXO_PACOTE}${tenantId}:${estudioAtomatizaId}`;
+export function ehDoPacoteUnico(referenciaExterna: string | null | undefined): boolean {
+  return Boolean(referenciaExterna?.startsWith(PREFIXO_PACOTE));
+}
+
 /** true se o evento do webhook pertence à Galeria Átomo (a conta é dividida com o Atomatiza). */
 export function eventoEhNosso(referenciaExterna: string | null | undefined): boolean {
-  return Boolean(referenciaExterna?.startsWith(PREFIXO));
+  return Boolean(referenciaExterna?.startsWith(PREFIXO) || ehDoPacoteUnico(referenciaExterna));
 }
 
 /**
@@ -528,6 +695,7 @@ export function eventoEhNosso(referenciaExterna: string | null | undefined): boo
  * dois-pontos.
  */
 export function tenantDaReferencia(referenciaExterna: string): string {
+  if (ehDoPacoteUnico(referenciaExterna)) return referenciaExterna.slice(PREFIXO_PACOTE.length).split(":")[0];
   return referenciaExterna.slice(PREFIXO.length).split(":")[0];
 }
 
@@ -538,6 +706,7 @@ export function tenantDaReferencia(referenciaExterna: string): string {
  * mês (ou um ano, no anual) inteiro de serviço a partir daquele dia.
  */
 export function tipoDaReferencia(referenciaExterna: string): "assinatura" | "diferenca" {
+  if (ehDoPacoteUnico(referenciaExterna)) return "assinatura";
   return referenciaExterna.slice(PREFIXO.length).split(":")[1] === "diferenca" ? "diferenca" : "assinatura";
 }
 

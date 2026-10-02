@@ -1,0 +1,37 @@
+-- ============================================================================
+--  A CAPA DA PASTA ENVIADA COMO ARQUIVO
+-- ============================================================================
+--
+--  Pedido do Juan, 01/10/2026: "dificuldade em alterar a capa das pastas,
+--  fazer ser mais fácil, visível no começo da página, enviar uma nova foto ou
+--  escolher uma da galeria".
+--
+--  Escolher uma foto do capítulo já existia (`secoes.capa_media_id`, migração
+--  052). O que não existia era subir uma imagem que NÃO é da entrega — uma arte
+--  com o nome do capítulo, um frame tratado, um convite. Pelo caminho antigo o
+--  fotógrafo teria de subi-la como foto do capítulo, e ela apareceria no meio
+--  das fotos do casal.
+--
+--  Mesma forma da `galerias.capa_chave` (migração 029), e pela mesma razão:
+--  uma mídia "só capa" exigiria um filtro novo em todo lugar que lista foto, e
+--  esquecer um deles entrega ao casal uma imagem que nunca foi dele.
+--
+--    · o arquivo vai do navegador direto para o bucket com URL assinada;
+--    · a coluna guarda só a chave, e o link é assinado ao desenhar a página;
+--    · nulo é o estado normal — nada muda para quem não enviou nada.
+--
+--  QUEM VENCE QUEM, na leitura (`pastasNoDesign` e a galeria pública):
+--  arquivo enviado > foto escolhida > primeira foto do capítulo. É a mesma
+--  ordem da capa da galeria, para as duas telas não discordarem.
+--
+--  ── A PARTE QUE NÃO É SQL, E QUE QUASE CUSTOU CARO ────────────────────────
+--
+--  Coluna de chave nova tem de entrar em `chavesConhecidas`
+--  (`scripts/varrer-orfaos-regras.mjs`), senão `varrer-orfaos --apagar` lê o
+--  arquivo como órfão e o apaga de uma galeria no ar. Ao escrever esta migração
+--  descobriu-se que a `galerias.capa_chave` NUNCA esteve nessa lista — desde a
+--  029. As duas entraram juntas, com teste
+--  (`scripts/testar-chaves-conhecidas.mjs`).
+
+alter table secoes
+  add column if not exists capa_chave text;

@@ -223,6 +223,13 @@ await etapa("o operador tem CNPJ no formato certo, ou nenhum", async () => {
   if (OPERADOR.cnpj !== null && !/^\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}$/.test(OPERADOR.cnpj)) {
     throw new Error(`CNPJ fora do formato: ${OPERADOR.cnpj}`);
   }
+  if (OPERADOR.cnpj !== null) {
+    /* Dígito trocado num contrato é a parte errada no contrato. */
+    const { cnpjValido } = await import("../src/lib/documento.ts");
+    if (!cnpjValido(OPERADOR.cnpj.replace(/\D/g, ""))) {
+      throw new Error(`CNPJ com dígito verificador errado: ${OPERADOR.cnpj}`);
+    }
+  }
   for (const pagina of ["termos", "privacidade"]) {
     if (!ler(PAGINAS[pagina]).includes("operadorPorExtenso()")) {
       throw new Error(`/${pagina} escreve o operador à mão`);

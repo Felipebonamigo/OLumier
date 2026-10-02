@@ -1,0 +1,16 @@
+[Unit]
+Description=Olumier - enviar os e-mails da galeria que venceram hoje
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# TimeoutStartSec existe por causa de um prejuizo medido no Atomatiza: unidade
+# oneshot sem teto pode pendurar e deixar o sistema sem rodar a tarefa por
+# horas, sem nada acusando. Dez minutos sao de sobra para a fila de um dia -
+# o script manda no maximo 200 por rodada, e cada um e uma requisicao HTTP.
+TimeoutStartSec=600
+WorkingDirectory=/opt/fotonio
+ExecStart=/usr/local/bin/node --env-file=/opt/fotonio/.env.production \
+  --experimental-strip-types --import /opt/fotonio/scripts/registrar-ts.mjs \
+  /opt/fotonio/scripts/enviar-emails-da-galeria.mjs --aplicar

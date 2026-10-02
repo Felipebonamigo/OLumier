@@ -38,7 +38,7 @@ export function AvisoEmailPendente({ email, whatsapp }: { email: string; whatsap
     <div className="border-b border-acento/30 bg-acento/5">
       <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-3 text-sm sm:flex-row sm:items-center sm:gap-4">
         <p className="min-w-0 flex-1 leading-relaxed text-texto-soft">
-          <strong className="text-texto">Confirme seu e-mail para enviar fotos.</strong> Mandamos um
+          <strong className="text-texto">Confirme seu e-mail para enviar fotos e vídeos.</strong> Mandamos um
           link para <span className="break-all text-texto">{email}</span>. E-mail errado? Fale com a
           gente pelo WhatsApp <span className="whitespace-nowrap">{whatsapp}</span>.
         </p>

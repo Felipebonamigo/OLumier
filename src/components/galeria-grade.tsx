@@ -98,6 +98,17 @@ interface PropsGrade {
    * Sem fatia, a lista já é a inteira.
    */
   listaCompleta?: boolean;
+  /**
+   * Itens maiores nesta seção — hoje só o capítulo que é só vídeo e tem poucos
+   * (ver `VIDEOS_GRANDES_ATE` em `galeria-cliente.tsx`).
+   *
+   * Juan, 30/09/2026: "como são poucos vídeos, acho que podemos aumentar a
+   * visualização deles". Não é eixo de aparência: o fotógrafo não escolheu nada,
+   * e a grade dele continua a mesma — é a MESMA grade com a largura-alvo do
+   * degrau de cima, aplicada onde a densidade calibrada para cinquenta fotos
+   * desenhava três miniaturas e uma faixa de nada à direita.
+   */
+  maiores?: boolean;
 }
 
 /**
@@ -247,9 +258,22 @@ export function GaleriaGrade({
   render,
   proporcao,
   listaCompleta = true,
+  maiores = false,
 }: PropsGrade) {
-  const { gapPx: gap, minColunas, maxColunas } = DENSIDADES[aparencia.densidade];
-  const largura = LARGURA_DA_FOTO[aparencia.densidade];
+  const d = DENSIDADES[aparencia.densidade];
+  const gap = d.gapPx;
+  /*
+   * MAIORES: o dobro da largura-alvo e metade das colunas.
+   *
+   * As duas coisas juntas, e não só a largura: a largura-alvo é o que a conta
+   * usa para decidir quantas colunas cabem, então dobrá-la sozinha já abriria
+   * menos colunas — mas o TETO continuaria o da densidade, e numa tela larga a
+   * grade voltaria a enfileirar cinco. O piso vai a 1 porque um capítulo de um
+   * vídeo só tem de poder usar a fileira inteira.
+   */
+  const minColunas = maiores ? 1 : d.minColunas;
+  const maxColunas = maiores ? Math.max(1, Math.ceil(d.maxColunas / 2)) : d.maxColunas;
+  const largura = LARGURA_DA_FOTO[aparencia.densidade] * (maiores ? 2 : 1);
   const itens = Array.from({ length: quantidade }, (_, i) => i);
 
   /* "Colunas", "Panorama" e "Linhas" são o mesmo desenho — fileiras

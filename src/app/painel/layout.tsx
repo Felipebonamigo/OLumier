@@ -1,4 +1,6 @@
 import Link from "next/link";
+import type { Metadata } from "next";
+import { METADADOS_DO_APP } from "@/config/app-instalado";
 import { redirect } from "next/navigation";
 import { sessaoAtual } from "@/lib/auth";
 import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
@@ -14,6 +16,10 @@ import { AvisoEmailPendente } from "@/components/aviso-email-pendente";
 import { marca } from "@/config/marca";
 import { SeletorPlataforma } from "@/components/seletor-plataforma";
 import { JANELA_ATOMATIZA, JANELA_GALERIA, LINK_ATOMATIZA, usaOAtomatiza } from "@/lib/ponte-atomatiza";
+
+/* O painel é o app do fotógrafo: ícone da tela de início, manifesto e abrir
+   sem a barra do navegador. Ver `config/app-instalado.ts`. */
+export const metadata: Metadata = METADADOS_DO_APP;
 
 export default async function PainelLayout({ children }: { children: React.ReactNode }) {
   /*

@@ -44,8 +44,9 @@ export interface GaleriaPreparada {
   titulo: string;
   id: string | null;
   nova: boolean;
-  /** Nomes dos arquivos que já estão prontos nela — a fila pula estes. */
-  nomesNaGaleria: string[];
+  /** Nome e tamanho dos que já estão prontos nela — a fila pula estes
+      (mesma régua de `separarRepetidos`). */
+  arquivosNaGaleria: { nome: string; bytes: number }[];
   erro?: string;
 }
 
@@ -84,7 +85,7 @@ export async function prepararImportacaoAction(
     /* Uma resposta por pedido, SEMPRE, na mesma ordem: a tela casa a resposta
        com a galeria pela posição. Pular o pedido desalinharia todas as outras. */
     if (!titulo) {
-      galerias.push({ titulo, id: null, nova: false, nomesNaGaleria: [], erro: "sem nome" });
+      galerias.push({ titulo, id: null, nova: false, arquivosNaGaleria: [], erro: "sem nome" });
       continue;
     }
     const dataEvento = DATA.test(String(p.dataEvento ?? "")) ? String(p.dataEvento) : undefined;
@@ -97,7 +98,7 @@ export async function prepararImportacaoAction(
         [p.existenteId, tenantId],
       );
       if (!g) {
-        galerias.push({ titulo, id: null, nova: false, nomesNaGaleria: [], erro: "galeria não encontrada" });
+        galerias.push({ titulo, id: null, nova: false, arquivosNaGaleria: [], erro: "galeria não encontrada" });
         continue;
       }
       if (g.estado !== "online") {
@@ -105,16 +106,21 @@ export async function prepararImportacaoAction(
           titulo,
           id: g.id,
           nova: false,
-          nomesNaGaleria: [],
+          arquivosNaGaleria: [],
           erro: "está no cofre — reative antes de importar para ela",
         });
         continue;
       }
-      const nomes = await consultar<{ nome_original: string }>(
-        "select nome_original from medias where galeria_id = $1 and pronto",
+      const arquivos = await consultar<{ nome_original: string; bytes: string }>(
+        "select nome_original, bytes from medias where galeria_id = $1 and pronto",
         [g.id],
       );
-      galerias.push({ titulo, id: g.id, nova: false, nomesNaGaleria: nomes.map((n) => n.nome_original) });
+      galerias.push({
+        titulo,
+        id: g.id,
+        nova: false,
+        arquivosNaGaleria: arquivos.map((a) => ({ nome: a.nome_original, bytes: Number(a.bytes) })),
+      });
       continue;
     }
 
@@ -126,7 +132,7 @@ export async function prepararImportacaoAction(
         tenantId,
       ]).catch(() => {});
     }
-    galerias.push({ titulo, id: nova!.id, nova: true, nomesNaGaleria: [] });
+    galerias.push({ titulo, id: nova!.id, nova: true, arquivosNaGaleria: [] });
   }
 
   revalidatePath("/painel");

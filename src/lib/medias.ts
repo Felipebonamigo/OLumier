@@ -1,5 +1,7 @@
 import "server-only";
 import { consultar, consultarUm, emTransacao } from "./db";
+import { moverBloco, type DestinoDoBloco } from "./ordem-em-bloco";
+import { encaixarNaPasta, type ArquivoDaPasta, type LinhaDoCapitulo } from "./encaixe-da-pasta";
 
 export interface Media {
   id: string;
@@ -33,6 +35,8 @@ export interface Media {
    * ficam sempre no r2 — ver `lib/armazem.ts`, que é quem decide de onde ler.
    */
   armazem: string;
+  /** Sobe a cada republicação na mesma chave (migração 039). */
+  versao: number;
 }
 
 /** O que aceitamos subir. Fora desta lista, recusamos antes de gerar a URL. */
@@ -150,6 +154,12 @@ export async function criarMediaPendente(dados: {
    * é por isso que ele é opcional.
    */
   lote?: string | null;
+  /**
+   * Até que índice este lote vai — quantos arquivos o navegador já pôs na fila
+   * dele. É o que reserva a faixa inteira (migração 061): o lote seguinte
+   * começa depois dela. Ausente, a faixa cresce com o maior índice já visto.
+   */
+  ate?: number;
   /** DateTimeOriginal do EXIF. Ver migração 035. */
   tiradaEm?: Date | null;
   /**
@@ -214,16 +224,27 @@ export async function criarMediaPendente(dados: {
    *
    * O preço é um buraco na numeração quando um envio é abortado no meio. Não
    * custa nada: dentro do capítulo só a posição RELATIVA importa.
+   *
+   * ── E A BASE AINDA ANDAVA COM OUTRO ENVIO AO MESMO TEMPO (02/10/2026) ──
+   *
+   * Com lote, a base agora vem de `baseDoLote`: decidida uma vez e guardada
+   * (migração 061). A conta de cima, refeita a cada arquivo, só fica parada
+   * enquanto NINGUÉM MAIS envia para a galeria. Ver `baseDoLote`.
    */
-  const proxima = await consultarUm<{ n: number }>(
-    `select coalesce(max(ordem), -1) + 1 as n
-       from medias
-      where galeria_id = $1
-        and case when $2::uuid is null then pronto
-                 else lote is distinct from $2::uuid end`,
-    [dados.galeriaId, dados.lote ?? null],
-  );
-  const posicao = (proxima?.n ?? 0) + (dados.indice ?? 0);
+  const indice = dados.indice ?? 0;
+  let base: number;
+  if (dados.lote) {
+    base = await baseDoLote(dados.galeriaId, dados.lote, Math.max(dados.ate ?? 0, indice + 1));
+  } else {
+    const proxima = await consultarUm<{ n: number }>(
+      `select coalesce(max(ordem), -1) + 1 as n
+         from medias
+        where galeria_id = $1 and pronto`,
+      [dados.galeriaId],
+    );
+    base = proxima?.n ?? 0;
+  }
+  const posicao = base + indice;
 
   return consultarUm<Media>(
     `insert into medias (galeria_id, tenant_id, chave, chave_thumb, chave_preview,
@@ -251,6 +272,66 @@ export async function criarMediaPendente(dados: {
       dados.duracaoSeg ?? null,
     ],
   );
+}
+
+/**
+ * A BASE DA POSIÇÃO DE UM LOTE — decidida no primeiro arquivo, e guardada
+ * (migração 061).
+ *
+ * Equipe da Carol Tedesco, 02/10/2026: "na pasta do note tá em ordem, mas no
+ * link tá subindo desorganizado". A base era refeita a cada arquivo como "o
+ * maior `ordem` de fora deste lote". Com outro envio rodando na mesma galeria
+ * — outra aba, outro computador da equipe, o envio que parecia parado —, cada
+ * linha de um empurrava a base do outro, e o arquivo que pedia a vaga um
+ * instante depois do vizinho caía dezenas de posições à frente dele. Medido em
+ * `testar-ordem-do-envio`: 101 de 150 fora do lugar, com os dois envios em
+ * capítulos diferentes.
+ *
+ * Agora o primeiro arquivo reserva a faixa `[base, base + ate)` e os seguintes
+ * só a leem. O lote novo começa depois do maior `ordem` E depois da faixa dos
+ * lotes do último dia — então dois envios para o mesmo capítulo saem um
+ * inteiro depois do outro, e não intercalados.
+ *
+ * O caminho comum é um `update` pela chave primária. Só o primeiro arquivo de
+ * cada lote abre transação, e ela segura a galeria (trava consultiva) para
+ * dois lotes que começam no mesmo instante não lerem o mesmo máximo.
+ *
+ * "Reenviar as que falharam" mantém o lote, e por isso devolve cada arquivo à
+ * posição dele, mesmo depois de outro envio ter passado na frente.
+ */
+async function baseDoLote(galeriaId: string, lote: string, ate: number): Promise<number> {
+  const ja = await consultarUm<{ base: number }>(
+    `update lotes_de_envio set fim = greatest(fim, base + $3)
+      where galeria_id = $1 and lote = $2
+      returning base`,
+    [galeriaId, lote, ate],
+  );
+  if (ja) return ja.base;
+
+  return emTransacao(async (q) => {
+    await q("select pg_advisory_xact_lock(hashtext('lote-de-envio:' || $1::text))", [galeriaId]);
+    /* O `lote is distinct from` cobre o envio que começou ANTES desta
+       migração: as linhas dele já existem, sem faixa guardada. */
+    const [linha] = await q<{ base: number }>(
+      `insert into lotes_de_envio (galeria_id, lote, base, fim)
+       select $1, $2, b.n, b.n + $3
+         from (select greatest(
+                 (select coalesce(max(ordem), -1) + 1 from medias
+                   where galeria_id = $1 and lote is distinct from $2::uuid),
+                 (select coalesce(max(fim), 0) from lotes_de_envio
+                   where galeria_id = $1 and criado_em > now() - interval '1 day')
+               ) as n) b
+       on conflict (galeria_id, lote)
+         do update set fim = greatest(lotes_de_envio.fim, lotes_de_envio.base + $3)
+       returning base`,
+      [galeriaId, lote, ate],
+    );
+    await q(
+      "delete from lotes_de_envio where galeria_id = $1 and criado_em < now() - interval '7 days'",
+      [galeriaId],
+    );
+    return linha.base;
+  });
 }
 
 /** Anula as chaves de derivadas que não chegaram ao bucket — a grade cai no original. */
@@ -440,6 +521,114 @@ export async function moverMediaNaOrdem(
   return true;
 }
 
+/**
+ * MOVE VÁRIAS FOTOS DE UMA VEZ — o arrastar com várias marcadas e os botões
+ * "para o início" / "para o fim" da barra de seleção (01/10/2026).
+ *
+ * A regra de onde cada uma vai mora em `lib/ordem-em-bloco.ts`, a MESMA que a
+ * tela usa para a pré-visualização. Aqui fica o que é de banco:
+ *
+ *   - a ordem atual é lida inteira (uma consulta, só `id` e `ordem`), porque o
+ *     grupo pode vir de qualquer lugar da galeria;
+ *   - as casas são as que JÁ existem: quem vai para a k-ésima posição recebe o
+ *     k-ésimo valor de `ordem`. Os buracos que a lixeira deixou ficam onde
+ *     estão, e só muda de linha quem de fato mudou de lugar;
+ *   - ordem repetida (galeria antiga, anterior ao lote de 23/09) não tem
+ *     "k-ésima casa" que preserve o desempate, e aí a galeria é renumerada de
+ *     0 a n-1 uma vez — a ordem que a tela mostra é a que fica.
+ *
+ * Os ids vêm do navegador: o `where` por galeria e estúdio é o que impede
+ * mover foto de outra galeria, ou para dentro de uma que não é de quem pede.
+ */
+export async function moverBlocoNaOrdem(
+  galeriaId: string,
+  tenantId: string,
+  ids: string[],
+  destino: DestinoDoBloco,
+): Promise<boolean> {
+  /* Mesmo desempate da grade (`ordem, criado_em`): é a ordem que a pessoa vê. */
+  const linhas = await consultar<{ id: string; ordem: number }>(
+    `select id, ordem from medias
+      where galeria_id = $1 and tenant_id = $2
+      order by ordem, criado_em, id`,
+    [galeriaId, tenantId],
+  );
+  const atual = linhas.map((l) => l.id);
+  const daqui = new Set(atual);
+  const bloco = ids.filter((id) => daqui.has(id));
+  if (bloco.length === 0) return false;
+  if (destino !== "inicio" && destino !== "fim" && !daqui.has(destino)) return false;
+
+  const nova = moverBloco(atual, bloco, destino);
+  if (nova.join() === atual.join()) return false;
+
+  const casas = linhas.map((l) => l.ordem);
+  const semRepetida = casas.every((c, i) => i === 0 || c > casas[i - 1]);
+  const casaDe = semRepetida ? (k: number) => casas[k] : (k: number) => k;
+  const ordemAntes = new Map(linhas.map((l) => [l.id, l.ordem]));
+  const mudou = nova
+    .map((id, k) => ({ id, ordem: casaDe(k) }))
+    .filter((x) => ordemAntes.get(x.id) !== x.ordem);
+  if (mudou.length === 0) return false;
+
+  await emTransacao(async (consultarNaTransacao) => {
+    await consultarNaTransacao(
+      `update medias m set ordem = v.ordem
+         from unnest($3::uuid[], $4::int[]) as v(id, ordem)
+        where m.id = v.id and m.galeria_id = $1 and m.tenant_id = $2`,
+      [galeriaId, tenantId, mudou.map((x) => x.id), mudou.map((x) => x.ordem)],
+    );
+  });
+  return true;
+}
+
+/**
+ * NO FIM DE UM ENVIO QUE PULOU AS QUE JÁ ESTAVAM LÁ, a pasta volta a ficar na
+ * ordem dela — capítulo por capítulo. A regra mora em `lib/encaixe-da-pasta.ts`;
+ * aqui é o que é de banco: ler a galeria uma vez e gravar numa instrução só.
+ *
+ * Só as prontas: a pendente ainda pode desistir, e quem desiste não deve ter
+ * empurrado ninguém. Devolve quantas mudaram de lugar.
+ */
+export async function encaixarNaOrdemDaPasta(
+  galeriaId: string,
+  tenantId: string,
+  lote: string,
+  pasta: ArquivoDaPasta[],
+): Promise<number> {
+  const linhas = await consultar<{
+    id: string;
+    secao_id: string | null;
+    nome_original: string;
+    bytes: string;
+    ordem: number;
+    do_envio: boolean;
+  }>(
+    `select id, secao_id, nome_original, bytes, ordem, coalesce(lote = $3::uuid, false) as do_envio
+       from medias
+      where galeria_id = $1 and tenant_id = $2 and pronto
+      order by ordem, criado_em, id`,
+    [galeriaId, tenantId, lote],
+  );
+  const porCapitulo = new Map<string, LinhaDoCapitulo[]>();
+  for (const l of linhas) {
+    const k = l.secao_id ?? "";
+    let doCapitulo = porCapitulo.get(k);
+    if (!doCapitulo) porCapitulo.set(k, (doCapitulo = []));
+    doCapitulo.push({ id: l.id, nome: l.nome_original, bytes: Number(l.bytes), ordem: l.ordem, doEnvio: l.do_envio });
+  }
+  const mudou = [...porCapitulo.values()].flatMap((doCapitulo) => encaixarNaPasta(doCapitulo, pasta));
+  if (mudou.length === 0) return 0;
+
+  await consultar(
+    `update medias m set ordem = v.ordem
+       from unnest($3::uuid[], $4::int[]) as v(id, ordem)
+      where m.id = v.id and m.galeria_id = $1 and m.tenant_id = $2`,
+    [galeriaId, tenantId, mudou.map((x) => x.id), mudou.map((x) => x.ordem)],
+  );
+  return mudou.length;
+}
+
 export async function apagarTodasAsMedias(
   galeriaId: string,
   tenantId: string,
@@ -531,6 +720,34 @@ export async function definirMiniatura(
       where id = $1 and tenant_id = $2 and tipo = 'video'
       returning id`,
     [mediaId, tenantId, chaveThumb, largura ?? null, altura ?? null, duracaoSeg ?? null],
+  );
+  return linhas.length > 0;
+}
+
+/**
+ * O nome do vídeo na tela do Stream (migração 055).
+ *
+ * Juan, 30/09/2026: "adicionar possibilidade de trocar o nome do arquivo que
+ * aparece na visualização". É só o nome de EXIBIÇÃO: o download continua
+ * chegando com `nome_original`.
+ *
+ * Texto vazio devolve o vídeo à regra de sempre (o título tirado do arquivo) —
+ * apagar o campo é o jeito natural de desfazer, e gravar "" seria um título
+ * invisível. Só vídeo, pela mesma razão de `definirMiniatura`: a trava mora no
+ * `where`, e não em quem chama.
+ */
+export async function definirTituloDoVideo(
+  galeriaId: string,
+  tenantId: string,
+  mediaId: string,
+  titulo: string,
+): Promise<boolean> {
+  const limpo = titulo.replace(/\s+/g, " ").trim().slice(0, 120);
+  const linhas = await consultar<{ id: string }>(
+    `update medias set titulo = $4
+      where id = $1 and galeria_id = $2 and tenant_id = $3 and tipo = 'video'
+      returning id`,
+    [mediaId, galeriaId, tenantId, limpo || null],
   );
   return linhas.length > 0;
 }

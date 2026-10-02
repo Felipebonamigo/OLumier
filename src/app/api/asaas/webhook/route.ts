@@ -5,6 +5,7 @@ import { eventoEhNosso, tenantDaReferencia, tipoDaReferencia } from "@/lib/asaas
 import { efeitoDoEvento, pagoAteDepoisDoAviso, type DatasDaCobranca } from "@/lib/assinatura";
 import { PREFIXO_ATOMATIZA, PREFIXO_DIFERENCA_ATOMATIZA } from "@/config/combo";
 import { recalcularCombo, recalcularComboDoCliente } from "@/lib/combo";
+import { avisarPagamento } from "@/lib/aviso-de-pagamento";
 import { aplicarEventoDaDiferenca } from "@/lib/troca-de-plano";
 import { marcarDevolucaoFeita } from "@/lib/devolucao";
 
@@ -183,11 +184,19 @@ export async function POST(request: NextRequest) {
     );
     // Cada pagamento nosso também confere o combo. É a rede de segurança: se um
     // aviso do Atomatiza se perdeu, o preço se acerta a cada ciclo.
-    after(() =>
-      recalcularCombo(tenantId, evento).catch((erro) =>
+    /* Primeiro o combo, depois o e-mail: o aviso mostra o valor já acertado.
+       E o e-mail sai mesmo se o combo falhar — ele diz que não conferiu. Ver
+       `lib/aviso-de-pagamento.ts`. `pago_ate` nulo antes deste aviso = é o
+       primeiro pagamento do estúdio. */
+    const primeiro = !tenant.pago_ate;
+    after(async () => {
+      await recalcularCombo(tenantId, evento).catch((erro) =>
         console.error(`[combo] ${evento} do estúdio ${tenantId}:`, erro),
-      ),
-    );
+      );
+      await avisarPagamento(tenantId, { valor: corpo.payment?.value ?? null, evento, primeiro }).catch((erro) =>
+        console.error(`[aviso-de-pagamento] ${evento} do estúdio ${tenantId}:`, erro),
+      );
+    });
   } else if (efeito === "atrasou") {
     /*
      * Inadimplente NÃO derruba as galerias no ato: o cliente final do fotógrafo

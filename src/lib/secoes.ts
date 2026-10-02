@@ -27,6 +27,8 @@ export interface Secao {
   total?: number;
   /** A foto de frente da pasta (migração 052). Null = a primeira do capítulo. */
   capa_media_id?: string | null;
+  /** Capa enviada como arquivo (migração 057). Vence `capa_media_id`. */
+  capa_chave?: string | null;
 }
 
 /**
@@ -74,16 +76,44 @@ export async function definirCapaDaPasta(
   galeriaId: string,
   tenantId: string,
   mediaId: string,
-): Promise<boolean> {
-  const linhas = await consultar(
-    `update secoes s set capa_media_id = m.id
+): Promise<{ ok: boolean; chaveAntiga: string | null }> {
+  /*
+   * ── ESCOLHER UMA FOTO TIRA A IMAGEM ENVIADA (02/10/2026) ────────────────
+   *
+   * A migração 057 estabeleceu que arquivo enviado VENCE a foto escolhida, e os
+   * dois lugares que desenham obedecem. Só que esta função gravava
+   * `capa_media_id` e deixava `capa_chave` de pé — então, depois de um envio,
+   * clicar numa foto do capítulo não mudava NADA na tela e a ação respondia
+   * "ok". O botão existia e mentia.
+   *
+   * Escolher uma foto é dizer "quero esta", então o arquivo sai: a coluna é
+   * zerada e a chave antiga volta para quem chamou poder apagar o objeto. Ler
+   * antes de zerar é a única hora em que dá para saber qual arquivo ficou sem
+   * dono.
+   */
+  /* A chave ANTES de zerar. Subconsulta dentro do RETURNING leria a tabela no
+     mesmo snapshot da instrução, e "antes ou depois" ali é sutil demais para o
+     caminho que decide se um arquivo pago vai embora. */
+  const antes = await consultarUm<{ capa_chave: string | null }>(
+    `select s.capa_chave
+       from secoes s
+       join medias m on m.secao_id = s.id
+      where m.id = $1 and m.galeria_id = $2 and m.tenant_id = $3`,
+    [mediaId, galeriaId, tenantId],
+  );
+  const linhas = await consultar<{ id: string }>(
+    `update secoes s
+        set capa_media_id = m.id, capa_chave = null
        from medias m
       where m.id = $1 and m.galeria_id = $2 and m.tenant_id = $3
         and s.id = m.secao_id and s.galeria_id = m.galeria_id
       returning s.id`,
     [mediaId, galeriaId, tenantId],
   );
-  return linhas.length > 0;
+  return {
+    ok: linhas.length > 0,
+    chaveAntiga: linhas.length > 0 ? (antes?.capa_chave ?? null) : null,
+  };
 }
 
 /** Confere que a galeria é do tenant antes de qualquer escrita em seção. */
@@ -395,13 +425,36 @@ export async function ordenarFotosDaSecao(
 }
 
 /** Apaga o capítulo; as fotos ficam (viram "sem capítulo") pelo on delete set null. */
+/**
+ * A CAPA ENVIADA SAI DO BUCKET COM O CAPÍTULO (migração 057).
+ *
+ * As fotos não são apagadas quando um capítulo morre — `medias.secao_id` é
+ * `on delete set null` e elas voltam para "sem capítulo". A capa enviada como
+ * arquivo não tem para onde voltar: ou sai aqui, ou fica paga para sempre, e
+ * desde 02/10/2026 a varredura a reconhece como tendo dono, então ela NÃO é
+ * recolhida depois.
+ *
+ * O `returning` é o que torna isso possível: depois do delete não existe mais
+ * de onde ler a chave.
+ */
+async function apagarCapasEnviadas(chaves: (string | null)[]) {
+  const reais = chaves.filter((c): c is string => Boolean(c));
+  if (reais.length === 0) return;
+  const { apagarObjetos } = await import("./r2");
+  await apagarObjetos(reais).catch((e) =>
+    console.error("[secoes] capas de capítulo podem ter ficado no bucket:", e),
+  );
+}
+
 export async function apagarSecao(secaoId: string, tenantId: string) {
-  await consultar(
+  const apagadas = await consultar<{ capa_chave: string | null }>(
     `delete from secoes s
       using galerias g
-      where s.id = $1 and s.galeria_id = g.id and g.tenant_id = $2`,
+      where s.id = $1 and s.galeria_id = g.id and g.tenant_id = $2
+      returning s.capa_chave`,
     [secaoId, tenantId],
   );
+  await apagarCapasEnviadas(apagadas.map((a) => a.capa_chave));
 }
 
 /**
@@ -430,13 +483,14 @@ export async function apagarSecao(secaoId: string, tenantId: string) {
  * não é apagado.
  */
 export async function apagarTodasAsSecoes(galeriaId: string, tenantId: string): Promise<number> {
-  const apagadas = await consultar<{ id: string }>(
+  const apagadas = await consultar<{ id: string; capa_chave: string | null }>(
     `delete from secoes s
       using galerias g
       where s.galeria_id = $1 and s.galeria_id = g.id and g.tenant_id = $2
-      returning s.id`,
+      returning s.id, s.capa_chave`,
     [galeriaId, tenantId],
   );
+  await apagarCapasEnviadas(apagadas.map((a) => a.capa_chave));
   return apagadas.length;
 }
 

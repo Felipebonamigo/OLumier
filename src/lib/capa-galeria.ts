@@ -146,8 +146,17 @@ export async function definirCapaPorMedia(
             atualizado_em = now()
       where g.id = $2 and g.tenant_id = $3
         and exists (
+          /*
+           * FOTO, ou FILME COM PÔSTER (02/10/2026).
+           *
+           * Juan pediu capa de vídeo; Felipe cortou para "só a capa principal".
+           * O "chave_thumb is not null" não é detalhe: vídeo sem pôster não tem
+           * imagem nenhuma, e deixá-lo passar faria a capa apontar para o .mp4.
+           * Ver lib/capa-publica.ts, que desenha a mesma regra do outro lado.
+           */
           select 1 from medias m
-           where m.id = $1 and m.galeria_id = g.id and m.tipo = 'foto'
+           where m.id = $1 and m.galeria_id = g.id
+             and (m.tipo = 'foto' or (m.tipo = 'video' and m.chave_thumb is not null))
         )
       returning g.id`,
     [mediaId, galeriaId, tenantId],

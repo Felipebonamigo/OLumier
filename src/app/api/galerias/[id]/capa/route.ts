@@ -163,3 +163,4 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   revalidatePath(`/painel/galerias/${id}/design`);
   return NextResponse.json({ ok: true });
 }
+

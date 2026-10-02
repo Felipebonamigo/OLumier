@@ -30,8 +30,8 @@
  * selecionado. Isso aqui não alcança, e dizer que alcança seria pior que não
  * ter o teste.
  *
- * Da grade pequena o que dá para prender é a FORMA no HTML: as colunas e o
- * `content-visibility`. Os números vieram do navegador, com os 4.577 dele:
+ * Da grade pequena o que dá para prender é a FORMA no HTML: as colunas e a
+ * janela (desde 01/10/2026; antes era o `content-visibility`). Os números vieram do navegador, com os 4.577 dele:
  * ladrilho de 236×295 para 116×145, página de 370.051 px para 102.173, e a
  * rolagem de 57,1 ms por quadro (148 de 149 quadros abaixo de 30 fps) para
  * 27,3 ms (43 de 149).
@@ -144,7 +144,7 @@ console.log("\nA grade de contato:\n");
 const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
-await etapa("a grade é de contato, e pula o que está fora da tela", async () => {
+await etapa("a grade é de contato, e só desenha o que está perto da tela", async () => {
   const g = await galeriaDaRodada(db, { nome: "grade-contato", medias: 6, publicada: true });
   const html = await (
     await fetch(`${BASE}/painel/galerias/${g.id}/fotos`, {
@@ -168,19 +168,22 @@ await etapa("a grade é de contato, e pula o que está fora da tela", async () =
     );
   }
 
-  /* `<li[^>]*class=`, e não `<li class=`: o que se prende é o ladrilho TER
-     `content-visibility`, não a classe ser o primeiro atributo dele. Em
-     28/09/2026 o `draggable` do arrastar passou na frente e este teste ficou
-     vermelho sem que a propriedade medida tivesse mudado. */
-  const li = html.match(/<li[^>]*class="[^"]*content-visibility[^"]*"/)?.[0];
-  if (!li) {
-    throw new Error(
-      "os ladrilhos perderam o `content-visibility` — com 4.577 fotos a rolagem volta" +
-        " de 27 ms para 57 ms por quadro, que é o 'lagzinho' do relato",
-    );
-  }
-  if (!/contain-intrinsic-size/.test(li)) {
-    throw new Error("sem `contain-intrinsic-size` a barra de rolagem dança enquanto se rola");
+  /* ATÉ 01/10/2026 o que se prendia aqui era o `content-visibility` em cada
+     ladrilho — o remédio de quando a grade desenhava a galeria inteira. Com
+     3.300 fotos no Safari nem ele bastou, e a grade virou uma JANELA: só o que
+     está perto da tela é desenhado. O que se prende agora é ela — numa
+     galeria de 300, o HTML não traz 300 ladrilhos. */
+  const grande = await galeriaDaRodada(db, { nome: "grade-janela", medias: 300, publicada: true });
+  const htmlGrande = await (
+    await fetch(`${BASE}/painel/galerias/${grande.id}/fotos`, {
+      headers: { cookie: cookieDeSessao(grande.tenant_id) },
+      cache: "no-store",
+    })
+  ).text();
+  const desenhados = (htmlGrande.match(/<li[^>]*data-ladrilho/g) ?? []).length;
+  if (desenhados === 0) throw new Error("a grade grande não desenhou ladrilho nenhum");
+  if (desenhados >= 300) {
+    throw new Error(`a grade desenhou os ${desenhados} — voltou a pôr a galeria inteira na página`);
   }
 
   /* O gesto tem de estar ESCRITO: ninguém tenta um atalho que a tela não
@@ -189,7 +192,7 @@ await etapa("a grade é de contato, e pula o que está fora da tela", async () =
     throw new Error("a tela não conta que dá para marcar um trecho com Shift");
   }
 
-  return `${colunas} colunas, ladrilhos contidos, gesto anunciado`;
+  return `${colunas} colunas, ${desenhados} de 300 desenhados, gesto anunciado`;
 });
 
 await limparRodada(db);

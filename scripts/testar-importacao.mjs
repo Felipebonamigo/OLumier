@@ -178,6 +178,23 @@ await etapa("as partes de uma coleção viram UMA galeria", () => {
   igual(imp.nomeDoZip("Ana e Pedro_part1.zip"), "Ana e Pedro", "_part1");
   igual(imp.nomeDoZip("Ana e Pedro (2).zip"), "Ana e Pedro", "(2)");
   igual(imp.nomeDoZip("Ensaio-2.zip"), "Ensaio-2", "o -2 solto fica");
+  /* Pixieset, 01/10/2026: três partes de uma galeria só, e fotos e vídeos em ZIPs separados. */
+  igual(imp.nomeDoZip("miristraidecor-photo-download-1of3.zip"), "miristraidecor", "pixieset 1of3");
+  igual(imp.nomeDoZip("miristraidecor-photo-download-3of3.zip"), "miristraidecor", "pixieset 3of3");
+  igual(imp.nomeDoZip("miristraidecor-video-download.zip"), "miristraidecor", "pixieset vídeo");
+  igual(imp.nomeDoZip("Ana e Pedro 2 de 3.zip"), "Ana e Pedro", "n de m sem part");
+  igual(imp.nomeDoZip("Casamento 2019.zip"), "Casamento 2019", "ano no fim fica");
+  igual(imp.nomeDoZip("Festa 15 de 2025.zip"), "Festa 15 de 2025", "dia de ano não é parte");
+
+  const px = ["1of3", "2of3", "3of3"].map((n, k) =>
+    imp.fonteDoZip(`miristraidecor-photo-download-${n}.zip`, [doZip(`IMG_${k}.jpg`, 3)], k),
+  );
+  const pxv = imp.fonteDoZip("miristraidecor-video-download.zip", [doZip("filme.mp4", 9)], 3);
+  const juntas = imp.montarGalerias(
+    [...px, pxv].map((fonte) => ({ fonte, titulo: fonte.nomeSugerido, data: "", incluir: true })),
+  );
+  igual(juntas.length, 1, "as três partes e o vídeo do pixieset numa galeria");
+  igual(juntas[0].itens.length, 4, "arquivos das quatro partes");
 
   const p1 = imp.fonteDoZip("Ana e Pedro - Part 1.zip", [doZip("Ceremony/a.jpg", 5)], 0);
   const p2 = imp.fonteDoZip("Ana e Pedro - Part 2.zip", [doZip("Party/b.jpg", 7)], 1);
@@ -222,15 +239,25 @@ await etapa("mesmo nome sem acento e sem caixa é a mesma galeria existente", ()
   igual(achada?.id, "1", "existente");
 });
 
-/* ── o login do Pixieset, só para contas apontadas ────────────────────── */
+/* ── o login das outras plataformas, só para contas apontadas ─────────── */
 
-await etapa("login do Pixieset: ninguém por padrão, só a conta liberada no admin", async () => {
-  const px = await import("../src/config/pixieset.ts");
-  if (px.loginDoPixiesetLiberado({ pixieset_liberado_em: null })) throw new Error("liberou com nulo");
-  if (px.loginDoPixiesetLiberado({})) throw new Error("liberou sem a coluna");
-  if (!px.loginDoPixiesetLiberado({ pixieset_liberado_em: new Date() })) throw new Error("não reconheceu a liberada");
-  /* A segunda trava: sem conector, nem conta liberada vê o formulário aceso. */
-  if (px.CONECTOR_PIXIESET_PRONTO) throw new Error("conector marcado como pronto sem existir");
+await etapa("login de outra plataforma: ninguém por padrão, e cada uma na sua coluna", async () => {
+  const px = await import("../src/config/plataformas-de-origem.ts");
+  igual(px.PLATAFORMAS.map((p) => p.id), ["pixieset", "pixellu"], "plataformas");
+  for (const p of px.PLATAFORMAS) {
+    if (px.loginLiberado({ [p.coluna]: null }, p.id)) throw new Error(`${p.nome}: liberou com nulo`);
+    if (px.loginLiberado({}, p.id)) throw new Error(`${p.nome}: liberou sem a coluna`);
+    if (!px.loginLiberado({ [p.coluna]: new Date() }, p.id)) throw new Error(`${p.nome}: não reconheceu`);
+    /* A segunda trava: sem conector, nem conta liberada vê o formulário aceso. */
+    if (p.conectorPronto) throw new Error(`${p.nome}: conector marcado como pronto sem existir`);
+  }
+  /* Liberar uma não libera a outra. */
+  if (px.loginLiberado({ pixieset_liberado_em: new Date() }, "pixellu")) {
+    throw new Error("o Pixieset liberado abriu o Pixellu");
+  }
+  if (px.plataformaPorId("dropbox") || px.plataformaPorId("pixieset_liberado_em")) {
+    throw new Error("aceitou plataforma fora da lista");
+  }
 });
 
 console.log(falhou ? "\nFALHOU" : "\nOK");

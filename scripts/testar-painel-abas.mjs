@@ -52,13 +52,14 @@ const igual = (a, b, o) => {
   if (a !== b) throw new Error(`${o}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 
-const ABAS = ["fotos", "design", "entrega", "atividade"];
+const ABAS = ["fotos", "design", "entrega", "recados", "atividade"];
 
 /** O que só pode aparecer na aba certa — um pedaço de texto de cada seção. */
 const MARCA_DA_ABA = {
   fotos: "Arraste a pasta do casamento aqui",
   design: "Aparência da galeria",
   entrega: "Entrega ao cliente",
+  recados: "Pedir recado nesta galeria",
   atividade: "Acessos do cliente",
 };
 
@@ -95,7 +96,7 @@ await etapa("o endereço antigo da galeria continua abrindo, e cai em Fotos", as
   return `${r.status} → /fotos`;
 });
 
-await etapa("as quatro abas abrem", async () => {
+await etapa("todas as abas abrem", async () => {
   for (const aba of ABAS) {
     const r = await pegar(`/painel/galerias/${g.id}/${aba}`);
     igual(r.status, 200, `aba ${aba}`);
@@ -103,7 +104,7 @@ await etapa("as quatro abas abrem", async () => {
   return ABAS.join(", ");
 });
 
-await etapa("o menu lateral aparece em todas, com as quatro entradas", async () => {
+await etapa("o menu lateral aparece em todas, com uma entrada por aba", async () => {
   for (const aba of ABAS) {
     const html = await (await pegar(`/painel/galerias/${g.id}/${aba}`)).text();
     for (const outra of ABAS) {
@@ -114,7 +115,7 @@ await etapa("o menu lateral aparece em todas, com as quatro entradas", async () 
   }
 });
 
-await etapa('"Ver como o cliente vê" aparece nas quatro abas, e abre a prévia do dono', async () => {
+await etapa('"Ver como o cliente vê" aparece em todas as abas, e abre a prévia do dono', async () => {
   /*
    * O botão existia e era o problema: morava dentro do editor de aparência,
    * atrás de um rótulo pequeno. O sócio pediu "um botão de visualização mais
@@ -134,7 +135,7 @@ await etapa('"Ver como o cliente vê" aparece nas quatro abas, e abre a prévia 
   return esperado;
 });
 
-await etapa("publicar está no cabeçalho, nas quatro abas", async () => {
+await etapa("publicar está no cabeçalho, em todas as abas", async () => {
   /* Juan: "não achei onde publica a galeria… achei, na sessão de entrega. Mas
      seria ótimo se tivesse lá em cima, em 'rascunho', pra publicar independente
      de qual página estivesse." A bancada nasce publicada; para ver o botão é

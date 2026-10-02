@@ -172,7 +172,7 @@ export function ImportarGalerias({
         resultado.push({ titulo: p.titulo, id: p.id, nova: p.nova, enviados: 0, pulados: 0, erro: p.erro });
         continue;
       }
-      const { novos, repetidos } = separarRepetidos(g.itens, p.nomesNaGaleria);
+      const { novos, repetidos } = separarRepetidos(g.itens, p.arquivosNaGaleria);
       if (novos.length > 0) await envio.enfileirar(novos, { galeriaId: p.id, rostosAtivos: false });
       resultado.push({
         titulo: p.titulo,

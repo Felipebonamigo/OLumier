@@ -27,23 +27,18 @@ import {
   tornarEstiloPadrao,
   type EstiloDoEstudio,
 } from "@/lib/estilos-do-estudio";
-import type { Aparencia } from "@/config/aparencia";
-import { descricaoDaAssinatura, precoDoCicloComComboCentavos, descontoDaGaleriaCentavos } from "@/config/combo";
-import { faixaDoAtomatiza } from "@/lib/combo";
-import { cotarTroca, trocarPlano } from "@/lib/troca-de-plano";
+import { aparenciaComFormato, type Aparencia } from "@/config/aparencia";
+import { formatosLiberadosPara } from "@/lib/acesso-formatos";
+import { assinarTenant, escolherPlanoAntesDeAssinar } from "@/lib/assinar";
+import { assinarPacote, acrescentarAtomatiza } from "@/lib/pacote";
+import { ehFaixaAtomatiza } from "@/config/combo";
+import { cotarTroca, trocarPlano, RECADO_DO_PACOTE } from "@/lib/troca-de-plano";
 import { PRAZOS } from "@/config/prazos";
 import { marca } from "@/config/marca";
 import { planoPorId, cicloDe, formatarReais } from "@/config/planos";
 import { formaDaAssinatura } from "@/config/forma-assinatura";
 import { buscarTenantPorId } from "@/lib/tenants";
-import {
-  asaasConfigurado,
-  garantirCliente,
-  criarAssinatura,
-  cancelarAssinatura,
-} from "@/lib/asaas";
-import { conferirDocumento, soDigitos } from "@/lib/documento";
-import { documentoEmUso } from "@/lib/cadastro";
+import { cancelarAssinatura } from "@/lib/asaas";
 import { enviarConfirmacao } from "@/lib/confirmacao-email";
 import { situacaoDoTenant } from "@/lib/assinatura";
 import { anotarDevolucao, cotarCancelamento, PRAZO_DA_DEVOLUCAO } from "@/lib/devolucao";
@@ -74,6 +69,8 @@ import {
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
 import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
+import { fotosDaPasta, type FotoDaPasta } from "@/lib/entrega-no-design";
+import { definirTituloDoVideo } from "@/lib/medias";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -128,10 +125,17 @@ export async function criarGaleriaAction(
    */
   /* Um estilo salvo do estúdio (até cinco, desde 28/09/2026) entra na mesma
      fila, entre o pronto e o padrão — ver `aparenciaInicialDaGaleria`. */
-  const aparenciaInicial = await aparenciaInicialDaGaleria(
-    tenantId,
-    String(form.get("preset") ?? ""),
-    String(form.get("estilo") ?? ""),
+  /* E o formato (galeria, pastas, stream), escolhido na mesma etapa, por
+     cima do estilo — ver `aparenciaComFormato`. */
+  const aparenciaInicial = aparenciaComFormato(
+    await aparenciaInicialDaGaleria(
+      tenantId,
+      String(form.get("preset") ?? ""),
+      String(form.get("estilo") ?? ""),
+    ),
+    /* Quem não tem Pastas e Stream liberados não escolhe formato — o campo
+       nem aparece, e o formulário é um endpoint. Ver `acesso-formatos`. */
+    (await formatosLiberadosPara(tenantId)) ? String(form.get("formato") ?? "") : "",
   );
   if (aparenciaInicial) {
     await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
@@ -233,6 +237,157 @@ export async function salvarPublicacaoAction(form: FormData) {
   if (publicada !== null) await avisarEntrega(galeriaId);
 
   revalidatePath(`/painel/galerias/${galeriaId}`);
+}
+
+/**
+ * OS E-MAILS DA GALERIA (migração 059) — configuração, fila e cancelamento.
+ *
+ * Nenhuma destas três manda e-mail. Elas gravam a INTENÇÃO; quem manda é o
+ * script diário (`scripts/enviar-emails-da-galeria.mjs`). A separação é o que
+ * torna o reenvio impossível e o que permite ao fotógrafo ver a fila antes de
+ * qualquer coisa chegar na caixa do casal.
+ */
+export async function salvarEmailConfigAction(form: FormData): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  const { lerTemplate } = await import("@/config/email-da-galeria");
+  const lembretes = form.get("lembretes") === "1";
+  const template = lerTemplate(String(form.get("template") ?? ""));
+  const mensagem = String(form.get("mensagem") ?? "").trim().slice(0, 600) || null;
+
+  await consultar(
+    `update galerias
+        set email_lembretes = $1, email_template = $2, email_mensagem = $3, atualizado_em = now()
+      where id = $4 and tenant_id = $5`,
+    [lembretes, template, mensagem, galeriaId, tenantId],
+  );
+
+  /*
+   * DESLIGAR OS LEMBRETES TIRA O QUE AINDA NÃO SAIU.
+   *
+   * Sem isto, desligar a chave não desligaria nada: a fila já estava gravada, e
+   * o script diário continuaria mandando "faz seis meses" para quem o fotógrafo
+   * acabou de dizer que não quer mais incomodar. O e-mail já enviado fica — ele
+   * não se desfaz, e tirar a linha dele faria a tela mentir sobre o que o casal
+   * recebeu.
+   */
+  if (!lembretes) {
+    const { cancelarPendentes } = await import("@/lib/emails-da-galeria");
+    await cancelarPendentes(galeriaId, tenantId, [
+      "dia_do_evento",
+      "feedback",
+      "relembrar",
+      "um_ano",
+    ]);
+  }
+
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return {};
+}
+
+/**
+ * Põe a entrega (e os lembretes, se ligados) na fila.
+ *
+ * O campo é texto livre, uma linha por pessoa, porque é assim que o fotógrafo
+ * tem os endereços: copiados do WhatsApp ou do contrato. Aceita
+ * `Ana <ana@exemplo.com>` para o e-mail poder dizer "Oi, Ana" — o formato que
+ * todo cliente de e-mail do mundo já usa, em vez de dois campos por pessoa.
+ */
+export async function agendarEmailsAction(
+  form: FormData,
+): Promise<{ agendados: number; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { agendados: 0, erro: "Galeria não identificada." };
+
+  const { agendarEmails } = await import("@/lib/emails-da-galeria");
+  const destinatarios = String(form.get("destinatarios") ?? "")
+    .split(/[\n,;]+/)
+    .map((linha) => linha.trim())
+    .filter(Boolean)
+    .map((linha) => {
+      const comNome = linha.match(/^(.*?)<([^>]+)>$/);
+      return comNome
+        ? { nome: comNome[1].trim().replace(/^"|"$/g, "") || null, email: comNome[2].trim() }
+        : { nome: null, email: linha };
+    });
+
+  if (destinatarios.length === 0) {
+    return { agendados: 0, erro: "Escreva pelo menos um e-mail." };
+  }
+
+  const r = await agendarEmails(galeriaId, tenantId, destinatarios);
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return r;
+}
+
+/** Cancela tudo o que ainda não saiu desta galeria. O enviado fica. */
+export async function cancelarEmailsAction(
+  form: FormData,
+): Promise<{ cancelados: number; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { cancelados: 0, erro: "Galeria não identificada." };
+
+  const { cancelarPendentes } = await import("@/lib/emails-da-galeria");
+  const cancelados = await cancelarPendentes(galeriaId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return { cancelados };
+}
+
+/**
+ * A CONFIGURAÇÃO DO RECADO DO CLIENTE (migração 058).
+ *
+ * Fica fora de `salvarPublicacaoAction` porque não é controle de entrega: é o
+ * que a aba Recados monta. E fica fora da APARÊNCIA pelos três motivos da
+ * migração — aparência tem rascunho (o fotógrafo editaria o convite, não
+ * publicaria, e o casal leria o texto velho), vira padrão do estúdio e vira
+ * preset. Decisão de coletar dado pessoal não anda de carona num botão de
+ * salvar visual.
+ *
+ * Devolve `{ erro }` pela mesma razão de `salvarAparenciaAction`: grava sozinha,
+ * e quem salva sozinho tem de avisar quando não conseguiu.
+ */
+export async function salvarRecadoConfigAction(form: FormData): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  const { lerPerguntas, TETO_DO_CONVITE } = await import("@/lib/recados");
+
+  let perguntas: string[] = [];
+  try {
+    perguntas = lerPerguntas(JSON.parse(String(form.get("perguntas") ?? "[]")));
+  } catch {
+    return { erro: "Não entendi a lista de perguntas." };
+  }
+
+  const ativo = form.get("ativo") === "1";
+  const estrelas = form.get("estrelas") === "1";
+  /*
+   * O ESTADO INVÁLIDO QUE A TELA NÃO PODE GRAVAR EM SILÊNCIO: estrelas ligadas
+   * sem pergunta nenhuma montada é um formulário vazio na entrega de um
+   * casamento. Avisa em vez de gravar — o fotógrafo ligaria num sábado e
+   * descobriria na segunda que não pedia nada.
+   */
+  if (estrelas && perguntas.length === 0) {
+    return { erro: "Escreva pelo menos uma pergunta antes de ligar as notas." };
+  }
+
+  const convite = String(form.get("convite") ?? "").trim().slice(0, TETO_DO_CONVITE) || null;
+
+  await consultar(
+    `update galerias
+        set recado_ativo = $1, recado_estrelas = $2, recado_convite = $3,
+            recado_perguntas = $4::jsonb, atualizado_em = now()
+      where id = $5 and tenant_id = $6`,
+    [ativo, estrelas, convite, JSON.stringify(perguntas), galeriaId, tenantId],
+  );
+
+  revalidatePath(`/painel/galerias/${galeriaId}/recados`);
+  return {};
 }
 
 /** Salva a aparência. Valida antes de gravar — o JSON vem do navegador. */
@@ -431,7 +586,45 @@ export async function definirCapaDaPastaAction(form: FormData): Promise<{ ok: bo
   const galeriaId = String(form.get("galeria_id") ?? "");
   const mediaId = String(form.get("media_id") ?? "");
   if (!galeriaId || !mediaId) return { ok: false };
-  const ok = await definirCapaDaPasta(galeriaId, tenantId, mediaId);
+  const { ok, chaveAntiga } = await definirCapaDaPasta(galeriaId, tenantId, mediaId);
+  /* A imagem enviada que acabou de perder a vez sai do bucket: arquivo pago que
+     nenhuma linha cita é órfão, e desde 02/10 a varredura o PRESERVA em vez de
+     recolher. */
+  if (chaveAntiga) {
+    const { apagarObjeto } = await import("@/lib/r2");
+    await apagarObjeto(chaveAntiga).catch((e) =>
+      console.error("[capa da pasta] a imagem enviada pode ter ficado no bucket:", e),
+    );
+  }
+  revalidatePath(`/painel/galerias/${galeriaId}`);
+  revalidatePath(`/painel/galerias/${galeriaId}/design`);
+  return { ok };
+}
+
+/**
+ * As fotos de uma pasta, uma página por vez, para escolher a capa dela na aba
+ * Design. Ver `fotosDaPasta` em `lib/entrega-no-design.ts`.
+ */
+export async function fotosDaPastaAction(
+  galeriaId: string,
+  secaoId: string,
+  desde: number,
+): Promise<{ fotos: FotoDaPasta[]; mais: boolean }> {
+  const tenantId = await exigirTenant();
+  if (!galeriaId || !secaoId) return { fotos: [], mais: false };
+  return fotosDaPasta(galeriaId, tenantId, secaoId, Number(desde) || 0);
+}
+
+/**
+ * O nome do vídeo na tela do Stream (migração 055). Vazio volta ao nome
+ * tirado do arquivo. Ver `definirTituloDoVideo`.
+ */
+export async function renomearVideoAction(form: FormData): Promise<{ ok: boolean }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const mediaId = String(form.get("media_id") ?? "");
+  if (!galeriaId || !mediaId) return { ok: false };
+  const ok = await definirTituloDoVideo(galeriaId, tenantId, mediaId, String(form.get("titulo") ?? ""));
   revalidatePath(`/painel/galerias/${galeriaId}`);
   return { ok };
 }
@@ -671,94 +864,80 @@ export async function criarAssinaturaAction(
    * de NÃO guardar o cartão de quem não pediu. Ver `config/forma-assinatura.ts`.
    */
   escolhaDaForma?: unknown,
+  /* O tamanho escolhido no formulário. Ausente → o plano que a conta já tem. */
+  planoIdBruto?: unknown,
 ): Promise<{ erro?: string } | void> {
-  const ciclo = cicloDe(cicloBruto);
   const tenantId = await exigirTenant();
-
-  if (!asaasConfigurado()) return { erro: "A cobranca ainda nao foi ligada." };
-
-  const tenant = await buscarTenantPorId(tenantId);
-  if (!tenant) return { erro: "Conta nao encontrada." };
-  if (tenant.asaas_assinatura_id) return; // ja tem
-
-  const plano = planoPorId(tenant.plano_id);
-  if (!plano) return { erro: "Plano invalido." };
-
-  // O Asaas recusa cliente sem CPF/CNPJ. Conferir aqui em vez de deixar a API
-  // devolver erro em inglês que não diz à pessoa o que fazer.
-  const doc = soDigitos(documento || tenant.cpf_cnpj || "");
-  const problema = conferirDocumento(doc);
-  if (problema) return { erro: problema };
-  /* Um documento, uma conta (migração 045) — também aqui, senão a conta antiga
-   * sem CPF assinaria com o documento de outra. Antes do Asaas, para não abrir
-   * cliente lá com um documento que não vai ficar gravado aqui. */
-  if (await documentoEmUso(doc, tenantId)) {
-    return {
-      erro: `Esse CPF/CNPJ já está em outra conta. Fale com a gente pelo WhatsApp ${marca.whatsappVisivel} para juntar as duas.`,
-    };
-  }
-
   try {
-    const cliente = await garantirCliente({
-      tenantId,
-      nome: tenant.nome_estudio,
-      email: tenant.email,
-      cpfCnpj: doc,
-    });
-
-    // Guardar só depois do Asaas aceitar: documento recusado não deve ficar
-    // gravado como se fosse válido.
-    await consultar("update tenants set cpf_cnpj = $1, atualizado_em = now() where id = $2", [
-      doc,
-      tenantId,
-    ]);
-
-    // Primeiro vencimento quando o teste acabar; se ja acabou, em 3 dias.
-    const fimTrial = tenant.trial_ate ? new Date(tenant.trial_ate) : new Date();
-    const minimo = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-    const vencimento = fimTrial > minimo ? fimTrial : minimo;
-
-    /*
-     * O COMBO COM O ATOMATIZA (28/09/2026). Quem já assina o Atomatiza com o
-     * mesmo CPF/CNPJ entra aqui com a metade do desconto da Galeria — a outra
-     * metade o Atomatiza aplica na assinatura de lá, quando esta for paga. Sem
-     * resposta do Asaas, a assinatura nasce no preço cheio e a conferência do
-     * primeiro pagamento acerta: nunca travar a assinatura por causa do
-     * desconto. Ver `lib/combo.ts`.
-     */
-    const faixa = await faixaDoAtomatiza(doc, plano).catch(() => null);
-
-    /* O preço da fatura é o do CICLO: no anual são dez mensalidades cobradas de
-     * uma vez. A grade continua guardando só o mensal — o anual é derivado,
-     * nunca uma segunda tabela para dessincronizar. */
-    const precoDoCiclo = precoDoCicloComComboCentavos(plano, ciclo, faixa);
-
-    const assinatura = await criarAssinatura({
-      clienteAsaasId: cliente.id,
-      tenantId,
-      planoId: plano.id,
-      precoCentavos: precoDoCiclo,
-      ciclo,
-      descricao: descricaoDaAssinatura(marca.nome, plano, ciclo, faixa),
-      primeiroVencimento: vencimento,
+    const recusa = await escolherPlanoAntesDeAssinar(tenantId, planoIdBruto, await ipDaRequisicao());
+    if (recusa) return { erro: recusa };
+    const r = await assinarTenant(tenantId, {
+      documento,
+      ciclo: cicloDe(cicloBruto),
       forma: formaDaAssinatura(escolhaDaForma),
     });
-
-    /* O ciclo é gravado JUNTO com o id da assinatura, na mesma escrita. Se
-     * ficasse para depois, uma falha no meio deixaria uma assinatura anual
-     * marcada como mensal — e a próxima troca de plano recalcularia o split com
-     * reserva de um mês, mandando embora o dinheiro dos outros onze. */
-    await consultar(
-      `update tenants
-          set asaas_cliente_id = $1, asaas_assinatura_id = $2, ciclo_cobranca = $3,
-              combo_atomatiza = $4, assinatura_criada_em = now(), atualizado_em = now()
-        where id = $5`,
-      [cliente.id, assinatura.id, ciclo, descontoDaGaleriaCentavos(plano, faixa) > 0 ? faixa : null, tenantId],
-    );
-
+    if (!r.ok) return r.jaAssina ? undefined : { erro: r.erro };
     revalidatePath("/painel/conta");
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "nao consegui criar a assinatura" };
+  }
+}
+
+/**
+ * "Assinar o pacote": a Galeria daqui e o Atomatiza pela ponte, no mesmo
+ * clique. A ordem e as regras estão em `lib/pacote.ts` e `docs/pacote.md`.
+ *
+ * `galeriaAssinada` avisa a tela que, mesmo com erro, a assinatura daqui
+ * nasceu — e a página precisa recarregar para mostrar a fatura.
+ */
+export async function assinarPacoteAction(
+  documento: string,
+  cicloBruto: unknown,
+  escolhaDaForma: unknown,
+  faixaBruta: unknown,
+  aceitouTermos: boolean,
+  planoIdBruto?: unknown,
+): Promise<{ erro?: string; galeriaAssinada?: boolean; contaNova?: boolean }> {
+  const tenantId = await exigirTenant();
+  if (!ehFaixaAtomatiza(faixaBruta)) return { erro: "Escolha a faixa do Atomatiza." };
+  try {
+    const recusa = await escolherPlanoAntesDeAssinar(tenantId, planoIdBruto, await ipDaRequisicao());
+    if (recusa) return { erro: recusa };
+    const r = await assinarPacote(tenantId, {
+      faixa: faixaBruta,
+      ciclo: cicloDe(cicloBruto),
+      forma: escolhaDaForma,
+      documento,
+      aceitouTermos: aceitouTermos === true,
+    });
+    revalidatePath("/painel/conta");
+    if (!r.ok) return { erro: r.erro, galeriaAssinada: r.galeriaAssinada };
+    return { contaNova: r.atomatiza.contaNova };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "não consegui assinar o pacote" };
+  }
+}
+
+/** Quem já assina a Galeria acrescenta o Atomatiza, pela ponte. */
+export async function acrescentarAtomatizaAction(
+  cicloBruto: unknown,
+  escolhaDaForma: unknown,
+  faixaBruta: unknown,
+  aceitouTermos: boolean,
+): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  if (!ehFaixaAtomatiza(faixaBruta)) return { erro: "Escolha a faixa do Atomatiza." };
+  try {
+    const r = await acrescentarAtomatiza(tenantId, {
+      faixa: faixaBruta,
+      ciclo: cicloDe(cicloBruto),
+      forma: escolhaDaForma,
+      aceitouTermos: aceitouTermos === true,
+    });
+    revalidatePath("/painel/conta");
+    return r.ok ? {} : { erro: r.erro };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "não consegui acrescentar o Atomatiza" };
   }
 }
 
@@ -846,6 +1025,7 @@ export async function cotarCancelamentoAction(): Promise<
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return { erro: "Conta não encontrada." };
   if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+  if (tenant.pacote_atomatiza_id) return { erro: RECADO_DO_PACOTE };
   try {
     const c = await cotarCancelamento(tenant);
     return {
@@ -899,6 +1079,7 @@ export async function cancelarAssinaturaAction(
   const tenant = await buscarTenantPorId(tenantId);
   if (!tenant) return { erro: "Conta não encontrada." };
   if (!tenant.asaas_assinatura_id) return { erro: "Não há assinatura ativa para cancelar." };
+  if (tenant.pacote_atomatiza_id) return { erro: RECADO_DO_PACOTE };
 
   let devolucao: Awaited<ReturnType<typeof cotarCancelamento>> | null = null;
   if (devolverCentavos !== null) {
@@ -1592,6 +1773,50 @@ export async function moverFotoAction(form: FormData) {
   const { moverMediaNaOrdem } = await import("@/lib/medias");
   await moverMediaNaOrdem(galeriaId, tenantId, arrastado, alvo);
   revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
+ * Várias fotos de uma vez: o arrastar com várias marcadas, e os botões "para o
+ * início" e "para o fim" da barra de seleção. Ver `moverBlocoNaOrdem`.
+ */
+export async function moverFotosAction(form: FormData) {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  const ids = String(form.get("media_ids") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 10_000);
+  const destino = String(form.get("destino") ?? "");
+  if (!galeriaId || ids.length === 0 || !destino) return;
+
+  const { moverBlocoNaOrdem } = await import("@/lib/medias");
+  await moverBlocoNaOrdem(galeriaId, tenantId, ids, destino);
+  revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
+ * Chamada pelo envio quando a fila seca, se a pasta tinha arquivos que já
+ * estavam na galeria: o que subiu agora volta para o meio dela, na ordem da
+ * pasta. Ver `lib/encaixe-da-pasta.ts`.
+ *
+ * Sem `revalidatePath`: quem chama faz `router.refresh()` logo depois, e
+ * revalidar aqui desenharia a página duas vezes (ver `grade-medias.tsx`).
+ */
+export async function encaixarNaOrdemDaPastaAction(
+  galeriaId: string,
+  lote: string,
+  pasta: { nome: string; bytes: number }[],
+): Promise<number> {
+  const tenantId = await exigirTenant();
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(galeriaId) || !uuid.test(lote) || !Array.isArray(pasta)) return 0;
+  const lista = pasta
+    .slice(0, 20_000)
+    .filter((a) => typeof a?.nome === "string" && Number.isFinite(a?.bytes))
+    .map((a) => ({ nome: a.nome, bytes: Number(a.bytes) }));
+  const { encaixarNaOrdemDaPasta } = await import("@/lib/medias");
+  return encaixarNaOrdemDaPasta(galeriaId, tenantId, lote, lista);
 }
 
 /**

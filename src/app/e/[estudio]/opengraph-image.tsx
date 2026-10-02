@@ -1,7 +1,6 @@
 import { ImageResponse } from "next/og";
 import { TEMAS } from "@/config/aparencia";
 import { marca } from "@/config/marca";
-import { armazemDe } from "@/lib/armazem";
 import { comAlfa, fotoParaOCartao } from "@/lib/cartao-de-link";
 import { lerSite } from "@/lib/site-estudio";
 import { buscarEstudio, galeriaDoTopo, galeriasDaVitrine } from "@/lib/vitrine";
@@ -37,11 +36,14 @@ export default async function Image({ params }: Props) {
     try {
       const topo = galeriaDoTopo(await galeriasDaVitrine(t.id), site);
       if (topo?.capa_original) {
-        foto = await fotoParaOCartao(
-          topo.capa_preview ?? topo.capa_thumb,
-          topo.capa_original,
-          armazemDe(topo.capa_armazem),
-        );
+        foto = await fotoParaOCartao({
+          id: topo.slug,
+          tipo: topo.capa_tipo ?? "foto",
+          chave: topo.capa_original,
+          chave_preview: topo.capa_preview,
+          chave_thumb: topo.capa_thumb,
+          armazem: topo.capa_armazem,
+        });
       }
     } catch {
       /* Banco fora ou consulta que falha: quadro neutro. Robô que recebe 500
