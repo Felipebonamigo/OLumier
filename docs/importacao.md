@@ -47,7 +47,9 @@ novo. Para criar outra galeria de mesmo nome, basta mudar o nome na linha.
 | `src/components/envio-em-curso.tsx` | A fila passou a aceitar uma galeria por lote e arquivos "adiados" (de dentro de ZIP). A aba Fotos não mudou de comportamento. |
 | `src/app/painel/importar/actions.ts` | Cria as galerias (ou reencontra as existentes) antes do primeiro arquivo subir, depois do mesmo portão de cobrança da rota de envio. |
 | `src/components/importar-galerias.tsx` | A tela. |
-| `src/components/migrar-do-pixieset.tsx` | A seção "Vindo do Pixieset?". |
+| `src/components/migrar-de-outra-plataforma.tsx` | A seção "Vindo de outra plataforma?" (Pixieset e Pixellu). |
+| `src/config/plataformas-de-origem.ts` | A lista das plataformas, a coluna de liberação de cada uma e se o conector existe. |
+| `src/lib/acesso-plataforma.ts` | Libera/bloqueia o login de uma plataforma para um estúdio, com evento na auditoria. |
 
 Testes: `scripts/testar-zip-leitor.mjs` (ZIPs do Info-ZIP, do Python e do nosso
 escritor, com e sem compressão, com ZIP64, com senha, cortados) e
@@ -90,14 +92,30 @@ de logar no pixieset por enquanto, para todos, só vamos habilitar para os
 usuários que eu apontar" — e depois: "crie essa opção, para liberar, lá no
 admin". Quem libera é o botão **"Permitir Pixieset"** na ficha do estúdio
 (`/painel/admin/estudios/<id>`), que grava `tenants.pixieset_liberado_em`
-(migração 052). Só um admin (`ADMINS`) vê e aperta o botão, a ação confere o
+(migração 051). Só um admin (`ADMINS`) vê e aperta o botão, a ação confere o
 admin de novo, e cada liberação ou bloqueio vira evento na auditoria com quem
 fez. Nulo, que é o padrão, ninguém tem acesso. (Por algumas horas isto foi a
 variável `PIXIESET_LOGIN_LIBERADO`; nunca chegou a ser preenchida em produção.)
 O formulário só se abre com as duas travas: a conta liberada **e**
-`CONECTOR_PIXIESET_PRONTO = true` em `src/config/pixieset.ts`. Hoje o conector não existe, então liberar uma conta
-só troca o recado ("sua conta está liberada, mas o caminho ainda não foi
-ligado").
+`conectorPronto: true` na plataforma, em `src/config/plataformas-de-origem.ts`.
+Hoje o conector não existe, então liberar uma conta só troca o recado ("sua
+conta está liberada, mas o caminho ainda não foi ligado").
+
+**Pixellu, do mesmo jeito.** Felipe, 30/09/2026: "crie a opção Login com a
+conta do Pixellu, igual foi feito para o pixieset, só eu posso habilitar pelo
+menu admin". A ficha do estúdio passou a ter um bloco "Importar de outra
+plataforma", com um botão por plataforma ("Permitir Pixieset", "Permitir
+Pixellu"); o do Pixellu grava `tenants.pixellu_liberado_em` (migração 053) e
+registra `pixellu.liberado` / `pixellu.bloqueado`. O Pixellu também não tem API
+pública que tenhamos achado, e o site de ajuda dele não abre deste ambiente —
+tudo o que vale para o Pixieset abaixo vale para ele. Os termos de uso do
+Pixellu **não foram lidos**: a tela diz que "serviços assim costumam proibir"
+esse acesso, e não que eles proíbem. Terceira plataforma: uma linha na lista,
+uma coluna nova, e o texto dela no componente.
+
+"Só eu": hoje o botão é de quem está em `ADMINS`. Se a lista tiver mais de um
+e-mail, todos eles podem liberar — restringir a uma pessoa só seria outra
+regra, que ainda não existe.
 
 Para ligar, nesta ordem:
 
@@ -114,6 +132,10 @@ Para ligar, nesta ordem:
 4. A senha **nunca** gravada: usada uma vez para abrir a sessão e descartada.
 
 ## O que falta validar
+
+- **Um ZIP de verdade do Pixellu.** A galeria do Pixellu se divide em até 20
+  seções; não sabemos se o "baixar todas" traz as seções em pastas (aí viram
+  capítulos) nem como nomeia um download em partes.
 
 - **Um ZIP de verdade do Pixieset.** Não confirmamos se os sets vêm em pastas
   dentro do ZIP, nem como as partes de uma coleção grande são nomeadas. Se os

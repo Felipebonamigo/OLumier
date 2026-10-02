@@ -68,6 +68,25 @@ fi
 echo "→ conferindo o origin"
 bash scripts/portao-origin.sh master origin
 
+# FIM DE LINHA DO WINDOWS NAO VAI PARA O SERVIDOR (01/10/2026).
+#
+# Este deploy copia ops/fotonio-backup.sh e ops/fotonio-vigia.sh para /opt (ver
+# "atualizando os scripts de operação", la embaixo). Publicado de um checkout
+# no Windows, eles iam com CRLF, e o Linux le o `\r` como parte do comando:
+#   /usr/bin/env: 'bash\r': No such file or directory
+# Foi o que parou o vigia, a publicacao seguinte no "dump de seguranca" — e
+# teria parado o backup noturno. A soma conferida la embaixo nao pega isso: a copia chega
+# identica, so que errada. Entao a conferencia e aqui, antes de tudo.
+for f in ops/*.sh; do
+	if grep -q $'\r' "$f"; then
+		echo "✗ $f esta com fim de linha do Windows (CRLF) — no servidor ele nao roda."
+		echo "  Conserte e publique de novo:"
+		echo "    sed -i 's/\r\$//' ops/*.sh"
+		echo "  (o .gitattributes do repositorio evita que volte depois de um git pull)"
+		exit 1
+	fi
+done
+
 # O `node_modules` precisa ser DIRETORIO DE VERDADE, e a checagem e aqui em cima
 # porque falhar depois custa o portao inteiro.
 #

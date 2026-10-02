@@ -751,7 +751,18 @@ export function EditorSecoes({
         capítulos é a oferta. Então o título muda e, lá embaixo, a linha das
         fotos sobe para cima do vazio.
       */}
-      <h2 className="text-sm font-semibold">{temCapitulos ? "Capítulos" : "Ordem das fotos"}</h2>
+      <h2 className="text-sm font-semibold">
+        {temCapitulos ? "Capítulos" : "Ordem das fotos"}
+        {/* Enquanto o servidor confirma, os botões da lista ficam travados — e
+            travado sem aviso é o "clico em renomear, nada acontece" do Juan
+            (01/10/2026). Dizer que está salvando é o que separa "espere" de
+            "quebrou". */}
+        {ocupado && (
+          <span role="status" className="ml-2 text-xs font-normal text-texto-faint">
+            salvando…
+          </span>
+        )}
+      </h2>
       <p className="mt-0.5 text-xs text-texto-faint">
         {temCapitulos
           ? "Dividem a galeria em momentos. O cliente ganha um menu para pular direto ao que quer ver."

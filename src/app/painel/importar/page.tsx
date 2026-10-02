@@ -10,8 +10,8 @@ import { situacaoDoTenant } from "@/lib/assinatura";
 import { asaasConfigurado } from "@/lib/asaas";
 import { ProvedorDeEnvio } from "@/components/envio-em-curso";
 import { ImportarGalerias } from "@/components/importar-galerias";
-import { MigrarDoPixieset } from "@/components/migrar-do-pixieset";
-import { loginDoPixiesetLiberado } from "@/config/pixieset";
+import { MigrarDeOutraPlataforma } from "@/components/migrar-de-outra-plataforma";
+import { loginLiberado } from "@/config/plataformas-de-origem";
 
 export const metadata: Metadata = { title: "Importar galerias" };
 export const dynamic = "force-dynamic";
@@ -67,7 +67,12 @@ export default async function ImportarPage() {
         />
       </ProvedorDeEnvio>
 
-      <MigrarDoPixieset liberado={loginDoPixiesetLiberado(tenant)} />
+      <MigrarDeOutraPlataforma
+        liberadas={{
+          pixieset: loginLiberado(tenant, "pixieset"),
+          pixellu: loginLiberado(tenant, "pixellu"),
+        }}
+      />
     </main>
   );
 }

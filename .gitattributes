@@ -1,0 +1,14 @@
+# ── O QUE RODA NO SERVIDOR SAI DAQUI COM FIM DE LINHA DO LINUX (01/10/2026) ──
+#
+# A publicação de 01/10 parou no "dump de segurança" com
+#   /usr/bin/env: 'bash\r': No such file or directory
+# O `/opt/fotonio-backup.sh` do servidor estava com fim de linha do Windows
+# (CRLF): copiado de um checkout no Windows, onde o Git converte LF em CRLF ao
+# baixar. No repositório ele sempre esteve certo — o estrago nasce na cópia.
+# E o mesmo script é o backup noturno do banco: com CRLF, ele não roda.
+#
+# Com isto, o Git entrega estes arquivos com LF em qualquer sistema, e a cópia
+# para o servidor leva o que o Linux entende.
+*.sh       text eol=lf
+ops/**     text eol=lf
+deploy.sh  text eol=lf
