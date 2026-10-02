@@ -1,5 +1,5 @@
 [Unit]
-Description=Fotonio - conta os pagamentos do Asaas que o webhook perdeu
+Description=Galeria Átomo - conta os pagamentos do Asaas que o webhook perdeu
 After=network.target postgresql.service
 
 [Service]

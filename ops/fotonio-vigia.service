@@ -1,5 +1,5 @@
 [Unit]
-Description=Fotonio - vigia de saude
+Description=Galeria Átomo - vigia de saude
 After=network-online.target
 
 [Service]

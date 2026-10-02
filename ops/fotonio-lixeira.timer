@@ -1,5 +1,5 @@
 [Unit]
-Description=Olumier - destruir galerias vencidas na lixeira
+Description=Galeria Átomo - destruir galerias vencidas na lixeira
 
 [Timer]
 # 04:50 — depois do cofre (04:33), para a limpeza ver o estado ja arquivado.

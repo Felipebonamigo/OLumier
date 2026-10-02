@@ -1,5 +1,5 @@
 [Unit]
-Description=Olumier - enviar os e-mails da galeria que venceram hoje
+Description=Galeria Átomo - enviar os e-mails da galeria que venceram hoje
 
 [Timer]
 # 12:15 UTC = 09:15 em Brasilia. O servidor roda em Etc/UTC (`timedatectl`), e

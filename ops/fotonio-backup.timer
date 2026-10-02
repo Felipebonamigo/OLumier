@@ -1,5 +1,5 @@
 [Unit]
-Description=Fotonio - backup diario do banco
+Description=Galeria Átomo - backup diario do banco
 
 [Timer]
 # 03:40 — depois do backup do Atomatiza (03:10) para os dois nao disputarem

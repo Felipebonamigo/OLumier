@@ -1,5 +1,5 @@
 [Unit]
-Description=Confere de hora em hora os pagamentos que o webhook do Asaas perdeu
+Description=Galeria Átomo - confere de hora em hora os pagamentos que o webhook do Asaas perdeu
 
 [Timer]
 OnCalendar=hourly

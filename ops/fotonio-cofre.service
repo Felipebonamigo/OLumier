@@ -1,5 +1,5 @@
 [Unit]
-Description=Fotonio - cofre diario e limpeza de envios abandonados
+Description=Galeria Átomo - cofre diario e limpeza de envios abandonados
 After=network.target postgresql.service
 
 [Service]

@@ -1,5 +1,5 @@
 [Unit]
-Description=Fotonio - backup diario do banco
+Description=Galeria Átomo - backup diario do banco
 After=network-online.target postgresql.service
 Wants=network-online.target
 

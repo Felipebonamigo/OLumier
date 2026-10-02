@@ -1,5 +1,5 @@
 [Unit]
-Description=Olumier - destruir galerias vencidas na lixeira
+Description=Galeria Átomo - destruir galerias vencidas na lixeira
 After=network-online.target postgresql.service
 Wants=network-online.target
 

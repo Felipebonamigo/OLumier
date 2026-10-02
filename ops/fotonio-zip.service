@@ -1,5 +1,5 @@
 [Unit]
-Description=Fotonio - servidor de ZIP (monta e entrega os ZIPs das galerias)
+Description=Galeria Átomo - servidor de ZIP (monta e entrega os ZIPs das galerias)
 After=network-online.target
 Wants=network-online.target
 

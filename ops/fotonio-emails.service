@@ -1,5 +1,5 @@
 [Unit]
-Description=Olumier - enviar os e-mails da galeria que venceram hoje
+Description=Galeria Átomo - enviar os e-mails da galeria que venceram hoje
 After=network-online.target postgresql.service
 Wants=network-online.target
 
