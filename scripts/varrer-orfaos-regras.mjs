@@ -84,6 +84,22 @@ export async function chavesConhecidas(db) {
   const { rows: marcas } = await db.query(
     "select logo_chave from tenants where logo_chave is not null",
   );
+  /*
+   * AS CAPAS ENVIADAS COMO ARQUIVO — e a falta delas aqui era um defeito.
+   *
+   * Até 02/10/2026 esta função só conhecia as mídias e a logo. A capa enviada
+   * à parte (`galerias.capa_chave`, migração 029) tinha dono no banco e nenhum
+   * dono aqui: a varredura a lia como órfã e `--apagar` levava o arquivo de uma
+   * galeria publicada. A capa de pasta (migração 057) nasceu com o mesmo risco
+   * e entrou junto. Toda coluna de chave nova precisa vir para cá — é esta
+   * lista que decide o que sobrevive no bucket.
+   */
+  const { rows: capas } = await db.query(
+    "select capa_chave from galerias where capa_chave is not null",
+  );
+  const { rows: capasDePasta } = await db.query(
+    "select capa_chave from secoes where capa_chave is not null",
+  );
   /* Os donos vêm de `tenants`, não das chaves: um estúdio recém-criado, ainda
    * sem foto nenhuma, precisa ser reconhecido como daqui. */
   const { rows: donosRows } = await db.query("select id from tenants");
@@ -99,6 +115,8 @@ export async function chavesConhecidas(db) {
     if (m.chave_preview) r2.add(m.chave_preview);
   }
   for (const t of marcas) if (t.logo_chave) r2.add(t.logo_chave);
+  /* As capas são sempre do R2: nenhum caminho de envio de capa escreve no B2. */
+  for (const c of [...capas, ...capasDePasta]) if (c.capa_chave) r2.add(c.capa_chave);
 
   return { r2, b2, donos };
 }

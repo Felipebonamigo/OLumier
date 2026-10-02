@@ -1,7 +1,8 @@
 import { ImageResponse } from "next/og";
+import { escolherCapa, urlDaCapa } from "@/lib/capa-publica";
 import { marca } from "@/config/marca";
 import { lerAparencia, variaveisDoTema } from "@/config/aparencia";
-import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
+import { armazemDe, urlDoOriginal } from "@/lib/armazem";
 import { buscarGaleriaPublica, listarMediasPublicas } from "@/lib/galerias-publicas";
 
 /**
@@ -120,16 +121,13 @@ export default async function Image({ params }: Props) {
   if (podeMostrarFoto && galeria) {
     try {
       const medias = await listarMediasPublicas(galeria.id);
-      const capa =
-        medias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
-        medias.find((m) => m.tipo === "foto");
+      const capa = escolherCapa(medias, galeria.capa_media_id);
 
       if (capa) {
         /* Validade curta de propósito: o link só precisa viver o tempo desta
            requisição, aqui dentro, e nunca sai deste processo. */
-        const armazem = armazemDe(capa.armazem);
-        const daDerivada = await urlDaDerivada(capa.chave_preview, capa.chave, armazem, 120);
-        capaEmbutida = await embutirSeDesenhavel(daDerivada);
+        const daDerivada = await urlDaCapa(capa, 120);
+        capaEmbutida = daDerivada ? await embutirSeDesenhavel(daDerivada) : null;
 
         /*
          * A derivada é WebP, e o satori não a desenha (ver `DESENHAVEIS`).
@@ -141,9 +139,12 @@ export default async function Image({ params }: Props) {
          * `chave_preview` nulo já cai no original pela própria `urlDaDerivada`;
          * o `if` evita repetir a mesma busca nesse caso.
          */
-        if (!capaEmbutida && capa.chave_preview) {
+        /* Só FOTO cai no original: o "original" de um vídeo é o .mp4, que o
+           satori não desenha e que custaria a saída do arquivo inteiro para
+           descobrir isso. Vídeo tem o pôster ou não tem capa. */
+        if (!capaEmbutida && capa.tipo === "foto" && capa.chave_preview) {
           capaEmbutida = await embutirSeDesenhavel(
-            await urlDoOriginal(capa.chave, armazem, 120),
+            await urlDoOriginal(capa.chave, armazemDe(capa.armazem), 120),
           );
         }
       }

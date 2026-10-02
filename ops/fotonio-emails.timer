@@ -1,0 +1,15 @@
+[Unit]
+Description=Olumier - enviar os e-mails da galeria que venceram hoje
+
+[Timer]
+# 09:15 no fuso do servidor. De manha, e nao de madrugada: "sua galeria esta
+# pronta" e "amanha faz um ano" sao mensagens que a pessoa le e quer abrir na
+# hora. E-mail que chega as 4h30 fica no fim da caixa junto com propaganda.
+#
+# Depois do backup (03:40), do cofre (04:30) e da limpeza (04:50): nada aqui
+# depende deles, mas nenhuma rodada pesada esta em pe as 9h15.
+OnCalendar=*-*-* 09:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

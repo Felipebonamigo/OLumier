@@ -104,6 +104,19 @@ export interface Galeria {
      O cliente nunca vê isto — quem o lê é só o editor, ao abrir. */
   aparencia_rascunho: unknown;
   capa_media_id: string | null;
+  /* O recado do cliente (migração 058) — a configuração CRUA, como está no
+     banco. Quem junta as regras (estrelas sem pergunta não liga nada, convite
+     vazio usa o padrão) é `configDoRecado` em `lib/recados.ts`. */
+  recado_ativo: boolean;
+  recado_estrelas: boolean;
+  recado_convite: string | null;
+  recado_perguntas: unknown;
+  /* Os e-mails da galeria (migração 059): a chave dos lembretes, o desenho
+     escolhido e o recado do fotógrafo no e-mail de entrega. A FILA não mora
+     aqui — é `emails_da_galeria`, uma linha por e-mail agendado. */
+  email_lembretes: boolean;
+  email_template: string | null;
+  email_mensagem: string | null;
   /** De onde a galeria veio, quando não nasceu no painel — ver migração 047. */
   origem: string | null;
   origem_ref: string | null;
@@ -657,9 +670,18 @@ export async function destruirGaleria(
   }>("select chave, chave_thumb, chave_preview, armazem from medias where galeria_id = $1", [
     galeriaId,
   ]);
+  /* As capas de capítulo enviadas como arquivo (migração 057). Mesma razão de
+     a capa da galeria estar aqui: não são linha em `medias`, e quem não as
+     juntar deixa arquivo pago sem dono — a varredura reconhece a coluna desde
+     02/10/2026 e por isso NÃO vai recolhê-las depois. */
+  const capasDePasta = await consultar<{ capa_chave: string }>(
+    "select capa_chave from secoes where galeria_id = $1 and capa_chave is not null",
+    [galeriaId],
+  );
   const quantos =
     medias.reduce((n, m) => n + [m.chave, m.chave_thumb, m.chave_preview].filter(Boolean).length, 0) +
-    (antes?.capa_chave ? 1 : 0);
+    (antes?.capa_chave ? 1 : 0) +
+    capasDePasta.length;
 
   const apagou = await consultar<{ id: string }>(
     "delete from galerias where id = $1 returning id",
@@ -692,10 +714,14 @@ export async function destruirGaleria(
   if (r.falhou) {
     console.error(`[destruirGaleria] arquivos da galeria ${galeriaId} podem ter ficado no armazém: ${r.falhou}`);
   }
-  if (antes?.capa_chave) {
+  const avulsas = [
+    ...(antes?.capa_chave ? [antes.capa_chave] : []),
+    ...capasDePasta.map((c) => c.capa_chave),
+  ];
+  if (avulsas.length > 0) {
     const { apagarObjetos } = await import("./r2");
-    await apagarObjetos([antes.capa_chave]).catch((e) =>
-      console.error(`[destruirGaleria] a capa da galeria ${galeriaId} pode ter ficado no bucket:`, e),
+    await apagarObjetos(avulsas).catch((e) =>
+      console.error(`[destruirGaleria] capas da galeria ${galeriaId} podem ter ficado no bucket:`, e),
     );
   }
 }

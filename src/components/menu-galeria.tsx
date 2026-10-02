@@ -65,6 +65,25 @@ const ABAS = [
     soComVideo: true,
   },
   {
+    /*
+      ── A ÁREA DE RECADOS (01/10/2026) ────────────────────────────────────
+
+      Juan: "disponibilizar uma área de feedbacks (…) montado e organizado lá na
+      área de feedbacks da organização da galeria". Montar o pedido e ler as
+      respostas são o mesmo assunto, e por isso é UMA aba e não um interruptor
+      na Entrega com a leitura em outro lugar.
+
+      Permanente, ao contrário da aba Vídeo: aquela depende de um fato da
+      galeria (ter filme), esta depende de uma decisão que o fotógrafo só pode
+      tomar se encontrar onde tomá-la.
+    */
+    id: "recados",
+    nome: "Recados",
+    desc: "O que o casal achou",
+    /* Balão de fala com três pontos — o desenho universal de recado. */
+    caminho: "M4 5.5h16v10H9l-4 3.5v-3.5H4zM9 10.5h.01M12.5 10.5h.01M16 10.5h.01",
+  },
+  {
     id: "atividade",
     nome: "Atividade",
     desc: "Quem abriu, quem escolheu",

@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { podeSerCapa, urlDaCapa } from "@/lib/capa-publica";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { listarMedias } from "@/lib/medias";
 import { listarSecoes } from "@/lib/secoes";
-import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 
 /** Uma hora: o pop-up é aberto, usado e fechado em minutos. */
 const VALIDADE = 3600;
@@ -34,7 +34,19 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const galeria = await galeriaDoPainel(id, tenantId);
   if (!galeria) return NextResponse.json({ erro: "Galeria não encontrada." }, { status: 404 });
 
-  const medias = (await listarMedias(galeria.id)).filter((m) => m.tipo === "foto");
+  /*
+   * FOTO, OU FILME COM PÔSTER (02/10/2026).
+   *
+   * Juan pediu capa de vídeo; Felipe cortou para "só a capa principal, não a
+   * capa das pastas". A regra de quem PODE ser capa mora em
+   * `lib/capa-publica.ts` e é a mesma que a escrita confere — esta tela só não
+   * pode oferecer menos do que o servidor aceita, senão o recurso existe e
+   * ninguém acha.
+   *
+   * Vídeo sem pôster fica de fora porque não há miniatura para desenhar aqui:
+   * seria um quadrado vazio no meio da grade de escolha.
+   */
+  const medias = (await listarMedias(galeria.id)).filter(podeSerCapa);
   const fotos = await Promise.all(
     medias.map(async (m) => ({
       id: m.id,
@@ -51,7 +63,11 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
        * montada aqui, e a coluna é uma que a consulta já traz.
        */
       secaoId: m.secao_id,
-      url: await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), VALIDADE),
+      /* O vídeo entra pelo pôster: `urlDaDerivada` cairia no
+         .mp4 quando não há derivada, e a grade de escolha mostraria um
+         arquivo de 800 MB no lugar de uma miniatura. */
+      tipo: m.tipo,
+      url: await urlDaCapa(m, VALIDADE),
     })),
   );
 

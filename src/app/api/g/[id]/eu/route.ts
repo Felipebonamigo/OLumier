@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { consultarUm } from "@/lib/db";
 import {
   esquecerPessoa,
   favoritasDaPessoa,
@@ -7,7 +6,7 @@ import {
   pessoaPorEmail,
   pessoaPorNomeOuEmail,
 } from "@/lib/favoritas";
-import { temAcessoLiberado } from "@/lib/galerias-publicas";
+import { galeriaLiberada } from "@/lib/acesso-galeria-publica";
 
 /**
  * "Quem é você nesta galeria" — o e-mail que separa uma lista de favoritas da
@@ -25,19 +24,6 @@ import { temAcessoLiberado } from "@/lib/galerias-publicas";
  * cofre, e a senha quando houver. Identificar-se não abre nada que o link já
  * não abrisse — só diz de quem é a lista.
  */
-async function galeriaLiberada(id: string) {
-  const galeria = await consultarUm<{ id: string; senha_hash: string | null; estado: string }>(
-    "select id, senha_hash, estado from galerias where id = $1 and publicada",
-    [id],
-  );
-  if (!galeria) return { ok: false as const, status: 404 };
-  if (galeria.estado !== "online") return { ok: false as const, status: 409 };
-  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
-    return { ok: false as const, status: 401 };
-  }
-  return { ok: true as const };
-}
-
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 

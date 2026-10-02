@@ -506,6 +506,20 @@ function SeletorDeFormato({
         </p>
       )}
       {/*
+        A CAPA DE CADA PASTA — e a posição é o pedido.
+
+        30/09/2026 ela saiu da aba Fotos para cá, porque "existia e ninguém
+        achou". 01/10/2026 Juan voltou: "dificuldade em alterar a capa das
+        pastas, fazer ser mais fácil, VISÍVEL NO COMEÇO DA PÁGINA". Estava no
+        fim do grupo, depois dos cartões de formato, dos cartões de estilo e dos
+        nomes dos vídeos — achável por quem rolasse.
+
+        Agora é a primeira coisa depois de escolher o formato. Acima da escolha
+        do formato não dá: perguntar a capa das pastas antes de a entrega ser em
+        pastas seria perguntar sobre uma tela que ninguém vai ver.
+      */}
+      {ap.formato === "pastas" && <CapasDasPastas galeriaId={galeriaId} pastas={pastas} aoGravar={aoGravar} />}
+      {/*
         O ESTILO DO FORMATO, logo abaixo dele (30/09/2026): "vamos pensar em
         estilos para pastas e stream". Só aparece o do formato escolhido —
         quatro cartões de pasta numa entrega em Stream seriam uma pergunta
@@ -527,12 +541,6 @@ function SeletorDeFormato({
           escolher={(id) => mudar({ ...ap, estiloStream: id })}
         />
       )}
-      {/*
-        A CAPA DE CADA PASTA, aqui (Juan, 30/09/2026: "adicionar opção de
-        escolher a capa de cada capítulo"). O botão na aba Fotos continua
-        existindo; este é o lugar onde se procura.
-      */}
-      {ap.formato === "pastas" && <CapasDasPastas galeriaId={galeriaId} pastas={pastas} aoGravar={aoGravar} />}
       {ap.formato === "stream" && (
         <>
           <div>
@@ -730,6 +738,9 @@ const GRUPOS = [
   { id: "tipografia", nome: "Tipografia" },
   { id: "cor", nome: "Cor" },
   { id: "grade", nome: "Grade" },
+  /* O fim da entrega é um lugar, como a capa: a última coisa que o casal vê.
+     Separado porque nenhum dos outros grupos é sobre onde a galeria acaba. */
+  { id: "fim", nome: "Fim" },
 ] as const;
 type Grupo = (typeof GRUPOS)[number]["id"];
 
@@ -1454,6 +1465,45 @@ export function EditorAparencia({
               <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
               <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
               <Eixo eixo="canto" titulo="Canto das fotos" ap={ap} mudar={mudar} />
+            </>
+          )}
+          {/*
+            ── O FIM DA GALERIA (01/10/2026) ─────────────────────────────────
+
+            Juan: "no final da galeria uma frase editável, por exemplo
+            'obrigado por escolher o nosso olhar para esse dia inesquecível' —
+            algo onde consiga editar com a frase que queremos e fonte. Acho que
+            vai mostrar um cuidado a mais." Felipe: "isso eu acho bom".
+
+            Vazio é o padrão, e é o certo: galeria já entregue não ganha frase
+            nossa no fim. A fonte escolhe entre as duas famílias que a galeria
+            já tem — uma terceira só para uma frase seria um eixo para ninguém.
+
+            O botão de voltar é escolha porque o próprio Juan dividiu opinião
+            ("eu não colocaria, mas entendo quem goste").
+          */}
+          {grupo === "fim" && (
+            <>
+              <div>
+                <span className="block text-xs font-medium text-texto-soft">Frase de despedida</span>
+                <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+                  Aparece depois da última foto, com a letra da galeria. Vazio não mostra nada.
+                </p>
+                <textarea
+                  value={ap.despedida}
+                  onChange={(e) => mudar({ ...ap, despedida: e.target.value.slice(0, 160) })}
+                  maxLength={160}
+                  rows={2}
+                  placeholder="Obrigado por escolher o nosso olhar para esse dia inesquecível"
+                  aria-label="Frase de despedida"
+                  className="mt-2 w-full resize-none rounded-lg border border-linha bg-void px-3 py-2 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+                />
+              </div>
+              {/* A fonte só decide algo quando existe frase para desenhar. */}
+              {ap.despedida.trim() !== "" && (
+                <Eixo eixo="despedidaFonte" titulo="Fonte da despedida" ap={ap} mudar={mudar} />
+              )}
+              <Eixo eixo="voltarAoInicio" titulo="Botão “Volte ao início”" ap={ap} mudar={mudar} />
             </>
           )}
         </div>

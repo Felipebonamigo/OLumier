@@ -88,6 +88,7 @@ export type MenuBaixar = {
 
 export function MenusDaGaleria({
   capitulos,
+  recado = null,
   enderecoBase,
   fatia = null,
   capituloAberto = null,
@@ -116,6 +117,15 @@ export function MenusDaGaleria({
   baixar: MenuBaixar | null;
   /** Null com menos de duas fotos à vista — tocar uma foto só é abri-la. */
   tocarSlideshow: (() => void) | null;
+  /**
+   * Abre a tela do recado, ou null quando o fotógrafo não pediu recado nesta
+   * galeria (migração 058).
+   *
+   * Juan, 01/10/2026: "no menu, junto da área das favoritas, vai ter algum
+   * símbolo (que representa o feedback)". Botão e não menu, pela mesma razão do
+   * slideshow: há uma escolha só — escrever.
+   */
+  recado?: (() => void) | null;
 }) {
   const barraRef = useRef<HTMLElement | null>(null);
   const busca = useSearchParams();
@@ -261,7 +271,7 @@ export function MenusDaGaleria({
     };
   }, [capitulos, fatia]);
 
-  if (!favoritas && !baixar && !tocarSlideshow && capitulos.length < 2) return null;
+  if (!favoritas && !baixar && !tocarSlideshow && !recado && capitulos.length < 2) return null;
 
   return (
     <nav
@@ -288,6 +298,15 @@ export function MenusDaGaleria({
             style={{ color: "var(--g-suave)" }}
           >
             ▶ Slideshow
+          </button>
+        )}
+
+        {/* Junto das favoritas, como ele pediu — e à esquerda delas não: as
+            favoritas são o que a pessoa veio fazer, o recado é o que ela faz
+            depois. */}
+        {recado && (
+          <button type="button" onClick={recado} className={GATILHO} style={{ color: "var(--g-suave)" }}>
+            ✉ Recado
           </button>
         )}
 

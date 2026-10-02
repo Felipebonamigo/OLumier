@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { consultarUm } from "@/lib/db";
 import {
   estadoSelecao,
   fecharSelecao,
@@ -8,29 +7,13 @@ import {
   pessoaAtual,
   alternarDaPessoa,
 } from "@/lib/favoritas";
-import { temAcessoLiberado } from "@/lib/galerias-publicas";
+import { galeriaLiberada } from "@/lib/acesso-galeria-publica";
 
 /**
  * Marcar e desmarcar favorita. Sem login: quem tem o link (e a senha, se
- * houver) pode marcar.
- *
- * A conferência de senha NÃO é opcional aqui. Sem ela, alguém que só descobriu
- * o id da galeria conseguiria marcar fotos de uma galeria trancada — sem nunca
- * ver as fotos, mas sujando a lista que o fotógrafo usa para montar o álbum.
+ * houver) pode marcar. A porta é `galeriaLiberada`, que mora em
+ * `lib/acesso-galeria-publica.ts` e é a mesma das outras rotas do convidado.
  */
-async function galeriaLiberada(id: string) {
-  const galeria = await consultarUm<{ id: string; senha_hash: string | null; estado: string }>(
-    "select id, senha_hash, estado from galerias where id = $1 and publicada",
-    [id],
-  );
-  if (!galeria) return { ok: false as const, status: 404 };
-  // No cofre a galeria não abre para ninguém; marcar também não faz sentido.
-  if (galeria.estado !== "online") return { ok: false as const, status: 409 };
-  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
-    return { ok: false as const, status: 401 };
-  }
-  return { ok: true as const, galeria };
-}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

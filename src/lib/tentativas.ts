@@ -86,6 +86,44 @@ export function registrarErro(chave: string): Veredito {
   return { permitido: true };
 }
 
+/**
+ * O FREIO DE QUEM ACERTA — e é um problema diferente do de quem erra.
+ *
+ * `registrarErro` conta ERRO, e é o certo para senha: quem acerta não deve
+ * carregar histórico nenhum. Mas há rota em que o pedido é sempre "válido" e o
+ * estrago está no VOLUME — o recado do cliente é a primeira: quem tem o link
+ * cria identidades à vontade (`pessoaPorEmail` aceita qualquer coisa com arroba)
+ * e cada identidade pode gravar uma linha. Sem contar acerto, um laço enche a
+ * tela do fotógrafo com mil recados e nada o detém.
+ *
+ * Mesmo `Map`, mesmo teto, mesma ressalva do cabeçalho: mais de uma instância,
+ * e isto vira Redis.
+ *
+ * @param chave quem está pedindo — a rota escolhe (galeria + IP em hash)
+ * @param limite quantos acertos cabem na janela de 15 minutos
+ */
+export function registrarUso(chave: string, limite: number): Veredito {
+  const agora = Date.now();
+  if (registros.size > LIMPAR_ACIMA_DE) limparVencidos(agora);
+
+  const r = registros.get(chave);
+  if (!r || r.expiraEm < agora) {
+    registros.set(chave, { erros: 1, expiraEm: agora + JANELA_MS });
+    return { permitido: true };
+  }
+  if (r.bloqueadoAte && r.bloqueadoAte > agora) {
+    return { permitido: false, esperarSeg: Math.ceil((r.bloqueadoAte - agora) / 1000) };
+  }
+
+  r.erros += 1;
+  if (r.erros > limite) {
+    r.bloqueadoAte = agora + CASTIGO_MS;
+    r.expiraEm = agora + CASTIGO_MS;
+    return { permitido: false, esperarSeg: Math.ceil(CASTIGO_MS / 1000) };
+  }
+  return { permitido: true };
+}
+
 /** Chamar quando a senha estiver CERTA — quem acertou não carrega o histórico. */
 export function limparTentativas(chave: string) {
   registros.delete(chave);

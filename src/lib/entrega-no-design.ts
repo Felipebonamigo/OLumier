@@ -39,10 +39,12 @@ export interface PastaNoDesign {
   secaoId: string;
   nome: string;
   fotos: number;
-  /** A capa que o cliente vê hoje — a escolhida, ou a primeira foto. */
+  /** A capa que o cliente vê hoje — a enviada, a escolhida, ou a primeira foto. */
   capa: string | null;
   /** A capa foi escolhida (e não é só a primeira por falta de escolha). */
   escolhida: boolean;
+  /** A capa é um ARQUIVO enviado à parte (migração 057), não uma foto da entrega. */
+  enviada: boolean;
 }
 
 export interface FotoDaPasta {
@@ -90,11 +92,12 @@ export async function pastasNoDesign(galeriaId: string): Promise<PastaNoDesign[]
     nome: string;
     fotos: number;
     escolhida: boolean;
+    capa_chave: string | null;
     chave: string | null;
     chave_thumb: string | null;
     armazem: string | null;
   }>(
-    `select s.id as secao_id, s.nome,
+    `select s.id as secao_id, s.nome, s.capa_chave,
             (select count(*)::int from medias f
               where f.secao_id = s.id and f.pronto and f.tipo = 'foto') as fotos,
             (capa.id is not null and capa.id = s.capa_media_id) as escolhida,
@@ -112,15 +115,26 @@ export async function pastasNoDesign(galeriaId: string): Promise<PastaNoDesign[]
       order by s.ordem`,
     [galeriaId],
   );
+  /*
+   * QUEM VENCE QUEM: arquivo enviado > foto escolhida > primeira foto. A mesma
+   * ordem da capa da galeria, para as duas telas não discordarem.
+   *
+   * O `filter` passou a aceitar capítulo SEM foto que tenha capa enviada: é
+   * justamente o caso de quem subiu uma arte para um capítulo que ainda vai
+   * receber as fotos, e antes ele desaparecia da tela.
+   */
   return Promise.all(
     linhas
-      .filter((l) => l.chave)
+      .filter((l) => l.capa_chave || l.chave)
       .map(async (l) => ({
         secaoId: l.secao_id,
         nome: l.nome,
         fotos: l.fotos,
         escolhida: l.escolhida,
-        capa: await urlDaDerivada(l.chave_thumb, l.chave as string, armazemDe(l.armazem), VALIDADE),
+        enviada: Boolean(l.capa_chave),
+        capa: l.capa_chave
+          ? await urlDeLeitura(l.capa_chave, VALIDADE)
+          : await urlDaDerivada(l.chave_thumb, l.chave as string, armazemDe(l.armazem), VALIDADE),
       })),
   );
 }

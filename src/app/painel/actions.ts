@@ -239,6 +239,157 @@ export async function salvarPublicacaoAction(form: FormData) {
   revalidatePath(`/painel/galerias/${galeriaId}`);
 }
 
+/**
+ * OS E-MAILS DA GALERIA (migração 059) — configuração, fila e cancelamento.
+ *
+ * Nenhuma destas três manda e-mail. Elas gravam a INTENÇÃO; quem manda é o
+ * script diário (`scripts/enviar-emails-da-galeria.mjs`). A separação é o que
+ * torna o reenvio impossível e o que permite ao fotógrafo ver a fila antes de
+ * qualquer coisa chegar na caixa do casal.
+ */
+export async function salvarEmailConfigAction(form: FormData): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  const { lerTemplate } = await import("@/config/email-da-galeria");
+  const lembretes = form.get("lembretes") === "1";
+  const template = lerTemplate(String(form.get("template") ?? ""));
+  const mensagem = String(form.get("mensagem") ?? "").trim().slice(0, 600) || null;
+
+  await consultar(
+    `update galerias
+        set email_lembretes = $1, email_template = $2, email_mensagem = $3, atualizado_em = now()
+      where id = $4 and tenant_id = $5`,
+    [lembretes, template, mensagem, galeriaId, tenantId],
+  );
+
+  /*
+   * DESLIGAR OS LEMBRETES TIRA O QUE AINDA NÃO SAIU.
+   *
+   * Sem isto, desligar a chave não desligaria nada: a fila já estava gravada, e
+   * o script diário continuaria mandando "faz seis meses" para quem o fotógrafo
+   * acabou de dizer que não quer mais incomodar. O e-mail já enviado fica — ele
+   * não se desfaz, e tirar a linha dele faria a tela mentir sobre o que o casal
+   * recebeu.
+   */
+  if (!lembretes) {
+    const { cancelarPendentes } = await import("@/lib/emails-da-galeria");
+    await cancelarPendentes(galeriaId, tenantId, [
+      "dia_do_evento",
+      "feedback",
+      "relembrar",
+      "um_ano",
+    ]);
+  }
+
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return {};
+}
+
+/**
+ * Põe a entrega (e os lembretes, se ligados) na fila.
+ *
+ * O campo é texto livre, uma linha por pessoa, porque é assim que o fotógrafo
+ * tem os endereços: copiados do WhatsApp ou do contrato. Aceita
+ * `Ana <ana@exemplo.com>` para o e-mail poder dizer "Oi, Ana" — o formato que
+ * todo cliente de e-mail do mundo já usa, em vez de dois campos por pessoa.
+ */
+export async function agendarEmailsAction(
+  form: FormData,
+): Promise<{ agendados: number; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { agendados: 0, erro: "Galeria não identificada." };
+
+  const { agendarEmails } = await import("@/lib/emails-da-galeria");
+  const destinatarios = String(form.get("destinatarios") ?? "")
+    .split(/[\n,;]+/)
+    .map((linha) => linha.trim())
+    .filter(Boolean)
+    .map((linha) => {
+      const comNome = linha.match(/^(.*?)<([^>]+)>$/);
+      return comNome
+        ? { nome: comNome[1].trim().replace(/^"|"$/g, "") || null, email: comNome[2].trim() }
+        : { nome: null, email: linha };
+    });
+
+  if (destinatarios.length === 0) {
+    return { agendados: 0, erro: "Escreva pelo menos um e-mail." };
+  }
+
+  const r = await agendarEmails(galeriaId, tenantId, destinatarios);
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return r;
+}
+
+/** Cancela tudo o que ainda não saiu desta galeria. O enviado fica. */
+export async function cancelarEmailsAction(
+  form: FormData,
+): Promise<{ cancelados: number; erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { cancelados: 0, erro: "Galeria não identificada." };
+
+  const { cancelarPendentes } = await import("@/lib/emails-da-galeria");
+  const cancelados = await cancelarPendentes(galeriaId, tenantId);
+  revalidatePath(`/painel/galerias/${galeriaId}/entrega`);
+  return { cancelados };
+}
+
+/**
+ * A CONFIGURAÇÃO DO RECADO DO CLIENTE (migração 058).
+ *
+ * Fica fora de `salvarPublicacaoAction` porque não é controle de entrega: é o
+ * que a aba Recados monta. E fica fora da APARÊNCIA pelos três motivos da
+ * migração — aparência tem rascunho (o fotógrafo editaria o convite, não
+ * publicaria, e o casal leria o texto velho), vira padrão do estúdio e vira
+ * preset. Decisão de coletar dado pessoal não anda de carona num botão de
+ * salvar visual.
+ *
+ * Devolve `{ erro }` pela mesma razão de `salvarAparenciaAction`: grava sozinha,
+ * e quem salva sozinho tem de avisar quando não conseguiu.
+ */
+export async function salvarRecadoConfigAction(form: FormData): Promise<{ erro?: string }> {
+  const tenantId = await exigirTenant();
+  const galeriaId = String(form.get("galeria_id") ?? "");
+  if (!galeriaId) return { erro: "Galeria não identificada." };
+
+  const { lerPerguntas, TETO_DO_CONVITE } = await import("@/lib/recados");
+
+  let perguntas: string[] = [];
+  try {
+    perguntas = lerPerguntas(JSON.parse(String(form.get("perguntas") ?? "[]")));
+  } catch {
+    return { erro: "Não entendi a lista de perguntas." };
+  }
+
+  const ativo = form.get("ativo") === "1";
+  const estrelas = form.get("estrelas") === "1";
+  /*
+   * O ESTADO INVÁLIDO QUE A TELA NÃO PODE GRAVAR EM SILÊNCIO: estrelas ligadas
+   * sem pergunta nenhuma montada é um formulário vazio na entrega de um
+   * casamento. Avisa em vez de gravar — o fotógrafo ligaria num sábado e
+   * descobriria na segunda que não pedia nada.
+   */
+  if (estrelas && perguntas.length === 0) {
+    return { erro: "Escreva pelo menos uma pergunta antes de ligar as notas." };
+  }
+
+  const convite = String(form.get("convite") ?? "").trim().slice(0, TETO_DO_CONVITE) || null;
+
+  await consultar(
+    `update galerias
+        set recado_ativo = $1, recado_estrelas = $2, recado_convite = $3,
+            recado_perguntas = $4::jsonb, atualizado_em = now()
+      where id = $5 and tenant_id = $6`,
+    [ativo, estrelas, convite, JSON.stringify(perguntas), galeriaId, tenantId],
+  );
+
+  revalidatePath(`/painel/galerias/${galeriaId}/recados`);
+  return {};
+}
+
 /** Salva a aparência. Valida antes de gravar — o JSON vem do navegador. */
 /**
  * Grava a aparência. Devolve `{ erro }` em vez de nada.

@@ -56,6 +56,8 @@ import { GaleriaPastas, VoltarAsPastas, type PastaDaEntrega } from "@/components
 import { GaleriaStream, type FileiraDoStream } from "@/components/galeria-stream";
 import { AncoraDeChegada } from "@/components/ancora-de-chegada";
 import { aparenciaPermitida } from "@/lib/acesso-formatos";
+import { configDoRecado } from "@/config/recado";
+import { escolherCapa, urlDaCapa } from "@/lib/capa-publica";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -446,6 +448,10 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     recorte: pedidas.length > 0,
     verGaleria: ver === "galeria",
   };
+  /* O recado do cliente (migração 058) — lido da linha que já veio, sem
+     consulta nova. Desligado é o estado de toda galeria já entregue. */
+  const recado = configDoRecado(galeria);
+
   const tela = telaDaEntrega(aparencia.formato, conteudo, pedidoDaTela);
   const volta = voltaDaGaleria(aparencia.formato, conteudo, pedidoDaTela);
   /* O que fica da consulta nos links que esta página monta: o que é do dono
@@ -745,13 +751,11 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * lista inteira, mostrava a certa. Assinar essa URL não desfaz a economia da
    * amostra: é UMA foto, que a capa ia assinar de qualquer jeito.
    */
-  const capa =
-    todasAsMedias.find((m) => m.id === galeria.capa_media_id && m.tipo === "foto") ??
-    medias.find((m) => m.tipo === "foto");
+  const capa = escolherCapa(todasAsMedias, galeria.capa_media_id, medias);
   const urlCapa = galeria.capa_chave
     ? await urlDeLeitura(galeria.capa_chave, VALIDADE)
     : capa
-      ? await urlDaDerivada(capa.chave_preview, capa.chave, armazemDe(capa.armazem), VALIDADE)
+      ? await urlDaCapa(capa, VALIDADE)
       : null;
 
   /*
@@ -819,7 +823,15 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
 
   /* Os grupos na ordem da galeria — as soltas primeiro, depois os capítulos
      na ordem do painel —, a mesma de `capitulos` e do menu. */
-  const grupos: { id: string; apelido: string; nome: string; capaId: string | null; medias: MediaPublica[] }[] = [];
+  const grupos: {
+    id: string;
+    apelido: string;
+    nome: string;
+    capaId: string | null;
+    /** Capa enviada como arquivo (migração 057) — vence a foto escolhida. */
+    capaChave: string | null;
+    medias: MediaPublica[];
+  }[] = [];
   if (tela !== "galeria") {
     const soltas = todasAsMedias.filter((m) => !m.secao_id);
     if (soltas.length) {
@@ -828,13 +840,23 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         apelido: "sem-capitulo",
         nome: nomeDoGrupoSolto(galeria.grupo_solto),
         capaId: null,
+        /* As soltas não são um capítulo: não há linha em `secoes` onde
+           guardar uma capa própria delas. A primeira foto segue valendo. */
+        capaChave: null,
         medias: soltas,
       });
     }
     for (const sec of secoes) {
       const doGrupo = todasAsMedias.filter((m) => m.secao_id === sec.id);
       if (doGrupo.length) {
-        grupos.push({ id: sec.id, apelido: sec.slug, nome: sec.nome, capaId: sec.capa_media_id ?? null, medias: doGrupo });
+        grupos.push({
+          id: sec.id,
+          apelido: sec.slug,
+          nome: sec.nome,
+          capaId: sec.capa_media_id ?? null,
+          capaChave: sec.capa_chave ?? null,
+          medias: doGrupo,
+        });
       }
     }
   }
@@ -852,8 +874,16 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             /* Três atrás da capa: a Pilha usa duas, o Índice e o Mosaico usam as
                três. Miniatura, não visualizador — são imagens pequenas. */
             const atras = g.medias.filter((m) => m !== capaDaPasta && temImagem(m)).slice(0, 3);
+            /* Arquivo enviado vence a foto escolhida (migração 057): é uma
+               imagem que NÃO está na entrega, então não sai de `g.medias` —
+               só a frente troca, e as três de trás continuam sendo fotos do
+               capítulo. */
             const imagens = await Promise.all([
-              ...(capaDaPasta ? [imagemDa(capaDaPasta, true)] : []),
+              ...(g.capaChave
+                ? [urlDeLeitura(g.capaChave, VALIDADE)]
+                : capaDaPasta
+                  ? [imagemDa(capaDaPasta, true)]
+                  : []),
               ...atras.map((m) => imagemDa(m, false)),
             ]);
             const fotosDaPasta = g.medias.filter((m) => m.tipo === "foto").length;
@@ -1146,6 +1176,8 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               permiteDownload={false}
               galeriaId={galeria.id}
               aparencia={aparencia}
+              /* Sem recado nesta tela: são fotos de exemplo, e um convite aqui
+                 gravaria um recado de verdade na galeria do próprio fotógrafo. */
               capitulos={[]}
               modoProvavel={modoProvavel}
             enderecoBase={enderecoBase}
@@ -1169,6 +1201,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             permiteDownload={galeria.permite_download}
             galeriaId={galeria.id}
             aparencia={aparencia}
+            recado={recado}
             capitulos={capitulos}
             modoProvavel={modoProvavel}
             enderecoBase={enderecoBase}
