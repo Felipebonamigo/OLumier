@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import GaleriaPublicaPage, { generateMetadata as metadataDaGaleria } from "../page";
+import { secaoPeloApelidoPublica } from "@/lib/secoes-publicas";
 
 /**
  * O CAPÍTULO COMO PEDAÇO DO CAMINHO.
@@ -40,13 +41,39 @@ type Props = {
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { estudio, galeria } = await params;
-  /* O cartão e o título são os da GALERIA: é ela que a pessoa está
-     compartilhando, e o capítulo é onde ela abriu. */
-  return metadataDaGaleria({
+  const { estudio, galeria, capitulo } = await params;
+  /*
+   * ── O CARTÃO É DA GALERIA; A ABA, DO CAPÍTULO (01/10/2026) ─────────────
+   *
+   * Aqui estava escrito "o cartão E o título são os da GALERIA", e a metade do
+   * cartão continua certa: quando o casal manda o link no WhatsApp, o cartão
+   * tem de dizer o casamento. Ninguém compartilha um capítulo achando que
+   * compartilha um capítulo.
+   *
+   * A metade do TÍTULO estava errada, e o Juan apontou: "ao ir para o próximo
+   * capítulo não muda em cima o nome da aba — se está vendo a recepção e vai
+   * para a festa, deveria mudar lá em cima". O título da aba não é o que se
+   * compartilha: é a orientação de quem está lendo agora, e é o que distingue
+   * seis abas abertas. Ali o capítulo é a informação mais útil que existe.
+   *
+   * As duas saíam da mesma função e por isso andavam juntas. O capítulo entra
+   * só no `title`; `openGraph` e `twitter` continuam com o que a galeria
+   * monta. `testar-capitulo-na-aba.mjs` prende as duas metades — separá-las é
+   * o tipo de coisa que a próxima sessão reunifica "arrumando".
+   */
+  const daGaleria = await metadataDaGaleria({
     params: Promise.resolve({ estudio, galeria }),
     searchParams: Promise.resolve({}),
   });
+
+  /* O NOME do capítulo, e não o apelido da URL: "recem-casados" é endereço, não
+     texto de tela. Capítulo que não existe (link velho, renome, erro de digitação)
+     devolve nulo, e aí a aba continua sendo a da galeria — melhor do que repetir
+     o que veio de fora. */
+  const secao = await secaoPeloApelidoPublica(estudio, galeria, capitulo);
+  if (!secao) return daGaleria;
+
+  return { ...daGaleria, title: `${secao} · ${daGaleria.title}` };
 }
 
 export default async function CapituloDaGaleria({ params, searchParams }: Props) {
