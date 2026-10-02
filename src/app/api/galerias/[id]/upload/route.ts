@@ -94,6 +94,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     duracao?: number;
     indice?: number;
     lote?: string;
+    ate?: number;
     alternativo?: boolean;
   };
   try {
@@ -276,6 +277,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
        tipo no `::uuid` da consulta, e derrubaria o envio por causa de um campo
        que não muda uma foto de lugar. */
     lote: UUID.test(String(corpo.lote ?? "")) ? String(corpo.lote) : null,
+    /* Até onde o lote vai (migração 061). Teto de um milhão: é a largura da
+       faixa reservada, e um número absurdo aqui só abriria um buraco enorme
+       na numeração — não pode derrubar o envio. */
+    ate:
+      Number.isInteger(corpo.ate) && Number(corpo.ate) > 0 ? Math.min(Number(corpo.ate), 1_000_000) : undefined,
   });
 
   const [urlThumb, urlPreview] = await Promise.all([

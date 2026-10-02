@@ -20,6 +20,7 @@ import {
   MINIATURAS_JUNTAS,
   limitador,
   type ArquivoComCaminho,
+  type ArquivoConhecido,
   comRetentativa,
   erroDefinitivo,
   emParaleloDeFila,
@@ -31,7 +32,7 @@ import {
 } from "@/lib/fila-upload";
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
 import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio } from "@/lib/velocidade-regras";
-import { garantirSecoesAction } from "@/app/painel/actions";
+import { encaixarNaOrdemDaPastaAction, garantirSecoesAction } from "@/app/painel/actions";
 
 /**
  * O ENVIO QUE SOBREVIVE À TROCA DE ABA.
@@ -102,6 +103,13 @@ export interface OpcoesDeEnvio {
   destino?: string;
   /** A busca por rosto está ligada: cada foto é medida durante o envio. */
   rostosAtivos: boolean;
+  /**
+   * Os arquivos DESTA pasta que já estavam na galeria — os que a pergunta das
+   * repetidas pulou (vazio em "Enviar mesmo assim", que manda todos). Presente,
+   * o envio põe a pasta na ordem dela quando a fila secar: o que faltava volta
+   * para o meio, e não para o fim. Ver `lib/encaixe-da-pasta.ts`.
+   */
+  encaixarCom?: ArquivoComCaminho[];
 }
 
 interface Envio {
@@ -394,6 +402,8 @@ export function ProvedorDeEnvio({
    * motivo: enquanto houver arquivo subindo, é tudo o mesmo envio.
    */
   const loteAtual = useRef<string | null>(null);
+  /* As pastas a pôr na ordem quando a fila secar, por galeria e lote. */
+  const encaixes = useRef(new Map<string, { galeriaId: string; lote: string; pasta: ArquivoConhecido[] }>());
 
   const enviarUm = useCallback(
     async (tarefa: Tarefa) => {
@@ -489,6 +499,10 @@ export function ProvedorDeEnvio({
                   /* E o lote é o que impede a base da posição de subir no meio
                      do envio. Ver `criarMediaPendente` e a migração 038. */
                   lote: tarefa.lote ?? undefined,
+                  /* Quantos arquivos este lote já tem na fila: o servidor
+                     reserva a faixa inteira, e outro envio para a mesma
+                     galeria começa depois dela (migração 061). */
+                  ate: proximoIndice.current.get(tarefa.galeriaId),
                   alternativo: alternativo || undefined,
                 }),
               });
@@ -674,6 +688,13 @@ export function ProvedorDeEnvio({
         ),
       );
     }
+    /* Uma ida por pasta que pulou repetidas; falhar aqui só deixa as novas no
+       fim do capítulo, como era antes — o envio já terminou. */
+    const aEncaixar = [...encaixes.current.values()];
+    encaixes.current.clear();
+    for (const e of aEncaixar) {
+      await encaixarNaOrdemDaPastaAction(e.galeriaId, e.lote, e.pasta).catch(() => 0);
+    }
     router.refresh();
   }, [enviarUm, enviarMedidas, router]);
 
@@ -777,6 +798,19 @@ export function ProvedorDeEnvio({
         };
       });
       proximoIndice.current.set(alvo, base + lote.length);
+
+      /* A pasta inteira, na MESMA ordem do envio — as que sobem e as que já
+         estavam lá —, para o encaixe do fim. */
+      if (opcoes.encaixarCom && loteAtual.current) {
+        const chave = `${alvo}:${loteAtual.current}`;
+        const ja = encaixes.current.get(chave);
+        const pasta = ordenarNaturalPorCaminho([...itens, ...opcoes.encaixarCom.filter(itemAceito)]).map((it) => ({
+          nome: it.arquivo.name,
+          bytes: tamanhoDe(it),
+        }));
+        if (ja) ja.pasta.push(...pasta);
+        else encaixes.current.set(chave, { galeriaId: alvo, lote: loteAtual.current, pasta });
+      }
 
       pendentes.current.push(...lote);
       setFila((f) => [...f, ...lote.map((t) => t.item)]);
