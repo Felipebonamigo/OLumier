@@ -155,6 +155,7 @@ export function GaleriaDemo({
         >
           {!semCapa && (
             <GaleriaCapa
+              ilustracao
               aparencia={ap}
               dados={{
                 titulo: identidade.titulo,

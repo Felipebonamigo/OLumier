@@ -91,10 +91,40 @@ e sem cabeçalho para um leitor de tela anunciar.
 Não dava para ver lendo o código — só contando as tags do HTML pronto. É a razão
 de `testar-vitrine.mjs` existir ao lado da suíte pura.
 
+## O que o buscador e o WhatsApp veem (26/09/2026)
+
+A vitrine é a única página do estúdio que **deve** aparecer no Google — as
+galerias saem com `noindex`. Até 26/09/2026 ela herdava tudo da casa: o cartão
+de link dizia "Galeria Átomo", a aba terminava em "· Galeria Átomo", e
+`/robots.txt` e `/sitemap.xml` do subdomínio caíam na rota de galeria (404).
+
+- **Cartão próprio.** `app/e/[estudio]/opengraph-image.tsx` desenha a foto do
+  topo com o nome do estúdio, nas cores do tema do site. A foto é baixada no
+  servidor e o que sai é um PNG com endereço estável — era a pendência que
+  impedia o `og:image` aqui. A regra de quais galerias podem dar a foto é a
+  mesma da página (`lib/vitrine.ts`): publicada, no ar, sem senha, no prazo.
+- **Canônico.** A mesma vitrine abre pelo domínio próprio, pelo subdomínio nos
+  dois domínios atendidos e por `/e/<estudio>`. `enderecoDaVitrine` escolhe um:
+  o domínio próprio verificado, senão `<estudio>.galeriaatomo.com.br`.
+- **Robots e sitemap do estúdio.** O proxy reescreve os dois para
+  `app/e/[estudio]/regras-para-robos` e `mapa-do-site` — nomes neutros porque o
+  Next trata caminho terminado em `/sitemap.xml` como rota especial. O sitemap
+  lista só a vitrine.
+- **Ícone da aba.** A logo do estúdio quando ela existe; sem logo, o favicon de
+  sempre — a aba não pode ficar sem ícone (`testar-app-instalado.mjs`), e o
+  ícone de APP da plataforma nunca vai para a página do estúdio
+  (`lib/icone-do-estudio.ts`).
+- **`<h1>` com texto e descrição do estúdio (29/09/2026).** Com logo, o nome vai
+  também em texto dentro do `<h1>` (só para leitor de tela e buscador). A
+  descrição é a frase da capa; sem ela, o começo do "sobre" (só com o site
+  ligado); só então o genérico. E um bloco `Organization` com o endereço
+  canônico e, se a seção de contato estiver no ar, os canais dela.
+
+`scripts/testar-seo.mjs` prende tudo isso. O plano geral de SEO está em
+`docs/seo.md`.
+
 ## Aberto
 
 - A capa sai da capa de uma galeria. Quem não tem galeria pública sem senha fica
   com a capa só tipográfica — que é bonita, mas não é o que a pessoa espera.
-- Sem `og:image`: as fotos vivem atrás de URL assinada que expira, e o
-  compartilhamento no WhatsApp precisaria de um endereço estável.
 - Uma seção livre ("blocos") continua fora, de propósito. Ver acima.

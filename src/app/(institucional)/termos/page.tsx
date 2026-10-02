@@ -3,14 +3,16 @@ import Link from "next/link";
 import { marca } from "@/config/marca";
 import { VERSOES_LEGAIS, dataPorExtenso, operadorPorExtenso } from "@/config/documentos-legais";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
+import { metadadosDaCasa } from "@/lib/metadados";
 import { PRAZO_DA_DEVOLUCAO } from "@/lib/devolucao";
 import { DIAS_DE_ARREPENDIMENTO } from "@/config/devolucao";
 import { AVISOS_ANTES_DE_APAGAR, RETENCAO_POR_EXTENSO, TOTAL_DE_AVISOS } from "@/config/retencao";
 
-export const metadata: Metadata = {
-  title: "Termos de Uso",
-  description: `Regras de uso da ${marca.nome}.`,
-};
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: "Termos de Uso",
+  descricao: `Regras de uso da ${marca.nome}.`,
+  caminho: "/termos",
+});
 
 /* A data é do TEXTO, não do arquivo: mexeu na regra, muda a versão em
  * `config/documentos-legais.ts`. Termo que diz ter sido atualizado em agosto e

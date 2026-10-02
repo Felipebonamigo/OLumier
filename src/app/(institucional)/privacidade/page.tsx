@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
+import { metadadosDaCasa } from "@/lib/metadados";
 import { VERSOES_LEGAIS, dataPorExtenso, operadorPorExtenso } from "@/config/documentos-legais";
 import { RETENCAO_POR_EXTENSO, TOTAL_DE_AVISOS } from "@/config/retencao";
 
-export const metadata: Metadata = {
-  title: "Política de Privacidade",
-  description: `Como a ${marca.nome} trata dados pessoais.`,
-};
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: "Política de Privacidade",
+  descricao: `Como a ${marca.nome} trata dados pessoais.`,
+  caminho: "/privacidade",
+});
 
 /**
  * Data da última revisão do texto — precisa mudar junto com o conteúdo. Mora em

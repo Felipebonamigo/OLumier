@@ -40,6 +40,12 @@ galeriaatomo.com.br, www.galeriaatomo.com.br {
 }
 ```
 
+> **O `www`, medido no ar em 29/09/2026, já chega redirecionado à raiz** — o
+> servidor tem um redirecionamento que o bloco acima não mostra. O app faz o
+> mesmo desde 26/09/2026 (`src/proxy.ts`, 308, menos a `/api`), como segunda
+> camada: se o Caddy um dia servir os dois nomes com 200, o buscador continua
+> vendo um site só, e não dois com o conteúdo copiado.
+
 ## 2. O matcher do subdomínio de estúdio — **não existe mais**
 
 > **Nada a fazer aqui. Pule para a seção 3.**

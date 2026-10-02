@@ -65,15 +65,47 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     params: Promise.resolve({ estudio, galeria }),
     searchParams: Promise.resolve({}),
   });
+  if (!daGaleria.openGraph) return daGaleria;
+
+  /*
+   * ── A IMAGEM TEM DE VIR NOMEADA AQUI (26/09/2026) ───────────────────────
+   *
+   * O `opengraph-image.tsx` mora no segmento da GALERIA, e o Next só pendura a
+   * imagem dele no segmento que tem o arquivo. Este segmento devolve um
+   * `openGraph` próprio — o da galeria, acima —, e bloco próprio SUBSTITUI o
+   * herdado inteiro, imagem junto. Resultado: o link de um capítulo
+   * ("/casamento/festa") desdobrava no WhatsApp com título e sem foto nenhuma.
+   * Achado medindo o HTML da auditoria de SEO; ninguém tinha mandado um link
+   * de capítulo e olhado.
+   */
+  const cartao = {
+    url: `/g/${estudio}/${galeria}/opengraph-image`,
+    width: 1200,
+    height: 630,
+    type: "image/png",
+  };
+  const comCartao: Metadata = {
+    ...daGaleria,
+    openGraph: { ...daGaleria.openGraph, images: [cartao] },
+    twitter: { ...daGaleria.twitter, images: [cartao.url] },
+  };
 
   /* O NOME do capítulo, e não o apelido da URL: "recem-casados" é endereço, não
      texto de tela. Capítulo que não existe (link velho, renome, erro de digitação)
      devolve nulo, e aí a aba continua sendo a da galeria — melhor do que repetir
      o que veio de fora. */
   const secao = await secaoPeloApelidoPublica(estudio, galeria, capitulo);
-  if (!secao) return daGaleria;
+  if (!secao) return comCartao;
 
-  return { ...daGaleria, title: `${secao} · ${daGaleria.title}` };
+  /*
+   * O título da galeria é `{ absolute }` — é ele que tira o "· Galeria Átomo"
+   * do fim da aba (ver `generateMetadata` em ../page.tsx). Interpolar o objeto
+   * escreveria "[object Object]" na aba; o texto sai de dentro dele, e o
+   * capítulo continua `absolute` pelo mesmo motivo.
+   */
+  const t = daGaleria.title;
+  const daAba = typeof t === "string" ? t : t && "absolute" in t ? t.absolute : "";
+  return { ...comCartao, title: { absolute: `${secao} · ${daAba}` } };
 }
 
 export default async function CapituloDaGaleria({ params, searchParams }: Props) {
