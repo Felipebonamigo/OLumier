@@ -99,6 +99,77 @@ await etapa("a logo do estúdio está na lista", async () => {
   return "logo reconhecida";
 });
 
+await etapa("a FONTE própria do estúdio está na lista", async () => {
+  /*
+   * A terceira coluna de chave do banco (migração 026), e a que ficou de fora
+   * quando as capas entraram: o comentário da rota da fonte dizia que "a
+   * varredura já a conhece (ehChaveDeMarca)", e `ehChaveDeMarca` nunca foi
+   * importada por script nenhum da varredura — é código morto. O dono da chave É
+   * um tenant deste banco, então o guarda de ambiente também não protegia.
+   */
+  const fonte = `${g.tenant_id}/marca/fonte-${Date.now()}.fonte`;
+  await db.query("update tenants set fonte_chave = $1 where id = $2", [fonte, g.tenant_id]);
+  const { r2 } = await chavesConhecidas(db);
+  if (!r2.has(fonte)) throw new Error("a fonte do estúdio ficaria órfã — a varredura a apagaria");
+  return "fonte reconhecida";
+});
+
+await etapa("as fotos da PÁGINA INICIAL estão na lista", async () => {
+  /* Migração 043: o admin troca as fotos da home pela tela, e elas não pertencem
+     a galeria nenhuma. Fora da lista, a varredura levava a capa da página de
+     vendas junto com o lixo. */
+  const { rows } = await db.query("select lugar, chave, chave_miniatura from fotos_da_home limit 1");
+  if (rows.length === 0) return "nenhuma foto de home nesta bancada — pulado";
+  const { r2 } = await chavesConhecidas(db);
+  if (!r2.has(rows[0].chave)) throw new Error("a foto da home ficaria órfã");
+  if (rows[0].chave_miniatura && !r2.has(rows[0].chave_miniatura)) {
+    throw new Error("a miniatura da foto da home ficaria órfã");
+  }
+  return rows[0].lugar;
+});
+
+await etapa("TODA coluna de chave do banco está coberta por esta lista", async () => {
+  /*
+   * A etapa que existe para o PRÓXIMO buraco, não para os já tapados.
+   *
+   * Três vezes seguidas uma coluna de chave nasceu e ninguém a pôs em
+   * `chavesConhecidas` (capa da galeria, capa da pasta, fonte do estúdio). A
+   * lista das colunas sai do PRÓPRIO BANCO: coluna nova com nome de chave que
+   * este teste não conhece reprova aqui, no dia em que nascer.
+   */
+  const { rows } = await db.query(`
+    select table_name, column_name
+      from information_schema.columns
+     where table_schema = 'public'
+       and (column_name like '%_chave' or column_name = 'chave')
+     order by table_name, column_name`);
+  const cobertas = new Set([
+    "medias.chave",
+    "medias.chave_thumb",
+    "medias.chave_preview",
+    "galerias.capa_chave",
+    "secoes.capa_chave",
+    "tenants.logo_chave",
+    "tenants.fonte_chave",
+    "fotos_da_home.chave",
+    "fotos_da_home.chave_miniatura",
+    /* NÃO é chave de bucket: `custos_da_sociedade.chave` é só o identificador da
+       semente da migração 047, para ela não duplicar se rodar de novo. Fica
+       nomeada aqui para a próxima pessoa não precisar descobrir isso de novo. */
+    "custos_da_sociedade.chave",
+  ]);
+  const faltando = rows
+    .map((r) => `${r.table_name}.${r.column_name}`)
+    .filter((c) => !cobertas.has(c));
+  if (faltando.length > 0) {
+    throw new Error(
+      `coluna(s) de chave que a varredura talvez não conheça: ${faltando.join(", ")} — ` +
+        "ponha em chavesConhecidas e nesta lista, ou a varredura apaga o arquivo",
+    );
+  }
+  return `${cobertas.size} colunas conhecidas`;
+});
+
 await etapa("chave que ninguém gravou NÃO entra", async () => {
   /* O contrário da lista também importa: se tudo entrasse, a varredura nunca
      apagaria nada e o bucket cresceria com lixo pago para sempre. */

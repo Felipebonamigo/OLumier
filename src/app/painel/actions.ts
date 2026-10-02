@@ -586,8 +586,18 @@ export async function definirCapaDaPastaAction(form: FormData): Promise<{ ok: bo
   const galeriaId = String(form.get("galeria_id") ?? "");
   const mediaId = String(form.get("media_id") ?? "");
   if (!galeriaId || !mediaId) return { ok: false };
-  const ok = await definirCapaDaPasta(galeriaId, tenantId, mediaId);
+  const { ok, chaveAntiga } = await definirCapaDaPasta(galeriaId, tenantId, mediaId);
+  /* A imagem enviada que acabou de perder a vez sai do bucket: arquivo pago que
+     nenhuma linha cita é órfão, e desde 02/10 a varredura o PRESERVA em vez de
+     recolher. */
+  if (chaveAntiga) {
+    const { apagarObjeto } = await import("@/lib/r2");
+    await apagarObjeto(chaveAntiga).catch((e) =>
+      console.error("[capa da pasta] a imagem enviada pode ter ficado no bucket:", e),
+    );
+  }
   revalidatePath(`/painel/galerias/${galeriaId}`);
+  revalidatePath(`/painel/galerias/${galeriaId}/design`);
   return { ok };
 }
 

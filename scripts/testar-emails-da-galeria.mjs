@@ -174,15 +174,25 @@ await etapa("dois destinatários, duas filas", async () => {
   igual(lista.length, 10, "linhas");
 });
 
-await etapa("a lista de destinatários tem teto", async () => {
+await etapa("a lista de destinatários tem teto — e o que cabe É agendado", async () => {
+  /*
+   * A etapa media `novos > MAX` e passava também quando NADA era agendado: trocar
+   * o `slice` por "recusa a lista inteira" deixava o fotógrafo que cola 12
+   * endereços (casal + pais) sem e-mail nenhum, nem a entrega, e ela ficava
+   * verde. Agora as duas metades são conferidas: nem mais que o teto, nem zero.
+   */
   const demais = Array.from({ length: MAX_DESTINATARIOS + 5 }, (_, i) => ({
     email: `teto-${i}-${Date.now()}@exemplo.com`,
   }));
   const antes = (await emailsDaGaleria(g.id)).length;
-  await agendarEmails(g.id, g.tenant_id, demais);
+  const r = await agendarEmails(g.id, g.tenant_id, demais);
+  if (r.erro) throw new Error(`recusou a lista inteira: ${r.erro}`);
   const depois = (await emailsDaGaleria(g.id)).length;
-  const novos = (depois - antes) / 5;
+  const porDestinatario = 5;
+  const novos = (depois - antes) / porDestinatario;
   if (novos > MAX_DESTINATARIOS) throw new Error(`entraram ${novos} destinatários`);
+  if (novos < 1) throw new Error("não agendou nada — o teto virou recusa da lista toda");
+  igual(novos, MAX_DESTINATARIOS, "destinatários aceitos");
   return `${novos} de ${demais.length} pedidos`;
 });
 
@@ -264,40 +274,48 @@ await etapa("o script em modo seco não manda nada nem mexe na fila", async () =
   return "fila intacta";
 });
 
-await etapa("galeria fora do ar: o script pula e escreve o motivo", async () => {
-  /* A regra 3 — e com `--aplicar`, que é o caminho de produção. O envio nem é
-     tentado: não há chave de e-mail nesta bancada, e o pulo acontece antes. */
-  await db.query("update galerias set publicada = false where id = $1", [g.id]);
-  const { execFileSync } = await import("node:child_process");
-  let saida = "";
-  try {
-    saida = execFileSync(
-      process.execPath,
-      [
-        "--env-file=.env.local",
-        "--experimental-strip-types",
-        "--import",
-        "./scripts/registrar-ts.mjs",
-        "scripts/enviar-emails-da-galeria.mjs",
-        "--aplicar",
-      ],
-      { encoding: "utf8", cwd: process.cwd() },
-    );
-  } catch (e) {
-    /*
-     * Sem chave de e-mail o script sai 1 — e é o certo. O que importa aqui
-     * continua valendo e continua sendo conferido abaixo: ele PULOU a galeria
-     * fora do ar e escreveu o motivo na fila, sem marcar ninguém como enviado.
-     */
-    saida = String(e.stdout ?? "") + String(e.stderr ?? "");
-    if (!/não dá para enviar|pulado/.test(saida)) throw e;
-  }
-  const lista = await emailsDaGaleria(g.id);
-  const entrega = lista.find((l) => l.tipo === "entrega");
-  if (entrega.enviadoEm) throw new Error("mandou de uma galeria fora do ar");
-  if (!entrega.erro) throw new Error("não escreveu o motivo de ter pulado");
+await etapa("galeria fora do ar NEM ENTRA na fila do dia", async () => {
+  /*
+   * A regra 3, conferida onde ela mora agora.
+   *
+   * Antes esta etapa rodava o script e olhava se a linha tinha `erro` — e passava
+   * mesmo com o bloco de pulo apagado, porque nesta bancada não há chave de
+   * e-mail e o script escrevia "envio indisponível" de qualquer jeito. A regra
+   * passou para a CONSULTA (`pendentesParaEnviar`), que é onde ela também
+   * conserta o entupimento: linha de galeria arquivada não ocupa mais uma das 200
+   * vagas da rodada, todo dia, para sempre.
+   */
   await db.query("update galerias set publicada = true where id = $1", [g.id]);
-  return entrega.erro;
+  const comAr = (await pendentesParaEnviar(new Date())).filter((p) => p.galeriaId === g.id);
+  if (comAr.length === 0) throw new Error("com a galeria no ar, a fila deveria trazer algo");
+
+  await db.query("update galerias set publicada = false where id = $1", [g.id]);
+  const semAr = (await pendentesParaEnviar(new Date())).filter((p) => p.galeriaId === g.id);
+  igual(semAr.length, 0, "linhas na fila com a galeria fora do ar");
+
+  await db.query("update galerias set publicada = true, estado = 'arquivada' where id = $1", [g.id]);
+  const noCofre = (await pendentesParaEnviar(new Date())).filter((p) => p.galeriaId === g.id);
+  igual(noCofre.length, 0, "linhas na fila com a galeria no cofre");
+
+  await db.query("update galerias set estado = 'online' where id = $1", [g.id]);
+  const devolta = (await pendentesParaEnviar(new Date())).filter((p) => p.galeriaId === g.id);
+  if (devolta.length === 0) throw new Error("a linha não voltou à fila quando a galeria voltou");
+  return `${comAr.length} com ar, 0 fora, ${devolta.length} na volta`;
+});
+
+await etapa("lembrete que venceu há meses não sai mais", async () => {
+  /* "Amanhã faz um ano" chegando catorze meses depois é pior que não chegar. */
+  const { ATRASO_MAXIMO_DIAS } = await import("../src/lib/emails-da-galeria.ts");
+  await db.query(
+    `update emails_da_galeria set agendado_para = current_date - $2::int
+      where galeria_id = $1 and tipo = 'um_ano'`,
+    [g.id, ATRASO_MAXIMO_DIAS + 5],
+  );
+  const fila = await pendentesParaEnviar(new Date());
+  if (fila.some((p) => p.galeriaId === g.id && p.tipo === "um_ano")) {
+    throw new Error(`lembrete de ${ATRASO_MAXIMO_DIAS + 5} dias atrás entrou na fila`);
+  }
+  return `teto de ${ATRASO_MAXIMO_DIAS} dias`;
 });
 
 /* ── CANCELAR ───────────────────────────────────────────────────────────── */

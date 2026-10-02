@@ -78,6 +78,21 @@ export interface Email {
   assunto: string;
   html: string;
   texto: string;
+  /**
+   * CHAVE DE IDEMPOTÊNCIA — o mesmo valor nunca manda duas mensagens.
+   *
+   * Existe por um caso medido no desenho do envio diário: o Resend ACEITA a
+   * requisição, enfileira a mensagem e responde em 11 segundos; o
+   * `AbortSignal.timeout(10_000)` aborta, `enviarEmail` devolve false, e a linha
+   * fica pendente. No dia seguinte a mesma linha é tentada de novo — e a noiva
+   * recebe "suas fotos estão prontas" duas vezes. A chave única da tabela não
+   * ajuda: a linha nunca foi marcada como enviada.
+   *
+   * O Resend trata `Idempotency-Key` por 24h, que é exatamente a janela entre
+   * duas rodadas diárias. Quem chama passa um valor ESTÁVEL por mensagem (o id da
+   * linha da fila), nunca um aleatório.
+   */
+  idempotencia?: string;
 }
 
 /**
@@ -102,6 +117,7 @@ export async function enviarEmail(email: Email): Promise<boolean> {
       headers: {
         Authorization: `Bearer ${k}`,
         "Content-Type": "application/json",
+        ...(email.idempotencia ? { "Idempotency-Key": email.idempotencia } : {}),
       },
       body: JSON.stringify({
         from: de,

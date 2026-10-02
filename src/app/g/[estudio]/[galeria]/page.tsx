@@ -448,9 +448,18 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     recorte: pedidas.length > 0,
     verGaleria: ver === "galeria",
   };
-  /* O recado do cliente (migração 058) — lido da linha que já veio, sem
-     consulta nova. Desligado é o estado de toda galeria já entregue. */
-  const recado = configDoRecado(galeria);
+  /*
+   * O recado do cliente (migração 058) — lido da linha que já veio, sem consulta
+   * nova. Desligado é o estado de toda galeria já entregue.
+   *
+   * `null` quando desligado, e não o objeto com `ativo: false`: ele é prop de
+   * componente de cliente, e prop de cliente viaja serializada no HTML público.
+   * Com o objeto inteiro, as perguntas do fotógrafo ("o preço ficou dentro do que
+   * você esperava?") ficavam legíveis no código-fonte da página de quem tem o
+   * link — mesmo com o recurso desligado, e mesmo depois de ele desligar.
+   */
+  const configRecado = configDoRecado(galeria);
+  const recado = configRecado.ativo ? configRecado : null;
 
   const tela = telaDaEntrega(aparencia.formato, conteudo, pedidoDaTela);
   const volta = voltaDaGaleria(aparencia.formato, conteudo, pedidoDaTela);

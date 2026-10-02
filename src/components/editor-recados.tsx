@@ -70,8 +70,18 @@ export function EditorRecados({
       if (r.erro) {
         setErro(r.erro);
         setEstado("");
-        /* O que o servidor recusou não fica na tela como se tivesse valido. */
-        setEstrelas(estrelas);
+        /*
+         * O QUE O SERVIDOR RECUSOU VOLTA ATRÁS NA TELA — inteiro.
+         *
+         * Antes só `setEstrelas(estrelas)`, que neste caminho é um no-op: o
+         * estado já era esse. Tirar a última pergunta deixava a tela com zero
+         * perguntas, o interruptor ligado e o BANCO com a pergunta viva — então a
+         * galeria continuava pedindo a nota de uma pergunta que o fotógrafo
+         * achava que tinha apagado.
+         */
+        setAtivo(config.ativo);
+        setEstrelas(config.estrelas);
+        setPerguntas(config.perguntas);
         return;
       }
       setEstado("ok");
@@ -147,7 +157,15 @@ export function EditorRecados({
                 onClick={() => {
                   const lista = perguntas.filter((_, k) => k !== i);
                   setPerguntas(lista);
-                  gravar({ perguntas: lista });
+                  /*
+                   * Tirar a ÚLTIMA pergunta desliga as notas junto, em vez de
+                   * mandar um estado que o servidor recusa. Sem isso o fotógrafo
+                   * apagava a pergunta, lia "escreva pelo menos uma" em 11px e
+                   * saía da tela achando que tinha desligado algo.
+                   */
+                  const aindaTem = lista.some((q) => q.trim());
+                  if (!aindaTem) setEstrelas(false);
+                  gravar({ perguntas: lista, estrelas: aindaTem && estrelas });
                 }}
                 aria-label={`Tirar a pergunta ${i + 1}`}
                 className="shrink-0 rounded-md border border-linha px-2 py-1.5 text-[11px] text-texto-faint transition hover:border-alerta hover:text-alerta"

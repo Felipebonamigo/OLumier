@@ -82,7 +82,7 @@ export async function chavesConhecidas(db) {
     "select chave, chave_thumb, chave_preview, armazem from medias",
   );
   const { rows: marcas } = await db.query(
-    "select logo_chave from tenants where logo_chave is not null",
+    "select logo_chave, fonte_chave from tenants where logo_chave is not null or fonte_chave is not null",
   );
   /*
    * AS CAPAS ENVIADAS COMO ARQUIVO — e a falta delas aqui era um defeito.
@@ -100,6 +100,18 @@ export async function chavesConhecidas(db) {
   const { rows: capasDePasta } = await db.query(
     "select capa_chave from secoes where capa_chave is not null",
   );
+  /*
+   * AS FOTOS DA PÁGINA INICIAL (migração 043) — a quarta coluna de chave que
+   * estava fora desta lista, achada em 02/10/2026 pelo teste que varre o
+   * `information_schema` em vez de confiar em memória.
+   *
+   * Elas não pertencem a galeria nenhuma: o admin as troca pela tela da home, e
+   * ficam no bucket com duas derivadas. Fora daqui, `--apagar` levava a capa da
+   * própria página de vendas.
+   */
+  const { rows: daHome } = await db.query(
+    "select chave, chave_miniatura from fotos_da_home",
+  );
   /* Os donos vêm de `tenants`, não das chaves: um estúdio recém-criado, ainda
    * sem foto nenhuma, precisa ser reconhecido como daqui. */
   const { rows: donosRows } = await db.query("select id from tenants");
@@ -114,9 +126,25 @@ export async function chavesConhecidas(db) {
     if (m.chave_thumb) r2.add(m.chave_thumb);
     if (m.chave_preview) r2.add(m.chave_preview);
   }
-  for (const t of marcas) if (t.logo_chave) r2.add(t.logo_chave);
+  for (const t of marcas) {
+    if (t.logo_chave) r2.add(t.logo_chave);
+    /*
+     * A FONTE PRÓPRIA DO ESTÚDIO (migração 026) — a terceira coluna de chave do
+     * banco, e a que ficou de fora quando as capas entraram em 02/10/2026.
+     *
+     * O comentário da rota da fonte dizia que "a varredura já a conhece
+     * (ehChaveDeMarca)". Não conhecia: `ehChaveDeMarca` existe em `lib/r2.ts` e
+     * nenhum script da varredura a importa — é código morto. E o dono da chave É
+     * um tenant deste banco, então o guarda de ambiente também não a protegia.
+     */
+    if (t.fonte_chave) r2.add(t.fonte_chave);
+  }
   /* As capas são sempre do R2: nenhum caminho de envio de capa escreve no B2. */
   for (const c of [...capas, ...capasDePasta]) if (c.capa_chave) r2.add(c.capa_chave);
+  for (const f of daHome) {
+    if (f.chave) r2.add(f.chave);
+    if (f.chave_miniatura) r2.add(f.chave_miniatura);
+  }
 
   return { r2, b2, donos };
 }

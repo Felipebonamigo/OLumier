@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { podeSerCapa, urlDaCapa } from "@/lib/capa-publica";
+import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { sessaoAtual } from "@/lib/auth";
 import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { listarMedias } from "@/lib/medias";
@@ -63,11 +64,22 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
        * montada aqui, e a coluna é uma que a consulta já traz.
        */
       secaoId: m.secao_id,
-      /* O vídeo entra pelo pôster: `urlDaDerivada` cairia no
-         .mp4 quando não há derivada, e a grade de escolha mostraria um
-         arquivo de 800 MB no lugar de uma miniatura. */
       tipo: m.tipo,
-      url: await urlDaCapa(m, VALIDADE),
+      /*
+       * MINIATURA, e não prévia — a grade desenha ladrilho de 150 px.
+       *
+       * Passou um dia por `urlDaCapa`, que usa a prévia (2048 px, qualidade
+       * 0,90): dez vezes a área por ladrilho, e ~500 MB para rolar uma galeria
+       * de 600 fotos numa tela de escolher capa. Pior, `urlDaDerivada` cai no
+       * ORIGINAL quando a prévia não existe, e original pode estar no B2, onde
+       * a saída é paga.
+       *
+       * O vídeo entra pelo pôster, que é a miniatura dele.
+       */
+      url:
+        m.tipo === "video"
+          ? await urlDaCapa(m, VALIDADE)
+          : await urlDaDerivada(m.chave_thumb, m.chave, armazemDe(m.armazem), VALIDADE),
     })),
   );
 

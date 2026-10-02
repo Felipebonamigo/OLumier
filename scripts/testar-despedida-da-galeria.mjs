@@ -145,10 +145,16 @@ await etapa("texto comprido é aparado, como o rótulo", async () => {
    * casal, e um parágrafo inteiro no fim da galeria vira outra coisa. Aparar é
    * melhor do que recusar — quem colou demais não perde o que escreveu.
    */
-  const comprido = "x".repeat(400);
+  /* O teto é 160 (`textoLivre(o.despedida, 160)`), e a conferência tem de ser
+     NESSE número: medir "menos de 300" deixava passar um teto de 280, que é
+     exatamente o parágrafo no fim da galeria que esta etapa diz querer evitar. */
+  const TETO = 160;
+  const comprido = "x".repeat(TETO + 240);
   const html = await comAparencia({ despedida: comprido });
-  if (html.includes("x".repeat(300))) throw new Error("não aparou: 300 caracteres passaram");
-  return "aparado";
+  const maior = (html.match(/x{20,}/g) ?? []).reduce((n, t) => Math.max(n, t.length), 0);
+  if (maior === 0) throw new Error("a frase comprida não saiu na página");
+  if (maior > TETO) throw new Error(`não aparou no teto: saíram ${maior} caracteres`);
+  return `aparado em ${maior}`;
 });
 
 await etapa("HTML na frase não vira marcação", async () => {

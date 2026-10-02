@@ -59,7 +59,17 @@ export function escolherCapa<T extends MediaParaCapa>(
   const escolhida = capaMediaId
     ? todas.find((m) => m.id === capaMediaId && podeSerCapa(m))
     : undefined;
-  return escolhida ?? reserva.find((m) => m.tipo === "foto") ?? reserva.find(podeSerCapa);
+  /*
+   * A RESERVA É SÓ FOTO, e o degrau que falta aqui é deliberado.
+   *
+   * Havia um terceiro degrau — "senão o primeiro vídeo com pôster" — e ele
+   * MUDAVA galeria já entregue: uma entrega só de filme, sem capa escolhida,
+   * desenhava a capa sem imagem (o desenho que o fotógrafo aprovou), e passaria
+   * a abrir com o pôster do primeiro vídeo da noite, sem ninguém pedir.
+   *
+   * Vídeo vira capa quando é ESCOLHIDO. Nunca por reserva.
+   */
+  return escolhida ?? reserva.find((m) => m.tipo === "foto");
 }
 
 /** A imagem desta capa. Null quando não há imagem possível. */

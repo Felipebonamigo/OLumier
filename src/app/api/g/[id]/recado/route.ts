@@ -93,7 +93,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   /* A autorização é um SIM explícito e nada mais: qualquer outro valor é não. */
-  await gravarRecado(id, pessoaId, { texto, notas, autoriza: corpo.autoriza === true });
+  const gravou = await gravarRecado(id, pessoaId, {
+    texto,
+    notas,
+    autoriza: corpo.autoriza === true,
+  });
+  if (!gravou) {
+    /* O teto por identidade (migração 060). 409 e não 429: não é volume de
+       origem, é esta pessoa já ter dito o que tinha para dizer. */
+    return NextResponse.json(
+      { erro: "Você já deixou os seus recados nesta galeria." },
+      { status: 409 },
+    );
+  }
 
   registrarUso(chaveDoFreio, RECADOS_POR_JANELA);
   return NextResponse.json({ ok: true });

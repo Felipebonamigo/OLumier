@@ -198,11 +198,29 @@ await etapa("o arquivo enviado vence a foto escolhida", async () => {
   return "arquivo > foto escolhida";
 });
 
-await etapa("a entrega do cliente mostra a capa enviada na pasta", async () => {
-  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
-  const limpo = html.replaceAll("\\u0026", "&").replaceAll("&amp;", "&");
+await etapa("a entrega do cliente mostra a capa enviada na FRENTE da pasta", async () => {
+  /*
+   * DENTRO DA MARCAÇÃO, e na FRENTE da pasta.
+   *
+   * A conferência olhava o documento inteiro, scripts incluídos: inverter a ordem
+   * do array `imagens` (capa enviada no fim, em vez de primeiro) devolvia a frente
+   * da pasta para a foto do capítulo — o defeito que o Juan pediu para consertar —
+   * e a etapa continuava verde, porque a chave seguia na carga do React.
+   */
+  const bruto = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+  const html = bruto
+    .replace(new RegExp("<script[\\s\\S]*?</script>", "g"), "")
+    .replaceAll("\\u0026", "&")
+    .replaceAll("&amp;", "&");
   const nome = chave.split("/").pop();
-  if (!limpo.includes(nome)) throw new Error("a capa enviada não aparece nas pastas do cliente");
+  if (!html.includes(nome)) throw new Error("a capa enviada não aparece nas pastas do cliente");
+  /* A capa enviada tem de vir ANTES das miniaturas das fotos do capítulo: elas
+     são as três de trás da pilha, e a enviada é a frente. */
+  const daCapa = html.indexOf(nome);
+  const daFoto = html.indexOf("capa-pasta-2_thumb");
+  if (daFoto !== -1 && daCapa > daFoto) {
+    throw new Error("a imagem enviada não é a frente da pasta — virou uma das de trás");
+  }
   return nome;
 });
 

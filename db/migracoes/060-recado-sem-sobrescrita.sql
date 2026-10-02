@@ -1,0 +1,54 @@
+-- ============================================================================
+--  O RECADO DEIXA DE SER SOBRESCRITO
+-- ============================================================================
+--
+--  Defeito achado em 02/10/2026, antes de publicar, por revisão adversarial do
+--  próprio lote que criou a tabela (migração 058).
+--
+--  ── O QUE ACONTECIA ───────────────────────────────────────────────────────
+--
+--  A tabela tinha `unique (galeria_id, pessoa_id)` e a gravação era
+--  `on conflict do update set texto = ..., notas = ..., autoriza_depoimento = ...`.
+--  A intenção era boa: "voltar e escrever de novo CORRIGE o que ela disse".
+--
+--  Só que a IDENTIDADE de quem escreve é um e-mail NÃO VERIFICADO — decisão de
+--  produto de 15/09/2026, documentada em `lib/favoritas.ts`: não há senha, não há
+--  confirmação, e `pessoaPorEmail` devolve a MESMA linha de `pessoas_da_galeria`
+--  para quem quer que digite aquele endereço. Isso é aceitável para separar a
+--  lista de favoritas da noiva da do convidado. Não é aceitável para isto:
+--
+--   1. qualquer um com o link digitava `ana@gmail.com`, escrevia outro texto, e o
+--      recado da Ana DESAPARECIA do banco, sem cópia;
+--   2. pior, a caixa "o fotógrafo pode usar o que eu escrevi como depoimento"
+--      vinha no mesmo pedido — então um estranho punha palavras na boca da noiva
+--      E dava a autorização por ela, e o painel mostrava aquilo assinado com o
+--      nome e o e-mail dela;
+--   3. e sem atacante nenhum: o casal que usa UM e-mail só (`anaepedro@`) perdia
+--      o recado de quem escreveu primeiro.
+--
+--  Havia ainda a versão benigna do mesmo estrago: quem voltasse para dar só as
+--  estrelas apagava o próprio texto, porque o `do update` escrevia os três campos
+--  com o que viesse no pedido.
+--
+--  ── O CONSERTO ────────────────────────────────────────────────────────────
+--
+--  Sai a chave única: cada envio é uma LINHA. Nada é sobrescrito, nada é
+--  apagado, e a autorização pertence à linha em que foi dada — a da Ana continua
+--  `false`, a do estranho nasce `true` e com a data dele. O painel passa a
+--  mostrar os dois, e dois recados da mesma pessoa com textos diferentes é
+--  exatamente a informação que o fotógrafo precisa para não publicar o errado.
+--
+--  Verificar e-mail resolveria pela raiz, e não foi feito aqui de propósito: é
+--  mudança de produto (atrito para o convidado que só quer escrever uma frase) e
+--  é decisão do Felipe, não minha. Isto fecha o estrago sem mudar o combinado.
+--
+--  O TETO por pessoa vive no código (`MAX_RECADOS_POR_PESSOA`, `lib/recados.ts`),
+--  e não aqui: é regra de produto, muda sem migração, e um `check` no banco
+--  recusaria com erro de constraint no lugar de uma frase em português.
+
+alter table recados
+  drop constraint if exists recados_galeria_id_pessoa_id_key;
+
+-- A leitura do painel ainda é "os desta galeria, os novos primeiro", e agora
+-- também "quantos desta pessoa" — para a tela poder dizer que é o segundo.
+create index if not exists idx_recados_pessoa on recados (galeria_id, pessoa_id);

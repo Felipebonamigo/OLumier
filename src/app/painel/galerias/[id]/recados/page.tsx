@@ -113,7 +113,15 @@ export default async function RecadosPage({ params }: { params: Promise<{ id: st
                   <span className="text-sm font-medium">{comoChamar(r)}</span>
                   <span className="text-[11px] text-texto-faint">
                     {dataHora(r.quando)}
-                    {r.corrigido && " · corrigido depois"}
+                    {/*
+                      "2º de 3 desta pessoa" — e não "corrigido depois", que era o
+                      que estava escrito e dizia o contrário do que acontece desde
+                      a migração 060: nada é substituído. Dois textos diferentes
+                      com o mesmo e-mail é o sinal de que alguém digitou o endereço
+                      de outra pessoa, e isso precisa ser visível antes de uma
+                      frase virar depoimento no site.
+                    */}
+                    {r.total > 1 && ` · ${r.ordem}º de ${r.total} deste e-mail`}
                   </span>
                 </div>
                 {r.email && r.nome && (

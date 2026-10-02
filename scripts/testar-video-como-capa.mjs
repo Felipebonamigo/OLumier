@@ -133,15 +133,32 @@ await etapa("a galeria desenha o PÔSTER, e nunca o .mp4", async () => {
   return "pôster na capa";
 });
 
-await etapa("o cartão do WhatsApp também usa o pôster", async () => {
-  /* A capa do cartão sai de outra rota (`opengraph-image`), e foi por isso que
-     a conferência está aqui: a página e o cartão escolhiam a capa em dois
-     lugares, com o mesmo filtro copiado. */
+await etapa("o cartão do WhatsApp responde, e sai SEM foto — por um motivo", async () => {
+  /*
+   * ── A VERDADE DESTA ETAPA, ESCRITA EM VEZ DE PROMETIDA ──────────────────
+   *
+   * Ela dizia "o cartão também usa o pôster" e conferia só `content-type:
+   * image/*` — o que é verdade para o quadro neutro também. A revisão de
+   * 02/10/2026 pegou: o cartão NÃO mostra o pôster, e não é descuido.
+   *
+   * O satori só desenha JPEG e PNG (`DESENHAVEIS`, em `opengraph-image.tsx`), e
+   * o pôster é WebP — é o formato que o navegador do fotógrafo gera. Para foto
+   * existe a segunda tentativa, o ORIGINAL (JPEG); para vídeo o "original" é o
+   * .mp4, que o satori não desenha e que custaria a saída do arquivo inteiro para
+   * descobrir isso. Então o cartão cai no quadro neutro, com a cor e o nome da
+   * galeria — que é a entrega digna que aquele arquivo já escolheu dar.
+   *
+   * O que esta etapa prende: o cartão RESPONDE (não quebra), e o .mp4 nunca é
+   * buscado para desenhar. O dia em que alguém gerar pôster em JPEG, esta etapa
+   * é o lugar de mudar a expectativa de propósito.
+   */
   const r = await fetch(`${BASE}/g/${g.tslug}/${g.gslug}/opengraph-image`, { cache: "no-store" });
   igual(r.status, 200, "status");
   const tipo = r.headers.get("content-type") ?? "";
   if (!tipo.startsWith("image/")) throw new Error(`o cartão devolveu ${tipo}`);
-  return tipo;
+  const bytes = (await r.arrayBuffer()).byteLength;
+  if (bytes < 1000) throw new Error("o cartão saiu vazio");
+  return `${tipo}, ${Math.round(bytes / 1024)} KB (quadro neutro)`;
 });
 
 await etapa("o fotógrafo acha o filme na tela de escolher a capa", async () => {

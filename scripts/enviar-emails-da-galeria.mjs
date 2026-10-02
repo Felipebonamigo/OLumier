@@ -29,6 +29,8 @@ import {
 } from "../src/lib/emails-da-galeria.ts";
 import { montarEmailDaGaleria } from "../src/config/email-da-galeria.ts";
 import { enviarEmail, emailConfigurado, motivoEmailIndisponivel } from "../src/lib/email.ts";
+import { galeriasNoAr } from "../src/lib/assinatura.ts";
+import { asaasConfigurado } from "../src/lib/asaas.ts";
 import { urlDeLeitura } from "../src/lib/r2.ts";
 import { urlDaDerivada, armazemDe } from "../src/lib/armazem.ts";
 
@@ -67,10 +69,33 @@ let pulados = 0;
 for (const e of pendentes) {
   const destino = `${e.tipo} → ${e.para} (${e.titulo})`;
 
-  if (!e.publicada || e.estado !== "online") {
-    const motivo = !e.publicada ? "galeria fora do ar" : `galeria em ${e.estado}`;
+  /*
+   * A CONSULTA JÁ FILTRA galeria fora do ar e no cofre — ver
+   * `pendentesParaEnviar`. Este bloco continua como segunda tranca (o estado pode
+   * mudar entre a consulta e o envio) e cobre o que a consulta NÃO sabe: a conta
+   * do estúdio. Trial abandonado e vencido tira a galeria do ar pela régua de
+   * `galeriasNoAr`, e mandar "rever as fotos" para um link que não abre mais é
+   * pior que silêncio.
+   */
+  const noAr =
+    e.publicada &&
+    e.estado === "online" &&
+    galeriasNoAr(
+      { status: e.estudioStatus, trial_ate: e.estudioTrialAte },
+      /* O MESMO sinal que `/api/galerias/[id]` usa para responder "no ar" ao
+         Atomatiza: responder diferente aqui mandaria o casal para um link que a
+         própria plataforma considera fechado. */
+      asaasConfigurado(),
+    );
+  if (!noAr) {
+    const motivo = !e.publicada
+      ? "galeria fora do ar"
+      : e.estado !== "online"
+        ? `galeria em ${e.estado}`
+        : "a conta do estúdio não serve galeria agora";
     console.log(`  · ${destino} — pulado: ${motivo}`);
-    if (APLICAR) await marcarErro(e.id, motivo);
+    /* NÃO marca erro: a linha volta à fila sozinha quando a situação mudar, e
+       escrever o mesmo motivo todo dia só enchia a tela do fotógrafo. */
     pulados += 1;
     continue;
   }
@@ -146,7 +171,10 @@ for (const e of pendentes) {
     continue;
   }
 
-  const ok = await enviarEmail({ para: e.para, assunto, html, texto });
+  /* A chave de idempotência é o ID DA LINHA: estável entre rodadas, então um
+     Resend lento que aceitou e respondeu depois do nosso timeout não manda a
+     mesma mensagem duas vezes no dia seguinte. */
+  const ok = await enviarEmail({ para: e.para, assunto, html, texto, idempotencia: e.id });
   if (ok) {
     await marcarEnviado(e.id);
     enviados += 1;

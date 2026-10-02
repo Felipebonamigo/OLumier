@@ -466,6 +466,29 @@ export function GaleriaCliente({
    * com a rota `eu` por conta própria — duas identificações paralelas para a
    * mesma pessoa é o defeito que a migração 033 veio consertar.
    */
+  /*
+   * QUAIS CAPÍTULOS SAEM MAIORES — decidido sobre o capítulo INTEIRO.
+   *
+   * A conta morava no `render`, sobre `cap.indices` — e ali `cap` é o recorte do
+   * DESENHO POR PARTES, não o capítulo. Num capítulo de 20 vídeos que vem depois
+   * de 55 fotos, a primeira leva desenha 5 deles: "5 vídeos, todos vídeo" dava
+   * verdadeiro, os 20 saíam com o dobro da largura, e o tamanho mudava embaixo do
+   * dedo quando o resto era desenhado.
+   *
+   * `fatia` fica de fora inteira: ali `indices` é só o que já chegou do servidor,
+   * e um capítulo que parece ter 4 vídeos pode ter 40 vindo pela rede.
+   */
+  const capitulosDeVideo = useMemo(() => {
+    const ids = new Set<string>();
+    if (fatia) return ids;
+    for (const c of capitulos) {
+      const quantos = c.indices.length;
+      if (quantos === 0 || quantos > VIDEOS_GRANDES_ATE) continue;
+      if (c.indices.every((i) => itens[i]?.tipo === "video")) ids.add(c.id);
+    }
+    return ids;
+  }, [capitulos, itens, fatia]);
+
   const [recadoAberto, setRecadoAberto] = useState(false);
 
   /** Diz quem é, para o recado. Devolve a mensagem de erro, ou null. */
@@ -2128,10 +2151,7 @@ export function GaleriaCliente({
                 e é para isso que existe densidade. MUITOS vira lista, e lista
                 grande em cartão grande só vira rolagem.
               */
-              maiores={
-                cap.indices.length <= VIDEOS_GRANDES_ATE &&
-                cap.indices.every((i) => itens[i].tipo === "video")
-              }
+              maiores={capitulosDeVideo.has(cap.id)}
               /* O fim do que está desenhado só é o fim do capítulo quando o
                  desenho por partes chegou até ele E nenhuma foto dele ainda
                  vem pela rede. Ver `fileirasDeColunas`. */

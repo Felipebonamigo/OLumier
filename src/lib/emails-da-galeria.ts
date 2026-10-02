@@ -1,6 +1,7 @@
 import "server-only";
 import { consultar, consultarUm } from "./db";
 import { enderecoDaGaleria } from "@/config/marca";
+import { FUSO } from "@/config/fuso";
 import { TIPOS, lerTemplate, type TipoDeEmail } from "@/config/email-da-galeria";
 
 /**
@@ -50,15 +51,31 @@ export function emailPlausivel(email: string): boolean {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
 }
 
+/**
+ * Soma dias sobre a DATA, nunca sobre o instante.
+ *
+ * `setUTCDate` em cima de um `Date` que veio de coluna `date` (meia-noite local)
+ * atravessava o fuso e podia andar um dia; aqui a conta é feita sobre o texto
+ * AAAA-MM-DD, onde "mais 182 dias" não tem como escorregar.
+ */
 function somarDias(base: Date, dias: number): Date {
-  const d = new Date(base);
-  d.setUTCDate(d.getUTCDate() + dias);
-  return d;
+  const [a, m, d] = soData(base).split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d + dias, 12));
 }
 
-/** "2026-10-02" — o que a coluna `date` guarda, sem passar por fuso. */
+/**
+ * "2026-10-02" — a data NO FUSO DO BRASIL, que é o fuso do produto.
+ *
+ * Era `toISOString().slice(0,10)`, ou seja UTC, e isso descartava e-mail em
+ * silêncio: o servidor roda em UTC, então entre 21h e meia-noite de Brasília o
+ * "hoje" dele já é amanhã. Um fotógrafo que às 21h30 publicasse a galeria do
+ * making of de um casamento do dia seguinte via o "No dia do casamento" ser
+ * considerado passado e nunca agendado — e nada na tela dizia por quê.
+ *
+ * `en-CA` porque ele formata como AAAA-MM-DD, que é o que a coluna `date` aceita.
+ */
 function soData(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return d.toLocaleDateString("en-CA", { timeZone: FUSO });
 }
 
 /**
@@ -242,27 +259,50 @@ export interface EmailParaEnviar {
   /** Estados que impedem o envio: a galeria saiu do ar, ou foi para o cofre. */
   publicada: boolean;
   estado: string;
+  /** A conta do estúdio, para `galeriasNoAr` — trial abandonado tira do ar. */
+  estudioStatus: string;
+  estudioTrialAte: Date | null;
 }
 
+/** Quantos dias depois da data um lembrete ainda faz sentido. */
+export const ATRASO_MAXIMO_DIAS = 30;
+
 /**
- * O que venceu e ainda não saiu.
+ * O que venceu e ainda não saiu — e só o que dá para entregar HOJE.
  *
  * `agendado_para <= hoje` e não `= hoje`: se o servidor ficar dois dias fora, o
- * que venceu no meio sai na volta, em vez de nunca sair.
+ * que venceu no meio sai na volta em vez de nunca sair.
+ *
+ * ── AS DUAS CONDIÇÕES QUE A CONSULTA GANHOU, E O QUE ELAS EVITAM ──────────
+ *
+ * 1. `g.publicada and g.estado = 'online'`. Antes a linha de galeria arquivada
+ *    vinha, o laço a pulava e escrevia o motivo — todo dia, para sempre. Com 512
+ *    galerias no cofre, as 200 vagas da rodada enchiam só de linhas puladas e o
+ *    e-mail de ENTREGA de quem acabou de publicar não saía mais. A linha agora
+ *    simplesmente não é escolhida, e volta à fila no dia em que a galeria voltar.
+ *
+ * 2. `agendado_para >= hoje - ATRASO_MAXIMO_DIAS`. Lembrete tem data porque a
+ *    data é o assunto dele: "amanhã faz um ano" chegando catorze meses depois é
+ *    pior que não chegar. Galeria que passou meses fora do ar não dispara o
+ *    passado todo de uma vez quando voltar.
  */
 export async function pendentesParaEnviar(hoje: Date, limite = 200): Promise<EmailParaEnviar[]> {
   const linhas = await consultar<Record<string, unknown>>(
     `select e.id, e.tipo, e.para, e.nome, e.galeria_id, e.agendado_para,
             g.tenant_id, g.titulo, g.data_evento, g.email_template, g.email_mensagem,
             g.slug as galeria_slug, g.capa_chave, g.capa_media_id, g.publicada, g.estado,
-            t.nome_estudio, t.slug as estudio_slug, t.cor_destaque, t.logo_chave
+            t.nome_estudio, t.slug as estudio_slug, t.cor_destaque, t.logo_chave,
+            t.status as estudio_status, t.trial_ate as estudio_trial_ate
        from emails_da_galeria e
        join galerias g on g.id = e.galeria_id
        join tenants t on t.id = g.tenant_id
-      where e.enviado_em is null and e.agendado_para <= $1::date
+      where e.enviado_em is null
+        and e.agendado_para <= $1::date
+        and e.agendado_para >= $1::date - $3::int
+        and g.publicada and g.estado = 'online'
       order by e.agendado_para
       limit $2`,
-    [soData(hoje), limite],
+    [soData(hoje), limite, ATRASO_MAXIMO_DIAS],
   );
   return linhas.map((l) => ({
     id: String(l.id),
@@ -284,6 +324,11 @@ export async function pendentesParaEnviar(hoje: Date, limite = 200): Promise<Ema
     capaMediaId: (l.capa_media_id as string | null) ?? null,
     publicada: Boolean(l.publicada),
     estado: String(l.estado),
+    /* A conta do estúdio ainda serve galeria? Trial abandonado e vencido tira a
+       galeria do ar (`galeriasNoAr`), e mandar "rever as fotos" para um link que
+       não abre mais é pior que silêncio. */
+    estudioStatus: String(l.estudio_status),
+    estudioTrialAte: (l.estudio_trial_ate as Date | null) ?? null,
   }));
 }
 

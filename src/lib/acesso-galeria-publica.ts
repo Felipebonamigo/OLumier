@@ -29,12 +29,25 @@ import { temAcessoLiberado } from "./galerias-publicas";
  * montar o álbum.
  */
 export async function galeriaLiberada(id: string) {
-  const galeria = await consultarUm<{ id: string; senha_hash: string | null; estado: string }>(
-    "select id, senha_hash, estado from galerias where id = $1 and publicada",
-    [id],
-  );
+  const galeria = await consultarUm<{
+    id: string;
+    senha_hash: string | null;
+    estado: string;
+    expira_em: Date | null;
+  }>("select id, senha_hash, estado, expira_em from galerias where id = $1 and publicada", [id]);
   if (!galeria) return { ok: false as const, status: 404 };
   if (galeria.estado !== "online") return { ok: false as const, status: 409 };
+  /*
+   * VENCIDA também é 409, e esta linha é de 02/10/2026.
+   *
+   * A página já mostrava "galeria expirada", mas as rotas não perguntavam — e o
+   * cookie de identificação vale 90 dias. Quem tivesse a aba aberta (ou voltasse
+   * pelo histórico) continuava marcando favorita e, desde o recado, gravando
+   * texto numa entrega que a própria plataforma considera encerrada.
+   */
+  if (galeria.expira_em && new Date(galeria.expira_em) < new Date()) {
+    return { ok: false as const, status: 409 };
+  }
   if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
     return { ok: false as const, status: 401 };
   }

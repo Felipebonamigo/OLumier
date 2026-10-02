@@ -53,8 +53,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
    * O `motivo` vem da tela que pediu. Ausente, vale a regra estrita — quem não
    * disse por que está identificando cai no caso que preserva a lista.
    */
+  /*
+   * ── QUEM ACEITA SÓ O NOME, E POR QUÊ (recado entrou em 02/10/2026) ──────
+   *
+   * FAVORITAR exige e-mail: a lista tem de ser a mesma no celular e no notebook,
+   * e só o e-mail atravessa dois aparelhos.
+   *
+   * BAIXAR aceita nome — "pelo menos um dos dois" (Felipe, 23/09/2026).
+   *
+   * RECADO aceita nome pela mesma razão do download: é um ato único, não uma
+   * lista que precisa ser reencontrada. E a tela dele diz, em letra grande, "Seu
+   * e-mail (opcional)" — sem esta linha, a Tia Marta escrevia o nome, deixava o
+   * e-mail em branco como a tela permite, e levava um 400 dizendo "e-mail
+   * inválido" sem ter como passar.
+   */
   const pessoa =
-    corpo.motivo === "baixar"
+    corpo.motivo === "baixar" || corpo.motivo === "recado"
       ? await pessoaPorNomeOuEmail(id, { email: corpo.email, nome: corpo.nome })
       : await pessoaPorEmail(id, String(corpo.email ?? ""), corpo.nome ?? null);
 

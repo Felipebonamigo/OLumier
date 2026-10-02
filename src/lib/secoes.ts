@@ -76,16 +76,44 @@ export async function definirCapaDaPasta(
   galeriaId: string,
   tenantId: string,
   mediaId: string,
-): Promise<boolean> {
-  const linhas = await consultar(
-    `update secoes s set capa_media_id = m.id
+): Promise<{ ok: boolean; chaveAntiga: string | null }> {
+  /*
+   * ── ESCOLHER UMA FOTO TIRA A IMAGEM ENVIADA (02/10/2026) ────────────────
+   *
+   * A migração 057 estabeleceu que arquivo enviado VENCE a foto escolhida, e os
+   * dois lugares que desenham obedecem. Só que esta função gravava
+   * `capa_media_id` e deixava `capa_chave` de pé — então, depois de um envio,
+   * clicar numa foto do capítulo não mudava NADA na tela e a ação respondia
+   * "ok". O botão existia e mentia.
+   *
+   * Escolher uma foto é dizer "quero esta", então o arquivo sai: a coluna é
+   * zerada e a chave antiga volta para quem chamou poder apagar o objeto. Ler
+   * antes de zerar é a única hora em que dá para saber qual arquivo ficou sem
+   * dono.
+   */
+  /* A chave ANTES de zerar. Subconsulta dentro do RETURNING leria a tabela no
+     mesmo snapshot da instrução, e "antes ou depois" ali é sutil demais para o
+     caminho que decide se um arquivo pago vai embora. */
+  const antes = await consultarUm<{ capa_chave: string | null }>(
+    `select s.capa_chave
+       from secoes s
+       join medias m on m.secao_id = s.id
+      where m.id = $1 and m.galeria_id = $2 and m.tenant_id = $3`,
+    [mediaId, galeriaId, tenantId],
+  );
+  const linhas = await consultar<{ id: string }>(
+    `update secoes s
+        set capa_media_id = m.id, capa_chave = null
        from medias m
       where m.id = $1 and m.galeria_id = $2 and m.tenant_id = $3
         and s.id = m.secao_id and s.galeria_id = m.galeria_id
       returning s.id`,
     [mediaId, galeriaId, tenantId],
   );
-  return linhas.length > 0;
+  return {
+    ok: linhas.length > 0,
+    chaveAntiga: linhas.length > 0 ? (antes?.capa_chave ?? null) : null,
+  };
 }
 
 /** Confere que a galeria é do tenant antes de qualquer escrita em seção. */

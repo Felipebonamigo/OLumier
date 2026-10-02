@@ -90,7 +90,8 @@ const ligar = (extra = {}) =>
     ],
   );
 
-const noiva = await identificar(`noiva-recado-${Date.now()}@exemplo.com`);
+const EMAIL_DA_NOIVA = `noiva-recado-${Date.now()}@exemplo.com`;
+const noiva = await identificar(EMAIL_DA_NOIVA);
 const FRASE = "Vocês capturaram exatamente o que esse dia foi para nós";
 
 console.log("O recado do cliente:\n");
@@ -98,11 +99,28 @@ console.log("O recado do cliente:\n");
 /* ── DESLIGADO ──────────────────────────────────────────────────────────── */
 
 await etapa("desligado: a galeria entregue não muda", async () => {
-  const html = desenhado(await (await fetch(paginaPublica, { cache: "no-store" })).text());
-  if (/[Dd]eixar um recado|[Rr]ecado para/.test(html)) {
+  const bruto = await (await fetch(paginaPublica, { cache: "no-store" })).text();
+  const html = desenhado(bruto);
+  if (/[Dd]eixar um recado/.test(html)) {
     throw new Error("apareceu convite de recado numa galeria que não ligou nada");
   }
-  return "sem convite";
+  /*
+   * O SÍMBOLO NA BARRA, que é o risco real das 512 galerias entregues: trocar
+   * `recado?.ativo ? abrir : null` por `abrir` punha um ícone de recado em todas
+   * elas, e a conferência de "convite" não pegava — o rótulo da barra é outro.
+   */
+  if (/✉s*Recado/.test(html)) {
+    throw new Error("o símbolo do recado apareceu na barra de uma galeria desligada");
+  }
+  /* E as perguntas do fotógrafo não podem viajar nem na carga do React: prop de
+     componente de cliente vai serializada no HTML de quem tem o link. */
+  await ligar({ ativo: false, estrelas: false, perguntas: ["O preço ficou dentro do esperado?"] });
+  const comPergunta = await (await fetch(paginaPublica, { cache: "no-store" })).text();
+  if (comPergunta.includes("O preço ficou dentro do esperado?")) {
+    throw new Error("a pergunta do fotógrafo vazou no HTML público com o recado desligado");
+  }
+  await db.query("update galerias set recado_perguntas = '[]'::jsonb where id = $1", [g.id]);
+  return "sem convite, sem símbolo, sem pergunta";
 });
 
 await etapa("desligado: a rota recusa, mesmo com a pessoa identificada", async () => {
@@ -153,29 +171,133 @@ await etapa("identificada, o recado grava", async () => {
   igual(rows[0].autoriza_depoimento, false, "autorização sem pedir");
 });
 
-await etapa("escrever de novo CORRIGE, não acrescenta", async () => {
-  const novo = "Corrigindo: foi o melhor dia da nossa vida";
+await etapa("escrever de novo NÃO apaga o anterior", async () => {
+  /*
+   * A promessa antiga era "voltar e escrever de novo CORRIGE", feita com
+   * `on conflict do update`. Era um defeito: a identidade é um e-mail não
+   * verificado, então "corrigir" era o verbo errado — quem digitasse o endereço
+   * da noiva apagava o texto dela. Migração 060: cada envio é uma linha.
+   */
+  const novo = "Complementando: foi o melhor dia da nossa vida";
   const r = await mandar(noiva, { texto: novo });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const { rows } = await db.query("select texto from recados where galeria_id = $1", [g.id]);
-  igual(rows.length, 1, "linhas");
-  igual(rows[0].texto, novo, "texto");
+  const { rows } = await db.query(
+    "select texto from recados where galeria_id = $1 order by criado_em",
+    [g.id],
+  );
+  igual(rows.length, 2, "linhas");
+  igual(rows[0].texto, FRASE, "o primeiro texto continua lá");
+  igual(rows[1].texto, novo, "o segundo entrou ao lado");
+  return "dois recados, nenhum apagado";
 });
 
-await etapa("duas pessoas, dois recados", async () => {
+await etapa("quem digita o e-mail de outra pessoa NÃO apaga o recado dela", async () => {
+  /*
+   * ── O DEFEITO QUE ESTA ETAPA EXISTE PARA PRENDER ────────────────────────
+   *
+   * `pessoaPorEmail` devolve a MESMA linha de `pessoas_da_galeria` para quem
+   * quer que digite aquele endereço — não há senha nem confirmação, e isso é
+   * decisão de produto de 15/09/2026. Com o `do update` que existia, bastava um
+   * estranho com o link digitar `ana@`, escrever outro texto e MARCAR "pode usar
+   * como depoimento": o texto da Ana desaparecia do banco e o painel mostrava a
+   * frase do estranho assinada com o nome e o e-mail dela, autorizada.
+   *
+   * O teste encena isso com um cookie NOVO para o mesmo e-mail — que é
+   * exatamente o que o navegador do estranho faz.
+   */
+  const { rows: antes } = await db.query(
+    "select texto, autoriza_depoimento from recados where galeria_id = $1 order by criado_em",
+    [g.id],
+  );
+  const estranho = await identificar(EMAIL_DA_NOIVA); /* mesmo e-mail, outra sessão */
+  const r = await mandar(estranho, { texto: "Não recomendo este fotógrafo", autoriza: true });
+  if (!r.ok && r.status !== 409) throw new Error(`HTTP ${r.status}`);
+
+  const { rows: depois } = await db.query(
+    "select texto, autoriza_depoimento from recados where galeria_id = $1 order by criado_em",
+    [g.id],
+  );
+  for (const [i, linha] of antes.entries()) {
+    igual(depois[i]?.texto, linha.texto, `o texto ${i + 1} continua intacto`);
+    igual(
+      depois[i]?.autoriza_depoimento,
+      linha.autoriza_depoimento,
+      `a autorização ${i + 1} continua como estava`,
+    );
+  }
+  return r.status === 409 ? "barrado pelo teto" : "o texto do estranho entrou ao lado, sem apagar nada";
+});
+
+await etapa("quem dá só o nome consegue deixar recado", async () => {
+  /*
+   * A tela diz "Seu e-mail (opcional)" em letra grande. A rota `eu` só aceitava
+   * nome quando o motivo era "baixar" — então a Tia Marta escrevia o nome,
+   * deixava o e-mail vazio como a tela permite, e levava um 400 de "e-mail
+   * inválido" sem ter como passar. Esta etapa anda pelo caminho dela.
+   */
+  const r = await fetch(`${BASE}/api/g/${g.id}/eu`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nome: `Tia Marta ${Date.now()}`, email: "", motivo: "recado" }),
+  });
+  if (!r.ok) throw new Error(`identificar só com nome: HTTP ${r.status}`);
+  const cookieDela = (r.headers.get("set-cookie") ?? "").split(";")[0];
+  const envio = await mandar(cookieDela, { texto: "Lindas fotos, meus parabéns" });
+  if (!envio.ok) throw new Error(`mandar: HTTP ${envio.status}`);
+  const { rows } = await db.query(
+    `select r.texto, p.nome, p.email from recados r
+       join pessoas_da_galeria p on p.id = r.pessoa_id
+      where r.galeria_id = $1 and p.nome like 'Tia Marta%'`,
+    [g.id],
+  );
+  igual(rows.length, 1, "recados da Tia Marta");
+  igual(rows[0].email, null, "sem e-mail, como ela deixou");
+  return "nome basta";
+});
+
+await etapa("a mesma identidade tem teto de recados", async () => {
+  const { MAX_RECADOS_POR_PESSOA } = await import("../src/lib/recados.ts");
+  const quem = await identificar(`teto-${Date.now()}@exemplo.com`);
+  let barrou = 0;
+  for (let i = 0; i < MAX_RECADOS_POR_PESSOA + 2 && !barrou; i++) {
+    const r = await mandar(quem, { texto: `recado ${i}` });
+    if (r.status === 409) barrou = i + 1;
+  }
+  if (!barrou) throw new Error("escreveu sem limite com a mesma identidade");
+  return `barrou no ${barrou}º (teto ${MAX_RECADOS_POR_PESSOA})`;
+});
+
+await etapa("cada pessoa tem o recado dela", async () => {
   const noivo = await identificar(`noivo-recado-${Date.now()}@exemplo.com`);
+  const { rows: antes } = await db.query(
+    "select count(*)::int as n from recados where galeria_id = $1",
+    [g.id],
+  );
   const r = await mandar(noivo, { texto: "Assino embaixo" });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const { rows } = await db.query("select count(*)::int as n from recados where galeria_id = $1", [g.id]);
-  igual(rows[0].n, 2, "recados");
+  const { rows: depois } = await db.query(
+    `select count(*)::int as n from recados r
+       join pessoas_da_galeria p on p.id = r.pessoa_id
+      where r.galeria_id = $1 and p.email like 'noivo-recado-%'`,
+    [g.id],
+  );
+  igual(depois[0].n, 1, "recados do noivo");
+  const { rows: total } = await db.query(
+    "select count(*)::int as n from recados where galeria_id = $1",
+    [g.id],
+  );
+  igual(total[0].n, antes[0].n + 1, "uma linha nova, e só uma");
 });
 
 await etapa("o texto é aparado no teto do depoimento", async () => {
+  /* Identidade nova: a noiva já gastou o teto dela nas etapas acima, e um 409
+     aqui mediria o teto em vez da aparagem. */
+  const quem = await identificar(`aparagem-${Date.now()}@exemplo.com`);
   const comprido = "z".repeat(TETO_DO_RECADO + 400);
-  const r = await mandar(noiva, { texto: comprido });
+  const r = await mandar(quem, { texto: comprido });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const { rows } = await db.query(
-    "select length(texto) as n from recados where galeria_id = $1 order by atualizado_em desc limit 1",
+    "select length(texto) as n from recados where galeria_id = $1 order by criado_em desc limit 1",
     [g.id],
   );
   igual(Number(rows[0].n), TETO_DO_RECADO, "tamanho gravado");
@@ -231,11 +353,28 @@ await etapa("outro estúdio NÃO lê", async () => {
 
 /* ── AS ESTRELAS ────────────────────────────────────────────────────────── */
 
-await etapa("sem as estrelas ligadas, nota mandada por rota é ignorada", async () => {
-  const quem = await identificar(`so-nota-${Date.now()}@exemplo.com`);
-  const r = await mandar(quem, { notas: { "Atendimento": 5 } });
-  /* Sem texto e sem pergunta válida, não há recado a gravar. */
-  igual(r.status, 422, "status");
+await etapa("estrelas DESLIGADAS com pergunta montada: a nota é ignorada", async () => {
+  /*
+   * A etapa media a coisa errada: sem pergunta nenhuma montada, o 422 vinha de
+   * "não há nota válida", e trocar `config.estrelas ? ... : {}` por ignorar a
+   * chave `recado_estrelas` por completo deixava tudo verde. Agora a pergunta
+   * EXISTE e a chave está desligada — é só a chave que pode recusar a nota.
+   */
+  await ligar({ ativo: true, estrelas: false, perguntas: ["Como foi o atendimento?"] });
+  const quem = await identificar(`sem-estrela-${Date.now()}@exemplo.com`);
+  const r = await mandar(quem, { texto: "ok", notas: { "Como foi o atendimento?": 5 } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const { rows } = await db.query(
+    "select notas from recados where galeria_id = $1 order by criado_em desc limit 1",
+    [g.id],
+  );
+  igual(Object.keys(rows[0].notas).length, 0, "notas gravadas com a chave desligada");
+
+  /* E sem pergunta nenhuma, nota nem tem onde cair. */
+  await ligar({ ativo: true, estrelas: false, perguntas: [] });
+  const outro = await identificar(`so-nota-${Date.now()}@exemplo.com`);
+  igual((await mandar(outro, { notas: { Atendimento: 5 } })).status, 422, "status sem pergunta");
+  return "a chave manda";
 });
 
 await etapa("com as perguntas do fotógrafo, a nota grava", async () => {
