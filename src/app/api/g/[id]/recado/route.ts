@@ -4,6 +4,7 @@ import { pessoaAtual } from "@/lib/favoritas";
 import { hashDeIp } from "@/lib/ip";
 import { podeTentar, registrarUso, emPalavras } from "@/lib/tentativas";
 import { configDaGaleria, gravarRecado, notasValidas, TETO_DO_RECADO } from "@/lib/recados";
+import { avisarRecado } from "@/lib/avisos";
 
 /**
  * O RECADO DO CLIENTE — a única porta por onde ele entra (migração 058).
@@ -108,5 +109,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   registrarUso(chaveDoFreio, RECADOS_POR_JANELA);
+
+  /*
+   * O OUTRO LADO FICA SABENDO — DEPOIS da resposta, e só quando a galeria veio de
+   * um contrato.
+   *
+   * `after` e não `await`, e a diferença é de quem paga a espera. Quem está nesta
+   * rota é o CASAL, no celular, esperando o "recado enviado": o canal tem até
+   * quatro segundos de teto (`TEMPO_MAXIMO_MS`), e somar isso ao clique dele para
+   * avisar o CRM do fotógrafo é cobrar de quem não tem nada com aquilo. O recado
+   * já está gravado quando esta linha roda — a resposta não depende do aviso.
+   *
+   * Em `avisarEntrega` é `await` porque lá quem espera é o fotógrafo publicando,
+   * e ele quer saber se o aviso saiu. Aqui não há ninguém para informar.
+   *
+   * O `try` existe porque `after` só vale dentro de uma requisição; fora dela
+   * (um script, a suíte) o aviso simplesmente não acontece, como já não acontecia.
+   */
+  try {
+    const { after } = await import("next/server");
+    after(() => avisarRecado(id));
+  } catch {
+    await avisarRecado(id);
+  }
   return NextResponse.json({ ok: true });
 }

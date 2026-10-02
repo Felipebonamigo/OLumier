@@ -83,6 +83,12 @@ export async function POST(request: NextRequest) {
     subtitulo?: string;
     dataEvento?: string;
     referenciaExterna?: string;
+    /**
+     * O cliente do contrato (migração 061) — nome e e-mail, como o outro sistema
+     * os tem. Vira a sugestão que a aba Entrega pré-enche, e nada mais: nenhum
+     * e-mail é agendado por este POST.
+     */
+    cliente?: { nome?: string; email?: string };
   };
   try {
     corpo = await request.json();
@@ -133,6 +139,9 @@ export async function POST(request: NextRequest) {
       subtitulo: String(corpo.subtitulo ?? "").trim() || undefined,
       dataEvento: String(corpo.dataEvento ?? "").trim() || undefined,
       origem: referencia ? { de: ORIGEM_INTEGRACAO, ref: referencia } : undefined,
+      /* Só quando vem da integração: `cliente` sem `referenciaExterna` seria o
+         plugin do Lightroom inventando um destinatário para a entrega. */
+      cliente: referencia ? corpo.cliente : undefined,
     });
 
   /*

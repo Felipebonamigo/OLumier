@@ -113,6 +113,10 @@ export interface Galeria {
   recado_estrelas: boolean;
   recado_convite: string | null;
   recado_perguntas: unknown;
+  /* O cliente que veio do contrato do Atomatiza (migração 061). Sugestão para a
+     aba Entrega; não agenda nada. */
+  cliente_nome: string | null;
+  cliente_email: string | null;
   /* Os e-mails da galeria (migração 059): a chave dos lembretes, o desenho
      escolhido e o recado do fotógrafo no e-mail de entrega. A FILA não mora
      aqui — é `emails_da_galeria`, uma linha por e-mail agendado. */
@@ -400,6 +404,14 @@ export async function criarGaleria(dados: {
    * rota `POST /api/galerias`, que também é quem garante a idempotência.
    */
   origem?: { de: string; ref: string };
+  /**
+   * O cliente que o outro sistema já tem (migração 061).
+   *
+   * É SUGESTÃO para a aba Entrega, e não fila: nada é agendado aqui. Juan,
+   * 01/10/2026: "essa função já recolherá os dados automaticamente, como o email
+   * por exemplo" — o que faltava era justamente não redigitar.
+   */
+  cliente?: { nome?: string | null; email?: string | null };
 }) {
   const base = gerarSlug(dados.titulo) || "galeria";
   let slug = base;
@@ -412,9 +424,22 @@ export async function criarGaleria(dados: {
     slug = `${base}-${i}`;
   }
 
+  /*
+   * O e-mail entra em minúsculas, e o que não é e-mail NÃO entra.
+   *
+   * Minúsculas porque a fila de e-mails também normaliza (`agendarEmails`), e
+   * duas formas do mesmo endereço fariam a tela sugerir uma e a fila gravar
+   * outra. Endereço inválido vira nulo em vez de recusar a criação: no contrato
+   * do outro lado o campo pode estar vazio ou com "a combinar", e o botão "criar
+   * a galeria desta venda" não pode falhar por causa disso.
+   */
+  const clienteEmail = String(dados.cliente?.email ?? "").trim().toLowerCase().slice(0, 160);
+  const emailValido = /^[^@s]+@[^@s]+.[^@s]+$/.test(clienteEmail) ? clienteEmail : null;
+
   return consultarUm<Galeria>(
-    `insert into galerias (tenant_id, slug, titulo, subtitulo, data_evento, origem, origem_ref)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into galerias (tenant_id, slug, titulo, subtitulo, data_evento, origem, origem_ref,
+                           cliente_nome, cliente_email)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      returning *`,
     [
       dados.tenantId,
@@ -424,6 +449,8 @@ export async function criarGaleria(dados: {
       dados.dataEvento || null,
       dados.origem?.de ?? null,
       dados.origem?.ref ?? null,
+      String(dados.cliente?.nome ?? "").trim().slice(0, 80) || null,
+      emailValido,
     ],
   );
 }

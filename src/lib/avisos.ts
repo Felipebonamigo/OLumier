@@ -227,3 +227,120 @@ export async function avisarEntrega(galeriaId: string): Promise<void> {
     console.error("[avisos] não consegui avisar a entrega:", e);
   }
 }
+/** O aviso de recado, como ele vai na rede. Ver `corpoDoAvisoDeRecado`. */
+export interface AvisoDeRecado {
+  evento: "recado.novo";
+  ocorridoEm: string;
+  galeriaId: string;
+  referenciaExterna: string;
+  /** Quantos recados a galeria TEM agora — contador absoluto, não incremento. */
+  recados: number;
+}
+
+/**
+ * O CORPO DO AVISO, montado fora da rede — e é por isso que ele é uma função.
+ *
+ * A regra que mais importa neste canal ("o texto do casal não viaja") só é
+ * verificável se houver onde verificá-la sem servidor, sem banco e sem o segredo
+ * do canal. Numa bancada sem `AVISOS_ENC_KEY` o envio inteiro pula; esta função
+ * continua sendo conferida — ver `scripts/testar-ponte-cliente-e-recado.mjs`.
+ *
+ * Quem acrescentar campo aqui está acrescentando campo numa requisição que sai
+ * desta casa para outra: pergunte primeiro se o outro lado PRECISA, e depois se
+ * aquilo é dado do casal.
+ */
+export function corpoDoAvisoDeRecado(dados: {
+  galeriaId: string;
+  referenciaExterna: string;
+  recados: number;
+  ocorridoEm: Date;
+}): AvisoDeRecado {
+  return {
+    evento: "recado.novo",
+    ocorridoEm: dados.ocorridoEm.toISOString(),
+    galeriaId: dados.galeriaId,
+    referenciaExterna: dados.referenciaExterna,
+    /* Quantos existem AGORA, e não "+1": o outro lado pode ter perdido avisos, e
+       um contador absoluto diz a verdade em qualquer ordem de chegada. */
+    recados: dados.recados,
+  };
+}
+
+/**
+ * UM RECADO NOVO NA GALERIA DE UM CONTRATO (02/10/2026).
+ *
+ * Juan, 01/10/2026: "já integrará o feedback que as pessoas deram na galeria,
+ * dentro do próprio sistema Atomatiza. Talvez como um 'registro de contato'".
+ *
+ * ── O TEXTO NÃO VAI AQUI, E É O PONTO ─────────────────────────────────────
+ *
+ * A regra 2 deste canal continua inteira: o aviso diz QUE existe recado novo e
+ * quantos há, e nada do casal viaja. Quem quer o texto busca em
+ * `GET /api/galerias/<id>/recados` com a chave de API do próprio estúdio.
+ *
+ * A razão é o pior caso. Com o texto no aviso, um segredo vazado permitiria
+ * ESCREVER a palavra inventada de um casal dentro do CRM de um fotógrafo — e de
+ * lá ela sai como depoimento no site dele. Sem o texto, o mesmo vazamento
+ * provoca, no máximo, uma busca autenticada que devolve o que já era dele.
+ *
+ * ── E NEM TUDO O QUE É RECADO VIRA AVISO ──────────────────────────────────
+ *
+ * Só galeria que veio de fora (`origem_ref`), como em `avisarEntrega`: galeria
+ * criada no painel não tem contrato do outro lado para onde apontar, e o aviso
+ * seria uma requisição por recado para ninguém.
+ */
+export async function avisarRecado(galeriaId: string): Promise<void> {
+  try {
+    const g = await consultarUm<{
+      tenant_id: string;
+      origem_ref: string | null;
+      recados: number;
+    }>(
+      `select g.tenant_id, g.origem_ref,
+              (select count(*)::int from recados r where r.galeria_id = g.id) as recados
+         from galerias g
+        where g.id = $1`,
+      [galeriaId],
+    );
+    if (!g?.origem_ref) return;
+
+    const canal = await canalDoEstudio(g.tenant_id);
+    if (!canal) return;
+
+    const corpo = JSON.stringify(
+      corpoDoAvisoDeRecado({
+        galeriaId,
+        referenciaExterna: g.origem_ref,
+        recados: g.recados,
+        ocorridoEm: new Date(),
+      }),
+    );
+
+    let erro: string | null = null;
+    try {
+      const r = await fetch(canal.url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-atomo-estudio": g.tenant_id,
+          "x-atomo-assinatura": assinar(corpo, canal.segredo),
+        },
+        body: corpo,
+        cache: "no-store",
+        signal: AbortSignal.timeout(TEMPO_MAXIMO_MS),
+      });
+      if (!r.ok) erro = `HTTP ${r.status}`;
+    } catch (e) {
+      erro = e instanceof Error ? e.message.slice(0, 200) : "falhou";
+    }
+
+    await consultar(
+      "update avisos set ultimo_envio_em = now(), ultimo_erro = $2 where tenant_id = $1",
+      [g.tenant_id, erro],
+    );
+  } catch (e) {
+    /* Regra 1: avisar não derruba nada. Quem escreveu o recado não pode levar
+       erro porque o CRM do fotógrafo está fora do ar. */
+    console.error("[avisos] não consegui avisar o recado:", e);
+  }
+}

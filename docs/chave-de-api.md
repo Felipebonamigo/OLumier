@@ -180,12 +180,29 @@ Três coisas entraram para isso, todas dentro do desenho que já existia:
 | `GET /api/conta` | o aperto de mão: a quem esta chave pertence (`tenantId`, `slug`, `nomeEstudio`, `dominio`, `escopo`) — é o que o outro lado mostra na tela antes de gravar a conexão, e o `escopo` deixa recusar chave de leitura na hora | `leitura` |
 | `GET /api/galerias/:id` | como está a entrega: estado, contagem, endereço canônico e o `noAr` **calculado** (a régua da página pública, nunca a coluna `publicada` crua) | `leitura` |
 | `POST /api/galerias` + `referenciaExterna` | criar a galeria de um contrato, com **idempotência**: a mesma referência devolve a mesma galeria (200), nunca uma `ana-pedro-2` | `envio` |
+| `POST /api/galerias` + `cliente` | junto da referência, o **nome e o e-mail do cliente** do contrato (migração 061). Vira a sugestão que a aba Entrega pré-enche; **não agenda e-mail nenhum** | `envio` |
+| `GET /api/galerias/:id/recados` | os recados que o casal deixou (migração 058), com as notas e a **autorização para usar como depoimento**. `?desde=<ISO>` devolve só o que é mais novo | `leitura` |
 
 A procedência fica em `galerias.origem`/`origem_ref` (migração 045), com índice único
 parcial por `(tenant, origem, origem_ref)` que deixa a lixeira de fora — apagar a
 galeria errada não pode trancar o contrato até a purga. A referência é **opaca**:
-guardamos e devolvemos, nunca interpretamos. Nenhum dado do contrato (valor, cliente,
-telefone) atravessa; senha de galeria não entra em URL nem em resposta.
+guardamos e devolvemos, nunca interpretamos. Senha de galeria não entra em URL nem em
+resposta.
+
+**O que atravessa do contrato**, desde 02/10/2026: o nome e o e-mail do cliente, e
+nada mais (nem valor, nem telefone, nem parcela). Juan pediu por escrito — "essa
+função já recolherá os dados automaticamente, como o email por exemplo" —, e o uso é
+exatamente o que o fotógrafo faria à mão: preencher o campo de avisar a entrega.
+Endereço que não é endereço vira nulo em vez de recusar a criação: no contrato do
+outro lado o campo pode estar vazio ou com "a combinar", e o botão "criar a galeria
+desta venda" não pode falhar por causa disso.
+
+**O que o outro lado LÊ dos recados**, e por que ele lê em vez de receber: o texto do
+casal **não viaja no aviso** (ver a camada 4). Quem quer o texto busca aqui, com a
+chave do próprio estúdio. Se o segredo do canal vazar, um aviso forjado consegue no
+máximo provocar esta busca, que devolve o que já era daquele estúdio; com o texto no
+aviso, o mesmo vazamento escreveria a palavra inventada de um casal dentro do CRM de
+um fotógrafo — e de lá ela sairia como depoimento no site dele.
 
 O `GET /api/conta` não fere o "conta exige cookie" desta página: ele não expõe nada
 que dê poder — nem e-mail, nem plano, nem cobrança. Só a identidade que a tela de
@@ -206,6 +223,17 @@ conferir.
 | `POST /api/avisos` | registra PARA ONDE avisar e com que segredo | `envio` |
 | `GET /api/avisos` | o estado do canal (endereço e última tentativa) — o segredo nunca volta | `leitura` |
 | `DELETE /api/avisos` | desfaz o canal | `envio` |
+
+**Os eventos que saem por ele**, e o que cada um leva:
+
+| Evento | Quando | Corpo |
+|---|---|---|
+| `entrega.mudou` | a galeria entrou ou saiu do ar | `galeriaId`, `referenciaExterna`, `noAr`, `totalMedias`, `ocorridoEm` |
+| `recado.novo` | alguém deixou recado numa galeria que veio de um contrato | `galeriaId`, `referenciaExterna`, `recados` (contador **absoluto**), `ocorridoEm` |
+
+Nenhum dos dois leva nada do casal — nem título, nem endereço, nem o texto do recado.
+O `recados` é contador absoluto e não incremento de propósito: quem perdeu avisos
+ainda recebe a verdade na próxima vez, em qualquer ordem de chegada.
 
 **Quem inventa o segredo é quem RECEBE**, e registra aqui — o desenho do
 webhook do Asaas. Assim o outro lado gira o segredo quando quiser sem pedir

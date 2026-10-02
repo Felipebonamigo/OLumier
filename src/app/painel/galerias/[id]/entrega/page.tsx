@@ -116,6 +116,20 @@ export default async function EntregaPage({ params }: { params: Promise<{ id: st
         galeriaId={galeria.id}
         publicada={galeria.publicada}
         temDataDeEvento={Boolean(galeria.data_evento)}
+        /*
+         * O cliente que veio do contrato (migração 061). Juan: "essa função já
+         * recolherá os dados automaticamente, como o email por exemplo" — então a
+         * caixa nasce preenchida, com o nome na forma que todo cliente de e-mail
+         * entende. Preenchida, e não enviada: quem aperta "Pôr na fila" continua
+         * sendo o fotógrafo, depois de subir as fotos.
+         */
+        clienteSugerido={
+          galeria.cliente_email
+            ? galeria.cliente_nome
+              ? `${galeria.cliente_nome} <${galeria.cliente_email}>`
+              : galeria.cliente_email
+            : ""
+        }
         config={{
           lembretes: galeria.email_lembretes,
           template: lerTemplate(galeria.email_template),

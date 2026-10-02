@@ -28,6 +28,7 @@ export function AvisarPorEmail({
   galeriaId,
   publicada,
   temDataDeEvento,
+  clienteSugerido = "",
   config,
   agendados,
 }: {
@@ -35,6 +36,12 @@ export function AvisarPorEmail({
   publicada: boolean;
   /** Sem data de evento, três dos cinco lembretes não têm de onde contar. */
   temDataDeEvento: boolean;
+  /**
+   * O cliente que veio do contrato do Atomatiza, já na forma
+   * `Nome <email@exemplo.com>` (migração 061). Vazio na galeria que não veio da
+   * ponte — que é o estado de quase toda galeria.
+   */
+  clienteSugerido?: string;
   config: { lembretes: boolean; template: TemplateDeEmail; mensagem: string };
   agendados: {
     id: string;
@@ -49,7 +56,13 @@ export function AvisarPorEmail({
   const [lembretes, setLembretes] = useState(config.lembretes);
   const [template, setTemplate] = useState(config.template);
   const [mensagem, setMensagem] = useState(config.mensagem);
-  const [destinatarios, setDestinatarios] = useState("");
+  /*
+   * A caixa nasce com o cliente do contrato. Depois do primeiro envio ela
+   * esvazia (o `setDestinatarios("")` do sucesso) e NÃO volta a sugerir: quem já
+   * pôs o casal na fila não precisa do nome de volta no campo, e a lista "na
+   * fila" logo abaixo já mostra quem está lá.
+   */
+  const [destinatarios, setDestinatarios] = useState(clienteSugerido);
   const [recado, setRecado] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, iniciar] = useTransition();
