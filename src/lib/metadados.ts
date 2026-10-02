@@ -104,6 +104,7 @@ export function metadadosDaCasa({
 export function dadosEstruturadosDaCasa(descricao: string) {
   const raiz = `https://${marca.dominio}/`;
   const organizacao = `${raiz}#organizacao`;
+  const outrosNomes = nomesSemAcento(marca.nome);
   return {
     "@context": "https://schema.org",
     "@graph": [
@@ -111,6 +112,7 @@ export function dadosEstruturadosDaCasa(descricao: string) {
         "@type": "Organization",
         "@id": organizacao,
         name: marca.nome,
+        ...(outrosNomes.length ? { alternateName: outrosNomes } : {}),
         url: raiz,
         logo: `${raiz}icon.svg`,
         contactPoint: {
@@ -125,6 +127,7 @@ export function dadosEstruturadosDaCasa(descricao: string) {
         "@type": "WebSite",
         "@id": `${raiz}#site`,
         name: marca.nome,
+        ...(outrosNomes.length ? { alternateName: outrosNomes } : {}),
         url: raiz,
         inLanguage: "pt-BR",
         publisher: { "@id": organizacao },
@@ -146,6 +149,23 @@ export function dadosEstruturadosDaCasa(descricao: string) {
       },
     ],
   };
+}
+
+/**
+ * O NOME COMO AS PESSOAS DIGITAM (02/10/2026).
+ *
+ * Felipe: "o sistema é Galeria Átomo, temos que lembrar disso, e deixar ele bem
+ * pesquisado no Google". Quase ninguém digita o acento numa busca: o que chega
+ * ao Google é "galeria atomo". `alternateName` é o campo que ele lê para saber
+ * que as duas grafias são o mesmo site — e o nome do site no resultado sai de
+ * `name`, que continua com acento.
+ *
+ * Derivado de `marca.nome`, e não escrito à mão: a marca já mudou duas vezes,
+ * e uma segunda cópia do nome é a que fica para trás na próxima troca.
+ */
+function nomesSemAcento(nome: string): string[] {
+  const sem = nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return sem === nome ? [] : [sem];
 }
 
 /**

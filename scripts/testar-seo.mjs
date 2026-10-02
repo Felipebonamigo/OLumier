@@ -225,6 +225,12 @@ await etapa("a home diz quem é: site, organização e produto com o preço que 
     if (!tipo(t)) throw new Error(`sem ${t} no bloco da casa`);
   }
   if (tipo("WebSite").name !== marca.nome) throw new Error(`WebSite.name é ${tipo("WebSite").name}`);
+  /* Quem busca digita "galeria atomo", sem acento: o bloco tem de dizer ao
+     Google que as duas grafias são o mesmo site (02/10/2026). */
+  const semAcento = marca.nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  if (semAcento !== marca.nome && !tipo("WebSite").alternateName?.includes(semAcento)) {
+    throw new Error(`WebSite sem a grafia "${semAcento}" em alternateName`);
+  }
   const oferta = tipo("SoftwareApplication").offers ?? {};
   const piso = (ESPACOS[0].precoCentavos / 100).toFixed(2);
   if (oferta.lowPrice !== piso || oferta.priceCurrency !== "BRL") {

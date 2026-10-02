@@ -89,7 +89,30 @@ que trazem gente — é ele que deve decidir as páginas da seção 4, e não
 palpite. Se o Search Console for ligado ao AdvisorPPC, dá para ler esses dados
 daqui. **Dono: Felipe.**
 
-### 3.4 Links de quem já é da família
+### 3.4 Ser achada pelo NOME — "galeria átomo" no Google
+
+O pedido mais direto (Felipe, 02/10/2026): quem digita o nome tem de cair no
+site. Para uma marca nova, o Google precisa de três provas de que "Galeria
+Átomo" é este endereço:
+
+1. **Que ele conhece o site** — o Search Console da 3.3. Sem isso, nada abaixo
+   acelera.
+2. **Que o site diz o próprio nome do mesmo jeito em todo lugar** — feito no
+   código: título de toda página da casa, `WebSite` e `Organization` com
+   `name` = `marca.nome`, e a grafia sem acento ("Galeria Atomo") em
+   `alternateName`, porque é assim que quase todo mundo digita.
+3. **Que outros lugares confirmam** — e é aqui que falta gente:
+   - **perfis oficiais com o nome**: Instagram (e o que mais houver) chamados
+     Galeria Átomo, com o link do site na bio. Quando existirem, os endereços
+     entram em `sameAs` no `Organization` (`src/lib/metadados.ts`) — é como o
+     Google junta site e perfis numa coisa só. Hoje não há nenhum registrado
+     no repositório;
+   - **links com o nome** dos sites da família (3.5).
+
+Medir: depois do Search Console ligado, o relatório **Desempenho** filtrado
+pela consulta "galeria atomo" mostra posição e cliques da busca pelo nome.
+
+### 3.5 Links de quem já é da família
 
 Para um site novo, o que mais pesa no começo é quem aponta para ele. Os
 primeiros links são os mais fáceis e os mais legítimos: sites da **Atomatiza**,
@@ -98,7 +121,7 @@ um. A estratégia de marca pede função própria para cada marca — um link co
 texto descritivo ("galerias de entrega para fotógrafos") respeita isso.
 **Dono: camada estratégica (Juan) + Felipe.**
 
-### 3.5 Decisões de produto que movem SEO
+### 3.6 Decisões de produto que movem SEO
 
 - **"entregue com Galeria Átomo" como link, na vitrine.** Hoje é texto. Como
   link, cada vitrine de estúdio vira um link para a casa — o jeito clássico de
