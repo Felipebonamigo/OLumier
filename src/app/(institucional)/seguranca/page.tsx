@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { marca } from "@/config/marca";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
+import { metadadosDaCasa } from "@/lib/metadados";
 
-export const metadata: Metadata = {
-  title: "Segurança e backup",
-  description: `Como a ${marca.nome} guarda as fotos e os filmes que você entrega: armazenamento profissional, trava contra exclusão e lixeira de ${PRAZO_LIXEIRA_DIAS} dias.`,
-};
+export const metadata: Metadata = metadadosDaCasa({
+  titulo: "Segurança e backup",
+  descricao: `Como a ${marca.nome} guarda as fotos e os filmes que você entrega: armazenamento profissional, trava contra exclusão e lixeira de ${PRAZO_LIXEIRA_DIAS} dias.`,
+  caminho: "/seguranca",
+});
 
 const ATUALIZADO_EM = "25 de agosto de 2026";
 

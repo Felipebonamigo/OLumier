@@ -25,6 +25,10 @@ import { COOKIE_PREVIA, VALIDADE_PREVIA_S, baseDaGaleria } from "@/config/previa
 
 const NOME_COOKIE = "olumier_sessao";
 
+/** Um arquivo pedido na raiz do endereço do estúdio — ver "ARQUIVO NÃO É GALERIA". */
+const ARQUIVO_NA_RAIZ =
+  /^\/[^/]*\.(txt|xml|json|webmanifest|ico|png|jpe?g|gif|webp|avif|svg|php|env|js|css|map|html?)$/i;
+
 /*
  * O domínio base era escrito aqui à mão, e este arquivo era o único lugar que o
  * sabia — o porteiro do certificado tinha a própria cópia, tirada de
@@ -65,14 +69,77 @@ async function estudioDoEndereco(host: string | null): Promise<string | null> {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
+  // --- www do domínio canônico ---------------------------------------------
+  /*
+   * `www.galeriaatomo.com.br` e `galeriaatomo.com.br` serviam a mesma página,
+   * as duas com 200 — o bloco do Caddy entrega os dois nomes ao app sem
+   * redirecionar (ops/caddy-galeriaatomo.md). Para o buscador são dois sites
+   * com o conteúdo copiado, e a relevância da home se dividia entre eles.
+   * Permanente (308), para ele juntar as duas numa só (26/09/2026).
+   *
+   * Só o `www` do CANÔNICO. O domínio antigo não passa por aqui: a rota interna
+   * `olumier.com.br/g/...` continua servindo de propósito, porque é link de
+   * galeria já entregue (ver `testar-subdominio.mjs`, etapas LEGADO).
+   *
+   * A `/api` fica de fora: webhook e porteiro do certificado não seguem
+   * redirecionamento, e quem os chama pelo `www` precisa ser atendido ali.
+   */
+  const hostPedido = request.headers.get("host")?.split(":")[0].toLowerCase();
+  if (hostPedido === `www.${marca.dominio}` && !pathname.startsWith("/api")) {
+    return NextResponse.redirect(new URL(pathname + search, `https://${marca.dominio}`), 308);
+  }
+
   // --- subdomínio do estúdio ------------------------------------------------
   const estudio = await estudioDoEndereco(request.headers.get("host"));
   if (estudio) {
     // Rotas internas seguem intactas — reescrever /api ou /_next quebraria tudo.
+    // O `/icon.svg` entrou em 26/09/2026: sem ele, cada página aberta no
+    // endereço do estúdio pedia o ícone, e o pedido virava a renderização de
+    // uma galeria chamada "icon.svg" — consulta ao banco para devolver 404.
     const interna =
       pathname.startsWith("/api") ||
       pathname.startsWith("/_next") ||
-      pathname === "/favicon.ico";
+      pathname === "/favicon.ico" ||
+      pathname === "/icon.svg";
+
+    /*
+     * `robots.txt` e `sitemap.xml` do ESTÚDIO, e não os da casa: os da casa
+     * apontam para `galeriaatomo.com.br` e fecham o `/painel`, que aqui nem
+     * existe. Pela mesma leitura de endereço curto que vale para galeria,
+     * estes dois caíam na rota de galeria e devolviam 404 — o site que o
+     * estúdio divulga ficava sem mapa para o buscador (26/09/2026).
+     *
+     * As rotas de destino têm nome NEUTRO, e não `robots.txt`/`sitemap.xml`:
+     * o Next trata todo caminho que termina em `/sitemap.xml` como rota
+     * especial de metadados, com regras próprias de nome e de cache. Aqui
+     * elas são rotas comuns, e o endereço público continua o que o robô pede.
+     */
+    if (pathname === "/robots.txt") {
+      return NextResponse.rewrite(new URL(`/e/${estudio}/regras-para-robos`, request.url));
+    }
+    if (pathname === "/sitemap.xml") {
+      return NextResponse.rewrite(new URL(`/e/${estudio}/mapa-do-site`, request.url));
+    }
+
+    /*
+     * ARQUIVO NÃO É GALERIA (30/09/2026).
+     *
+     * Robô pede arquivo o tempo todo — `/llms.txt`, `/apple-touch-icon.png`,
+     * `/ads.txt`, e as sondagens de sempre (`/wp-login.php`, `/.env`). Cada um
+     * era lido como o endereço curto de uma galeria e pagava uma renderização
+     * inteira da rota, com consulta ao banco, para devolver 404.
+     *
+     * Endereço de galeria nunca tem extensão: todo slug sai de `gerarSlug`, que
+     * só deixa letra, número e hífen. A lista de extensões é fechada, e não
+     * "qualquer ponto", para uma galeria antiga de antes dessa regra continuar
+     * abrindo — só o que é inequivocamente arquivo para aqui.
+     */
+    if (!interna && ARQUIVO_NA_RAIZ.test(pathname)) {
+      return new NextResponse("Não encontrado\n", {
+        status: 404,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
 
     if (!interna) {
       // O painel mora só no domínio principal: quem tenta entrar por um

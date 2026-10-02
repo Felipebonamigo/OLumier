@@ -10,6 +10,7 @@ import { Revelar } from "@/components/revelar";
 import { OPCOES, PRESETS } from "@/config/aparencia";
 import { ESPACOS, formatarGb, formatarReais } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
+import { dadosEstruturadosDaCasa, jsonLd, metadadosDaCasa } from "@/lib/metadados";
 import { DOMINIO_PROPRIO_LIBERADO, VIDEO_LIBERADO } from "@/config/lancamentos";
 import {
   GALERIA_EM_DESTAQUE,
@@ -53,9 +54,17 @@ import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
 const DESCRICAO =
   "Crie galerias bonitas, intuitivas e personalizáveis para entregar seu trabalho com a sua marca, no seu endereço e do seu jeito.";
 
+/*
+ * `metadadosDaCasa` põe o canônico, o og:url e a imagem do cartão; o título e
+ * a descrição continuam os do briefing. Ver `lib/metadados.ts`.
+ */
 export const metadata: Metadata = {
-  title: `${marca.nome} — ${marca.tagline}`,
-  description: DESCRICAO,
+  ...metadadosDaCasa({
+    titulo: `${marca.nome} — ${marca.tagline}`,
+    descricao: DESCRICAO,
+    caminho: "/",
+    tituloInteiro: true,
+  }),
   /* O ícone da tela de início e o app — ver `config/app-instalado.ts`. */
   ...METADADOS_DO_APP,
 };
@@ -981,6 +990,12 @@ export default async function Home() {
           <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_LD).replace(/</g, "\\u003c") }}
+          />
+          {/* Quem é a casa (site, organização, produto) — ver
+              `dadosEstruturadosDaCasa` em lib/metadados.ts. */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: jsonLd(dadosEstruturadosDaCasa(DESCRICAO)) }}
           />
           <div className="mt-10 border-t border-[var(--h-linha)]">
             {FAQ.map((p) => (

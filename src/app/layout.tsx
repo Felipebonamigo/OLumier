@@ -24,6 +24,7 @@ import {
 } from "next/font/google";
 import { marca } from "@/config/marca";
 import { SCRIPT_TEMA } from "@/config/tema";
+import { MODELO_DO_TITULO } from "@/lib/metadados";
 import "./globals.css";
 
 const montserrat = Montserrat({
@@ -253,7 +254,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(`https://${marca.dominio}`),
   title: {
     default: `${marca.nome} — ${marca.tagline}`,
-    template: `%s · ${marca.nome}`,
+    template: MODELO_DO_TITULO,
   },
   description: marca.descricao,
   /*
@@ -262,12 +263,16 @@ export const metadata: Metadata = {
    * termos — precisa desdobrar com imagem e título em vez de aparecer pelada.
    * A imagem vem da convenção `opengraph-image.tsx` ao lado; o Next monta a
    * tag sozinho, então aqui só entra o que a imagem não carrega.
+   *
+   * Isto é a REDE, não o cartão de cada página: quem é página pública da casa
+   * declara o próprio em `metadadosDaCasa` (lib/metadados.ts). Por isso não há
+   * `url` aqui — até 26/09/2026 havia `url: "/"`, e toda página herdava o
+   * endereço da home como se fosse o dela.
    */
   openGraph: {
     type: "website",
     siteName: marca.nome,
     locale: "pt_BR",
-    url: "/",
     title: `${marca.nome} — ${marca.tagline}`,
     description: marca.descricao,
   },
