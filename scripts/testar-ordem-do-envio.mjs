@@ -256,6 +256,117 @@ try {
     }
     return `${esperado.length} arquivos em duas pastas, nenhum fora do lugar`;
   });
+
+  /*
+   * ── DOIS ENVIOS AO MESMO TEMPO (02/10/2026, migração 061) ───────────────
+   *
+   * Equipe da Carol Tedesco, subindo de novo a cerimônia: "na pasta do note tá
+   * em ordem, mas no link tá subindo desorganizado".
+   *
+   * As etapas de cima têm UM envio de cada vez. Com dois rodando na mesma
+   * galeria — duas abas, dois computadores da equipe, o envio que parecia
+   * parado e continuava —, a base de cada um era "o maior `ordem` de fora do
+   * lote", refeita a cada arquivo: cada linha de um empurrava a base do
+   * outro. Antes da 061 esta etapa dava 139 de 150 fora do lugar num capítulo
+   * e 142 no outro — em capítulos DIFERENTES. As duas seguintes davam 153 de
+   * 160 e 56 de 60.
+   */
+  const secaoNova = async (galeriaId, nome) =>
+    (await db.query("insert into secoes (galeria_id, nome, ordem) values ($1, $2, 0) returning id", [galeriaId, nome]))
+      .rows[0].id;
+  const doCapitulo = async (galeriaId, secaoId) =>
+    (
+      await db.query(
+        "select nome_original from medias where galeria_id = $1 and secao_id = $2 and pronto order by ordem, criado_em",
+        [galeriaId, secaoId],
+      )
+    ).rows.map((r) => r.nome_original);
+  /* O envio do navegador em miniatura: seis no ar, preparo desigual. */
+  const enviar = async (galeriaId, { nomes, indices, lote, secaoId, ate }) => {
+    let proximo = 0;
+    const trabalhador = async () => {
+      for (;;) {
+        const k = proximo++;
+        if (k >= nomes.length) return;
+        await new Promise((r) => setTimeout(r, k % 7 === 0 ? 60 + Math.random() * 120 : 3 + Math.random() * 20));
+        const m = await criarMediaPendente({
+          galeriaId,
+          tenantId: est.id,
+          chave: `${est.id}/${galeriaId}/${lote}/${nomes[k]}`,
+          chaveThumb: null,
+          chavePreview: null,
+          nomeOriginal: nomes[k],
+          tipo: "foto",
+          mime: "image/jpeg",
+          bytes: 1000,
+          largura: 1000,
+          altura: 1500,
+          secaoId,
+          indice: indices[k],
+          lote,
+          ate,
+        });
+        await new Promise((r) => setTimeout(r, 5 + Math.random() * 30));
+        await confirmarMedia(m.id, est.id, 1000);
+      }
+    };
+    await Promise.all(Array.from({ length: 6 }, trabalhador));
+  };
+  const nomesDe = (prefixo, n) => Array.from({ length: n }, (_, i) => `${prefixo}-${String(i + 1).padStart(4, "0")}.jpg`);
+  const foraDoLugar = (veio, esperado) => veio.filter((n, i) => n !== esperado[i]).length;
+
+  await etapa("dois envios ao mesmo tempo, capítulos diferentes: cada um na ordem da pasta", async () => {
+    const g4 = await galeriaDaRodada(db, { nome: "ordem-dois-envios", medias: 0, publicada: true });
+    const cer = await secaoNova(g4.id, "Cerimônia");
+    const fes = await secaoNova(g4.id, "Festa");
+    const nc = nomesDe("cer", 150);
+    const nf = nomesDe("fes", 150);
+    await Promise.all([
+      enviar(g4.id, { nomes: nc, indices: nc.map((_, i) => i), lote: crypto.randomUUID(), secaoId: cer, ate: 150 }),
+      enviar(g4.id, { nomes: nf, indices: nf.map((_, i) => i), lote: crypto.randomUUID(), secaoId: fes, ate: 150 }),
+    ]);
+    const a = foraDoLugar(await doCapitulo(g4.id, cer), nc);
+    const b = foraDoLugar(await doCapitulo(g4.id, fes), nf);
+    if (a + b > 0) throw new Error(`cerimônia: ${a} de 150 fora do lugar; festa: ${b} de 150`);
+    return "150 + 150, nenhum fora do lugar";
+  });
+
+  await etapa("dois envios para o MESMO capítulo: o segundo vem inteiro depois do primeiro", async () => {
+    const g5 = await galeriaDaRodada(db, { nome: "ordem-mesmo-capitulo", medias: 0, publicada: true });
+    const cap = await secaoNova(g5.id, "Cerimônia");
+    const n1 = nomesDe("parte1", 80);
+    const n2 = nomesDe("parte2", 80);
+    const primeiro = enviar(g5.id, { nomes: n1, indices: n1.map((_, i) => i), lote: crypto.randomUUID(), secaoId: cap, ate: 80 });
+    /* O segundo sai quando o primeiro já está no ar. */
+    await new Promise((r) => setTimeout(r, 40));
+    await Promise.all([
+      primeiro,
+      enviar(g5.id, { nomes: n2, indices: n2.map((_, i) => i), lote: crypto.randomUUID(), secaoId: cap, ate: 80 }),
+    ]);
+    const fora = foraDoLugar(await doCapitulo(g5.id, cap), [...n1, ...n2]);
+    if (fora > 0) throw new Error(`${fora} de 160 fora do lugar — as duas partes se intercalaram`);
+    return "parte 1 inteira, depois a parte 2";
+  });
+
+  await etapa("reenviar as que falharam, depois de outro envio: cada uma volta ao seu lugar", async () => {
+    const g6 = await galeriaDaRodada(db, { nome: "ordem-reenviar", medias: 0, publicada: true });
+    const cer = await secaoNova(g6.id, "Cerimônia");
+    const fes = await secaoNova(g6.id, "Festa");
+    const nc = nomesDe("cer", 60);
+    const LOTE_CER = crypto.randomUUID();
+    const falharam = new Set([3, 17, 18, 40, 59]);
+    const subiram = nc.filter((_, i) => !falharam.has(i));
+    await enviar(g6.id, { nomes: subiram, indices: subiram.map((n) => nc.indexOf(n)), lote: LOTE_CER, secaoId: cer, ate: 60 });
+    /* Outro envio passa na frente... */
+    const nf = nomesDe("fes", 40);
+    await enviar(g6.id, { nomes: nf, indices: nf.map((_, i) => i), lote: crypto.randomUUID(), secaoId: fes, ate: 40 });
+    /* ...e só então "reenviar as que falharam" — mesmo lote, mesmos índices. */
+    const voltam = nc.filter((_, i) => falharam.has(i));
+    await enviar(g6.id, { nomes: voltam, indices: voltam.map((n) => nc.indexOf(n)), lote: LOTE_CER, secaoId: cer });
+    const fora = foraDoLugar(await doCapitulo(g6.id, cer), nc);
+    if (fora > 0) throw new Error(`${fora} de 60 fora do lugar`);
+    return "as 5 voltaram para o meio, onde estavam na pasta";
+  });
 } finally {
   await limparRodada(db);
   await db.end();

@@ -46,8 +46,11 @@ export function EnviarArquivos({
   } | null>(null);
   const envio = useEnvio();
 
-  const mandar = (itens: ArquivoComCaminho[]) =>
-    envio.enfileirar(itens, { destino: destino || undefined, rostosAtivos });
+  /* `encaixarCom`: a pasta tinha arquivos que já estavam na galeria — no fim
+     do envio, o que subiu agora volta para o meio dela (ver
+     `lib/encaixe-da-pasta.ts`). */
+  const mandar = (itens: ArquivoComCaminho[], encaixarCom?: ArquivoComCaminho[]) =>
+    envio.enfileirar(itens, { destino: destino || undefined, rostosAtivos, encaixarCom });
 
   /**
    * ── A PERGUNTA DO NOME REPETIDO ────────────────────────────────────────
@@ -280,7 +283,7 @@ export function EnviarArquivos({
             <button
               type="button"
               onClick={() => {
-                mandar([...pergunta.novos, ...pergunta.repetidos]);
+                mandar([...pergunta.novos, ...pergunta.repetidos], []);
                 setPergunta(null);
               }}
               className="rounded-lg border border-linha-forte px-3 py-1.5 text-xs transition hover:bg-carbon-2"
@@ -290,7 +293,7 @@ export function EnviarArquivos({
             <button
               type="button"
               onClick={() => {
-                if (pergunta.novos.length) mandar(pergunta.novos);
+                if (pergunta.novos.length) mandar(pergunta.novos, pergunta.repetidos);
                 setPergunta(null);
               }}
               disabled={pergunta.novos.length === 0}

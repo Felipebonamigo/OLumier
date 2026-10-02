@@ -1796,6 +1796,30 @@ export async function moverFotosAction(form: FormData) {
 }
 
 /**
+ * Chamada pelo envio quando a fila seca, se a pasta tinha arquivos que já
+ * estavam na galeria: o que subiu agora volta para o meio dela, na ordem da
+ * pasta. Ver `lib/encaixe-da-pasta.ts`.
+ *
+ * Sem `revalidatePath`: quem chama faz `router.refresh()` logo depois, e
+ * revalidar aqui desenharia a página duas vezes (ver `grade-medias.tsx`).
+ */
+export async function encaixarNaOrdemDaPastaAction(
+  galeriaId: string,
+  lote: string,
+  pasta: { nome: string; bytes: number }[],
+): Promise<number> {
+  const tenantId = await exigirTenant();
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuid.test(galeriaId) || !uuid.test(lote) || !Array.isArray(pasta)) return 0;
+  const lista = pasta
+    .slice(0, 20_000)
+    .filter((a) => typeof a?.nome === "string" && Number.isFinite(a?.bytes))
+    .map((a) => ({ nome: a.nome, bytes: Number(a.bytes) }));
+  const { encaixarNaOrdemDaPasta } = await import("@/lib/medias");
+  return encaixarNaOrdemDaPasta(galeriaId, tenantId, lote, lista);
+}
+
+/**
  * O caminho de volta: as fotos do capítulo voltam a ser "sem capítulo".
  *
  * Par do `moverSoltasAction` acima, pedido em 28/09/2026. O capítulo continua
