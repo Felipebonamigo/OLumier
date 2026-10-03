@@ -110,8 +110,14 @@ jobs:
       # O portão de vulnerabilidade fica AQUI, antes de existir o que publicar.
       # `high`: `moderate` e `low` em árvore de dev pipocam sem parar e treinam a
       # gente a ignorar o vermelho — portão que vira ruído morre.
+      #
+      # Desde 03/10/2026 é um script, e não `npm audit --audit-level=high` direto:
+      # a mesma régua, com uma saída estreita para alerta de ferramenta de
+      # desenvolvimento SEM versão corrigida (o `braces` do ESLint), listado em
+      # `.github/excecoes-do-audit.json` com motivo e data de revisão. O que vai
+      # para produção nunca tem exceção. Ver `scripts/auditar-dependencias.mjs`.
       - name: Vulnerabilidade nas dependências
-        run: npm audit --audit-level=high
+        run: node scripts/auditar-dependencias.mjs
 
       # ── O ARMAZÉM NÃO VEM MAIS DE FORA ────────────────────────────────────
       #
