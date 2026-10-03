@@ -402,7 +402,7 @@ export const identidadePorId = (id: string) => IDENTIDADES.find((i) => i.id === 
  */
 export const GALERIA_EM_DESTAQUE: IdGaleria = "delicada";
 
-/** A foto do cartão da galeria na seção "Cofre" (`CofreDemo`): a capa da galeria em destaque. */
+/** A foto do cartão da galeria na peça "Cofre" do bloco de recursos (`CofreEstados`): a capa da galeria em destaque. */
 export const LUGAR_DO_COFRE: IdFoto = `${GALERIA_EM_DESTAQUE}-1`;
 
 /** A galeria de um lugar, ou `null` para o `respiro`. */

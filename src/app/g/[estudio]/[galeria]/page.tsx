@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { FUSO } from "@/config/fuso";
+import { VALIDADE_DO_LINK_DA_GALERIA } from "@/config/links-assinados";
 import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
@@ -569,7 +570,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
    * que decidia se ela ia; esconder o botão não é proteger, e agora o link
    * nem chega a nascer sem alguém pedir.
    */
-  const VALIDADE = 6 * 3600;
+  const VALIDADE = VALIDADE_DO_LINK_DA_GALERIA;
 
   const itens: ItemGaleria[] = await Promise.all(
     (tela === "galeria" ? medias : []).map(async (m) => {
