@@ -2,7 +2,7 @@
 /* eslint-disable @next/next/no-img-element -- as fotos da home, servidas como estão. */
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { FONTES_TITULO } from "@/config/aparencia";
+import { FONTES_TITULO, variaveisDeForma, variaveisDoTema } from "@/config/aparencia";
 import type { FotosDaHome, Identidade } from "@/config/home-demonstracao";
 import { useEhCelular, usePedeMenosMovimento } from "./usa-celular";
 
@@ -30,24 +30,39 @@ import { useEhCelular, usePedeMenosMovimento } from "./usa-celular";
  * No celular a cena gruda no topo (metade da tela) e os passos passam por
  * baixo. Sem prender a página: o Safari do iPhone briga com rolagem sequestrada.
  * Quem pediu menos movimento vê a cena trocar sem as fotos voarem.
+ *
+ * ── A MESA E A GALERIA (03/10/2026) ──────────────────────────────────────
+ *
+ * Juan, olhando no computador: "a ideia tá ótima (temos que trocar as fotos)",
+ * "pode parecer mais com a galeria, ao invés do fundo quadriculado" — e logo
+ * depois, "fiquei em dúvida, esse fundo quadriculado tá certo?". As duas
+ * coisas ficaram: o quadriculado é a MESA, onde moram os arquivos (a pasta, os
+ * capítulos, o link); quando as fotos viram galeria, a mesa some e o fundo, o
+ * cabeçalho, a fonte e os cantos passam a ser os da galeria de verdade (a
+ * aparência da identidade, pelas mesmas variáveis do editor). A troca de fundo
+ * é a história: de arquivo para entrega. As fotos agora são as do Juan — a
+ * Carol aparece no hero e em "Sua marca" (`GALERIA_DA_SECAO`).
  */
 
 type Cena = "pasta" | "capitulos" | "galeria" | "entrega";
 
+/* Os capítulos da pasta de exemplo — nomes de momento, que servem a qualquer
+   casamento ou ensaio, para a foto trocada no admin não desmentir o rótulo. */
 const CAPITULOS = [
-  { nome: "Making of", de: 0, ate: 4 },
-  { nome: "Cerimônia", de: 4, ate: 8 },
-  { nome: "Festa", de: 8, ate: 11 },
+  { nome: "Retratos", de: 0, ate: 4 },
+  { nome: "No campo", de: 4, ate: 8 },
+  { nome: "Fim de tarde", de: 8, ate: 11 },
 ];
 
+/* Os nomes de arquivo do envio: a pasta do capítulo e um número de câmera. */
 const ENVIOS = [
-  ["01 Making of/VK_0112.jpg", "8,4 MB"],
-  ["01 Making of/VK_0118.jpg", "9,1 MB"],
-  ["02 Cerimônia/VK_0431.jpg", "7,9 MB"],
-  ["02 Cerimônia/VK_0440.jpg", "8,8 MB"],
-  ["03 Festa/VK_0907.jpg", "10,2 MB"],
-  ["03 Festa/VK_0921.jpg", "9,6 MB"],
-];
+  [0, "0112", "8,4 MB"],
+  [0, "0118", "9,1 MB"],
+  [1, "0431", "7,9 MB"],
+  [1, "0440", "8,8 MB"],
+  [2, "0907", "10,2 MB"],
+  [2, "0921", "9,6 MB"],
+] as const;
 
 /* [left, top, width, height, giro] em % da cena; `some` esconde. */
 type Lugar = { l: number; t: number; w: number; h: number; g: number; some?: boolean };
@@ -67,10 +82,12 @@ function lugares(cena: Cena, quantas: number, celular: boolean): Lugar[] {
         : { l: 6 + j * 17.5, t: 18 + c * 27, w: 15.5, h: 21, g: 0 };
     }
     if (cena === "galeria") {
-      if (k === 0) return { l: 6, t: 12, w: 88, h: 42, g: 0 };
+      /* Como a galeria abre: o cabeçalho com o nome em cima (camada
+         "galeria"), a capa larga, e a grade logo abaixo. */
+      if (k === 0) return { l: 4, t: 23, w: 92, h: 36, g: 0 };
       const r = k - 1;
-      const w = (88 - 4 * 1.5) / 5;
-      return { l: 6 + (r % 5) * (w + 1.5), t: 57 + Math.floor(r / 5) * 20.5, w, h: 19, g: 0 };
+      const w = (92 - 4 * 1) / 5;
+      return { l: 4 + (r % 5) * (w + 1), t: 61 + Math.floor(r / 5) * 19.5, w, h: 18.5, g: 0 };
     }
     /* entrega: tudo dentro do celular */
     const tl = celular ? 62 : 58;
@@ -101,7 +118,16 @@ export function DaPastaAGaleria({
 
   /* A capa primeiro, depois a grade — na ordem do dia. */
   const lista = [identidade.capa, ...identidade.fotos].slice(0, 11).map((id) => fotos[id]);
-  const titulo = FONTES_TITULO[identidade.aparencia.tipografia];
+  const ap = identidade.aparencia;
+  /* "Ana & Pedro" → "AP": o prefixo dos arquivos de exemplo. */
+  const sigla = identidade.titulo
+    .split(/\s+(?:&|e)\s+/)
+    .map((p) => p[0])
+    .join("")
+    .toUpperCase();
+  /* O tema, as cores e os cantos da galeria de verdade — as mesmas variáveis
+     que a galeria do cliente usa. Só valem quando a cena vira galeria. */
+  const daGaleria = { ...variaveisDoTema(ap), ...variaveisDeForma(ap) } as CSSProperties;
 
   useEffect(() => {
     const io = new IntersectionObserver(
@@ -175,7 +201,7 @@ export function DaPastaAGaleria({
       </ol>
 
       <div className="home-historia-palco order-1 lg:order-2">
-        <div className="home-cena" data-cena={cena} aria-hidden>
+        <div className="home-cena" data-cena={cena} style={daGaleria} aria-hidden>
           <p className="home-cena-rotulo">
             passo <b>0{passo + 1}</b> / 03
           </p>
@@ -185,13 +211,15 @@ export function DaPastaAGaleria({
             <div className="home-pasta">
               <p>
                 <span className="home-icone-pasta" />
-                Casamento {identidade.titulo}/
+                {ap.rotulo || "Casamento"} {identidade.titulo}/
               </p>
             </div>
             <div className="home-envios">
-              {ENVIOS.map(([nome, peso], k) => (
-                <div key={nome} className="home-envio" style={{ ["--k" as string]: k } as CSSProperties}>
-                  <span>{nome}</span>
+              {ENVIOS.map(([c, numero, peso], k) => (
+                <div key={numero} className="home-envio" style={{ ["--k" as string]: k } as CSSProperties}>
+                  <span>
+                    0{c + 1} {CAPITULOS[c].nome}/{sigla}_{numero}.jpg
+                  </span>
                   <span>{peso}</span>
                   <i>
                     <b />
@@ -212,11 +240,21 @@ export function DaPastaAGaleria({
             ))}
           </div>
 
-          {/* o título da galeria, na fonte dela */}
+          {/* o cabeçalho da galeria, como ela abre: o estúdio, o rótulo e o
+              nome, na fonte e no peso que a identidade escolheu */}
           <div className="home-cena-camada home-cena-acima" data-camada="galeria">
-            <p className="home-cena-titulo" style={{ fontFamily: titulo }}>
-              {identidade.titulo}
-            </p>
+            <div className="home-cena-cabecalho">
+              <span>Seu estúdio</span>
+              {ap.rotulo && <span>{ap.rotulo}</span>}
+              <p
+                style={{
+                  fontFamily: FONTES_TITULO[ap.tipografia],
+                  fontWeight: ap.peso === "forte" ? 700 : ap.peso === "leve" ? 400 : 500,
+                }}
+              >
+                {identidade.titulo}
+              </p>
+            </div>
           </div>
 
           {/* o link e o que o painel conta */}

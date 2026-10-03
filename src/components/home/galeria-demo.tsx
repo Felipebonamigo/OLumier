@@ -113,7 +113,7 @@ export function GaleriaDemo({
      A segunda volta é a das posições ímpares e depois a das pares — e não a
      lista ao contrário, como era: ao contrário, a última foto da primeira volta
      é a primeira da segunda, e as duas saíam lado a lado (com as 14 fotos da
-     Vanessa & Kalil, bem no meio da seleção). Assim a mesma foto fica a pelo
+     galeria da Carol, bem no meio da seleção). Assim a mesma foto fica a pelo
      menos meia galeria de distância dela mesma. */
   const segundaVolta = [
     ...identidade.fotos.filter((_, i) => i % 2 === 1),

@@ -169,9 +169,9 @@ o protagonismo da foto), preto com dourado, neon, gradiente roxo e 3D/WebGL.
   galeria do cliente. O número saiu de dois `6 * 3600` escritos à mão para
   `config/links-assinados.ts`, usado pela página da galeria, pela rota de
   endereços sob demanda e pela home.
-- Os prints do painel (`public/home/produto/*.webp`) não aparecem mais na home.
-  `scripts/capturar-telas-home.mjs` continua gerando; se a cena pesar em algum
-  aparelho, eles são o plano B.
+- Os prints do painel (`public/home/produto/*.webp`) não aparecem mais na home
+  e saíram do repositório em 03/10/2026. `scripts/capturar-telas-home.mjs`
+  recria a pasta; se a cena pesar em algum aparelho, eles são o plano B.
 - Movimento reduzido no sistema: esteiras param e viram lista, a cópia da
   esteira some, a cortina e a entrada do título não acontecem, a cena já mostra
   os capítulos, os números aparecem sem contar e o hero não troca sozinho.
@@ -187,3 +187,30 @@ do cabeçalho são os pontos a olhar.
 **Ainda é decisão da camada estratégica** (seção 6 continua valendo): palco
 claro ou escuro (a home segue clara), nomes dos estúdios nos exemplos, a
 terceira linguagem fotográfica fora do casamento, e a cor de destaque.
+
+### 7.1 Depois da primeira volta do Juan (03/10/2026)
+
+O Juan olhou a home no ar e voltou com quatro pontos: no celular ela "não tá
+tão encantadora"; o mesmo casal aparecia "muitas vezes repetido"; a cena de
+"Suba. Personalize. Entregue." podia "parecer mais com a galeria, ao invés do
+fundo quadriculado" (e logo depois ficou em dúvida se o quadriculado estava
+certo); e sugeriu "trocar todos os nomes por variações fictícias", com o que o
+Felipe concordou.
+
+| Ponto | O que mudou | Onde |
+|---|---|---|
+| Nomes | Todos os casais são inventados. A galeria da Carol voltou a "Marina & Caio" (data e cidade também inventadas) e a do Juan a "Ana & Pedro". As pastas das fotos deixaram de ter o nome do casal (`public/home/demo/galeria-carol`, `galeria-juan`). Galeria nova vinda de casamento de verdade entra com nome inventado. | `config/home-demonstracao.ts` ("OS NOMES") |
+| Repetição | Cada seção agora escolhe a sua galeria (`GALERIA_DA_SECAO`): o hero abre com a da Carol na frente e "Sua marca" começa por ela; a cena, o celular, a seleção, o Cofre e a lixeira se dividem entre as outras três. O fecho deixou de repetir a mesma capa: doze cartões, cada um com uma foto, uma fonte e uma paleta do editor. O mesmo casal, que aparecia em quase toda seção, aparece agora em três ou quatro. | `GALERIA_DA_SECAO`, `CARTOES_DO_FECHO` |
+| Celular | O hero mostra as três galerias ao mesmo tempo, em leque (a da frente no meio, as outras inclinadas dos lados), no lugar de uma só trocando com cortina; e vem título → galerias → texto, para as galerias aparecerem antes da dobra. | `hero-galerias.tsx`, `app/page.tsx` |
+| Quadriculado | Ficou **onde a cena é a mesa de trabalho** (a pasta, os capítulos, a entrega) e **saiu do passo "Personalize"**, que agora é a galeria de verdade: o fundo, os cantos, a fonte e a etiqueta são os da aparência da galeria, com o cabeçalho "Seu estúdio". A leitura é "da mesa para a galeria" — responde às duas falas do Juan sem escolher uma. Os arquivos da pasta ganharam capítulos ("01 Retratos/…"), que é como o fotógrafo organiza. | `da-pasta-a-galeria.tsx`, `.home-cena[data-cena="galeria"]` |
+
+**Fotos.** O Juan liberou mais dois casamentos para a home. Entram com nome
+inventado, de preferência nos lugares das duas galerias que ainda usam fotos
+provisórias ("Helena e Rafael" e "Júlia & Tomás", oito lugares cada), pelo
+`/painel/admin/home` — sem publicar código. Quando a "Helena e Rafael" tiver
+fotos próprias, o `pretoEBranco` dela (que existia só para as provisórias
+parecerem de outro fotógrafo) pode sair.
+
+**Verificado no Chromium** (1440 e 390): sem nome de casal real no texto nem nos
+endereços das imagens, sem rolagem lateral, sem erro no console. Safari segue
+pendente.

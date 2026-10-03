@@ -12,8 +12,13 @@ import { usePedeMenosMovimento } from "./usa-celular";
  *
  * Briefing §5: "é a mesma plataforma, mas não parece a mesma galeria", e isso
  * precisa chegar ANTES da leitura. No computador as três ficam no palco ao
- * mesmo tempo, uma na frente e duas atrás, e trocam de lugar devagar. No
- * celular não cabem três: fica uma, e a troca é uma cortina de baixo para cima.
+ * mesmo tempo, uma na frente e duas atrás, e trocam de lugar devagar.
+ *
+ * NO CELULAR TAMBÉM SÃO TRÊS (03/10/2026). Era uma só, trocando com uma
+ * cortina, e o Juan achou a home no celular "não tão encantadora": quem abria
+ * via uma galeria, e a mensagem do §5 — a mesma plataforma em identidades
+ * diferentes — dependia de esperar a troca. Agora as três ficam em leque: a da
+ * frente no meio, as outras duas espiando dos lados, inclinadas.
  *
  * ── EM MOVIMENTO (03/10/2026) ────────────────────────────────────────────
  *
@@ -39,12 +44,13 @@ const SEGUNDOS = 6;
 const PASSO_DA_ROLAGEM = 360;
 const PASSOS_DA_ROLAGEM = 3;
 
-/* Onde cada galeria fica, pela distância até a da frente. No celular as três
-   ocupam o mesmo lugar e só a da frente aparece. */
+/* Onde cada galeria fica, pela distância até a da frente: no celular, um leque
+   (a da frente no meio, as outras inclinadas dos lados); no computador, uma na
+   frente e duas atrás. */
 const LUGAR = [
-  "z-30 opacity-100 md:left-[17%] md:top-[5%] md:h-[95%] md:w-[66%]",
-  "z-20 opacity-0 md:opacity-100 md:left-[52%] md:top-[15%] md:h-[80%] md:w-[48%]",
-  "z-10 opacity-0 md:opacity-100 md:left-0 md:top-0 md:h-[80%] md:w-[48%]",
+  "z-30 left-[13%] top-[2%] h-[94%] w-[74%] md:left-[17%] md:top-[5%] md:h-[95%] md:w-[66%]",
+  "z-20 left-[42%] top-[9%] h-[82%] w-[58%] rotate-[7deg] md:rotate-0 md:left-[52%] md:top-[15%] md:h-[80%] md:w-[48%]",
+  "z-10 left-0 top-[9%] h-[82%] w-[58%] -rotate-[7deg] md:rotate-0 md:left-0 md:top-0 md:h-[80%] md:w-[48%]",
 ];
 
 export function HeroGalerias({
@@ -97,14 +103,14 @@ export function HeroGalerias({
         className="home-brilho"
         style={{ ["--brilho" as string]: brilho ?? "transparent" } as CSSProperties}
       />
-      <div className="home-palco relative aspect-[390/560] w-full sm:aspect-[4/5] md:aspect-[16/10]">
+      <div className="home-palco relative aspect-[390/500] w-full sm:aspect-[4/5] md:aspect-[16/10]">
         {identidades.map((ident, i) => {
           const distancia = (i - frente + identidades.length) % identidades.length;
           const naFrente = distancia === 0;
           return (
             <figure
               key={ident.id}
-              className={`absolute inset-0 flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_30px_80px_-30px_rgba(20,20,20,0.45)] ring-1 ring-black/5 transition-all duration-[900ms] ease-[cubic-bezier(.4,0,.2,1)] ${LUGAR[distancia]} ${naFrente ? "home-palco-frente" : ""}`}
+              className={`absolute inset-0 flex flex-col overflow-hidden rounded-2xl bg-white shadow-[0_30px_80px_-30px_rgba(20,20,20,0.45)] ring-1 ring-black/5 transition-all duration-[900ms] ease-[cubic-bezier(.4,0,.2,1)] ${LUGAR[distancia]}`}
               aria-hidden={!naFrente}
             >
               {/* A barra de endereço é parte da prova: o link é do estúdio. */}
@@ -148,8 +154,10 @@ export function HeroGalerias({
                   : "border-[var(--h-linha)] bg-white/50 hover:border-[var(--h-linha-forte)]"
               }`}
             >
-              <span className="block truncate text-[13px] font-medium text-[var(--h-tinta)]">{ident.rotulo}</span>
-              <span className="mt-0.5 block truncate font-mono text-[10.5px] text-[var(--h-tinta-3)]">
+              <span className="block truncate text-[12px] font-medium text-[var(--h-tinta)] sm:text-[13px]">
+                {ident.rotulo}
+              </span>
+              <span className="mt-0.5 hidden truncate font-mono text-[10.5px] text-[var(--h-tinta-3)] sm:block">
                 {ident.titulo}
               </span>
               {ativa && girando && (

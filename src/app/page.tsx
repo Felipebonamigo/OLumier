@@ -8,15 +8,17 @@ import { marca } from "@/config/marca";
 import { MarcaSimbolo, SeloBeta } from "@/components/marca-tile";
 import { MontadorPlano } from "@/components/montador-plano";
 import { Revelar } from "@/components/revelar";
-import { FONTES_TITULO, OPCOES, PRESETS, variaveisDoTema } from "@/config/aparencia";
+import { FONTES_TITULO, OPCOES, PRESETS, lerAparencia, variaveisDoTema, type Aparencia } from "@/config/aparencia";
 import { VALIDADE_DO_LINK_DA_GALERIA } from "@/config/links-assinados";
 import { ESPACOS, formatarGb, formatarReais } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 import { dadosEstruturadosDaCasa, jsonLd, metadadosDaCasa } from "@/lib/metadados";
 import { DOMINIO_PROPRIO_LIBERADO, VIDEO_LIBERADO } from "@/config/lancamentos";
 import {
-  GALERIA_EM_DESTAQUE,
+  GALERIA_DA_SECAO,
   IDENTIDADES,
+  TROCA_CORES,
+  type IdFoto,
   LUGAR_DO_COFRE,
   identidadePorId,
   type Identidade,
@@ -407,18 +409,48 @@ function Marcador({ children, claro = false }: { children: React.ReactNode; clar
  */
 export const revalidate = 3600;
 
-/* Os cartões das esteiras do fecho: a capa e mais duas fotos de cada galeria
-   de exemplo, intercaladas para duas galerias iguais não ficarem lado a lado. */
-const CARTOES_DO_FECHO = [0, 3, 6].flatMap((k) =>
-  IDENTIDADES.map((ident) => ({ ident, lugar: k === 0 ? ident.capa : ident.fotos[k] })),
-);
+/*
+ * OS CARTÕES DAS ESTEIRAS DO FECHO (03/10/2026).
+ *
+ * Eram três cartões de cada galeria de exemplo, com o nome do casal — e a
+ * galeria da Carol passava seis vezes pela tela. Agora cada cartão é uma
+ * identidade diferente montada com o que o editor oferece: uma fonte de título
+ * e uma combinação de cores sobre uma foto de verdade (da Carol e do Juan), com
+ * um título de capítulo. Doze cartões, doze fontes, nenhum nome repetido —
+ * "personalização se demonstra" (estratégia §9). Os lugares são os da galeria,
+ * então a foto trocada no admin troca aqui também.
+ */
+const CARTOES_DO_FECHO: { lugar: IdFoto; titulo: string; tipografia: Aparencia["tipografia"]; cor: number }[][] = [
+  [
+    { lugar: "classica-14", titulo: "Fim de tarde", tipografia: "bodoni", cor: 3 },
+    { lugar: "delicada-3", titulo: "Making of", tipografia: "playfair", cor: 2 },
+    { lugar: "classica-6", titulo: "Ensaio", tipografia: "manuscrita", cor: 1 },
+    { lugar: "delicada-9", titulo: "Sob a chuva", tipografia: "cinzel", cor: 4 },
+    { lugar: "classica-15", titulo: "Retratos", tipografia: "jost", cor: 0 },
+    { lugar: "delicada-11", titulo: "Festa", tipografia: "parisienne", cor: 3 },
+  ],
+  [
+    { lugar: "classica-3", titulo: "Os dois", tipografia: "garamond", cor: 1 },
+    { lugar: "delicada-6", titulo: "Saída", tipografia: "tenor", cor: 2 },
+    { lugar: "classica-11", titulo: "No campo", tipografia: "italianno", cor: 0 },
+    { lugar: "delicada-10", titulo: "Madrinhas", tipografia: "marcellus", cor: 4 },
+    { lugar: "classica-9", titulo: "Pôr do sol", tipografia: "outfit", cor: 3 },
+    { lugar: "delicada-2", titulo: "Detalhes", tipografia: "josefin", cor: 1 },
+  ],
+];
 
 export default async function Home() {
   const fotos = await fotosDaHome();
   const [delicada, editorial, classica] = IDENTIDADES;
-  /* A galeria de fotos de verdade (Vanessa & Kalil) é a que representa o
-     produto sozinha: a troca de identidade, o celular, a seleção e o cofre. */
-  const destaque = identidadePorId(GALERIA_EM_DESTAQUE) ?? delicada;
+  /* Cada seção que mostra UMA galeria diz qual em `GALERIA_DA_SECAO` — até
+     03/10/2026 era a galeria da Carol em todas, e o Juan contou oito. */
+  const daSecao = (s: keyof typeof GALERIA_DA_SECAO) => identidadePorId(GALERIA_DA_SECAO[s]) ?? delicada;
+  const suaMarca = daSecao("suaMarca");
+  const comoFunciona = daSecao("comoFunciona");
+  const doCelular = daSecao("celular");
+  const daSelecao = daSecao("selecao");
+  const doCofre = daSecao("cofre");
+  const daLixeira = daSecao("lixeira");
 
   return (
     <main className={`home overflow-x-clip ${fonteTitulo.variable} ${fonteTexto.variable}`}>
@@ -471,9 +503,13 @@ export default async function Home() {
       <EncolherAoRolar alvo="topo-da-home" />
 
       {/* ── 1 · hero ──────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-7xl px-4 pb-20 pt-12 sm:px-6 md:pt-16 lg:pb-28">
-        <div className="grid items-center gap-12 lg:grid-cols-[9fr_14fr] lg:gap-12">
-          <div>
+      {/* No celular a ordem é título → galerias → texto e botões: a imagem
+          chega antes da leitura (briefing §5), e não depois de uma tela de
+          texto. No computador o texto fica à esquerda, em duas linhas da
+          grade, e o palco ocupa as duas à direita. */}
+      <section className="mx-auto max-w-7xl px-4 pb-20 pt-10 sm:px-6 md:pt-16 lg:pb-28">
+        <div className="grid items-center gap-x-12 gap-y-8 lg:grid-cols-[9fr_14fr] lg:grid-rows-[auto_auto]">
+          <div className="lg:col-start-1 lg:row-start-1 lg:self-end">
             <p className={SOBRANCELHA}>Galeria brasileira para fotógrafos</p>
             {/* Entra palavra por palavra, saindo do desfoque (`.home-palavra`).
                 O texto é o mesmo de sempre, com os espaços entre as palavras:
@@ -499,7 +535,12 @@ export default async function Home() {
                 ))}
               </span>
             </h1>
-            <p className="mt-6 max-w-[44ch] text-lg leading-relaxed text-[var(--h-tinta-2)]">
+          </div>
+          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+            <HeroGalerias identidades={[delicada, editorial, classica]} fotos={fotos} />
+          </div>
+          <div className="lg:col-start-1 lg:row-start-2 lg:self-start">
+            <p className="max-w-[44ch] text-lg leading-relaxed text-[var(--h-tinta-2)]">
               {DESCRICAO}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -512,7 +553,6 @@ export default async function Home() {
             </div>
             <p className="mt-4 text-sm text-[var(--h-tinta-3)]">14 dias grátis · sem cartão</p>
           </div>
-          <HeroGalerias identidades={[delicada, editorial, classica]} fotos={fotos} />
         </div>
       </section>
 
@@ -604,7 +644,7 @@ export default async function Home() {
               Troque a capa, a fonte e as cores: é a galeria de verdade, redesenhada na hora.
             </p>
           </Revelar>
-          <TrocaIdentidade base={destaque} fotos={fotos} />
+          <TrocaIdentidade base={suaMarca} fotos={fotos} />
         </div>
       </section>
 
@@ -626,9 +666,9 @@ export default async function Home() {
             </p>
           </Revelar>
           <DaPastaAGaleria
-            identidade={destaque}
+            identidade={comoFunciona}
             fotos={fotos}
-            endereco={`seuestudio.${marca.dominio}/${destaque.slug}`}
+            endereco={`seuestudio.${marca.dominio}/${comoFunciona.slug}`}
           />
         </div>
       </section>
@@ -643,7 +683,7 @@ export default async function Home() {
             <div className="relative w-[300px] rounded-[2.6rem] bg-[#141414] p-2.5 shadow-[0_40px_90px_-30px_rgba(20,20,20,0.55)]">
               <div className="relative h-[620px] overflow-hidden rounded-[2.1rem] bg-white">
                 <iframe
-                  src={`/demonstracao/${destaque.id}`}
+                  src={`/demonstracao/${doCelular.id}`}
                   title="Galeria de demonstração, como o cliente vê no celular"
                   loading="lazy"
                   width={390}
@@ -716,7 +756,7 @@ export default async function Home() {
                 continuar o trabalho. Ideal também para a escolha das fotos do álbum.
               </p>
               <div className="mt-3 grid items-start gap-6 md:grid-cols-[6fr_5fr]">
-                <SelecaoDemo identidade={destaque} fotos={fotos} />
+                <SelecaoDemo identidade={daSelecao} fotos={fotos} />
                 <ul className="space-y-3 text-[15px] text-[var(--h-tinta-2)]">
                   <li>
                     <strong className="font-medium text-[var(--h-tinta)]">Sem limite, ou o número combinado.</strong>{" "}
@@ -746,7 +786,7 @@ export default async function Home() {
                 Quando o prazo termina, a galeria sai do ar para o cliente e vai para o Cofre. Nada é
                 apagado, e um clique traz de volta, no mesmo endereço.
               </p>
-              <CofreEstados foto={fotos[LUGAR_DO_COFRE]} titulo={destaque.titulo} />
+              <CofreEstados foto={fotos[LUGAR_DO_COFRE]} titulo={doCofre.titulo} />
               <p className="text-xs text-[var(--h-tinta-3)]">O Cofre não substitui uma estratégia profissional de backup.</p>
             </Peca>
 
@@ -807,12 +847,12 @@ export default async function Home() {
               <div className="relative mt-auto flex h-20 items-center justify-between" aria-hidden>
                 <div className="home-lixo-arquivo flex items-center gap-2.5 rounded-xl bg-[var(--h-papel)] py-2 pl-2 pr-3 ring-1 ring-[var(--h-linha)]">
                   <img
-                    src={fotos[destaque.capa].miniatura ?? fotos[destaque.capa].src}
+                    src={fotos[daLixeira.capa].miniatura ?? fotos[daLixeira.capa].src}
                     alt=""
                     loading="lazy"
                     className="h-11 w-8 rounded object-cover"
                   />
-                  <span className="text-[13px] font-medium">{destaque.titulo}</span>
+                  <span className="text-[13px] font-medium">{daLixeira.titulo}</span>
                 </div>
                 <div className="grid h-16 w-14 place-items-end justify-center rounded-b-xl border-[1.5px] border-t-[5px] border-[var(--h-tinta-3)] pb-1.5 font-mono text-[10px] text-[var(--h-tinta-3)]">
                   {PRAZO_LIXEIRA_DIAS} d
@@ -1098,22 +1138,22 @@ export default async function Home() {
           (capa e título), e não a galeria inteira: são muitos, e andando. */}
       <section className="overflow-hidden py-24 lg:py-32">
         <div className="home-esteiras grid gap-4">
-          {[CARTOES_DO_FECHO, [...CARTOES_DO_FECHO].reverse()].map((fila, n) => (
+          {CARTOES_DO_FECHO.map((fila, n) => (
             <div key={n} className={`home-esteira ${n === 1 ? "home-esteira-volta" : ""}`}>
               {[false, true].map((copia) => (
                 <div key={String(copia)} className="flex shrink-0 gap-4" aria-hidden={copia || undefined}>
-                  {fila.map(({ ident, lugar }) => {
+                  {fila.map(({ lugar, titulo, tipografia, cor }) => {
                     const f = fotos[lugar];
+                    const paleta = TROCA_CORES[cor];
                     return (
                       <div
                         key={lugar}
                         className="w-[15rem] shrink-0 overflow-hidden rounded-xl ring-1 ring-black/10"
                         style={{
-                          ...variaveisDoTema(ident.aparencia),
+                          ...variaveisDoTema(lerAparencia({ tipografia, tema: paleta.tema, cores: paleta.cores })),
                           background: "var(--g-fundo)",
                           color: "var(--g-texto)",
                         }}
-                        data-demo-pb={ident.pretoEBranco ? "" : undefined}
                       >
                         <img
                           src={f.miniatura ?? f.src}
@@ -1124,14 +1164,11 @@ export default async function Home() {
                           style={{ objectPosition: `${f.focoX}% ${f.focoY}%` }}
                         />
                         <div className="px-3 pb-3 pt-2.5">
-                          <p
-                            className="truncate text-[19px] leading-tight"
-                            style={{ fontFamily: FONTES_TITULO[ident.aparencia.tipografia] }}
-                          >
-                            {ident.titulo}
+                          <p className="truncate text-[21px] leading-tight" style={{ fontFamily: FONTES_TITULO[tipografia] }}>
+                            {titulo}
                           </p>
                           <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.1em] opacity-70">
-                            {ident.rotulo}
+                            {nomeDe("tipografia", tipografia)} · {paleta.nome}
                           </p>
                         </div>
                       </div>

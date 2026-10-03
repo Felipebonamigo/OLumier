@@ -661,20 +661,6 @@ html[data-js] .revelar[data-visivel] {
     transform: none;
   }
 }
-/* No celular só a galeria da frente aparece: ela entra como uma cortina. */
-@media (max-width: 767px) and (prefers-reduced-motion: no-preference) {
-  .home-palco-frente {
-    animation: home-cortina 1s cubic-bezier(0.22, 1, 0.36, 1) both;
-  }
-}
-@keyframes home-cortina {
-  from {
-    clip-path: inset(100% 0 0 0 round 1rem);
-  }
-  to {
-    clip-path: inset(0 0 0 0 round 1rem);
-  }
-}
 /* A barra da ficha enche no tempo da troca; o fim dela é a troca. */
 .home-ficha-tempo {
   position: absolute;
@@ -779,17 +765,35 @@ html[data-js] .revelar[data-visivel] {
     background: none;
   }
 }
+/* O quadriculado é a MESA — onde moram os arquivos (pasta, capítulos, link).
+   Quando as fotos viram galeria, a mesa some e o fundo passa a ser o da
+   galeria de verdade (`--g-fundo`, da identidade). Ver `da-pasta-a-galeria.tsx`. */
 .home-cena {
   position: relative;
   height: 100%;
   overflow: hidden;
   border-radius: 1.5rem;
   border: 1px solid var(--h-linha);
-  background:
-    linear-gradient(var(--h-linha) 1px, transparent 1px) 0 0 / 100% 44px,
-    linear-gradient(90deg, var(--h-linha) 1px, transparent 1px) 0 0 / 44px 100%,
-    var(--h-papel);
+  background-color: var(--h-papel);
+  background-image:
+    linear-gradient(var(--h-linha) 1px, transparent 1px),
+    linear-gradient(90deg, var(--h-linha) 1px, transparent 1px);
+  background-size:
+    100% 44px,
+    44px 100%;
   box-shadow: 0 24px 60px -30px rgba(20, 20, 20, 0.35);
+  transition: background-color 0.6s ease;
+}
+.home-cena[data-cena="galeria"] {
+  background-image: none;
+  background-color: var(--g-fundo, #fff);
+}
+/* Na galeria e no celular as fotos são as da grade: sem sombra de cartão,
+   com o canto que a identidade escolheu. */
+.home-cena[data-cena="galeria"] .home-ladrilho,
+.home-cena[data-cena="entrega"] .home-ladrilho {
+  box-shadow: none;
+  border-radius: var(--g-canto, 0px);
 }
 .home-cena-rotulo {
   position: absolute;
@@ -953,19 +957,30 @@ html[data-js] .revelar[data-visivel] {
   font-style: normal;
   color: var(--h-tinta-3);
 }
-.home-cena-titulo {
+.home-cena-cabecalho {
   position: absolute;
-  left: 6%;
-  right: 6%;
-  top: 12%;
-  height: 42%;
+  left: 4%;
+  right: 4%;
+  top: 5%;
+  height: 16%;
   display: flex;
-  align-items: flex-end;
-  padding: 0 0 4% 4%;
-  font-size: clamp(1.6rem, 3.2vw, 3rem);
-  line-height: 0.95;
-  color: #fff;
-  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.45);
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  color: var(--g-texto, var(--h-tinta));
+  text-align: center;
+}
+.home-cena-cabecalho span {
+  font: 500 9.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.home-cena-cabecalho p {
+  margin-top: 0.15rem;
+  font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+  line-height: 1;
 }
 .home-link {
   position: absolute;
@@ -1016,7 +1031,7 @@ html[data-js] .revelar[data-visivel] {
   height: 90%;
   border-radius: 1.6rem;
   border: 7px solid #0d0d0f;
-  background: #161514;
+  background: var(--g-fundo, #fff);
   box-shadow: 0 24px 50px -24px rgba(0, 0, 0, 0.6);
 }
 @media (max-width: 1023px) {
