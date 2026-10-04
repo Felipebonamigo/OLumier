@@ -1,5 +1,6 @@
 /**
- * Refaz os PRINTS DO PAINEL que a home mostra (`public/home/produto/*.webp`).
+ * Refaz os PRINTS DO PAINEL (`public/home/produto/*.webp`). A home deixou de mostrá-los em
+ * 03/10/2026 (a cena "Suba. Personalize. Entregue." tomou o lugar); rodar recria a pasta.
  *
  * ── POR QUE UM SCRIPT, E NÃO PRINTS TIRADOS À MÃO ─────────────────────────
  *
@@ -183,8 +184,8 @@ try {
     "select id from medias where galeria_id = $1 order by ordem, criado_em",
     [g.id],
   );
-  /* Quem escolhe são os noivos da galeria em destaque ("Vanessa & Kalil" →
-     Vanessa e Kalil): no print, a lista de favoritas é do casal da capa. */
+  /* Quem escolhe são os noivos da galeria em destaque ("Marina & Caio" →
+     Marina e Caio): no print, a lista de favoritas é do casal da capa. */
   const [nome1, nome2] = destaque.titulo.split(/\s+(?:&|e)\s+/);
   const email = (nome) => `${nome.normalize("NFD").replace(/[^a-zA-Z]/g, "").toLowerCase()}@exemplo.com`;
   const noiva = await pessoaPorEmail(g.id, email(nome1), nome1);

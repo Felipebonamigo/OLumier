@@ -1,0 +1,13 @@
+{
+  "_leia": "Alertas do `npm audit` que NÃO barram o Verificar. Só entra aqui alerta alto ou crítico que (1) atinge apenas ferramenta de desenvolvimento — o script confere, contra a auditoria só de produção — e (2) não tem versão corrigida para instalar. Cada um com o motivo e uma data de revisão: vencida, ele volta a barrar. Ver scripts/auditar-dependencias.mjs.",
+  "excecoes": [
+    {
+      "alerta": "GHSA-vfj7-8cjw-p6xm",
+      "pacote": "braces",
+      "por_onde_entra": "eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces",
+      "motivo": "Negação de serviço com padrões de glob muito aninhados. Vale para todas as versões publicadas (3.0.3 é a última, de 05/2024). Só o ESLint usa, com os padrões do próprio repositório; nada disso vai para o servidor. O conserto que o npm sugere é rebaixar o eslint-config-next para a 14, o que quebra o lint do Next 16.",
+      "aceito_em": "2026-10-03",
+      "revisar_ate": "2026-11-03"
+    }
+  ]
+}

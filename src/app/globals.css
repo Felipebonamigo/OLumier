@@ -586,6 +586,541 @@ html[data-js] .revelar[data-visivel] {
   }
 }
 
+/* ── A HOME EM MOVIMENTO (03/10/2026) ──────────────────────────────────────
+   Felipe aprovou a proposta: a home mais "tecnológica", na linha dos sites
+   animados de referência, mas presa à estratégia de marca — todo movimento
+   mostra o produto (§13: "sem virar espetáculo tecnológico"). O registro do
+   que mudou e por quê está em `docs/home-leitura-critica.md`, seção 7.
+
+   Tudo aqui respeita `prefers-reduced-motion`: as esteiras param e viram
+   lista, a cortina e a entrada do título não acontecem, a foto do respiro não
+   se mexe. */
+
+/* O cabeçalho é uma pílula de vidro que encolhe quando a página rola (ver
+   `encolher-ao-rolar.tsx`). O logo não muda: o símbolo, o nome e o selo de
+   beta são os de sempre. */
+.home-topo {
+  transition:
+    max-width 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s ease,
+    background-color 0.4s ease,
+    border-color 0.4s ease;
+}
+.home-topo[data-encolhido] {
+  max-width: 60rem;
+  border-color: var(--h-linha);
+  background-color: color-mix(in srgb, var(--h-branco) 78%, transparent);
+  box-shadow:
+    0 1px 2px rgba(20, 20, 20, 0.05),
+    0 14px 40px -18px rgba(20, 20, 20, 0.28);
+}
+
+/* O título do hero entra palavra por palavra, saindo do desfoque. Começa
+   visível (opacidade baixa, não zero): a frase é o que se lê primeiro. */
+@media (prefers-reduced-motion: no-preference) {
+  .home-palavra {
+    display: inline-block;
+    animation: home-palavra 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation-delay: calc(var(--i, 0) * 70ms + 120ms);
+  }
+}
+@keyframes home-palavra {
+  from {
+    opacity: 0.15;
+    filter: blur(10px);
+    transform: translateY(0.3em);
+  }
+}
+
+/* O brilho atrás do palco tem a cor da capa da frente (`cor-da-foto.ts`). A
+   cor é uma propriedade registrada para poder transitar de uma capa para a
+   outra em vez de pular. */
+@property --brilho {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: transparent;
+}
+.home-brilho {
+  position: absolute;
+  inset: -16% -12% -6%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(48% 52% at 56% 44%, color-mix(in srgb, var(--brilho) 40%, transparent), transparent 70%),
+    radial-gradient(30% 34% at 88% 82%, color-mix(in srgb, var(--brilho) 24%, transparent), transparent 72%);
+  filter: blur(18px);
+  transition: --brilho 1.4s ease;
+}
+/* No computador o palco vem levemente girado e se endireita com o mouse. */
+@media (min-width: 768px) and (prefers-reduced-motion: no-preference) {
+  .home-palco {
+    transform: perspective(1600px) rotateY(-4deg) rotateX(2deg);
+    transition: transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .home-palco:hover {
+    transform: none;
+  }
+}
+/* A barra da ficha enche no tempo da troca; o fim dela é a troca. */
+.home-ficha-tempo {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--h-tinta);
+  transform-origin: left;
+  animation: home-ficha var(--tempo, 6s) linear both;
+}
+.home-palco:hover + div .home-ficha-tempo {
+  animation-play-state: paused;
+}
+@keyframes home-ficha {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* A faixa de provas logo abaixo do hero: fatos, não adjetivos (§27). */
+.home-provas-trilho {
+  display: flex;
+  width: max-content;
+  animation: home-deriva 52s linear infinite;
+}
+.home-provas:hover .home-provas-trilho {
+  animation-play-state: paused;
+}
+
+/* As esteiras de galerias do fecho, em sentidos opostos. */
+.home-esteira {
+  display: flex;
+  gap: 1rem;
+  width: max-content;
+  animation: home-deriva 90s linear infinite;
+}
+.home-esteira-volta {
+  animation-direction: reverse;
+  animation-duration: 110s;
+}
+.home-esteiras:hover .home-esteira {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-provas-trilho,
+  .home-esteira {
+    animation: none;
+    width: auto;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .home-provas-trilho > [aria-hidden],
+  .home-esteira > [aria-hidden] {
+    display: none;
+  }
+}
+
+/* A foto do respiro desliza devagar enquanto passa pela tela — só onde o
+   navegador sabe animar pela rolagem; nos outros, ela fica parada. */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .home-respiro-foto {
+      animation: home-respiro linear both;
+      animation-timeline: view();
+    }
+  }
+}
+@keyframes home-respiro {
+  from {
+    transform: scale(1.14) translateY(-5%);
+  }
+  to {
+    transform: scale(1.02) translateY(4%);
+  }
+}
+
+/* ── Suba. Personalize. Entregue. — a cena (`da-pasta-a-galeria.tsx`) ── */
+/* No celular a cena gruda no topo da tela, e o fundo dela sobe até debaixo do
+   cabeçalho: sem isso, o texto do passo que já passou aparecia na fresta
+   entre a pílula e a cena. */
+.home-historia-palco {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: calc(46vh + 4.75rem + env(safe-area-inset-top, 0px));
+  padding-top: calc(4.75rem + env(safe-area-inset-top, 0px));
+  padding-bottom: 0.75rem;
+  background: var(--h-branco);
+}
+@media (min-width: 1024px) {
+  .home-historia-palco {
+    top: 14vh;
+    height: 72vh;
+    align-self: start;
+    padding-top: 0;
+    padding-bottom: 0;
+    background: none;
+  }
+}
+/* O quadriculado é a MESA — onde moram os arquivos (pasta, capítulos, link).
+   Quando as fotos viram galeria, a mesa some e o fundo passa a ser o da
+   galeria de verdade (`--g-fundo`, da identidade). Ver `da-pasta-a-galeria.tsx`. */
+.home-cena {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 1.5rem;
+  border: 1px solid var(--h-linha);
+  background-color: var(--h-papel);
+  background-image:
+    linear-gradient(var(--h-linha) 1px, transparent 1px),
+    linear-gradient(90deg, var(--h-linha) 1px, transparent 1px);
+  background-size:
+    100% 44px,
+    44px 100%;
+  box-shadow: 0 24px 60px -30px rgba(20, 20, 20, 0.35);
+  transition: background-color 0.6s ease;
+}
+.home-cena[data-cena="galeria"] {
+  background-image: none;
+  background-color: var(--g-fundo, #fff);
+}
+/* Na galeria e no celular as fotos são as da grade: sem sombra de cartão,
+   com o canto que a identidade escolheu. */
+.home-cena[data-cena="galeria"] .home-ladrilho,
+.home-cena[data-cena="entrega"] .home-ladrilho {
+  box-shadow: none;
+  border-radius: var(--g-canto, 0px);
+}
+.home-cena-rotulo {
+  position: absolute;
+  left: 1rem;
+  top: 0.9rem;
+  z-index: 5;
+  font: 400 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--h-tinta-3);
+}
+.home-cena-rotulo b {
+  font-weight: 500;
+  color: var(--h-tinta);
+}
+.home-cena-camada {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+.home-cena-acima {
+  z-index: 4;
+}
+.home-cena[data-cena="pasta"] [data-camada="pasta"],
+.home-cena[data-cena="capitulos"] [data-camada="capitulos"],
+.home-cena[data-cena="galeria"] [data-camada="galeria"],
+.home-cena[data-cena="entrega"] [data-camada="entrega"] {
+  opacity: 1;
+  transition-delay: 0.25s;
+}
+.home-ladrilho {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #e8e6e0;
+  box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.35);
+  transition:
+    left 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.6s ease;
+  transition-delay: calc(var(--k, 0) * 28ms);
+}
+.home-ladrilho img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-ladrilho {
+    transition: none;
+  }
+}
+.home-pasta {
+  position: absolute;
+  left: 5%;
+  top: 14%;
+  width: 40%;
+  height: 76%;
+  border-radius: 1rem;
+  border: 1px solid var(--h-linha-forte);
+  background: color-mix(in srgb, var(--h-branco) 90%, transparent);
+}
+.home-pasta p {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 1px solid var(--h-linha);
+  font: 500 11.5px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.home-icone-pasta {
+  position: relative;
+  flex: none;
+  width: 15px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--h-tinta-3);
+}
+.home-icone-pasta::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -3px;
+  width: 7px;
+  height: 4px;
+  border-radius: 2px 2px 0 0;
+  background: var(--h-tinta-3);
+}
+.home-envios {
+  position: absolute;
+  right: 5%;
+  top: 14%;
+  width: 46%;
+  display: grid;
+  gap: 0.55rem;
+}
+.home-envio {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem 0.6rem;
+  font: 400 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--h-tinta-2);
+}
+.home-envio span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-envio i {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--h-linha);
+  overflow: hidden;
+}
+.home-envio i b {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: 4px;
+  background: var(--h-tinta);
+  transform-origin: left;
+}
+.home-cena[data-cena="pasta"] .home-envio i b {
+  animation: home-progresso 2.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  animation-delay: calc(var(--k, 0) * -370ms);
+}
+@keyframes home-progresso {
+  0% {
+    transform: scaleX(0.04);
+  }
+  80%,
+  100% {
+    transform: scaleX(1);
+  }
+}
+.home-envios-resumo {
+  margin-top: 0.3rem;
+  font: 500 11.5px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--h-tinta);
+}
+.home-cap-rotulo {
+  position: absolute;
+  left: 6%;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  font: 500 11.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--h-tinta);
+}
+.home-cap-rotulo em {
+  font-style: normal;
+  color: var(--h-tinta-3);
+}
+.home-cena-cabecalho {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  top: 5%;
+  height: 16%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.25rem;
+  color: var(--g-texto, var(--h-tinta));
+  text-align: center;
+}
+.home-cena-cabecalho span {
+  font: 500 9.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.home-cena-cabecalho p {
+  margin-top: 0.15rem;
+  font-size: clamp(1.4rem, 2.6vw, 2.4rem);
+  line-height: 1;
+}
+.home-link {
+  position: absolute;
+  left: 6%;
+  top: 18%;
+  width: 46%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--h-linha-forte);
+  background: var(--h-branco);
+  font: 500 11.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow-wrap: anywhere;
+}
+.home-link small {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--h-tinta-3);
+}
+.home-metricas {
+  position: absolute;
+  left: 6%;
+  top: 46%;
+  width: 46%;
+  display: grid;
+  gap: 0.6rem;
+}
+.home-metricas div {
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--h-linha);
+  background: var(--h-branco);
+}
+.home-metricas b {
+  display: block;
+  font-family: var(--font-home-titulo), system-ui, sans-serif;
+  font-size: 1.6rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.home-metricas span {
+  font-size: 12px;
+  color: var(--h-tinta-3);
+}
+.home-celular {
+  position: absolute;
+  top: 5%;
+  width: 33%;
+  height: 90%;
+  border-radius: 1.6rem;
+  border: 7px solid #0d0d0f;
+  background: var(--g-fundo, #fff);
+  box-shadow: 0 24px 50px -24px rgba(0, 0, 0, 0.6);
+}
+@media (max-width: 1023px) {
+  .home-pasta {
+    top: 16%;
+    width: 44%;
+  }
+  .home-envios {
+    top: 16%;
+    width: 44%;
+    gap: 0.4rem;
+  }
+  .home-envio:nth-child(n + 5) {
+    display: none;
+  }
+  .home-link,
+  .home-metricas {
+    width: 52%;
+  }
+  .home-metricas {
+    top: 50%;
+    gap: 0.45rem;
+  }
+  .home-metricas b {
+    font-size: 1.25rem;
+  }
+}
+
+/* ── As peças do bloco de recursos (`bento-recursos.tsx`) ─────────────── */
+.home-peca {
+  --mx: 50%;
+  --my: 50%;
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  border: 1px solid var(--h-linha);
+  background: var(--h-branco);
+  padding: 1.4rem;
+}
+.home-peca::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(300px circle at var(--mx) var(--my), rgba(20, 20, 20, 0.06), transparent 70%);
+}
+.home-peca:hover::before {
+  opacity: 1;
+}
+/* A peça "Brasileira" guarda o papel quente da seção que ela substituiu. */
+.home-peca.home-peca-quente {
+  background: var(--h-quente);
+}
+.home-lixo-arquivo {
+  animation: home-lixo 6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+@keyframes home-lixo {
+  0%,
+  12% {
+    transform: none;
+    opacity: 1;
+  }
+  40%,
+  55% {
+    transform: translateX(calc(100% + 1.5rem)) scale(0.5);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(0.92);
+    opacity: 0;
+  }
+  85%,
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-lixo-arquivo {
+    animation: none;
+  }
+}
+
 /* ── ENTREGA EM PASTAS E EM STREAM (30/09/2026) ─────────────────────────────
    As pastas chegam uma depois da outra, como cópias postas na mesa; o atraso
    de cada uma vem do `--i` que `galeria-pastas.tsx` põe nela. Quem pediu

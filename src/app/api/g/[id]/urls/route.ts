@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultar, consultarUm } from "@/lib/db";
+import { VALIDADE_DO_LINK_DA_GALERIA } from "@/config/links-assinados";
 import { temAcessoLiberado } from "@/lib/galerias-publicas";
 import { galeriasNoAr } from "@/lib/assinatura";
 import { asaasConfigurado } from "@/lib/asaas";
@@ -29,7 +30,7 @@ import { nomeComCapitulo, vaiPrefixar, nomeDoGrupoSolto } from "@/lib/nome-de-ar
  * e o link agora nem chega a nascer.
  */
 
-const VALIDADE = 6 * 3600;
+const VALIDADE = VALIDADE_DO_LINK_DA_GALERIA;
 /** Teto de ids por pedido. "Baixar tudo" pede a galeria inteira de uma vez. */
 const MAX_IDS = 2000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

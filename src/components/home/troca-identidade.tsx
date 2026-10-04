@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { flushSync } from "react-dom";
 import { FONTES_TITULO, type Aparencia } from "@/config/aparencia";
 import { marca } from "@/config/marca";
 import {
@@ -30,6 +31,19 @@ export function TrocaIdentidade({ base, fotos }: { base: Identidade; fotos: Foto
   const [fonte, setFonte] = useState<string>(base.aparencia.tipografia);
   const [cor, setCor] = useState<string>(TROCA_CORES[0].id);
 
+  /*
+   * A TROCA COM TRANSIÇÃO (03/10/2026). Com a View Transitions do navegador, a
+   * galeria antiga se desfaz na nova em vez de piscar — só a moldura tem nome
+   * de transição, então o resto da página não se mexe. `flushSync` porque o
+   * navegador fotografa o "depois" assim que a função volta. Onde não existe
+   * (Firefox, Safari antigo) ou quem pediu menos movimento: troca direta.
+   */
+  const mudar = (fazer: () => void) => {
+    const doc = document as Document & { startViewTransition?: (f: () => void) => unknown };
+    if (!doc.startViewTransition || matchMedia("(prefers-reduced-motion: reduce)").matches) return fazer();
+    doc.startViewTransition(() => flushSync(fazer));
+  };
+
   const paleta = TROCA_CORES.find((c) => c.id === cor) ?? TROCA_CORES[0];
   const aparencia: Aparencia = {
     ...base.aparencia,
@@ -41,7 +55,10 @@ export function TrocaIdentidade({ base, fotos }: { base: Identidade; fotos: Foto
 
   return (
     <div>
-      <figure className="overflow-hidden rounded-2xl bg-white shadow-[0_30px_80px_-30px_rgba(20,20,20,0.4)] ring-1 ring-black/5">
+      <figure
+        className="overflow-hidden rounded-2xl bg-white shadow-[0_30px_80px_-30px_rgba(20,20,20,0.4)] ring-1 ring-black/5"
+        style={{ viewTransitionName: "home-troca" }}
+      >
         <div className="flex h-9 items-center gap-2 border-b border-black/5 px-3">
           <span className="flex gap-1" aria-hidden>
             <i className="block size-2 rounded-full bg-black/10" />
@@ -64,14 +81,14 @@ export function TrocaIdentidade({ base, fotos }: { base: Identidade; fotos: Foto
       <div className="mt-6 grid gap-5 sm:grid-cols-3">
         <Grupo rotulo="Capa">
           {TROCA_CAPAS.map((o) => (
-            <Opcao key={o.id} ativa={capa === o.id} onClick={() => setCapa(o.id)}>
+            <Opcao key={o.id} ativa={capa === o.id} onClick={() => mudar(() => setCapa(o.id))}>
               {o.nome}
             </Opcao>
           ))}
         </Grupo>
         <Grupo rotulo="Fonte do título">
           {TROCA_FONTES.map((o) => (
-            <Opcao key={o.id} ativa={fonte === o.id} onClick={() => setFonte(o.id)}>
+            <Opcao key={o.id} ativa={fonte === o.id} onClick={() => mudar(() => setFonte(o.id))}>
               {/* Cada fonte escrita nela mesma — como no editor. */}
               <span style={{ fontFamily: FONTES_TITULO[o.id as Aparencia["tipografia"]] }}>
                 {o.nome}
@@ -81,7 +98,7 @@ export function TrocaIdentidade({ base, fotos }: { base: Identidade; fotos: Foto
         </Grupo>
         <Grupo rotulo="Cores">
           {TROCA_CORES.map((o) => (
-            <Opcao key={o.id} ativa={cor === o.id} onClick={() => setCor(o.id)}>
+            <Opcao key={o.id} ativa={cor === o.id} onClick={() => mudar(() => setCor(o.id))}>
               <span className="flex items-center gap-1.5">
                 <span
                   aria-hidden

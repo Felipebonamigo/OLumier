@@ -3,18 +3,22 @@
 import type { Metadata } from "next";
 import { METADADOS_DO_APP } from "@/config/app-instalado";
 import Link from "next/link";
+import { Fragment } from "react";
 import { marca } from "@/config/marca";
 import { MarcaSimbolo, SeloBeta } from "@/components/marca-tile";
 import { MontadorPlano } from "@/components/montador-plano";
 import { Revelar } from "@/components/revelar";
-import { OPCOES, PRESETS } from "@/config/aparencia";
+import { FONTES_TITULO, OPCOES, PRESETS, lerAparencia, variaveisDoTema, type Aparencia } from "@/config/aparencia";
+import { VALIDADE_DO_LINK_DA_GALERIA } from "@/config/links-assinados";
 import { ESPACOS, formatarGb, formatarReais } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 import { dadosEstruturadosDaCasa, jsonLd, metadadosDaCasa } from "@/lib/metadados";
 import { DOMINIO_PROPRIO_LIBERADO, VIDEO_LIBERADO } from "@/config/lancamentos";
 import {
-  GALERIA_EM_DESTAQUE,
+  GALERIA_DA_SECAO,
   IDENTIDADES,
+  TROCA_CORES,
+  type IdFoto,
   LUGAR_DO_COFRE,
   identidadePorId,
   type Identidade,
@@ -25,7 +29,9 @@ import { GaleriaDemo } from "@/components/home/galeria-demo";
 import { HeroGalerias } from "@/components/home/hero-galerias";
 import { TrocaIdentidade } from "@/components/home/troca-identidade";
 import { SelecaoDemo } from "@/components/home/selecao-demo";
-import { CofreDemo } from "@/components/home/cofre-demo";
+import { EncolherAoRolar } from "@/components/home/encolher-ao-rolar";
+import { DaPastaAGaleria } from "@/components/home/da-pasta-a-galeria";
+import { Conta, CofreEstados, Peca, RelogioDoLink } from "@/components/home/bento-recursos";
 import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 import { DESCONTO_DO_PACOTE } from "@/config/combo";
 import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
@@ -40,8 +46,11 @@ import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
  *
  * O princípio que organiza a página inteira é o §28 do briefing: NÃO ESCONDER
  * O SOFTWARE. Toda galeria que aparece aqui é a galeria de verdade — os mesmos
- * componentes que o cliente abre, com os estilos do editor (`GaleriaDemo`) —, e
- * as telas do painel são prints do painel (`scripts/capturar-telas-home.mjs`).
+ * componentes que o cliente abre, com os estilos do editor (`GaleriaDemo`).
+ *
+ * EM MOVIMENTO desde 03/10/2026: a cena "Suba. Personalize. Entregue.", o
+ * bloco de peças dos recursos, a faixa de provas e as esteiras do fecho. Todo
+ * movimento mostra o produto; o registro está na seção 7 da leitura crítica.
  *
  * A outra regra é a de sempre desta página: só entra o que EXISTE e está
  * ligado. Vídeo e domínio próprio existem no código mas não estão validados
@@ -285,9 +294,12 @@ const PERGUNTAS = [
   },
 ];
 
-/* Recursos que NÃO têm seção própria acima — o briefing listava também
-   personalização, favoritos, cofre, domínio e segurança, e cada um já tem a
-   sua. Ver a redundância 2 em `docs/home-leitura-critica.md`. */
+/* Recursos que NÃO têm peça própria no bloco de recursos nem seção própria —
+   o briefing listava também personalização, favoritos, cofre, domínio e
+   segurança, e cada um já tem o seu lugar. Ver a redundância 2 em
+   `docs/home-leitura-critica.md`. Desde 03/10/2026, "Prova de entrega" e
+   "Capítulos pelas pastas" viraram peças do bloco e saem desta lista na hora
+   de desenhar (`E_TAMBEM`). */
 const RECURSOS = [
   {
     titulo: "Download completo",
@@ -318,6 +330,37 @@ const RECURSOS = [
     texto:
       "O mesmo endereço das entregas vira a página do estúdio: capa, sobre, portfólio e contato, pronta para a bio.",
   },
+];
+
+const E_TAMBEM = RECURSOS.filter((r) => r.titulo !== "Prova de entrega" && r.titulo !== "Capítulos pelas pastas");
+
+/*
+ * A FAIXA DE PROVAS, logo abaixo do hero (03/10/2026).
+ *
+ * É o "logo cloud" dos sites de tecnologia, com fatos no lugar de logos: prova
+ * antes de adjetivo (§27), e "brasileira" aparecendo cedo (estratégia §10). Só
+ * entra o que está no ar — o preço e o prazo da lixeira saem da mesma fonte que
+ * o resto da página, e "mais de 4.500 fotos" é a maior galeria do Juan, no ar
+ * desde 01/10/2026.
+ */
+const PROVAS: React.ReactNode[] = [
+  <>
+    <strong className="font-semibold text-[var(--h-tinta)]">{formatarReais(MENOR_ESPACO.precoCentavos)}</strong> por mês no
+    plano de {formatarGb(MENOR_ESPACO.gb)}
+  </>,
+  "Pix, boleto ou cartão",
+  "WhatsApp de quem constrói",
+  "As subpastas viram capítulos",
+  <>
+    Galerias com mais de <strong className="font-semibold text-[var(--h-tinta)]">4.500</strong> fotos
+  </>,
+  <>
+    Lixeira de <strong className="font-semibold text-[var(--h-tinta)]">{PRAZO_LIXEIRA_DIAS} dias</strong>
+  </>,
+  "Senha e prazo por galeria",
+  "Download no arquivo original",
+  "Aberturas e downloads contados",
+  `${OPCOES.tipografia.length - 1} fontes de título`,
 ];
 
 /* O que o cliente faz na galeria — só recurso ligado (briefing §9). "Salvar
@@ -354,35 +397,6 @@ function Marcador({ children, claro = false }: { children: React.ReactNode; clar
   return <p className={claro ? "text-xs font-medium uppercase tracking-[0.16em] text-white/70" : SOBRANCELHA}>{children}</p>;
 }
 
-/* Uma tela do painel, como ela é. Moldura mínima de janela — o print é que
-   tem de aparecer, não o aparelho em volta dele (briefing §22). */
-function TelaDoPainel({
-  src,
-  alt,
-  largura,
-  altura,
-  className = "",
-}: {
-  src: string;
-  alt: string;
-  largura: number;
-  altura: number;
-  className?: string;
-}) {
-  return (
-    <figure
-      className={`overflow-hidden rounded-xl bg-white shadow-[0_24px_60px_-28px_rgba(20,20,20,0.45)] ring-1 ring-black/5 ${className}`}
-    >
-      <div className="flex h-6 items-center gap-1 border-b border-black/5 px-2.5" aria-hidden>
-        <i className="block size-1.5 rounded-full bg-black/15" />
-        <i className="block size-1.5 rounded-full bg-black/15" />
-        <i className="block size-1.5 rounded-full bg-black/15" />
-      </div>
-      <img src={src} alt={alt} width={largura} height={altura} loading="lazy" className="block h-auto w-full" />
-    </figure>
-  );
-}
-
 /*
  * ESTÁTICA, REGENERADA QUANDO A FOTO MUDA (28/09/2026).
  *
@@ -395,12 +409,48 @@ function TelaDoPainel({
  */
 export const revalidate = 3600;
 
+/*
+ * OS CARTÕES DAS ESTEIRAS DO FECHO (03/10/2026).
+ *
+ * Eram três cartões de cada galeria de exemplo, com o nome do casal — e a
+ * galeria da Carol passava seis vezes pela tela. Agora cada cartão é uma
+ * identidade diferente montada com o que o editor oferece: uma fonte de título
+ * e uma combinação de cores sobre uma foto de verdade (da Carol e do Juan), com
+ * um título de capítulo. Doze cartões, doze fontes, nenhum nome repetido —
+ * "personalização se demonstra" (estratégia §9). Os lugares são os da galeria,
+ * então a foto trocada no admin troca aqui também.
+ */
+const CARTOES_DO_FECHO: { lugar: IdFoto; titulo: string; tipografia: Aparencia["tipografia"]; cor: number }[][] = [
+  [
+    { lugar: "classica-14", titulo: "Fim de tarde", tipografia: "bodoni", cor: 3 },
+    { lugar: "delicada-3", titulo: "Making of", tipografia: "playfair", cor: 2 },
+    { lugar: "classica-6", titulo: "Ensaio", tipografia: "manuscrita", cor: 1 },
+    { lugar: "delicada-9", titulo: "Sob a chuva", tipografia: "cinzel", cor: 4 },
+    { lugar: "classica-15", titulo: "Retratos", tipografia: "jost", cor: 0 },
+    { lugar: "delicada-11", titulo: "Festa", tipografia: "parisienne", cor: 3 },
+  ],
+  [
+    { lugar: "classica-3", titulo: "Os dois", tipografia: "garamond", cor: 1 },
+    { lugar: "delicada-6", titulo: "Saída", tipografia: "tenor", cor: 2 },
+    { lugar: "classica-11", titulo: "No campo", tipografia: "italianno", cor: 0 },
+    { lugar: "delicada-10", titulo: "Madrinhas", tipografia: "marcellus", cor: 4 },
+    { lugar: "classica-9", titulo: "Pôr do sol", tipografia: "outfit", cor: 3 },
+    { lugar: "delicada-2", titulo: "Detalhes", tipografia: "josefin", cor: 1 },
+  ],
+];
+
 export default async function Home() {
   const fotos = await fotosDaHome();
-  const [delicada, editorial, classica, noite] = IDENTIDADES;
-  /* A galeria de fotos de verdade (Vanessa & Kalil) é a que representa o
-     produto sozinha: a troca de identidade, o celular, a seleção e o cofre. */
-  const destaque = identidadePorId(GALERIA_EM_DESTAQUE) ?? delicada;
+  const [delicada, editorial, classica] = IDENTIDADES;
+  /* Cada seção que mostra UMA galeria diz qual em `GALERIA_DA_SECAO` — até
+     03/10/2026 era a galeria da Carol em todas, e o Juan contou oito. */
+  const daSecao = (s: keyof typeof GALERIA_DA_SECAO) => identidadePorId(GALERIA_DA_SECAO[s]) ?? delicada;
+  const suaMarca = daSecao("suaMarca");
+  const comoFunciona = daSecao("comoFunciona");
+  const doCelular = daSecao("celular");
+  const daSelecao = daSecao("selecao");
+  const doCofre = daSecao("cofre");
+  const daLixeira = daSecao("lixeira");
 
   return (
     <main className={`home overflow-x-clip ${fonteTitulo.variable} ${fonteTexto.variable}`}>
@@ -409,9 +459,17 @@ export default async function Home() {
           some — as âncoras são atalhos, a página inteira é o caminho — e o
           selo de beta também: o beta é contado com palavras em "Brasileira
           desde o começo", e no cabeçalho do celular ele empurrava o botão de
-          criar conta para fora da tela, que era o defeito da página antiga. */}
-      <header className="sticky top-0 z-50 border-b border-[var(--h-linha)] bg-[color-mix(in_srgb,var(--h-papel)_86%,transparent)] backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6">
+          criar conta para fora da tela, que era o defeito da página antiga.
+
+          PÍLULA DE VIDRO (03/10/2026): solta das bordas, translúcida, e
+          encolhe quando a página rola (`EncolherAoRolar`, desenho em
+          `.home-topo`). O logo é o de sempre — símbolo, nome e selo — por
+          pedido do Felipe: "mantenha o nosso logo". */}
+      <header
+        id="topo-da-home"
+        className="home-topo sticky top-3 z-50 mx-3 mt-3 max-w-7xl rounded-full border border-transparent bg-[color-mix(in_srgb,var(--h-papel)_80%,transparent)] backdrop-blur-xl sm:mx-auto"
+      >
+        <div className="flex h-14 items-center justify-between gap-3 pl-4 pr-2 sm:pl-5">
           <Link href="/" className="flex min-w-0 items-center gap-2" aria-label={`${marca.nome}, início`}>
             {/* O âmbar da lente é da marca, não da página: continua âmbar. */}
             <span style={{ ["--acento" as string]: "#d9a441" }}>
@@ -442,17 +500,47 @@ export default async function Home() {
           </div>
         </div>
       </header>
+      <EncolherAoRolar alvo="topo-da-home" />
 
       {/* ── 1 · hero ──────────────────────────────────────────────────── */}
-      <section className="mx-auto max-w-7xl px-4 pb-20 pt-12 sm:px-6 md:pt-16 lg:pb-28">
-        <div className="grid items-center gap-12 lg:grid-cols-[9fr_14fr] lg:gap-12">
-          <div>
+      {/* No celular a ordem é título → galerias → texto e botões: a imagem
+          chega antes da leitura (briefing §5), e não depois de uma tela de
+          texto. No computador o texto fica à esquerda, em duas linhas da
+          grade, e o palco ocupa as duas à direita. */}
+      <section className="mx-auto max-w-7xl px-4 pb-20 pt-10 sm:px-6 md:pt-16 lg:pb-28">
+        <div className="grid items-center gap-x-12 gap-y-8 lg:grid-cols-[9fr_14fr] lg:grid-rows-[auto_auto]">
+          <div className="lg:col-start-1 lg:row-start-1 lg:self-end">
             <p className={SOBRANCELHA}>Galeria brasileira para fotógrafos</p>
+            {/* Entra palavra por palavra, saindo do desfoque (`.home-palavra`).
+                O texto é o mesmo de sempre, com os espaços entre as palavras:
+                busca e leitor de tela leem a frase inteira. */}
             <h1 className="home-titulo mt-5 text-[clamp(2.5rem,4.3vw,4.1rem)] font-semibold leading-[1.0]">
-              Sua fotografia tem identidade.{" "}
-              <span className="text-[var(--h-tinta-3)]">Sua entrega também.</span>
+              {/* O espaço fica FORA da palavra: dentro de um inline-block o
+                  espaço do fim é engolido e as palavras grudariam. */}
+              {"Sua fotografia tem identidade.".split(" ").map((p, i) => (
+                <Fragment key={i}>
+                  <span className="home-palavra" style={{ ["--i" as string]: i }}>
+                    {p}
+                  </span>{" "}
+                </Fragment>
+              ))}
+              <span className="text-[var(--h-tinta-3)]">
+                {"Sua entrega também.".split(" ").map((p, i, todas) => (
+                  <Fragment key={i}>
+                    <span className="home-palavra" style={{ ["--i" as string]: i + 4 }}>
+                      {p}
+                    </span>
+                    {i < todas.length - 1 ? " " : ""}
+                  </Fragment>
+                ))}
+              </span>
             </h1>
-            <p className="mt-6 max-w-[44ch] text-lg leading-relaxed text-[var(--h-tinta-2)]">
+          </div>
+          <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+            <HeroGalerias identidades={[delicada, editorial, classica]} fotos={fotos} />
+          </div>
+          <div className="lg:col-start-1 lg:row-start-2 lg:self-start">
+            <p className="max-w-[44ch] text-lg leading-relaxed text-[var(--h-tinta-2)]">
               {DESCRICAO}
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -465,9 +553,29 @@ export default async function Home() {
             </div>
             <p className="mt-4 text-sm text-[var(--h-tinta-3)]">14 dias grátis · sem cartão</p>
           </div>
-          <HeroGalerias identidades={[delicada, editorial, classica]} fotos={fotos} />
         </div>
       </section>
+
+      {/* ── 1b · faixa de provas (03/10/2026) ─────────────────────────────
+          Esteira lenta, que para com o mouse em cima. A segunda cópia da
+          lista só existe para a volta não ter emenda — o leitor de tela não
+          a lê, e quem pediu menos movimento não a vê. */}
+      <div className="home-provas overflow-hidden border-y border-[var(--h-linha)] bg-white py-4">
+        <div className="home-provas-trilho">
+          {[false, true].map((copia) => (
+            <ul key={String(copia)} className="flex shrink-0" aria-hidden={copia || undefined}>
+              {PROVAS.map((prova, i) => (
+                <li
+                  key={i}
+                  className="flex items-center gap-3.5 whitespace-nowrap px-5 text-[14.5px] text-[var(--h-tinta-2)] before:block before:size-[5px] before:rounded-full before:bg-[var(--h-tinta-3)] before:content-['']"
+                >
+                  <span>{prova}</span>
+                </li>
+              ))}
+            </ul>
+          ))}
+        </div>
+      </div>
 
       {/* ── 2 · uma galeria, várias identidades ─────────────────────────── */}
       <section id="exemplos" className="scroll-mt-16 border-t border-[var(--h-linha)] bg-white py-24 lg:py-32">
@@ -536,14 +644,18 @@ export default async function Home() {
               Troque a capa, a fonte e as cores: é a galeria de verdade, redesenhada na hora.
             </p>
           </Revelar>
-          <TrocaIdentidade base={destaque} fotos={fotos} />
+          <TrocaIdentidade base={suaMarca} fotos={fotos} />
         </div>
       </section>
 
       {/* ── 4 · como funciona ──────────────────────────────────────────────
           O título era "Da pasta ao cliente." (briefing §8); Felipe pediu outra
-          frase em 28/09/2026. O título agora nomeia os três passos que vêm
-          logo abaixo. */}
+          frase em 28/09/2026. O título nomeia os três passos que vêm abaixo.
+
+          EM MOVIMENTO (03/10/2026): os três prints do painel deram lugar a
+          uma cena que acompanha a rolagem — as mesmas fotos saem da pasta,
+          viram capítulos, viram a galeria e entram no celular do cliente. Ver
+          `da-pasta-a-galeria.tsx`. */}
       <section id="como-funciona" className="scroll-mt-16 border-y border-[var(--h-linha)] bg-white py-24 lg:py-32">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <Revelar className="max-w-2xl">
@@ -553,66 +665,11 @@ export default async function Home() {
               Um fluxo intuitivo para transformar um trabalho pronto em uma entrega pronta.
             </p>
           </Revelar>
-
-          {/* Blocos alternando texto e tela (briefing §13 e §22), e não três
-              colunas: em coluna, o print do painel ficava do tamanho de um selo
-              e a interface deixava de ser lida — que é o contrário do que a
-              seção existe para fazer. */}
-          <ol className="mt-16 space-y-20 lg:mt-20 lg:space-y-28">
-            {[
-              {
-                n: "01",
-                verbo: "Suba",
-                texto: "Arraste suas fotografias para a galeria.",
-                detalhe:
-                  "A pasta inteira de uma vez, com as subpastas virando capítulos. As fotos sobem em paralelo, direto do navegador — e, se a conexão cair, o envio retoma de onde parou.",
-                tela: { src: "/home/produto/envio.webp", alt: "Tela de envio do painel com as fotos subindo", l: 1200, a: 769 },
-              },
-              {
-                n: "02",
-                verbo: "Personalize",
-                texto: "Ajuste a apresentação e deixe a experiência com a identidade do seu trabalho.",
-                detalhe:
-                  "Estilos prontos ou a sua combinação — capa, fonte, cores, grade —, com a prévia da galeria de verdade logo abaixo.",
-                tela: { src: "/home/produto/design.webp", alt: "Editor de design do painel com as cores e a prévia", l: 1200, a: 938 },
-              },
-              {
-                n: "03",
-                verbo: "Entregue",
-                texto: "Compartilhe o link com seu cliente.",
-                detalhe: `seuestudio.${marca.dominio}/${destaque.slug} — com senha e prazo, se você quiser. Ele abre no celular, sem instalar nada.`,
-                tela: { src: "/home/produto/entrega.webp", alt: "Galeria entregue aberta no celular do cliente", l: 780, a: 1400 },
-              },
-            ].map((passo, i) => (
-              <li
-                key={passo.n}
-                className="grid items-center gap-8 lg:grid-cols-[5fr_7fr] lg:gap-16"
-              >
-                <Revelar className={i % 2 === 1 ? "lg:order-2" : ""}>
-                  <p className="font-mono text-xs tracking-[0.14em] text-[var(--h-tinta-3)]">
-                    {passo.n} · {passo.verbo.toUpperCase()}
-                  </p>
-                  <h3 className="home-titulo mt-3 text-[1.9rem] font-semibold leading-tight">
-                    {passo.texto}
-                  </h3>
-                  <p className="mt-3 max-w-[46ch] text-lg leading-relaxed text-[var(--h-tinta-2)]">
-                    {passo.detalhe}
-                  </p>
-                </Revelar>
-                <div className={passo.n === "03" ? "mx-auto w-[64%] max-w-[300px]" : ""}>
-                  <TelaDoPainel
-                    src={passo.tela.src}
-                    alt={passo.tela.alt}
-                    largura={passo.tela.l}
-                    altura={passo.tela.a}
-                  />
-                </div>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-12 text-center text-sm text-[var(--h-tinta-3)]" aria-hidden>
-            arquivos → {marca.nome} → cliente
-          </p>
+          <DaPastaAGaleria
+            identidade={comoFunciona}
+            fotos={fotos}
+            endereco={`seuestudio.${marca.dominio}/${comoFunciona.slug}`}
+          />
         </div>
       </section>
 
@@ -626,7 +683,7 @@ export default async function Home() {
             <div className="relative w-[300px] rounded-[2.6rem] bg-[#141414] p-2.5 shadow-[0_40px_90px_-30px_rgba(20,20,20,0.55)]">
               <div className="relative h-[620px] overflow-hidden rounded-[2.1rem] bg-white">
                 <iframe
-                  src={`/demonstracao/${destaque.id}`}
+                  src={`/demonstracao/${doCelular.id}`}
                   title="Galeria de demonstração, como o cliente vê no celular"
                   loading="lazy"
                   width={390}
@@ -665,154 +722,207 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ── 6 · a seleção ───────────────────────────────────────────────── */}
-      <section className="border-t border-[var(--h-linha)] bg-white py-24 lg:py-32">
-        <div className="mx-auto grid max-w-7xl items-center gap-14 px-4 sm:px-6 lg:grid-cols-[5fr_7fr]">
-          <Revelar>
-            <Marcador>Favoritos e seleção</Marcador>
-            <h2 className={`${TITULO_SECAO} mt-4`}>A seleção acontece dentro da própria galeria.</h2>
-            <p className={`${TEXTO_SECAO} mt-6`}>
-              Seu cliente marca as fotografias favoritas enquanto navega. Você recebe a seleção
-              organizada para continuar o trabalho.
-            </p>
-            <ul className="mt-8 space-y-3 text-[var(--h-tinta-2)]">
-              <li>
-                <strong className="font-medium text-[var(--h-tinta)]">Sem limite, ou o número combinado.</strong>{" "}
-                O cliente marca quantas quiser. Se você definir um número, a galeria conta e para
-                nele, com prazo se você quiser.
-              </li>
-              <li>
-                <strong className="font-medium text-[var(--h-tinta)]">Cada pessoa com a sua lista.</strong>{" "}
-                Família e convidados abrem o mesmo link sem mexer na escolha do cliente.
-              </li>
-              <li>
-                <strong className="font-medium text-[var(--h-tinta)]">Escolha encerrada, lista travada.</strong>{" "}
-                Mudaram de ideia? Você reabre em um clique.
-              </li>
-              <li>
-                <strong className="font-medium text-[var(--h-tinta)]">Direto para o Lightroom.</strong> Um
-                botão copia os nomes dos arquivos, prontos para colar no filtro.
-              </li>
-            </ul>
-            <p className="mt-8 text-sm text-[var(--h-tinta-3)]">
-              Ideal também para organizar escolhas de fotografias para álbum.
-            </p>
-          </Revelar>
-          <div>
-            <SelecaoDemo identidade={destaque} fotos={fotos} />
-            {/* O painel entra por cima do canto da grade: é a mesma escolha,
-                vista do lado do fotógrafo. */}
-            {/* Abaixo de 640 px o print do painel vira um borrão de letra miúda:
-                some, e a grade com os corações conta a história sozinha. */}
-            <div className="relative z-10 mt-6 hidden sm:block lg:-mt-28 lg:ml-auto lg:mr-[-1.5rem] lg:w-[64%]">
-              <TelaDoPainel
-                src="/home/produto/selecao.webp"
-                alt="Painel da seleção, com as fotos escolhidas e o botão de copiar os nomes"
-                largura={1000}
-                altura={373}
-              />
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ── 6 · recursos, em peças (03/10/2026) ─────────────────────────────
+          Seleção, "Brasileira desde o começo", Cofre e Recursos eram quatro
+          seções, cada uma com a sua altura de tela. Viraram um bloco de peças
+          de tamanhos diferentes, e cada peça é uma demonstração viva do
+          recurso (§2 do briefing: demonstração real, nunca ícone genérico).
+          O briefing pede para não virar "sequência infinita de cards" (§22):
+          é um bloco só, no meio da página, cercado de seções abertas.
 
-      {/* ── 7 · brasileira desde o começo ──────────────────────────────────
-          PROVA > ADJETIVO (briefing §27): cada ponto é um fato conferível —
-          o preço sai de `ESPACOS`, o número de `marca.ts`.
+          PROVA > ADJETIVO (§27) continua: o preço sai de `ESPACOS`, o número
+          de `marca.ts`, o prazo do link de `config/links-assinados.ts`.
 
           A FOTO DA EQUIPE AINDA NÃO EXISTE. O briefing sugere imagens reais
           das pessoas por trás do produto; foto de banco no lugar delas seria a
-          única mentira desta seção. Quando as fotos chegarem, o lugar é ao
-          lado do título, no lugar do bloco de fechamento. */}
-      <section className="bg-[var(--h-quente)] py-24 lg:py-32">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <Revelar className="max-w-3xl">
-            <Marcador>Feita no Brasil</Marcador>
-            <h2 className="home-titulo mt-4 text-[clamp(2.6rem,6vw,5rem)] font-semibold leading-[0.98]">
-              Brasileira desde o começo.
-            </h2>
-            <p className={`${TEXTO_SECAO} mt-6 max-w-[48ch]`}>
-              Desenvolvida no Brasil, a partir da rotina de quem também trabalha com fotografia.
-            </p>
-          </Revelar>
-          <dl className="mt-16 grid gap-px overflow-hidden rounded-2xl bg-black/10 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                t: "Preço em real",
-                v: formatarReais(MENOR_ESPACO.precoCentavos),
-                d: `por mês, no plano de ${formatarGb(MENOR_ESPACO.gb)}. Sem dólar e sem câmbio no meio do mês.`,
-              },
-              { t: "Pagamento no Brasil", v: "Pix, boleto ou cartão", d: "Cobrança recorrente em real." },
-              {
-                t: "Atendimento em português",
-                v: marca.whatsappVisivel,
-                d: "No WhatsApp. Quem responde é quem constrói a plataforma.",
-              },
-              {
-                t: "Evolução junto com fotógrafos",
-                v: "Em beta",
-                d: "Cada tela começou numa conversa com quem estava entregando um trabalho naquele dia.",
-              },
-            ].map((p) => (
-              <div key={p.t} className="bg-[var(--h-quente)] p-6 lg:p-7">
-                <dt className="text-sm text-[var(--h-tinta-3)]">{p.t}</dt>
-                <dd>
-                  <span className="home-titulo mt-3 block text-[1.7rem] font-semibold leading-tight tabular-nums">
-                    {p.v}
-                  </span>
-                  <span className="mt-2 block text-sm leading-relaxed text-[var(--h-tinta-2)]">{p.d}</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <Revelar className="mt-16 grid gap-6 lg:grid-cols-2">
-            <p className="home-titulo text-3xl font-semibold leading-tight">
-              Perto o suficiente para ouvir quem usa.
-            </p>
-            <p className="text-lg leading-relaxed text-[var(--h-tinta-2)]">
-              A Galeria Átomo está começando agora. Os primeiros fotógrafos não estão apenas entrando
-              em uma plataforma pronta. Também estão ajudando a construir o que ela pode se tornar.
-            </p>
-          </Revelar>
-        </div>
-      </section>
-
-      {/* ── 8 · cofre ───────────────────────────────────────────────────── */}
-      <section className="py-24 lg:py-32">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <Revelar className="text-center">
-            <Marcador>Cofre</Marcador>
-            <h2 className={`${TITULO_SECAO} mx-auto mt-4 max-w-[18ch]`}>Sai do ar. Não precisa desaparecer.</h2>
-            <p className={`${TEXTO_SECAO} mx-auto mt-6 max-w-[52ch]`}>
-              Quando o prazo de uma galeria termina, ela pode deixar de ficar disponível para o cliente
-              sem que o trabalho precise ser apagado.
-            </p>
-          </Revelar>
-          <div className="mt-14">
-            <CofreDemo foto={fotos[LUGAR_DO_COFRE]} titulo={destaque.titulo} />
-          </div>
-          <p className="mx-auto mt-10 max-w-[52ch] text-center text-[var(--h-tinta-2)]">
-            Quando precisar novamente, restaure a galeria e continue de onde parou.
-          </p>
-          <p className="mx-auto mt-3 max-w-[52ch] text-center text-sm text-[var(--h-tinta-3)]">
-            O Cofre não substitui uma estratégia profissional de backup.
-          </p>
-        </div>
-      </section>
-
-      {/* ── 9 · recursos ────────────────────────────────────────────────── */}
-      <section id="recursos" className="scroll-mt-16 border-t border-[var(--h-linha)] bg-white py-24 lg:py-32">
+          única mentira da peça "Brasileira". Quando chegarem, o lugar é nela. */}
+      <section id="recursos" className="scroll-mt-16 py-24 lg:py-32">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <Revelar className="max-w-2xl">
             <Marcador>Recursos</Marcador>
             <h2 className={`${TITULO_SECAO} mt-4`}>Tudo o que sustenta a entrega.</h2>
+            <p className={`${TEXTO_SECAO} mt-5`}>Funcionando aqui mesmo, do jeito que funciona na sua galeria.</p>
           </Revelar>
-          <div className="mt-14 grid gap-x-10 border-t border-[var(--h-linha)] sm:grid-cols-2 lg:grid-cols-3">
-            {RECURSOS.map((r, i) => (
-              <Revelar key={r.titulo} atraso={(i % 3) * 80}>
-                <div className="border-b border-[var(--h-linha)] py-8">
-                  <h3 className="home-titulo text-xl font-semibold">{r.titulo}</h3>
-                  <p className="mt-2 leading-relaxed text-[var(--h-tinta-2)]">{r.texto}</p>
+
+          <div className="mt-14 grid gap-3.5 lg:grid-cols-6">
+            {/* A seleção — a galeria de verdade, com os corações marcando. */}
+            <Peca className="lg:col-span-4">
+              <Marcador>Favoritos e seleção</Marcador>
+              <h3 className="home-titulo text-2xl font-semibold leading-tight">
+                A seleção acontece dentro da própria galeria.
+              </h3>
+              <p className="max-w-[56ch] text-[var(--h-tinta-2)]">
+                Seu cliente marca as favoritas enquanto navega, e você recebe a escolha organizada para
+                continuar o trabalho. Ideal também para a escolha das fotos do álbum.
+              </p>
+              <div className="mt-3 grid items-start gap-6 md:grid-cols-[6fr_5fr]">
+                <SelecaoDemo identidade={daSelecao} fotos={fotos} />
+                <ul className="space-y-3 text-[15px] text-[var(--h-tinta-2)]">
+                  <li>
+                    <strong className="font-medium text-[var(--h-tinta)]">Sem limite, ou o número combinado.</strong>{" "}
+                    Se você definir um número, a galeria conta e para nele, com prazo se você quiser.
+                  </li>
+                  <li>
+                    <strong className="font-medium text-[var(--h-tinta)]">Cada pessoa com a sua lista.</strong>{" "}
+                    Família e convidados abrem o mesmo link sem mexer na escolha do cliente.
+                  </li>
+                  <li>
+                    <strong className="font-medium text-[var(--h-tinta)]">Escolha encerrada, lista travada.</strong>{" "}
+                    Mudaram de ideia? Você reabre em um clique.
+                  </li>
+                  <li>
+                    <strong className="font-medium text-[var(--h-tinta)]">Direto para o Lightroom.</strong> Um botão
+                    copia os nomes dos arquivos, prontos para colar no filtro.
+                  </li>
+                </ul>
+              </div>
+            </Peca>
+
+            {/* O Cofre — os quatro estados, um aceso de cada vez. */}
+            <Peca className="lg:col-span-2">
+              <Marcador>Cofre</Marcador>
+              <h3 className="home-titulo text-2xl font-semibold leading-tight">Sai do ar. Não precisa desaparecer.</h3>
+              <p className="text-[15px] text-[var(--h-tinta-2)]">
+                Quando o prazo termina, a galeria sai do ar para o cliente e vai para o Cofre. Nada é
+                apagado, e um clique traz de volta, no mesmo endereço.
+              </p>
+              <CofreEstados foto={fotos[LUGAR_DO_COFRE]} titulo={doCofre.titulo} />
+              <p className="text-xs text-[var(--h-tinta-3)]">O Cofre não substitui uma estratégia profissional de backup.</p>
+            </Peca>
+
+            {/* O link que vence — o relógio conta o prazo de verdade. */}
+            <Peca className="lg:col-span-2">
+              <Marcador>Segurança</Marcador>
+              <h3 className="home-titulo text-2xl font-semibold leading-tight">Nada é público.</h3>
+              <p className="text-[15px] text-[var(--h-tinta-2)]">
+                Toda foto chega por um link assinado que vence sozinho. Copiou o endereço para mandar fora
+                da galeria? Ele para de abrir.
+              </p>
+              <RelogioDoLink segundos={VALIDADE_DO_LINK_DA_GALERIA} />
+              <p className="font-mono text-xs text-[var(--h-tinta-3)]">até o link desta foto vencer</p>
+            </Peca>
+
+            {/* A prova de entrega — números de exemplo, e a peça diz que são. */}
+            <Peca className="lg:col-span-2">
+              <Marcador>Prova de entrega</Marcador>
+              <h3 className="home-titulo text-2xl font-semibold leading-tight">Você sabe que chegou.</h3>
+              <p className="text-[15px] text-[var(--h-tinta-2)]">
+                Aberturas e downloads contados, com quem baixou. “Não recebi” deixa de ser conversa.
+              </p>
+              <svg viewBox="0 0 200 56" preserveAspectRatio="none" className="mt-auto h-14 w-full" aria-hidden>
+                <path d="M0 50 L25 44 L50 46 L75 30 L100 34 L125 18 L150 22 L175 10 L200 8 L200 56 L0 56 Z" fill="rgba(20,20,20,0.06)" />
+                <path
+                  d="M0 50 L25 44 L50 46 L75 30 L100 34 L125 18 L150 22 L175 10 L200 8"
+                  fill="none"
+                  stroke="var(--h-tinta)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </svg>
+              <div className="flex gap-6">
+                <p>
+                  <span className="home-titulo block text-3xl font-semibold leading-none">
+                    <Conta ate={14} />
+                  </span>
+                  <span className="text-xs text-[var(--h-tinta-3)]">aberturas</span>
+                </p>
+                <p>
+                  <span className="home-titulo block text-3xl font-semibold leading-none">
+                    <Conta ate={312} />
+                  </span>
+                  <span className="text-xs text-[var(--h-tinta-3)]">downloads · exemplo</span>
+                </p>
+              </div>
+            </Peca>
+
+            {/* A lixeira — a galeria vai e volta. */}
+            <Peca className="lg:col-span-2">
+              <Marcador>Lixeira</Marcador>
+              <h3 className="home-titulo text-2xl font-semibold leading-tight">Lixeira de {PRAZO_LIXEIRA_DIAS} dias.</h3>
+              <p className="text-[15px] text-[var(--h-tinta-2)]">
+                Apagou uma galeria sem querer? Fotos, capítulos e a escolha do cliente voltam com um clique.
+              </p>
+              <div className="relative mt-auto flex h-20 items-center justify-between" aria-hidden>
+                <div className="home-lixo-arquivo flex items-center gap-2.5 rounded-xl bg-[var(--h-papel)] py-2 pl-2 pr-3 ring-1 ring-[var(--h-linha)]">
+                  <img
+                    src={fotos[daLixeira.capa].miniatura ?? fotos[daLixeira.capa].src}
+                    alt=""
+                    loading="lazy"
+                    className="h-11 w-8 rounded object-cover"
+                  />
+                  <span className="text-[13px] font-medium">{daLixeira.titulo}</span>
+                </div>
+                <div className="grid h-16 w-14 place-items-end justify-center rounded-b-xl border-[1.5px] border-t-[5px] border-[var(--h-tinta-3)] pb-1.5 font-mono text-[10px] text-[var(--h-tinta-3)]">
+                  {PRAZO_LIXEIRA_DIAS} d
+                </div>
+              </div>
+            </Peca>
+
+            {/* Os capítulos — a árvore de pastas vira as abas da galeria. */}
+            <Peca className="lg:col-span-3">
+              <Marcador>Capítulos</Marcador>
+              <h3 className="home-titulo text-2xl font-semibold leading-tight">As subpastas viram capítulos.</h3>
+              <p className="text-[15px] text-[var(--h-tinta-2)]">
+                Suba a pasta do trabalho: a organização que você fez no computador chega igual ao cliente,
+                na ordem do dia.
+              </p>
+              <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4" aria-hidden>
+                <ul className="font-mono text-[12.5px] leading-[1.9] text-[var(--h-tinta-2)]">
+                  <li className="truncate">Casamento/</li>
+                  <li className="truncate">├ 01 Making of/</li>
+                  <li className="truncate">├ 02 Cerimônia/</li>
+                  <li className="truncate">└ 03 Festa/</li>
+                </ul>
+                <span className="text-[var(--h-tinta-3)]">→</span>
+                <div className="flex flex-col gap-1.5 text-[13px]">
+                  <span className="truncate rounded-lg bg-[var(--h-tinta)] px-2.5 py-1.5 text-white">Making of</span>
+                  <span className="truncate rounded-lg bg-[var(--h-papel)] px-2.5 py-1.5 ring-1 ring-[var(--h-linha)]">Cerimônia</span>
+                  <span className="truncate rounded-lg bg-[var(--h-papel)] px-2.5 py-1.5 ring-1 ring-[var(--h-linha)]">Festa</span>
+                </div>
+              </div>
+            </Peca>
+
+            {/* Brasileira — fatos conferíveis, no papel quente de antes. */}
+            <Peca className="home-peca-quente lg:col-span-3">
+              <Marcador>Feita no Brasil</Marcador>
+              <h3 className="home-titulo text-[clamp(1.9rem,3vw,2.6rem)] font-semibold leading-[1]">
+                Brasileira desde o começo.
+              </h3>
+              <p className="text-[15px] text-[var(--h-tinta-2)]">
+                Desenvolvida no Brasil, a partir da rotina de quem também trabalha com fotografia.
+              </p>
+              <dl className="mt-auto grid grid-cols-2 gap-x-6 gap-y-4 pt-2">
+                {[
+                  {
+                    t: "Preço em real",
+                    v: formatarReais(MENOR_ESPACO.precoCentavos),
+                    d: `por mês, no plano de ${formatarGb(MENOR_ESPACO.gb)}`,
+                  },
+                  { t: "Pagamento no Brasil", v: "Pix, boleto ou cartão", d: "Cobrança recorrente em real" },
+                  { t: "Atendimento em português", v: marca.whatsappVisivel, d: "Quem responde é quem constrói" },
+                  { t: "Evolução junto", v: "Em beta", d: "Perto o suficiente para ouvir quem usa" },
+                ].map((p) => (
+                  <div key={p.t} className="min-w-0">
+                    <dt className="text-xs text-[var(--h-tinta-3)]">{p.t}</dt>
+                    <dd>
+                      <span className="home-titulo block text-xl font-semibold leading-tight tabular-nums">{p.v}</span>
+                      <span className="block text-[13px] text-[var(--h-tinta-2)]">{p.d}</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Peca>
+          </div>
+
+          {/* O que não ganhou peça própria continua dito, em uma linha cada. */}
+          <div className="mt-10 grid gap-x-10 border-t border-[var(--h-linha)] sm:grid-cols-2 lg:grid-cols-4">
+            {E_TAMBEM.map((r, i) => (
+              <Revelar key={r.titulo} atraso={(i % 4) * 80}>
+                <div className="py-6">
+                  <h3 className="home-titulo text-lg font-semibold">{r.titulo}</h3>
+                  <p className="mt-1.5 text-[15px] leading-relaxed text-[var(--h-tinta-2)]">{r.texto}</p>
                 </div>
               </Revelar>
             ))}
@@ -834,15 +944,17 @@ export default async function Home() {
         </section>
       )}
 
-      {/* ── 11 · respiro ────────────────────────────────────────────────── */}
-      <section className="relative isolate">
+      {/* ── 11 · respiro ──────────────────────────────────────────────────
+          A foto desliza devagar enquanto passa pela tela (03/10/2026) — só
+          onde o navegador anima pela rolagem (`.home-respiro-foto`). */}
+      <section className="relative isolate overflow-hidden">
         <img
           src={fotos.respiro.src}
           alt={fotos.respiro.descricao}
           loading="lazy"
           width={fotos.respiro.largura}
           height={fotos.respiro.altura}
-          className="h-[78svh] min-h-[420px] w-full object-cover"
+          className="home-respiro-foto h-[78svh] min-h-[420px] w-full object-cover"
           style={{ objectPosition: `${fotos.respiro.focoX}% ${fotos.respiro.focoY}%` }}
         />
         <div
@@ -1018,19 +1130,56 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ── 16 · fecho ──────────────────────────────────────────────────── */}
+      {/* ── 16 · fecho ────────────────────────────────────────────────────
+          Briefing §20 e §23: no fim, as identidades de novo, se deslocando
+          devagar. Desde 03/10/2026 são duas esteiras em sentidos opostos, cada
+          cartão com a fonte e as cores da sua galeria — a última imagem da
+          página é a variedade dos fotógrafos, não a nossa marca. Cartões leves
+          (capa e título), e não a galeria inteira: são muitos, e andando. */}
       <section className="overflow-hidden py-24 lg:py-32">
+        <div className="home-esteiras grid gap-4">
+          {CARTOES_DO_FECHO.map((fila, n) => (
+            <div key={n} className={`home-esteira ${n === 1 ? "home-esteira-volta" : ""}`}>
+              {[false, true].map((copia) => (
+                <div key={String(copia)} className="flex shrink-0 gap-4" aria-hidden={copia || undefined}>
+                  {fila.map(({ lugar, titulo, tipografia, cor }) => {
+                    const f = fotos[lugar];
+                    const paleta = TROCA_CORES[cor];
+                    return (
+                      <div
+                        key={lugar}
+                        className="w-[15rem] shrink-0 overflow-hidden rounded-xl ring-1 ring-black/10"
+                        style={{
+                          ...variaveisDoTema(lerAparencia({ tipografia, tema: paleta.tema, cores: paleta.cores })),
+                          background: "var(--g-fundo)",
+                          color: "var(--g-texto)",
+                        }}
+                      >
+                        <img
+                          src={f.miniatura ?? f.src}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-36 w-full object-cover"
+                          style={{ objectPosition: `${f.focoX}% ${f.focoY}%` }}
+                        />
+                        <div className="px-3 pb-3 pt-2.5">
+                          <p className="truncate text-[21px] leading-tight" style={{ fontFamily: FONTES_TITULO[tipografia] }}>
+                            {titulo}
+                          </p>
+                          <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-[0.1em] opacity-70">
+                            {nomeDe("tipografia", tipografia)} · {paleta.nome}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
-          <div className="flex snap-x gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible">
-            {[noite, delicada, editorial].map((ident) => (
-              <GaleriaDemo
-                key={ident.id}
-                identidade={ident}
-                fotos={fotos}
-                className="aspect-[4/5] w-[70%] shrink-0 snap-start rounded-xl ring-1 ring-black/10 md:w-auto"
-              />
-            ))}
-          </div>
           <Revelar className="mx-auto mt-16 max-w-2xl text-center">
             <h2 className={TITULO_SECAO}>Sua próxima entrega pode começar aqui.</h2>
             <p className={`${TEXTO_SECAO} mt-6`}>

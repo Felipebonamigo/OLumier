@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { marca } from "@/config/marca";
 import type { FotosDaHome, Identidade } from "@/config/home-demonstracao";
 import { GaleriaDemo } from "./galeria-demo";
+import { corDaFoto } from "./cor-da-foto";
 import { usePedeMenosMovimento } from "./usa-celular";
 
 /**
@@ -11,21 +12,45 @@ import { usePedeMenosMovimento } from "./usa-celular";
  *
  * Briefing §5: "é a mesma plataforma, mas não parece a mesma galeria", e isso
  * precisa chegar ANTES da leitura. No computador as três ficam no palco ao
- * mesmo tempo, uma na frente e duas atrás, e trocam de lugar devagar. No
- * celular não cabem três: fica uma, e a troca é por esmaecimento.
+ * mesmo tempo, uma na frente e duas atrás, e trocam de lugar devagar.
  *
- * As legendas embaixo são botões — trazem a galeria para a frente e param a
+ * NO CELULAR TAMBÉM SÃO TRÊS (03/10/2026). Era uma só, trocando com uma
+ * cortina, e o Juan achou a home no celular "não tão encantadora": quem abria
+ * via uma galeria, e a mensagem do §5 — a mesma plataforma em identidades
+ * diferentes — dependia de esperar a troca. Agora as três ficam em leque: a da
+ * frente no meio, as outras duas espiando dos lados, inclinadas.
+ *
+ * ── EM MOVIMENTO (03/10/2026) ────────────────────────────────────────────
+ *
+ * Felipe aprovou a proposta da "home em movimento" (o protótipo está no
+ * registro de `docs/home-leitura-critica.md`). Aqui ela trouxe três coisas,
+ * todas mostrando o produto e nenhuma só enfeite:
+ *
+ *  - a galeria da frente ROLA SOZINHA — é a galeria de verdade, então rolar é
+ *    mostrar que embaixo da capa tem a entrega inteira;
+ *  - o BRILHO atrás do palco tem a cor da capa da frente, lida da foto (ver
+ *    `cor-da-foto.ts`): a cor da página é sempre a do fotógrafo;
+ *  - as fichas embaixo têm uma barra que enche no tempo da troca. A troca
+ *    acontece quando a barra acaba (`animationend`), e não num relógio à parte:
+ *    parar a barra com o mouse em cima do palco para a troca junto.
+ *
+ * As fichas continuam botões — trazem a galeria para a frente e param a
  * rotação. Quem pediu menos movimento no sistema recebe o palco parado.
  */
 
-const SEGUNDOS = 5.5;
+const SEGUNDOS = 6;
+/* Quanto a galeria da frente desce a cada passo, em pixels da tela virtual
+   (`GaleriaDemo`). Três passos cabem na vez dela. */
+const PASSO_DA_ROLAGEM = 360;
+const PASSOS_DA_ROLAGEM = 3;
 
-/* Onde cada galeria fica, pela distância até a da frente. No celular as três
-   ocupam o mesmo lugar e só a da frente aparece. */
+/* Onde cada galeria fica, pela distância até a da frente: no celular, um leque
+   (a da frente no meio, as outras inclinadas dos lados); no computador, uma na
+   frente e duas atrás. */
 const LUGAR = [
-  "z-30 opacity-100 md:left-[17%] md:top-[5%] md:h-[95%] md:w-[66%]",
-  "z-20 opacity-0 md:opacity-100 md:left-[52%] md:top-[15%] md:h-[80%] md:w-[48%]",
-  "z-10 opacity-0 md:opacity-100 md:left-0 md:top-0 md:h-[80%] md:w-[48%]",
+  "z-30 left-[13%] top-[2%] h-[94%] w-[74%] md:left-[17%] md:top-[5%] md:h-[95%] md:w-[66%]",
+  "z-20 left-[42%] top-[9%] h-[82%] w-[58%] rotate-[7deg] md:rotate-0 md:left-[52%] md:top-[15%] md:h-[80%] md:w-[48%]",
+  "z-10 left-0 top-[9%] h-[82%] w-[58%] -rotate-[7deg] md:rotate-0 md:left-0 md:top-0 md:h-[80%] md:w-[48%]",
 ];
 
 export function HeroGalerias({
@@ -37,20 +62,48 @@ export function HeroGalerias({
 }) {
   const [frente, setFrente] = useState(0);
   const [parado, setParado] = useState(false);
+  const [rolar, setRolar] = useState(0);
+  const [brilho, setBrilho] = useState<string | null>(null);
   const menosMovimento = usePedeMenosMovimento();
+  const girando = !parado && !menosMovimento;
 
+  /* A galeria da frente desce aos poucos; a que sai volta ao topo. A troca
+     zera `rolar` no mesmo clique que muda a frente (ver `trazer`). */
   useEffect(() => {
-    if (parado || menosMovimento) return;
-    const relogio = setInterval(
-      () => setFrente((f) => (f + 1) % identidades.length),
-      SEGUNDOS * 1000,
-    );
+    if (menosMovimento) return;
+    let passo = 0;
+    const relogio = setInterval(() => {
+      passo = Math.min(passo + 1, PASSOS_DA_ROLAGEM);
+      setRolar(passo * PASSO_DA_ROLAGEM);
+    }, (SEGUNDOS * 1000) / (PASSOS_DA_ROLAGEM + 1));
     return () => clearInterval(relogio);
-  }, [parado, menosMovimento, identidades.length]);
+  }, [frente, menosMovimento]);
+
+  /* O brilho segue a capa da frente. */
+  useEffect(() => {
+    const capa = fotos[identidades[frente].capa];
+    let vivo = true;
+    void corDaFoto(capa.miniatura ?? capa.src).then((cor) => {
+      if (vivo && cor) setBrilho(cor);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [frente, fotos, identidades]);
+
+  const trazer = (i: number) => {
+    setRolar(0);
+    setFrente(i);
+  };
 
   return (
-    <div>
-      <div className="relative aspect-[390/560] w-full sm:aspect-[4/5] md:aspect-[16/10]">
+    <div className="relative isolate">
+      <div
+        aria-hidden
+        className="home-brilho"
+        style={{ ["--brilho" as string]: brilho ?? "transparent" } as CSSProperties}
+      />
+      <div className="home-palco relative aspect-[390/500] w-full sm:aspect-[4/5] md:aspect-[16/10]">
         {identidades.map((ident, i) => {
           const distancia = (i - frente + identidades.length) % identidades.length;
           const naFrente = distancia === 0;
@@ -76,31 +129,49 @@ export function HeroGalerias({
                 fotos={fotos}
                 className="min-h-0 flex-1"
                 carregarAgora={i === 0}
+                rolar={naFrente ? rolar : 0}
               />
             </figure>
           );
         })}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-2 md:justify-start">
-        {identidades.map((ident, i) => (
-          <button
-            key={ident.id}
-            type="button"
-            onClick={() => {
-              setFrente(i);
-              setParado(true);
-            }}
-            aria-pressed={frente === i}
-            className={`rounded-full border px-3 py-1 text-xs transition ${
-              frente === i
-                ? "border-[var(--h-tinta)] bg-[var(--h-tinta)] text-white"
-                : "border-[var(--h-linha-forte)] text-[var(--h-tinta-2)] hover:border-[var(--h-tinta)]"
-            }`}
-          >
-            {ident.rotulo}
-          </button>
-        ))}
+      <div className="mt-5 grid grid-cols-3 gap-2" role="group" aria-label="Galerias de exemplo">
+        {identidades.map((ident, i) => {
+          const ativa = frente === i;
+          return (
+            <button
+              key={ident.id}
+              type="button"
+              onClick={() => {
+                trazer(i);
+                setParado(true);
+              }}
+              aria-pressed={ativa}
+              className={`relative min-w-0 overflow-hidden rounded-xl border px-3 pb-3 pt-2.5 text-left transition ${
+                ativa
+                  ? "border-[var(--h-linha-forte)] bg-white shadow-[0_8px_24px_-16px_rgba(20,20,20,0.5)]"
+                  : "border-[var(--h-linha)] bg-white/50 hover:border-[var(--h-linha-forte)]"
+              }`}
+            >
+              <span className="block truncate text-[12px] font-medium text-[var(--h-tinta)] sm:text-[13px]">
+                {ident.rotulo}
+              </span>
+              <span className="mt-0.5 hidden truncate font-mono text-[10.5px] text-[var(--h-tinta-3)] sm:block">
+                {ident.titulo}
+              </span>
+              {ativa && girando && (
+                <i
+                  key={frente}
+                  aria-hidden
+                  className="home-ficha-tempo"
+                  style={{ ["--tempo" as string]: `${SEGUNDOS}s` } as CSSProperties}
+                  onAnimationEnd={() => trazer((frente + 1) % identidades.length)}
+                />
+              )}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -139,3 +139,78 @@ precisou passar o grupo das soltas (`sem-capitulo`) para as fotos aparecerem.
 - Fotos reais da equipe para "Brasileira desde o começo".
 - Tipografia e cor de destaque definitivas (hoje provisórias, um token cada).
 - Assinatura para o título e o cartão do link (hoje descritiva).
+
+## 7. A home em movimento (03/10/2026)
+
+Felipe pediu a home "bem tecnológica", na linha dos sites animados de
+referência (motionsites.ai), "pegando a nossa excelência", no computador e no
+celular. A proposta foi um protótipo navegável com notas de técnica, marca e
+celular em cada seção; Felipe aprovou tudo, com uma condição: **manter o
+logo** (símbolo, nome e selo de beta continuam os de sempre).
+
+**O princípio.** O "tecnológico" vem do movimento, mas todo movimento mostra o
+produto funcionando — §13 da estratégia: "movimento com função, sem espetáculo
+tecnológico". Ficaram de fora vídeo de fundo genérico (pesa no celular e tira
+o protagonismo da foto), preto com dourado, neon, gradiente roxo e 3D/WebGL.
+
+| Seção | O que mudou | Onde |
+|---|---|---|
+| Cabeçalho | Pílula de vidro solta das bordas, que encolhe ao rolar. Logo igual. | `encolher-ao-rolar.tsx`, `.home-topo` |
+| Hero | Título entra palavra por palavra saindo do desfoque; a galeria da frente rola sozinha; brilho atrás do palco com a cor da capa (lida da foto, então segue a troca do admin); fichas com barra de tempo — a troca é o fim da barra; palco levemente girado no computador; cortina no celular. | `hero-galerias.tsx`, `cor-da-foto.ts` |
+| Faixa de provas (nova) | Esteira lenta logo abaixo do hero, só com fatos no ar: preço, Pix/boleto/cartão, WhatsApp, capítulos, 4.500+ fotos, lixeira, senha e prazo, original, contagem, fontes. "Brasileira" aparece cedo (estratégia §10). | `PROVAS` em `app/page.tsx` |
+| Suba. Personalize. Entregue. | Os três prints viraram uma cena presa à rolagem: as mesmas fotos saem da pasta, viram capítulos, viram a galeria e entram no celular. Nomes de arquivo e números do painel são exemplo, e a cena diz. | `da-pasta-a-galeria.tsx` |
+| Seu trabalho. Sua marca. | Mesma troca ao vivo, agora com View Transitions (a galeria se desfaz na nova em vez de piscar). | `troca-identidade.tsx` |
+| Seleção, Brasileira, Cofre, Recursos | Viraram um bloco de peças (bento), cada uma uma demonstração viva: seleção com corações, Cofre trocando de estado, relógio do link que vence, prova de entrega contando, galeria indo para a lixeira, pastas virando abas, "Brasileira" no papel quente. O que não ganhou peça segue numa linha embaixo. | `bento-recursos.tsx` |
+| Respiro | A foto desliza devagar com a rolagem, onde o navegador anima pela rolagem. | `.home-respiro-foto` |
+| Fecho | Duas esteiras de galerias em sentidos opostos, cada cartão com a fonte e as cores dela. | `CARTOES_DO_FECHO` |
+
+**Detalhes que pedem cuidado:**
+- O relógio da peça "Nada é público" conta o prazo real do link da foto na
+  galeria do cliente. O número saiu de dois `6 * 3600` escritos à mão para
+  `config/links-assinados.ts`, usado pela página da galeria, pela rota de
+  endereços sob demanda e pela home.
+- Os prints do painel (`public/home/produto/*.webp`) não aparecem mais na home
+  e saíram do repositório em 03/10/2026. `scripts/capturar-telas-home.mjs`
+  recria a pasta; se a cena pesar em algum aparelho, eles são o plano B.
+- Movimento reduzido no sistema: esteiras param e viram lista, a cópia da
+  esteira some, a cortina e a entrada do título não acontecem, a cena já mostra
+  os capítulos, os números aparecem sem contar e o hero não troca sozinho.
+
+**Verificado no Chromium** (computador 1440 e celular 390): um `<h1>`, sem
+rolagem lateral, sem erro no console; o hero troca aos 6 s e para no clique; o
+cabeçalho encolhe; a troca de identidade usa a transição; o modo reduzido fica
+parado. `testar-tema`, `testar-seo`, `testar-comparativo`,
+`testar-marca-plataforma` e `testar-fotos-da-home` passam sem mudança.
+**Falta testar no Safari** (iPhone e Mac) — a cena presa à rolagem e o vidro
+do cabeçalho são os pontos a olhar.
+
+**Ainda é decisão da camada estratégica** (seção 6 continua valendo): palco
+claro ou escuro (a home segue clara), nomes dos estúdios nos exemplos, a
+terceira linguagem fotográfica fora do casamento, e a cor de destaque.
+
+### 7.1 Depois da primeira volta do Juan (03/10/2026)
+
+O Juan olhou a home no ar e voltou com quatro pontos: no celular ela "não tá
+tão encantadora"; o mesmo casal aparecia "muitas vezes repetido"; a cena de
+"Suba. Personalize. Entregue." podia "parecer mais com a galeria, ao invés do
+fundo quadriculado" (e logo depois ficou em dúvida se o quadriculado estava
+certo); e sugeriu "trocar todos os nomes por variações fictícias", com o que o
+Felipe concordou.
+
+| Ponto | O que mudou | Onde |
+|---|---|---|
+| Nomes | Todos os casais são inventados. A galeria da Carol voltou a "Marina & Caio" (data e cidade também inventadas) e a do Juan a "Ana & Pedro". As pastas das fotos deixaram de ter o nome do casal (`public/home/demo/galeria-carol`, `galeria-juan`). Galeria nova vinda de casamento de verdade entra com nome inventado. | `config/home-demonstracao.ts` ("OS NOMES") |
+| Repetição | Cada seção agora escolhe a sua galeria (`GALERIA_DA_SECAO`): o hero abre com a da Carol na frente e "Sua marca" começa por ela; a cena, o celular, a seleção, o Cofre e a lixeira se dividem entre as outras três. O fecho deixou de repetir a mesma capa: doze cartões, cada um com uma foto, uma fonte e uma paleta do editor. O mesmo casal, que aparecia em quase toda seção, aparece agora em três ou quatro. | `GALERIA_DA_SECAO`, `CARTOES_DO_FECHO` |
+| Celular | O hero mostra as três galerias ao mesmo tempo, em leque (a da frente no meio, as outras inclinadas dos lados), no lugar de uma só trocando com cortina; e vem título → galerias → texto, para as galerias aparecerem antes da dobra. | `hero-galerias.tsx`, `app/page.tsx` |
+| Quadriculado | Ficou **onde a cena é a mesa de trabalho** (a pasta, os capítulos, a entrega) e **saiu do passo "Personalize"**, que agora é a galeria de verdade: o fundo, os cantos, a fonte e a etiqueta são os da aparência da galeria, com o cabeçalho "Seu estúdio". A leitura é "da mesa para a galeria" — responde às duas falas do Juan sem escolher uma. Os arquivos da pasta ganharam capítulos ("01 Retratos/…"), que é como o fotógrafo organiza. | `da-pasta-a-galeria.tsx`, `.home-cena[data-cena="galeria"]` |
+
+**Fotos.** O Juan liberou mais dois casamentos para a home. Entram com nome
+inventado, de preferência nos lugares das duas galerias que ainda usam fotos
+provisórias ("Helena e Rafael" e "Júlia & Tomás", oito lugares cada), pelo
+`/painel/admin/home` — sem publicar código. Quando a "Helena e Rafael" tiver
+fotos próprias, o `pretoEBranco` dela (que existia só para as provisórias
+parecerem de outro fotógrafo) pode sair.
+
+**Verificado no Chromium** (1440 e 390): sem nome de casal real no texto nem nos
+endereços das imagens, sem rolagem lateral, sem erro no console. Safari segue
+pendente.

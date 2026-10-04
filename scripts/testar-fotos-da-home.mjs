@@ -37,6 +37,7 @@ import {
   FOTOS_PADRAO,
   IDENTIDADES,
   LUGARES_DA_HOME,
+  GALERIA_DA_SECAO,
   LUGAR_DO_COFRE,
   ondeAparece,
 } from "../src/config/home-demonstracao.ts";
@@ -204,11 +205,14 @@ try {
   });
 
   await etapa("o admin sabe dizer onde cada foto aparece", () => {
-    if (!ondeAparece("delicada-1").some((o) => o.includes('capa da galeria "Vanessa & Kalil"'))) {
-      throw new Error("delicada-1 é a capa da Vanessa & Kalil");
+    if (!ondeAparece("delicada-1").some((o) => o.includes('capa da galeria "Marina & Caio"'))) {
+      throw new Error("delicada-1 é a capa da Marina & Caio");
     }
     if (ondeAparece("delicada-2").some((o) => o.includes("capa"))) throw new Error("delicada-2 não é capa");
-    if (!ondeAparece("delicada-2").some((o) => o.includes("celular"))) throw new Error("a galeria em destaque some do celular");
+    /* Desde 03/10/2026 o celular mostra outra galeria (`GALERIA_DA_SECAO`), para
+       a galeria da Carol não se repetir em toda seção. */
+    if (!ondeAparece(`${GALERIA_DA_SECAO.celular}-2`).some((o) => o.includes("celular"))) throw new Error("a galeria do celular sumiu");
+    if (ondeAparece("delicada-2").some((o) => o.includes("celular"))) throw new Error("a galeria da Carol voltou para o celular");
     if (!ondeAparece("editorial-2").some((o) => o.includes("preto e branco"))) throw new Error("editorial é em preto e branco");
     if (!ondeAparece(LUGAR_DO_COFRE).some((o) => o.includes("Cofre"))) throw new Error("cofre sumiu");
     if (!ondeAparece("respiro")[0].includes("fim")) throw new Error("respiro");

@@ -16,8 +16,8 @@ import { lerAparencia, type Aparencia } from "@/config/aparencia";
  * As primeiras fotos autorais chegaram espalhadas pelas quatro galerias de
  * exemplo, e o mesmo casal aparecia como "Marina & Caio" numa e "Ana & Pedro"
  * na outra. Felipe: "todas as fotos que mandei são de uma galeria só" — a da
- * Vanessa & Kalil, fotografada pela Carol. Desde então CADA GALERIA TEM AS
- * SUAS FOTOS: a Vanessa & Kalil, as do casamento dela; a Laura & Romulo, as
+ * galeria de um casamento fotografado pela Carol. Desde então CADA GALERIA TEM
+ * AS SUAS FOTOS: a da Carol, as do casamento dela; a do Juan, as
  * da galeria do Juan, no lugar da "Ana & Pedro"; as outras duas, as
  * provisórias do começo (Unsplash, licença livre), até chegarem galerias de
  * verdade para elas.
@@ -33,9 +33,15 @@ import { lerAparencia, type Aparencia } from "@/config/aparencia";
  * ── OS NOMES ──────────────────────────────────────────────────────────────
  *
  * Nenhuma galeria leva nome de estúdio: todas assinam "Seu Estúdio" — a frase
- * que a seção quer que o visitante escute é "isto pode ser o SEU". A Vanessa &
- * Kalil e a Laura & Romulo são casamentos de verdade, com o nome que o Felipe
- * passou; as outras duas são inventadas, como sempre foram.
+ * que a seção quer que o visitante escute é "isto pode ser o SEU".
+ *
+ * TODOS OS NOMES DE CASAL SÃO FICTÍCIOS (03/10/2026). As duas galerias de
+ * fotos de verdade levavam o nome do casal de verdade; Juan sugeriu "trocar
+ * todos os nomes por variações fictícias" e o Felipe confirmou. A da Carol
+ * voltou a ser "Marina & Caio" e a do Juan "Ana & Pedro" — os nomes que esses
+ * lugares tinham antes das fotos autorais —, e a data e a cidade da capa
+ * também são inventadas. Galeria nova que vier de um casamento de verdade entra
+ * com nome inventado, nunca com o do casal.
  */
 
 export type Curadoria = "A" | "B" | "C" | "D" | "E";
@@ -67,19 +73,22 @@ export interface FotoDemo {
  *
  * As fotos de verdade moram numa pasta por casamento
  * (`public/home/demo/<casamento>/`): WebP de 1500 px no lado maior (2000 no
- * gramado da Vanessa & Kalil, que é a foto grande do fim), qualidade 76 —
+ * gramado da galeria da Carol, que é a foto grande do fim), qualidade 76 —
  * acima das provisórias porque a granulação some a 72. As provisórias ficam
  * soltas em `public/home/demo/`: 1100 px, qualidade 72. As medidas são as do
  * arquivo: a grade monta as fileiras pela proporção antes de a foto chegar, e
  * `testar-fotos-da-home` confere uma por uma.
  */
-const VK = "/home/demo/vanessa-e-kalil";
-const LR = "/home/demo/laura-e-romulo";
+/* As pastas levam o nome de quem fotografou, e não do casal: o caminho da foto
+   aparece no código da página, e os nomes da home são fictícios (ver "OS
+   NOMES" acima). */
+const VK = "/home/demo/galeria-carol";
+const LR = "/home/demo/galeria-juan";
 const vertical = { largura: 1000, altura: 1500 } as const;
 const deitada = { largura: 1500, altura: 1000 } as const;
 
 const ACERVO = {
-  // Vanessa & Kalil — 1º de maio de 2026, Porto Alegre. Fotos da Carol.
+  // A galeria da Carol — na home, "Marina & Caio".
   guardaChuva: { src: `${VK}/guarda-chuva.webp`, ...vertical, curadoria: "D", descricao: "Noivos caminhando pelo jardim debaixo de um guarda-chuva branco", focoX: 45, focoY: 58 },
   noivaVeu: { src: `${VK}/noiva-veu.webp`, ...vertical, descricao: "A noiva de véu, com o buquê de rosas brancas", focoX: 50, focoY: 30 },
   noivaNaPorta: { src: `${VK}/noiva-na-porta.webp`, ...vertical, descricao: "A noiva de costas na porta, com as madrinhas esperando lá fora", focoX: 50, focoY: 55 },
@@ -95,7 +104,7 @@ const ACERVO = {
   noivaMesa: { src: `${VK}/noiva-mesa-pb.webp`, ...vertical, curadoria: "C", descricao: "A noiva sorrindo à mesa do jantar, em preto e branco", focoX: 50, focoY: 35 },
   caminhada: { src: `${VK}/caminhada-grama.webp`, largura: 2000, altura: 1333, curadoria: "B", descricao: "Os noivos caminhando pelo gramado, vistos da cintura para baixo", focoX: 50, focoY: 50 },
 
-  // Laura & Romulo — a galeria do Juan.
+  // A galeria do Juan — na home, "Ana & Pedro".
   lrCasaDePedra: { src: `${LR}/09-beijo-casa-pedra.webp`, ...deitada, descricao: "O beijo no gramado, diante da casa de pedra", focoX: 50, focoY: 68 },
   lrMaosDadas: { src: `${LR}/01-maos-dadas-lago.webp`, ...vertical, descricao: "Os noivos de mãos dadas no campo, com o lago e o morro atrás", focoX: 50, focoY: 60 },
   lrCaminhadaPb: { src: `${LR}/02-caminhada-pb.webp`, ...vertical, descricao: "Em preto e branco, os noivos caminhando pelo campo", focoX: 50, focoY: 60 },
@@ -271,10 +280,11 @@ function fotosDaGrade(galeria: IdGaleria): IdFoto[] {
 export const IDENTIDADES: Identidade[] = [
   {
     /*
-     * ── VANESSA & KALIL (28/09/2026) ──────────────────────────────────────
+     * ── A GALERIA DA CAROL (28/09/2026) ───────────────────────────────────
      *
-     * Um casamento de verdade, fotografado pela Carol — 1º de maio de 2026,
-     * Porto Alegre —, no lugar da "Marina & Caio" inventada. O desenho é o
+     * Um casamento de verdade, fotografado pela Carol. Desde 03/10/2026 com
+     * nome, data e lugar inventados ("Marina & Caio"), a pedido do Juan: as
+     * fotos são reais, o casal da home não precisa ser. O desenho é o
      * das galerias que a Carol entrega (o modelo "Convite", pedido dela em
      * 31/08/2026): papel branco, a foto emoldurada, o nome numa serifada de
      * convite e o "ver galeria" no pé. É esta galeria que aparece no celular
@@ -283,11 +293,11 @@ export const IDENTIDADES: Identidade[] = [
      */
     id: "delicada",
     rotulo: "Clara e delicada",
-    titulo: "Vanessa & Kalil",
-    slug: "vanessa-e-kalil",
-    data: "1º de maio de 2026",
-    dataEvento: "2026-05-01",
-    local: "Porto Alegre",
+    titulo: "Marina & Caio",
+    slug: "marina-e-caio",
+    data: "18 de abril de 2026",
+    dataEvento: "2026-04-18",
+    local: "Gramado",
     capa: "delicada-1",
     fotos: fotosDaGrade("delicada"),
     aparencia: lerAparencia({
@@ -342,17 +352,16 @@ export const IDENTIDADES: Identidade[] = [
      * em cima, o nome grande numa serifada forte e a foto grande logo
      * abaixo —, e a grade "Colunas", a que ele usa nas entregas.
      *
-     * ── LAURA & ROMULO (28/09/2026) ────────────────────────────────────────
+     * ── A GALERIA DO JUAN (28/09/2026) ────────────────────────────────────
      *
-     * A galeria do Juan, no lugar da "Ana & Pedro" inventada — as 25 fotos
-     * que o Felipe mandou. Sem data e sem lugar: ainda não vieram, e a capa
-     * de um casamento de verdade não leva data inventada. Com os dois vazios
-     * a legenda da capa simplesmente não aparece (`GaleriaCapa`).
+     * As 25 fotos que o Felipe mandou, de um casamento do Juan, com o nome
+     * inventado ("Ana & Pedro", 03/10/2026). Sem data e sem lugar: a legenda
+     * da capa simplesmente não aparece com os dois vazios (`GaleriaCapa`).
      */
     id: "classica",
     rotulo: "Natural e contemporânea",
-    titulo: "Laura & Romulo",
-    slug: "laura-e-romulo",
+    titulo: "Ana & Pedro",
+    slug: "ana-e-pedro",
     data: "",
     dataEvento: null,
     local: "",
@@ -396,14 +405,40 @@ export const IDENTIDADES: Identidade[] = [
 export const identidadePorId = (id: string) => IDENTIDADES.find((i) => i.id === id);
 
 /**
- * A galeria que representa o produto nos pedaços que mostram UMA galeria só:
- * o celular de demonstração, a seleção, o cartão do cofre e os prints do
- * painel (`scripts/capturar-telas-home.mjs`). É a de fotos de verdade.
+ * A galeria que representa o produto na seção "Sua marca" (a troca de capa,
+ * fonte e cor) e nos prints do painel (`scripts/capturar-telas-home.mjs`). É a
+ * de fotos de verdade da Carol.
  */
 export const GALERIA_EM_DESTAQUE: IdGaleria = "delicada";
 
-/** A foto do cartão da galeria na seção "Cofre" (`CofreDemo`): a capa da galeria em destaque. */
-export const LUGAR_DO_COFRE: IdFoto = `${GALERIA_EM_DESTAQUE}-1`;
+/*
+ * QUAL GALERIA APARECE EM CADA SEÇÃO QUE MOSTRA UMA SÓ (03/10/2026).
+ *
+ * Juan, olhando a home em movimento no celular: o casal da galeria da Carol
+ * "aparece muitas vezes repetido" — e logo depois: "definitivamente temos que
+ * trocar a quantidade". Era a galeria em destaque em oito lugares:
+ * hero, exemplos, "Sua marca", a cena do "Suba. Personalize. Entregue.", o
+ * celular, a seleção, o cartão do Cofre e o da lixeira. Cada seção que mostra
+ * uma galeria só agora diz qual, aqui, e as duas de fotos de verdade (a da
+ * Carol e a do Juan) se revezam com as outras duas.
+ */
+export const GALERIA_DA_SECAO = {
+  /** "Sua marca": a troca de capa, fonte e cor. */
+  suaMarca: GALERIA_EM_DESTAQUE,
+  /** A cena "Suba. Personalize. Entregue." — as fotos que viram galeria. */
+  comoFunciona: "classica",
+  /** O celular com a galeria de verdade ("Intuitiva para quem recebe"). */
+  celular: "noite",
+  /** A peça da seleção, no bloco de recursos. */
+  selecao: "classica",
+  /** O cartão da galeria na peça do Cofre. */
+  cofre: "editorial",
+  /** O cartão da galeria que vai para a lixeira. */
+  lixeira: "noite",
+} as const satisfies Record<string, IdGaleria>;
+
+/** A foto do cartão da galeria na peça "Cofre" do bloco de recursos (`CofreEstados`). */
+export const LUGAR_DO_COFRE: IdFoto = `${GALERIA_DA_SECAO.cofre}-1`;
 
 /** A galeria de um lugar, ou `null` para o `respiro`. */
 export function galeriaDoLugar(lugar: LugarDaHome): Identidade | null {
@@ -433,8 +468,12 @@ export function ondeAparece(lugar: LugarDaHome): string[] {
   const onde: string[] = [];
   if (g.capa === lugar) onde.push(`a capa da galeria "${g.titulo}"${pb}`);
   onde.push(`a grade da galeria "${g.titulo}"${pb}`);
-  if (lugar === LUGAR_DO_COFRE) onde.push('a miniatura do cartão na seção "Cofre"');
-  if (g.id === GALERIA_EM_DESTAQUE) onde.push("o celular de demonstração e os prints do painel");
+  if (lugar === LUGAR_DO_COFRE) onde.push('a miniatura do cartão na peça "Cofre"');
+  if (g.id === GALERIA_DA_SECAO.lixeira && g.capa === lugar) onde.push('a miniatura do cartão na peça "Lixeira"');
+  if (g.id === GALERIA_DA_SECAO.suaMarca) onde.push('a seção "Sua marca" e os prints do painel');
+  if (g.id === GALERIA_DA_SECAO.comoFunciona) onde.push('a cena "Suba. Personalize. Entregue."');
+  if (g.id === GALERIA_DA_SECAO.selecao) onde.push("a peça da seleção, com os corações");
+  if (g.id === GALERIA_DA_SECAO.celular) onde.push("o celular de demonstração");
   return onde;
 }
 
