@@ -129,6 +129,43 @@ const VALE_NO_CACHE = 4 * 3600 * 1000;
 const GLIFO_SOBRE_FOTO = "drop-shadow(0 1px 1.5px rgba(0,0,0,.85)) drop-shadow(0 0 6px rgba(0,0,0,.45))";
 
 /**
+ * A RESPOSTA AO PONTEIRO dos botões desenhados com as cores da galeria.
+ *
+ * Felipe, 03/10/2026, com o print da galeria da Sirius: "esse botão não tem
+ * nenhuma ação, tem que ter um hover ou algo assim". Estava certo, e a causa é
+ * mecânica: a cor destes botões vem de variável CSS no `style` inline, e eles
+ * tinham só `transition` — que não transiciona nada quando nada muda.
+ *
+ * O preenchimento sai da PRÓPRIA cor do texto da galeria (`color-mix`), e não de
+ * um cinza fixo: num tema claro um véu escuro some, num escuro um véu claro
+ * estoura. Assim o realce funciona nos dez estilos sem ninguém escolher nada.
+ *
+ * `hover:` no Tailwind v4 já nasce dentro de `@media (hover: hover)`: no celular
+ * ele não existe, e o dedo não deixa botão "aceso" para trás. Por isso o
+ * `active:` vem junto — ali é ele que dá o retorno do toque.
+ */
+/**
+ * O QUE É DESENHADO EM CIMA DA FOTO — e a marca que os junta.
+ *
+ * Felipe, 03/10/2026: "no celular, permita ocultar os botões de download e
+ * favorito, para não estragar a imagem". É a segunda vez: em 08/09 o BAIXAR
+ * saiu do celular por decisão nossa, com a mesma frase. Agora é escolha dele,
+ * no eixo `glifosNaFoto` (Design → Grade).
+ *
+ * `data-sobre-a-foto` não é enfeite: é o contrato que faz a regra valer para o
+ * TERCEIRO controle que alguém desenhar ali amanhã. Sem ele, o teste teria de
+ * procurar por rótulo — e foi exatamente assim que ele passou verde medindo só
+ * os botões de baixar, porque o rótulo do coração é o nome da foto.
+ */
+const SOBRE_A_FOTO = "data-sobre-a-foto";
+
+const BOTAO_DA_GALERIA =
+  "transition hover:bg-[color-mix(in_srgb,var(--g-texto)_10%,transparent)] " +
+  "active:bg-[color-mix(in_srgb,var(--g-texto)_16%,transparent)] " +
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 " +
+  "focus-visible:outline-[var(--g-texto)]";
+
+/**
  * Até quantos vídeos um capítulo pode ter e ainda sair grande.
  *
  * Seis é a conta de duas fileiras na grade "normal" com as colunas pela metade
@@ -488,6 +525,44 @@ export function GaleriaCliente({
     }
     return ids;
   }, [capitulos, itens, fatia]);
+
+  const voltarAoInicio = aparencia.voltarAoInicio === "sim";
+
+  /*
+   * ── O BOTÃO DE VOLTAR AO INÍCIO FLUTUA (03/10/2026) ─────────────────────
+   *
+   * Felipe: "também não achei o botão de voltar ao início para a galeria, que
+   * fica ruim de voltar tudo no scroll".
+   *
+   * Ele existia, desligado — mas o defeito maior é que, mesmo ligado, ele morava
+   * no RODAPÉ. Um botão para subir que só aparece depois de descer tudo não
+   * serve a quem está no meio de seiscentas fotos: é justamente ali que a
+   * vontade de voltar aparece.
+   *
+   * `scroll` com `passive`, e nada de `IntersectionObserver`: a pergunta é "a
+   * pessoa desceu bastante?", não "tal elemento entrou na tela" — e um
+   * observador precisaria de um alvo plantado só para isso.
+   */
+  const [rolouBastante, setRolouBastante] = useState(false);
+
+  useEffect(() => {
+    if (!voltarAoInicio) return;
+    /* Duas telas: menos que isso e o botão aparece antes de a pessoa sentir
+       falta dele; muito mais e ele chega tarde. */
+    const gatilho = () => setRolouBastante(window.scrollY > window.innerHeight * 2);
+    gatilho();
+    window.addEventListener("scroll", gatilho, { passive: true });
+    return () => window.removeEventListener("scroll", gatilho);
+  }, [voltarAoInicio]);
+
+  const subir = useCallback(() => {
+    window.scrollTo({
+      top: 0,
+      /* Rolagem animada é o ponto do botão — mas quem pediu menos movimento no
+         sistema recebe o salto seco. */
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, []);
 
   const [recadoAberto, setRecadoAberto] = useState(false);
 
@@ -1436,7 +1511,6 @@ export function GaleriaCliente({
         };
   }, [capitulos, capituloAtivo]);
 
-  const voltarAoInicio = aparencia.voltarAoInicio === "sim";
   /* A galeria acabou DE VERDADE? Ver `lib/fim-da-galeria.ts` — e o teste. */
   const noFim = chegouAoFim({ fatiada: Boolean(fatia), acabou, falhou, faltaDesenhar });
 
@@ -1463,7 +1537,7 @@ export function GaleriaCliente({
               <button
                 type="button"
                 onClick={() => void carregarMais()}
-                className="rounded-[var(--g-pilula,9999px)] px-4 py-2 text-xs transition"
+                className={`rounded-[var(--g-pilula,9999px)] px-4 py-2 text-xs ${BOTAO_DA_GALERIA}`}
                 style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
               >
                 Carregar mais fotos
@@ -1479,7 +1553,7 @@ export function GaleriaCliente({
         <div className="my-10 text-center">
           <Link
             href={saidaDoCapitulo.para}
-            className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
+            className={`inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm ${BOTAO_DA_GALERIA}`}
             style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
           >
             {saidaDoCapitulo.texto}
@@ -1529,14 +1603,14 @@ export function GaleriaCliente({
           <button
             type="button"
             onClick={() => setRecadoAberto(true)}
-            className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
+            className={`inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm ${BOTAO_DA_GALERIA}`}
             style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
           >
             ✉ Deixar um recado
           </button>
         </div>
       )}
-      {noFim && (aparencia.despedida || voltarAoInicio) && (
+      {noFim && aparencia.despedida && (
         <div className="mb-14 mt-16 flex flex-col items-center gap-6 px-6 text-center">
           {aparencia.despedida && (
             <p
@@ -1546,30 +1620,37 @@ export function GaleriaCliente({
               {aparencia.despedida}
             </p>
           )}
-          {voltarAoInicio && (
-            <button
-              type="button"
-              onClick={() =>
-                window.scrollTo({
-                  top: 0,
-                  /* Rolagem animada é o ponto do botão — mas quem pediu menos
-                     movimento no sistema recebe o salto seco. */
-                  behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-                    ? "auto"
-                    : "smooth",
-                })
-              }
-              className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-6 py-3 text-sm transition"
-              style={{ border: "1px solid var(--g-linha)", color: "var(--g-texto)" }}
-            >
-              <span aria-hidden>↑</span>
-              Volte ao início
-            </button>
-          )}
         </div>
       )}
     </>
   );
+
+  /*
+   * Ele NASCE no HTML, invisível, em vez de aparecer só quando o JavaScript
+   * roda: assim o primeiro toque de quem rolou rápido não espera hidratação.
+   * E invisível aqui é `opacity-0` MAIS `pointer-events-none` — sem o segundo,
+   * um botão que ninguém vê continuaria roubando o toque em cima da capa.
+   */
+  const voltarAoTopo = voltarAoInicio ? (
+    <button
+      type="button"
+      onClick={subir}
+      aria-label="Volte ao início"
+      aria-hidden={!rolouBastante}
+      tabIndex={rolouBastante ? 0 : -1}
+      className={`fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-4 py-3 text-sm shadow-lg backdrop-blur ${BOTAO_DA_GALERIA} ${
+        rolouBastante ? "opacity-100" : "pointer-events-none opacity-0"
+      }`}
+      style={{
+        border: "1px solid var(--g-linha)",
+        color: "var(--g-texto)",
+        background: "color-mix(in srgb, var(--g-fundo) 82%, transparent)",
+      }}
+    >
+      <span aria-hidden>↑</span>
+      <span className="max-[480px]:sr-only">Volte ao início</span>
+    </button>
+  ) : null;
 
   const telaDoRecado =
     recado?.ativo && recadoAberto ? (
@@ -2306,6 +2387,12 @@ export function GaleriaCliente({
                     topo. `testar-urls-sob-demanda.mjs` confere que esse caminho
                     existe — sem ele, tirar o botão deixaria o celular sem saída.
                   */
+                  /* A marca que o eixo `glifosNaFoto` desliga no celular, e que o
+                   teste usa para alcançar TODO controle desenhado sobre a foto.
+                   `sempre` é o padrão: é o que as 512 galerias entregues têm. */
+                {...{ [SOBRE_A_FOTO]: "" }}
+                  /* O baixar nunca esteve no celular (08/09/2026), então o eixo
+                     novo não muda nada para ele — só o marca. */
                   className="grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:hidden"
                   style={{ color: "#fff", filter: GLIFO_SOBRE_FOTO }}
                 >
@@ -2353,9 +2440,11 @@ export function GaleriaCliente({
                 /* O posicionamento saiu daqui para o <span> que agrupa os dois
                    botões — senão o de baixar e o coração se sobreporiam no
                    mesmo canto. */
+                {...{ [SOBRE_A_FOTO]: "" }}
                 className={`grid h-9 w-9 place-items-center rounded-[var(--g-pilula,9999px)] transition max-[900px]:h-11 max-[900px]:w-11
                   ${ehFavorita ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 max-[900px]:opacity-100"}
-                  ${!selecao.aberta && !ehFavorita ? "hidden" : ""}`}
+                  ${!selecao.aberta && !ehFavorita ? "hidden" : ""}
+                  ${aparencia.glifosNaFoto === "computador" ? "max-[900px]:hidden" : ""}`}
                 /*
                   GLIFO COM SOMBRA, E NÃO DISCO ATRÁS DO ÍCONE.
 
@@ -2398,6 +2487,7 @@ export function GaleriaCliente({
       {/* A sentinela fica DEPOIS de todos os capítulos, e só uma vez: é o fim da
           rolagem, não o fim de cada seção. Ver `fimDaGaleria`. */}
       {fimDaGaleria}
+      {voltarAoTopo}
       {telaDoRecado}
 
       {/*

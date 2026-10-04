@@ -23,6 +23,24 @@ import { CONVITE_PADRAO, TETO_DO_RECADO } from "@/config/recado";
  * identificou para favoritar ou baixar não é perguntado de novo: a identidade é
  * a mesma (`pessoas_da_galeria`), e quem pergunta é o pai, que já tem o estado.
  */
+/**
+ * A RESPOSTA AO PONTEIRO desta tela.
+ *
+ * Felipe, 03/10/2026: "tem que ter um hover ou algo assim (…) e o mesmo para o
+ * pop up dele". A tela inteira tinha ZERO estados de hover — nem o botão de
+ * enviar, nem as estrelas, que são justamente o que se usa com o ponteiro
+ * parado em cima, decidindo a nota.
+ *
+ * O véu sai da própria cor do texto da galeria, como na grade: num tema claro um
+ * véu escuro some, num escuro um véu claro estoura. `active:` vem junto porque
+ * no celular não há hover — e é o toque que precisa de retorno.
+ */
+const RESPONDE =
+  "transition hover:bg-[color-mix(in_srgb,var(--g-texto)_10%,transparent)] " +
+  "active:bg-[color-mix(in_srgb,var(--g-texto)_16%,transparent)] " +
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 " +
+  "focus-visible:outline-[var(--g-texto)]";
+
 export function RecadoNaGaleria({
   convite,
   escrito,
@@ -137,7 +155,12 @@ export function RecadoNaGaleria({
               Obrigado — só o fotógrafo vai ler.
             </p>
             <div className="mt-6 flex justify-end">
-              <button type="button" onClick={aoFechar} className="px-5 py-2.5 text-sm" style={campo}>
+              <button
+                type="button"
+                onClick={aoFechar}
+                className={`px-5 py-2.5 text-sm ${RESPONDE}`}
+                style={campo}
+              >
                 Fechar
               </button>
             </div>
@@ -228,7 +251,7 @@ export function RecadoNaGaleria({
               <button
                 type="button"
                 onClick={aoFechar}
-                className="px-4 py-2.5 text-sm"
+                className={`rounded-[var(--g-pilula,9999px)] px-4 py-2.5 text-sm ${RESPONDE} hover:text-[var(--g-texto)]`}
                 style={{ color: "var(--g-tenue)" }}
               >
                 Agora não
@@ -237,7 +260,9 @@ export function RecadoNaGaleria({
                 type="button"
                 onClick={() => void enviar()}
                 disabled={ocupado}
-                className="px-5 py-2.5 text-sm disabled:opacity-60"
+                /* Cheio de `--g-texto`: um véu da mesma cor não mudaria nada
+                   aqui. O retorno é o próprio botão recuando de intensidade. */
+                className="px-5 py-2.5 text-sm transition hover:opacity-85 active:opacity-70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--g-texto)] disabled:opacity-60"
                 style={{
                   ...campo,
                   background: "var(--g-texto)",
@@ -280,7 +305,9 @@ function Estrelas({
           aria-label={`${n} de 5`}
           aria-pressed={valor >= n}
           onClick={() => mudar(valor === n ? 0 : n)}
-          className="text-xl leading-none transition"
+          /* A estrela cresce um pouco sob o ponteiro: é o que diz QUAL delas
+             vai ser marcada antes do clique. Sem isso, dar nota é adivinhar. */
+          className="rounded px-0.5 text-xl leading-none transition hover:scale-125 active:scale-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--g-texto)]"
           style={{ color: valor >= n ? "var(--g-texto)" : "var(--g-tenue)" }}
         >
           ★

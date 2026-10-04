@@ -1465,6 +1465,18 @@ export function EditorAparencia({
               <Eixo eixo="grade" titulo="Grade das fotos" ap={ap} mudar={mudar} />
               <Eixo eixo="densidade" titulo="Espaçamento" ap={ap} mudar={mudar} />
               <Eixo eixo="canto" titulo="Canto das fotos" ap={ap} mudar={mudar} />
+              {/*
+                Os glifos sobre a foto (03/10/2026). Fica na GRADE, e não na
+                Entrega, porque o que se decide aqui é o desenho da miniatura —
+                favoritar e baixar continuam existindo na foto aberta, com rótulo
+                escrito. Entrega é "o que o cliente pode fazer"; isto é "o que
+                aparece em cima da imagem".
+              */}
+              <Eixo eixo="glifosNaFoto" titulo="Ícones sobre a foto" ap={ap} mudar={mudar} />
+              <p className="-mt-1.5 text-[11px] leading-snug text-texto-faint">
+                No computador eles só aparecem quando o ponteiro passa por cima. A escolha vale para
+                o celular, onde não existe ponteiro e eles ficariam permanentes.
+              </p>
             </>
           )}
           {/*

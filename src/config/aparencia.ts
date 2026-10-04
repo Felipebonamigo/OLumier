@@ -267,6 +267,22 @@ export type FonteDaDespedida = "titulo" | "texto";
  */
 export type VoltarAoInicio = "nao" | "sim";
 
+/**
+ * Os glifos desenhados SOBRE a foto — o coração e o baixar de cada miniatura.
+ *
+ * Felipe, 03/10/2026: "no celular, permita ocultar os botões de download e
+ * favorito, para não estragar a imagem". É a segunda vez que a queixa aparece:
+ * em 08/09 o BAIXAR saiu do celular por decisão nossa, com a mesma frase ("os
+ * botões de favorito e download poluíram muito a imagem"). Agora o coração vira
+ * escolha, em vez de uma segunda decisão nossa sobre a entrega dos outros.
+ *
+ * "computador" NÃO tira o favoritar do celular: tira o ÍCONE da miniatura. A
+ * foto aberta continua com "Escolher" e "Baixar" escritos por extenso — é a
+ * mesma saída que o baixar usou, e sem ela isto seria remover um recurso em
+ * nome de estética.
+ */
+export type GlifosNaFoto = "sempre" | "computador";
+
 export type CapaFixa = "rola" | "fixa";
 
 export type LinhasTitulo = "auto" | "uma" | "duas" | "tres";
@@ -609,6 +625,7 @@ export interface Aparencia {
   despedida: string;
   despedidaFonte: FonteDaDespedida;
   voltarAoInicio: VoltarAoInicio;
+  glifosNaFoto: GlifosNaFoto;
   /** Porcentagem do tamanho próprio da capa: 100 é o de sempre. Ver `TAMANHO_TITULO`. */
   tamanhoTitulo: number;
   /** Porcentagem da área de referência da logo, ou `null` para a regra antiga. Ver `TAMANHO_LOGO`. */
@@ -712,6 +729,7 @@ export const APARENCIA_PADRAO: Aparencia = {
   despedida: "",
   despedidaFonte: "titulo",
   voltarAoInicio: "nao",
+  glifosNaFoto: "sempre",
   /* `sobreposto` é o cartão de sempre. Ver o comentário de `CartaoDoLink`:
      o modo limpo é escolha, não correção. */
   cartao: "sobreposto",
@@ -849,6 +867,7 @@ export function lerAparencia(bruto: unknown): Aparencia {
     despedida: textoLivre(o.despedida, 160),
     despedidaFonte: valida(o.despedidaFonte, OPCOES.despedidaFonte.map((x) => x.id), APARENCIA_PADRAO.despedidaFonte),
     voltarAoInicio: valida(o.voltarAoInicio, OPCOES.voltarAoInicio.map((x) => x.id), APARENCIA_PADRAO.voltarAoInicio),
+    glifosNaFoto: valida(o.glifosNaFoto, OPCOES.glifosNaFoto.map((x) => x.id), APARENCIA_PADRAO.glifosNaFoto),
     /*
      * A barrinha é NÚMERO, e por isso não passa por `valida` — não há lista de
      * valores certos entre 60 e 180. Apara para dentro da faixa em vez de
@@ -1135,7 +1154,11 @@ export const OPCOES = {
   ],
   voltarAoInicio: [
     { id: "nao", nome: "Não mostrar", desc: "A galeria termina na despedida" },
-    { id: "sim", nome: "Mostrar", desc: "Um botão para subir de volta ao começo" },
+    { id: "sim", nome: "Mostrar", desc: "Um botão flutuante para subir ao começo" },
+  ],
+  glifosNaFoto: [
+    { id: "sempre", nome: "Sempre", desc: "O coração aparece em toda foto, no celular também" },
+    { id: "computador", nome: "Só no computador", desc: "No celular a foto fica limpa; escolher e baixar ficam na foto aberta" },
   ],
   capaFixa: [
     { id: "rola", nome: "Sobe junto", desc: "A capa sai da tela conforme você rola" },
@@ -1229,19 +1252,19 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Banca de jornal: fundo claro, letra grande e tudo de canto vivo.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Terrosa, manuscrita e de cantos macios. Clima de ateliê.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     /*
@@ -1277,13 +1300,13 @@ export const PRESETS: Preset[] = [
     id: "marfim",
     nome: "Marfim",
     desc: "Creme e manuscrita, fotos rentes. É o desenho da nossa página inicial.",
-    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho e de canto vivo.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     /*
@@ -1300,7 +1323,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -1323,25 +1346,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, foto em arco e cantos bem macios. Clima de papel timbrado.",
-    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto, destaques grandes e canto vivo, como editorial de moda.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro, com a foto grande e limpa.",
-    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco, muito espaço e cantos arredondados. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
 ];
 
