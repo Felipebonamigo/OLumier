@@ -27,17 +27,42 @@ export function pool(): Pool {
   if (!bancoConfigurado) {
     throw new Error("DATABASE_URL não configurada em .env.local");
   }
-  globalThis._pgPool ??= new Pool({
-    connectionString: process.env.DATABASE_URL,
-    types: conversores,
-    max: 10,
-    idleTimeoutMillis: 30_000,
-    // Conexão ociosa não segura o processo. Sem isto todo script que consulta
-    // pelo pool ficava 30 s parado depois de terminar — ~10 min por
-    // publicação. O servidor não depende disso: quem o mantém vivo é o HTTP.
-    // Ver scripts/testar-pool-solta-processo.mjs.
-    allowExitOnIdle: true,
-  });
+  if (!globalThis._pgPool) {
+    const criado = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      types: conversores,
+      max: 10,
+      idleTimeoutMillis: 30_000,
+      // Conexão ociosa não segura o processo. Sem isto todo script que consulta
+      // pelo pool ficava 30 s parado depois de terminar — ~10 min por
+      // publicação. O servidor não depende disso: quem o mantém vivo é o HTTP.
+      // Ver scripts/testar-pool-solta-processo.mjs.
+      allowExitOnIdle: true,
+    });
+
+    /*
+     * ── SEM ISTO, O BANCO CAIR MATA O SERVIDOR (05/10/2026) ────────────────
+     *
+     * Medido: com o túnel do banco fora do ar, a home respondeu 500 e o
+     * processo morreu com `uncaughtException`. O tratamento de quem consulta
+     * estava certo e funcionou — o que derruba vem de fora de qualquer
+     * consulta: no node-postgres, quando a conexão de um cliente OCIOSO cai, o
+     * erro é emitido como evento `error` no pool. Evento de emissor sem
+     * ouvinte o Node promove a `uncaughtException`, e aí o processo acaba.
+     *
+     * Nenhum `try/catch` em volta de um `await` alcança isso, porque na hora
+     * do evento não existe consulta rodando. O ouvinte é o único lugar.
+     *
+     * Ele registra e segue: o pool descarta o cliente quebrado sozinho e a
+     * próxima consulta abre outro. Quem está no meio de uma consulta recebe o
+     * erro dela pelo `await`, como sempre.
+     */
+    criado.on("error", (e) => {
+      console.error("[banco] conexão ociosa caiu:", e instanceof Error ? e.message : e);
+    });
+
+    globalThis._pgPool = criado;
+  }
   return globalThis._pgPool;
 }
 

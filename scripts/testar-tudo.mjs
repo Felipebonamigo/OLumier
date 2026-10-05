@@ -243,6 +243,22 @@ try {
 
 const armazemDeMentira = Boolean(process.env.R2_ENDPOINT);
 
+/*
+ * ── TETO DE TEMPO POR SUÍTE (05/10/2026) ──────────────────────────────────
+ *
+ * Uma execução ficou trinta minutos sem imprimir UMA linha e foi derrubada de
+ * fora. `spawnSync` captura a saída do filho, então suíte pendurada não trava
+ * só a si mesma: trava o corredor, e nem as que já tinham passado aparecem.
+ *
+ * Doze minutos é larga para as suítes de verdade — as mais lentas sobem
+ * galeria e apagam mídia, e ficam em minutos de um dígito. Quem passar disso
+ * não está devagar, está parada.
+ *
+ * Mesma lição que o Atomatiza pagou com uma unidade `oneshot` sem
+ * `TimeoutStartSec`: treze horas sem o vigia rodar, e nada acusando.
+ */
+const TETO_POR_SUITE = 720_000;
+
 const verdes = [];
 const vermelhas = [];
 const pulados = [];
@@ -282,7 +298,7 @@ for (const nome of suites) {
       "./scripts/registrar-ts.mjs",
       path.join("scripts", `${nome}.mjs`),
     ],
-    { encoding: "utf8", cwd: path.resolve(AQUI, "..") },
+    { encoding: "utf8", cwd: path.resolve(AQUI, ".."), timeout: TETO_POR_SUITE },
   );
 
   const saida = `${r.stdout ?? ""}${r.stderr ?? ""}`;
@@ -291,7 +307,11 @@ for (const nome of suites) {
     console.log(`  ✓ ${nome}`);
   } else {
     vermelhas.push(nome);
-    console.log(`  ✗ ${nome}`);
+    /* Estourar o teto volta com `status` nulo e `signal` preenchido. Sem dizer
+       isso, o relatório abaixo chamaria de "morreu antes de relatar" — que é o
+       contrário da verdade: ela não morreu, ela não acabou. */
+    const pendurou = r.status === null && r.signal;
+    console.log(`  ✗ ${nome}${pendurou ? ` (passou de ${TETO_POR_SUITE / 60_000} min e foi parada)` : ""}`);
     // Só as linhas de falha: despejar a saída inteira de 15 suítes esconderia
     // justamente o que interessa.
     const linhas = saida.split("\n").filter((l) => l.includes("✗"));
