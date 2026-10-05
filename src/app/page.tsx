@@ -9,7 +9,6 @@ import { MarcaSimbolo, SeloBeta } from "@/components/marca-tile";
 import { MontadorPlano } from "@/components/montador-plano";
 import { Revelar } from "@/components/revelar";
 import { FONTES_TITULO, OPCOES, PRESETS, lerAparencia, variaveisDoTema, type Aparencia } from "@/config/aparencia";
-import { VALIDADE_DO_LINK_DA_GALERIA } from "@/config/links-assinados";
 import { ESPACOS, formatarGb, formatarReais } from "@/config/planos";
 import { PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 import { dadosEstruturadosDaCasa, jsonLd, metadadosDaCasa } from "@/lib/metadados";
@@ -31,7 +30,7 @@ import { TrocaIdentidade } from "@/components/home/troca-identidade";
 import { SelecaoDemo } from "@/components/home/selecao-demo";
 import { EncolherAoRolar } from "@/components/home/encolher-ao-rolar";
 import { DaPastaAGaleria } from "@/components/home/da-pasta-a-galeria";
-import { Conta, CofreEstados, Peca, RelogioDoLink } from "@/components/home/bento-recursos";
+import { Conta, CofreEstados, Peca } from "@/components/home/bento-recursos";
 import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 import { DESCONTO_DO_PACOTE } from "@/config/combo";
 import { URL_ATOMATIZA } from "@/lib/ponte-atomatiza";
@@ -790,20 +789,8 @@ export default async function Home() {
               <p className="text-xs text-[var(--h-tinta-3)]">O Cofre não substitui uma estratégia profissional de backup.</p>
             </Peca>
 
-            {/* O link que vence — o relógio conta o prazo de verdade. */}
-            <Peca className="lg:col-span-2">
-              <Marcador>Segurança</Marcador>
-              <h3 className="home-titulo text-2xl font-semibold leading-tight">Nada é público.</h3>
-              <p className="text-[15px] text-[var(--h-tinta-2)]">
-                Toda foto chega por um link assinado que vence sozinho. Copiou o endereço para mandar fora
-                da galeria? Ele para de abrir.
-              </p>
-              <RelogioDoLink segundos={VALIDADE_DO_LINK_DA_GALERIA} />
-              <p className="font-mono text-xs text-[var(--h-tinta-3)]">até o link desta foto vencer</p>
-            </Peca>
-
             {/* A prova de entrega — números de exemplo, e a peça diz que são. */}
-            <Peca className="lg:col-span-2">
+            <Peca className="lg:col-span-3">
               <Marcador>Prova de entrega</Marcador>
               <h3 className="home-titulo text-2xl font-semibold leading-tight">Você sabe que chegou.</h3>
               <p className="text-[15px] text-[var(--h-tinta-2)]">
@@ -838,7 +825,7 @@ export default async function Home() {
             </Peca>
 
             {/* A lixeira — a galeria vai e volta. */}
-            <Peca className="lg:col-span-2">
+            <Peca className="lg:col-span-3">
               <Marcador>Lixeira</Marcador>
               <h3 className="home-titulo text-2xl font-semibold leading-tight">Lixeira de {PRAZO_LIXEIRA_DIAS} dias.</h3>
               <p className="text-[15px] text-[var(--h-tinta-2)]">

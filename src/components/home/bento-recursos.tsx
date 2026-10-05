@@ -89,26 +89,6 @@ export function CofreEstados({ foto, titulo }: { foto: FotoDemo; titulo: string 
   );
 }
 
-/* ── O relógio do link que vence ───────────────────────────────────────── */
-export function RelogioDoLink({ segundos }: { segundos: number }) {
-  const [resta, setResta] = useState(segundos - 1);
-  const menosMovimento = usePedeMenosMovimento();
-  useEffect(() => {
-    if (menosMovimento) return;
-    const relogio = setInterval(() => setResta((r) => (r > 0 ? r - 1 : segundos - 1)), 1000);
-    return () => clearInterval(relogio);
-  }, [menosMovimento, segundos]);
-  const h = Math.floor(resta / 3600);
-  const m = Math.floor((resta % 3600) / 60);
-  const s = resta % 60;
-  const dois = (n: number) => String(n).padStart(2, "0");
-  return (
-    <p className="mt-auto font-mono text-[2.3rem] leading-none tracking-tight tabular-nums">
-      {h}:{dois(m)}:{dois(s)}
-    </p>
-  );
-}
-
 /* ── Um número que conta quando aparece ─────────────────────────────────── */
 export function Conta({ ate }: { ate: number }) {
   const ref = useRef<HTMLSpanElement>(null);
