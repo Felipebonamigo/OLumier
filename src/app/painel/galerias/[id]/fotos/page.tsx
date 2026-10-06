@@ -102,8 +102,17 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
    * O fotógrafo não descobriria sozinho — no painel dele o problema é o mesmo,
    * mas entre centenas de miniaturas ninguém repara. Por isso o aviso conta
    * quantas são e diz o que fazer.
+   *
+   * E DIZ QUAIS (06/10/2026). Juan, com 12 delas numa galeria de 1.969
+   * arquivos: "queria que ele sinalizasse quais são essas fotos". Contar sem
+   * nomear mandava procurar 12 miniaturas no meio de duas mil — o aviso
+   * explicava o defeito e escondia o caminho do conserto. Agora vai o nome do
+   * arquivo, que é o que se procura no Lightroom para reexportar, e o capítulo
+   * onde ela está, que é onde se apaga a velha.
    */
-  const heicSemPrevia = medias.filter((m) => /heic|heif/i.test(m.mime) && !m.chave_preview).length;
+  const heicSemPreviaLista = medias.filter((m) => /heic|heif/i.test(m.mime) && !m.chave_preview);
+  const heicSemPrevia = heicSemPreviaLista.length;
+  const nomeDoCapitulo = new Map(secoes.map((s) => [s.id, s.nome]));
 
   return (
     <>
@@ -127,6 +136,24 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
             como JPG e envie de novo — ou reenvie pelo Safari, que lê HEIC e gera a prévia
             normalmente.
           </p>
+          {/* Aberta quando a lista é curta, para o nome já estar na tela; longa,
+              fecha e rola por dentro, para o aviso não empurrar a página. */}
+          <details className="mt-2 text-xs" open={heicSemPrevia <= 20}>
+            <summary className="cursor-pointer font-medium underline underline-offset-4">
+              {heicSemPrevia === 1 ? "Qual é" : `Quais são as ${heicSemPrevia}`}
+            </summary>
+            <ul className="mt-1.5 max-h-56 space-y-0.5 overflow-y-auto">
+              {heicSemPreviaLista.map((m) => (
+                <li key={m.id}>
+                  <span className="font-mono">{m.nome_original}</span>
+                  <span className="opacity-75">
+                    {" "}
+                    — {m.secao_id ? (nomeDoCapitulo.get(m.secao_id) ?? "capítulo") : "fora dos capítulos"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       )}
 
