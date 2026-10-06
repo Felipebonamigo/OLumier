@@ -245,6 +245,25 @@ export async function liberarAcesso(galeriaId: string, senhaHash: string | null)
   );
 }
 
+/**
+ * QUEM ESTÁ PEDINDO É O DONO DA GALERIA, LOGADO? — a mesma pergunta que a
+ * página faz para abrir a prévia (`ehDono` em `g/[estudio]/[galeria]`).
+ *
+ * Existe por um defeito de 06/10/2026: a página abria o RASCUNHO para o dono e
+ * pulava a senha dele, mas as rotas que ela chama depois — `/urls` (o preview
+ * da foto ampliada e o próprio vídeo) e `/mais` (a rolagem depois das 600
+ * primeiras) — só olhavam `publicada` e a senha. O Juan conferia a galeria da
+ * Renata ainda em rascunho, com 1.969 arquivos: nenhum vídeo abria, e a
+ * rolagem parava em "A conexão falhou e ainda faltam fotos desta entrega".
+ *
+ * Quem chama pergunta só quando uma porta já ia fechar: a galeria publicada,
+ * sem senha e no ar — quase todo pedido — não paga a consulta da sessão.
+ */
+export async function donoLogado(tenantId: string): Promise<boolean> {
+  const { sessaoAtual } = await import("./auth");
+  return (await sessaoAtual()) === tenantId;
+}
+
 export async function temAcessoLiberado(
   galeriaId: string,
   senhaHash: string | null,

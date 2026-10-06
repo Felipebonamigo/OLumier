@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultar, consultarUm } from "@/lib/db";
 import { VALIDADE_DO_LINK_DA_GALERIA } from "@/config/links-assinados";
-import { temAcessoLiberado } from "@/lib/galerias-publicas";
+import { donoLogado, temAcessoLiberado } from "@/lib/galerias-publicas";
 import { galeriasNoAr } from "@/lib/assinatura";
 import { asaasConfigurado } from "@/lib/asaas";
 import { armazemDe, urlDaDerivada, urlDoOriginal } from "@/lib/armazem";
@@ -39,6 +39,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { id } = await params;
 
   const galeria = await consultarUm<{
+    publicada: boolean;
+    tenant_id: string;
     senha_hash: string | null;
     estado: string;
     permite_download: boolean;
@@ -46,27 +48,43 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     estudio_status: string;
     estudio_trial_ate: string | null;
   }>(
-    `select g.senha_hash, g.estado, g.permite_download, g.expira_em,
+    `select g.publicada, g.tenant_id, g.senha_hash, g.estado, g.permite_download, g.expira_em,
             t.status as estudio_status, t.trial_ate as estudio_trial_ate
        from galerias g join tenants t on t.id = g.tenant_id
-      where g.id = $1 and g.publicada`,
+      where g.id = $1`,
     [id],
   );
   if (!galeria) return NextResponse.json({ erro: "sem acesso" }, { status: 404 });
+  /*
+   * O DONO NA PRÉVIA (06/10/2026). A página abre o rascunho para ele e pula o
+   * estúdio fora do ar e a senha; sem as mesmas exceções aqui, a prévia
+   * mostrava a grade mas nenhum vídeo tocava e nenhuma foto ampliava. Só é
+   * perguntado quando uma dessas portas ia fechar — ver `donoLogado`. O
+   * interruptor de download continua valendo para ele: a prévia é "do jeito
+   * que o cliente vê".
+   */
+  let dono: boolean | undefined;
+  const ehDono = async () => (dono ??= await donoLogado(galeria.tenant_id));
+  if (!galeria.publicada && !(await ehDono())) {
+    return NextResponse.json({ erro: "sem acesso" }, { status: 404 });
+  }
   /*
    * Trial abandonado e prazo vencido, na ordem da página (16/09/2026): ela diz
    * "fora do ar" e "o prazo terminou", e sem estas linhas quem guardou o id da
    * galeria assinava os originais por aqui mesmo assim. As mesmas portas de
    * `prepararEntrega`, que guarda o zip e a lista.
    */
-  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado())) {
+  if (
+    !galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado()) &&
+    !(await ehDono())
+  ) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   }
   if (galeria.estado !== "online") return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   if (galeria.expira_em && new Date(galeria.expira_em) < new Date()) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   }
-  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
+  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash)) && !(await ehDono())) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 401 });
   }
 

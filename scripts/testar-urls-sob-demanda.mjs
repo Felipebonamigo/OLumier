@@ -24,8 +24,9 @@
  */
 import pg from "pg";
 import { exigirBancoDeTeste } from "./guarda-producao.mjs";
-import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
+import { galeriaDaRodada, limparRodada, segundoEstudioDaRodada } from "./fixture-de-teste.mjs";
 import { gerarHashSenhaGaleria } from "../src/lib/galerias-publicas.ts";
+import { cookieDeSessao } from "./sessao-de-teste.mjs";
 
 await exigirBancoDeTeste();
 
@@ -236,6 +237,51 @@ await etapa("galeria despublicada não assina nada", async () => {
   await db.query("update galerias set publicada = false where id = $1", [g.id]);
   igual((await pedir([m0.id], "preview")).status, 404, "status");
   await db.query("update galerias set publicada = true where id = $1", [g.id]);
+});
+
+/*
+ * ── O DONO NA PRÉVIA (06/10/2026) ──────────────────────────────────────────
+ *
+ * O Juan conferia uma galeria em RASCUNHO pela prévia: a página abria para
+ * ele, mas esta rota e a `/mais` respondiam 404 — nenhum vídeo tocava, nenhuma
+ * foto ampliava e a rolagem parava nas 600 primeiras. O dono logado passa
+ * pelas mesmas portas que a página abre para ele (rascunho e senha); outra
+ * conta logada, não.
+ */
+await etapa("no rascunho, o dono logado assina e carrega mais; outra conta, não", async () => {
+  const doDono = { headers: { cookie: cookieDeSessao(g.tenant_id) } };
+  /* O vizinho é OUTRO estúdio: `outra` é do mesmo estúdio da rodada, e o
+     cookie dela seria o do dono — o teste passaria sem comparar nada. */
+  const vizinho = await segundoEstudioDaRodada(db);
+  const deOutro = { headers: { cookie: cookieDeSessao(vizinho.id) } };
+  const mais = (extra) => fetch(`${BASE}/api/g/${g.id}/mais?desde=0`, { cache: "no-store", ...extra });
+  await db.query("update galerias set publicada = false where id = $1", [g.id]);
+  try {
+    const visto = [
+      `dono ${(await pedir([m0.id], "preview", doDono)).status}/${(await mais(doDono)).status}`,
+      `outra conta ${(await pedir([m0.id], "preview", deOutro)).status}/${(await mais(deOutro)).status}`,
+      `sem sessão ${(await pedir([m0.id], "preview")).status}/${(await mais()).status}`,
+    ].join(" · ");
+    igual(visto, "dono 200/200 · outra conta 404/404 · sem sessão 404/404", "urls/mais");
+    return visto;
+  } finally {
+    await db.query("update galerias set publicada = true where id = $1", [g.id]);
+  }
+});
+
+await etapa("com senha, o dono não precisa da própria senha — e quem não tem continua barrado", async () => {
+  const doDono = { headers: { cookie: cookieDeSessao(g.tenant_id) } };
+  await db.query("update galerias set senha_hash = $1 where id = $2", [
+    gerarHashSenhaGaleria("segredo", g.id),
+    g.id,
+  ]);
+  try {
+    const visto = `dono ${(await pedir([m0.id], "preview", doDono)).status} · sem senha ${(await pedir([m0.id], "preview")).status}`;
+    igual(visto, "dono 200 · sem senha 401", "status");
+    return visto;
+  } finally {
+    await db.query("update galerias set senha_hash = null where id = $1", [g.id]);
+  }
 });
 
 /*
