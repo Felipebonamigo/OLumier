@@ -135,7 +135,7 @@ const menuBaixar = async () => {
 
 await etapa("sem capítulos, o menu tem só o baixar tudo", async () => {
   const m = await menuBaixar();
-  if (!/Todas as fotos num zip \(4\)/.test(m)) throw new Error("sumiu o baixar tudo");
+  if (!/Todos os arquivos num zip \(4\)/.test(m)) throw new Error("sumiu o baixar tudo");
   return "um item";
 });
 
@@ -158,7 +158,7 @@ await etapa("com capítulos, cada um vira um item com a sua contagem", async () 
   const m = await menuBaixar();
   if (!/Cerimônia \(3\)/.test(m)) throw new Error("não achei “Cerimônia (3)”");
   if (!/Festa \(1\)/.test(m)) throw new Error("não achei “Festa (1)”");
-  if (!/Todas as fotos num zip \(4\)/.test(m)) throw new Error("o baixar tudo sumiu junto");
+  if (!/Todos os arquivos num zip \(4\)/.test(m)) throw new Error("o baixar tudo sumiu junto");
   return "Cerimônia (3) · Festa (1) · Todas (4)";
 });
 
@@ -172,7 +172,7 @@ await etapa("com UM capítulo só, não há pasta a escolher", async () => {
   try {
     const m = await menuBaixar();
     if (/Cerimônia/.test(m)) throw new Error("ofereceu a pasta única ao lado do baixar tudo");
-    if (!/Todas as fotos num zip \(4\)/.test(m)) throw new Error("e ainda perdeu o baixar tudo");
+    if (!/Todos os arquivos num zip \(4\)/.test(m)) throw new Error("e ainda perdeu o baixar tudo");
     return "só o baixar tudo";
   } finally {
     await db.query("update medias set secao_id = null where galeria_id = $1", [g.id]);
@@ -218,7 +218,7 @@ const menuDaGrande = async () => {
  */
 await etapa("no computador, “todas” conta a galeria inteira, não o pedaço da tela", async () => {
   const m = await menuDaGrande();
-  const item = m.match(/Todas as fotos[^<]*/)?.[0];
+  const item = m.match(/Todos os arquivos[^<]*/)?.[0];
   if (!item) throw new Error("a galeria grande perdeu o baixar tudo");
   if (!item.includes(`(${FOTOS_POR_TELA + 1})`)) {
     throw new Error(`a galeria tem ${FOTOS_POR_TELA + 1} fotos e o item diz "${item}"`);
@@ -259,8 +259,8 @@ const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chr
 
 await etapa("no iPhone, “salvar” conta a galeria inteira", async () => {
   const m = await menuComo(IPHONE);
-  const item = m.match(/Salvar as \d+ fotos no celular/)?.[0];
-  if (item !== `Salvar as ${FOTOS_POR_TELA + 1} fotos no celular`) {
+  const item = m.match(/Salvar os \d+ arquivos no celular/)?.[0];
+  if (item !== `Salvar os ${FOTOS_POR_TELA + 1} arquivos no celular`) {
     throw new Error(`o item do iPhone diz "${item ?? "nada"}"`);
   }
   return item;
@@ -268,11 +268,11 @@ await etapa("no iPhone, “salvar” conta a galeria inteira", async () => {
 
 await etapa("no Android, BAIXAR — o menu do Android não salva na galeria", async () => {
   const m = await menuComo(ANDROID);
-  const item = m.match(/Baixar as \d+ fotos no celular/)?.[0];
-  if (item !== `Baixar as ${FOTOS_POR_TELA + 1} fotos no celular`) {
+  const item = m.match(/Baixar os \d+ arquivos no celular/)?.[0];
+  if (item !== `Baixar os ${FOTOS_POR_TELA + 1} arquivos no celular`) {
     throw new Error(`o item do Android diz "${item ?? "nada"}"`);
   }
-  if (/Salvar as \d+ fotos/.test(m)) throw new Error("o Android ainda oferece o menu de compartilhar");
+  if (/Salvar os \d+ arquivos/.test(m)) throw new Error("o Android ainda oferece o menu de compartilhar");
   return item;
 });
 
@@ -307,14 +307,14 @@ await etapa("na tela da busca por rosto, o menu oferece só as encontradas", asy
     return html.match(/<nav[^>]*aria-label="Menu da galeria"[^]*?<\/nav>/)?.[0] ?? "";
   };
   const iphone = await pagina(IPHONE);
-  if (!/Salvar estas 2 fotos no celular/.test(iphone)) {
-    throw new Error("o iPhone não oferece “Salvar estas 2 fotos”");
+  if (!/Salvar estes 2 arquivos no celular/.test(iphone)) {
+    throw new Error("o iPhone não oferece “Salvar estes 2 arquivos”");
   }
   const pc = await pagina(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
   );
-  if (!/Baixar estas 2 fotos num zip/.test(pc)) {
-    throw new Error("o computador não oferece “Baixar estas 2 fotos num zip”");
+  if (!/Baixar estes 2 arquivos num zip/.test(pc)) {
+    throw new Error("o computador não oferece “Baixar estes 2 arquivos num zip”");
   }
   return "celular e computador";
 });

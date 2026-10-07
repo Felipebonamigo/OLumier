@@ -318,7 +318,7 @@ export function MenusDaGaleria({
                 a mesma coisa e continua no mesmo lugar amanhã. */}
             <ItemDoMenu aoTocar={favoritas.alternarFiltro} desligado={favoritas.quantas === 0}>
               {favoritas.soFavoritas
-                ? "Ver todas as fotos"
+                ? "Ver tudo"
                 : `Ver só as favoritas (${favoritas.quantas})`}
             </ItemDoMenu>
 
@@ -366,14 +366,14 @@ export function MenusDaGaleria({
             {baixar.recorte && (
               <ItemDoMenu aoTocar={baixar.recorte.baixar} desligado={Boolean(baixar.progresso)}>
                 {baixar.modo === "computador"
-                  ? `Baixar estas ${baixar.recorte.quantas} fotos num zip`
-                  : `${baixar.modo === "menu" ? "Salvar" : "Baixar"} estas ${baixar.recorte.quantas} fotos no celular`}
+                  ? `Baixar estes ${baixar.recorte.quantas} arquivos num zip`
+                  : `${baixar.modo === "menu" ? "Salvar" : "Baixar"} estes ${baixar.recorte.quantas} arquivos no celular`}
               </ItemDoMenu>
             )}
             <ItemDoMenu aoTocar={baixar.baixarTudo} desligado={Boolean(baixar.progresso)}>
               {baixar.modo === "computador"
-                ? `Todas as fotos num zip (${baixar.quantasNaGaleria})`
-                : `${baixar.modo === "menu" ? "Salvar" : "Baixar"} as ${baixar.quantasNaGaleria} fotos no celular`}
+                ? `Todos os arquivos num zip (${baixar.quantasNaGaleria})`
+                : `${baixar.modo === "menu" ? "Salvar" : "Baixar"} os ${baixar.quantasNaGaleria} arquivos no celular`}
             </ItemDoMenu>
             {/* O tamanho ANTES de começar: 2108 fotos são gigas, e quem está no
                 4G do salão precisa saber disso antes do primeiro toque. */}
@@ -397,7 +397,7 @@ export function MenusDaGaleria({
             {baixar.enviarParaOComputador && (
               <>
                 <ItemDoMenu aoTocar={baixar.enviarParaOComputador}>Baixar tudo no computador</ItemDoMenu>
-                <Rodape>manda o link para você — lá as fotos vêm num zip só</Rodape>
+                <Rodape>manda o link para você — lá os arquivos vêm num zip só</Rodape>
               </>
             )}
 
