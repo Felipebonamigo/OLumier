@@ -17,8 +17,12 @@ export default function robots(): MetadataRoute.Robots {
        * nenhum dos dois tem o que fazer num resultado de busca. `/g/` fica de
        * fora da lista de bloqueio de propósito: galeria pública é do estúdio, e
        * quem decide se ela aparece é a senha e o prazo, não o robots.
+       *
+       * `/bio/ir` são os redirecionadores da página-ponte do Instagram: cada
+       * visita é um clique contado, e robô não clica. A própria `/bio` fica
+       * aberta, e o `noindex` dela é o que a tira do Google.
        */
-      disallow: ["/painel", "/api"],
+      disallow: ["/painel", "/api", "/bio/ir"],
     },
     sitemap: `https://${marca.dominio}/sitemap.xml`,
   };

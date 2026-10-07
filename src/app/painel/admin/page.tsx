@@ -204,6 +204,9 @@ export default async function AdminPage({
         <Link href="/painel/admin/home" className="text-acento underline underline-offset-4">
           Fotos da página inicial →
         </Link>
+        <Link href="/painel/admin/bio" className="text-acento underline underline-offset-4">
+          Link da bio →
+        </Link>
       </p>
 
       {/* O índice. Âncoras de verdade (`<a href="#id">`), e não `<Link>`: o

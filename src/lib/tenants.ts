@@ -193,6 +193,13 @@ export async function criarTenant(dados: {
    * vale para toda conta criada fora do cadastro (testes, scripts).
    */
   emailConfirmado?: boolean;
+  /**
+   * De onde veio a conta — "fonte/meio/produto" do cookie da página-ponte
+   * `/bio` (por exemplo `instagram/bio/galeria`) — e a campanha. Nulo para quem
+   * não passou por ela. Ver `lib/bio-regras.ts` e a migração 063.
+   */
+  origem?: string | null;
+  origemCampanha?: string | null;
 }) {
   const plano = planoPorId(dados.planoId);
   if (!plano) throw new Error("Plano inválido");
@@ -223,8 +230,8 @@ export async function criarTenant(dados: {
 
   const linha = await consultarUm<Tenant>(
     `insert into tenants (slug, nome_estudio, email, senha_hash, plano_id, quota_bytes,
-                          cpf_cnpj, email_confirmado_em)
-     values ($1, $2, $3, $4, $5, $6, $7, case when $8::boolean then now() else null end)
+                          cpf_cnpj, email_confirmado_em, origem, origem_campanha)
+     values ($1, $2, $3, $4, $5, $6, $7, case when $8::boolean then now() else null end, $9, $10)
      returning *`,
     [
       slug,
@@ -235,6 +242,8 @@ export async function criarTenant(dados: {
       quota.toString(),
       dados.cpfCnpj || null,
       dados.emailConfirmado ?? true,
+      dados.origem ?? null,
+      dados.origemCampanha ?? null,
     ],
   );
   return linha!;
