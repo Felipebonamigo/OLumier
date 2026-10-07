@@ -55,14 +55,37 @@ export function dentroDoLimite(visitante: string, agora = Date.now()): boolean {
   return c.n <= TETO_POR_VISITANTE_NA_HORA;
 }
 
+/*
+ * O DUPLO TOQUE, em memória e não no banco.
+ *
+ * Era um `where not exists` no próprio `insert`, e tinha uma corrida: o clique
+ * grava DEPOIS de responder (`after`), então dois toques quase juntos conferiam o
+ * banco antes de o primeiro `insert` terminar, e os dois passavam. Pegou na
+ * suíte, que dispara os dois pedidos em sequência colada. Um `Map` é atômico
+ * num processo só — que é o que o app é, e pelo mesmo motivo de `tentativas.ts`
+ * (reiniciar zera, e tudo bem: o duplo toque dura segundos).
+ */
+const ultimosToques = new Map<string, number>();
+
+function toqueRepetido(visitante: string, evento: string, janelaSeg: number, agora = Date.now()): boolean {
+  if (ultimosToques.size > 5000) {
+    for (const [k, quando] of ultimosToques) if (agora - quando > 60_000) ultimosToques.delete(k);
+  }
+  const chave = `${evento}|${visitante}`;
+  const antes = ultimosToques.get(chave);
+  ultimosToques.set(chave, agora);
+  return antes !== undefined && agora - antes < janelaSeg * 1000;
+}
+
 /**
  * Grava um evento da bio.
  *
  * `janelaSeg` é uma janela de DUPLO TOQUE: o mesmo visitante, o mesmo evento,
  * dentro dela, conta uma vez só. Para clique é 3 s — o polegar que aperta duas
- * vezes. Para visita é 0 (sem janela): a página decide, no navegador, que uma
- * aba conta uma vez, e dois celulares na mesma rede com o mesmo modelo não podem
- * apagar um ao outro por cairem no mesmo hash.
+ * vezes. Para visita não há janela: a página decide, no navegador, que uma aba
+ * conta uma vez, e dois celulares na mesma rede com o mesmo modelo não podem
+ * apagar um ao outro por cair no mesmo hash. Sem hash (sem IP), não há como
+ * dizer que é o mesmo visitante, então também não há janela.
  *
  * NUNCA LANÇA: medir é secundário a levar a pessoa aonde ela quer ir.
  */
@@ -75,15 +98,10 @@ export async function registrarEventoDaBio(e: {
   janelaSeg?: number;
 }): Promise<void> {
   try {
+    if (e.janelaSeg && e.visitante && toqueRepetido(e.visitante, e.evento, e.janelaSeg)) return;
     await consultar(
-      `insert into bio_eventos (evento, fonte, meio, campanha, visitante)
-       select $1, $2, $3, $4, $5
-        where $6::int = 0 or $5::text is null or not exists (
-          select 1 from bio_eventos
-           where visitante = $5 and evento = $1
-             and criado_em > now() - make_interval(secs => $6::int)
-        )`,
-      [e.evento, e.fonte, e.meio, e.campanha, e.visitante, e.janelaSeg ?? 0],
+      "insert into bio_eventos (evento, fonte, meio, campanha, visitante) values ($1, $2, $3, $4, $5)",
+      [e.evento, e.fonte, e.meio, e.campanha, e.visitante],
     );
   } catch (erro) {
     console.error("[bio] evento não gravado:", erro instanceof Error ? erro.message : erro);
