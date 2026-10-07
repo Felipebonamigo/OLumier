@@ -623,14 +623,22 @@ export function GaleriaCapa({
    * Capa nova em vez de mexer na dividida, porque a "Ateliê" já usa a dividida
    * em galeria que pode estar entregue — e capa que muda sozinha é a coisa que
    * este arquivo mais evita.
+   *
+   * ── LADO A LADO SÓ COM A TELA DEITADA (06/10/2026) ─────────────────────
+   *
+   * Era `md:` (768 px de largura), e o iPad em pé passa disso: a Carol abriu a
+   * "Família do Thomas" no iPad e viu a foto do mar espremida numa coluna alta,
+   * com o nome no pé da outra — "gostaria que ficasse igual no celular". Agora
+   * o lado a lado é `paisagem:` (ver `globals.css`): em pé, empilha como no
+   * celular, com a margem maior do `md`.
    */
   if (aparencia.capa === "convite" && urlImagem) {
     return (
       <header
         data-capa="convite"
-        className={`grid gap-8 px-5 py-5 md:min-h-[calc(var(--g-capa-h,78vh)*1.205)] md:grid-cols-[1.1fr_1fr] md:gap-14 md:px-10 md:py-10 ${grudada}`}
+        className={`grid gap-8 px-5 py-5 md:px-10 md:py-10 paisagem:min-h-[calc(var(--g-capa-h,78vh)*1.205)] paisagem:grid-cols-[1.1fr_1fr] paisagem:gap-14 ${grudada}`}
       >
-        <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.667)] overflow-hidden md:min-h-full">
+        <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.667)] overflow-hidden paisagem:min-h-full">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
           <img
             src={urlImagem}
@@ -641,7 +649,7 @@ export function GaleriaCapa({
           />
         </div>
 
-        <div className="flex flex-col justify-between gap-10 md:py-4">
+        <div className="flex flex-col justify-between gap-10 paisagem:py-4">
           {/* Sem assinatura, o lugar dela FICA: este `justify-between` tem dois
               filhos, e é o de cima que empurra o texto para o pé da coluna. Com
               um filho só, o texto subiria para o topo — a capa CONVITE mudaria

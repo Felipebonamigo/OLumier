@@ -244,6 +244,34 @@ await etapa("a seção de envio tem nome acessível", () => {
   return `aria-labelledby="${secao[1]}"`;
 });
 
+/*
+ * ── O AVISO DE HEIC DIZ QUAIS SÃO (06/10/2026) ───────────────────────────
+ *
+ * Juan, com 12 HEIC sem prévia numa galeria de 1.969 arquivos: "queria que
+ * ele sinalizasse quais são essas fotos". O aviso contava e explicava, mas
+ * deixava a pessoa procurando doze miniaturas no meio de duas mil.
+ */
+await etapa("o aviso de HEIC lista cada arquivo e o capítulo dele", async () => {
+  const [solta, noCapitulo] = g.midias;
+  const { rows } = await db.query(
+    "select id, nome from secoes where galeria_id = $1 order by ordem limit 1",
+    [g.id],
+  );
+  if (!rows[0]) throw new Error("a bancada ficou sem capítulo para pôr a foto");
+  await db.query(
+    `update medias set mime = 'image/heic', chave_preview = null,
+            nome_original = case when id = $1 then 'IMG_0001.HEIC' else 'IMG_0002.HEIC' end,
+            secao_id = case when id = $2 then $3::uuid else null end
+      where id = any($4::uuid[])`,
+    [solta.id, noCapitulo.id, rows[0].id, [solta.id, noCapitulo.id]],
+  );
+  const texto = semTags(await abaFotos());
+  if (!/2 fotos podem não aparecer/.test(texto)) throw new Error("o aviso não contou as duas");
+  if (!texto.includes("IMG_0001.HEIC — fora dos capítulos")) throw new Error("a foto solta não aparece pelo nome");
+  if (!texto.includes(`IMG_0002.HEIC — ${rows[0].nome}`)) throw new Error("a foto do capítulo não diz o capítulo");
+  return `IMG_0001.HEIC (solta) · IMG_0002.HEIC (${rows[0].nome})`;
+});
+
 await limparRodada(db);
 await db.end();
 

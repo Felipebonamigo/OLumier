@@ -1,6 +1,19 @@
 @import "tailwindcss";
 
 /*
+  `paisagem:` — a tela mais larga que alta, a partir da largura do `md`.
+
+  Para capa que põe a foto ao LADO do texto (a "Convite"). Pela largura só, o
+  iPad em pé (820 a 1024 px) entrava no lado a lado: a foto deitada virava uma
+  coluna estreita e alta, cortada pela metade, e o nome ia parar no pé da outra
+  coluna. A Carol, com a galeria aberta no iPad (06/10/2026): "gostaria que
+  ficasse igual no celular". Em pé, qualquer tela empilha como o celular;
+  deitada, o lado a lado continua — computador, iPad deitado, celular deitado
+  (onde a tela é baixa e empilhar esconderia o nome).
+*/
+@custom-variant paisagem (@media (width >= 48rem) and (orientation: landscape));
+
+/*
   Galeria Átomo — tokens visuais.
 
   A paleta é a sala de projeção: preto AZULADO (sala escura é fria), luz PRATA

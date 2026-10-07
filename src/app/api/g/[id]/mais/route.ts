@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { consultarUm } from "@/lib/db";
-import { listarMediasPublicas, temAcessoLiberado } from "@/lib/galerias-publicas";
+import { donoLogado, listarMediasPublicas, temAcessoLiberado } from "@/lib/galerias-publicas";
 import { secaoPeloApelido } from "@/lib/secoes";
 import { galeriasNoAr } from "@/lib/assinatura";
 import { asaasConfigurado } from "@/lib/asaas";
@@ -53,27 +53,40 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
 
   const galeria = await consultarUm<{
+    publicada: boolean;
+    tenant_id: string;
     senha_hash: string | null;
     estado: string;
     expira_em: string | null;
     estudio_status: string;
     estudio_trial_ate: string | null;
   }>(
-    `select g.senha_hash, g.estado, g.expira_em,
+    `select g.publicada, g.tenant_id, g.senha_hash, g.estado, g.expira_em,
             t.status as estudio_status, t.trial_ate as estudio_trial_ate
        from galerias g join tenants t on t.id = g.tenant_id
-      where g.id = $1 and g.publicada`,
+      where g.id = $1`,
     [id],
   );
   if (!galeria) return NextResponse.json({ erro: "sem acesso" }, { status: 404 });
-  if (!galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado())) {
+  /* O dono passa por onde a página o deixa passar — rascunho, estúdio fora do
+     ar e a própria senha — e só é perguntado quando uma delas ia fechar. Ver
+     `donoLogado`. Cofre e prazo vencido fecham para ele também, como lá. */
+  let dono: boolean | undefined;
+  const ehDono = async () => (dono ??= await donoLogado(galeria.tenant_id));
+  if (!galeria.publicada && !(await ehDono())) {
+    return NextResponse.json({ erro: "sem acesso" }, { status: 404 });
+  }
+  if (
+    !galeriasNoAr({ status: galeria.estudio_status, trial_ate: galeria.estudio_trial_ate }, asaasConfigurado()) &&
+    !(await ehDono())
+  ) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   }
   if (galeria.estado !== "online") return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   if (galeria.expira_em && new Date(galeria.expira_em) < new Date()) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 409 });
   }
-  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash))) {
+  if (galeria.senha_hash && !(await temAcessoLiberado(id, galeria.senha_hash)) && !(await ehDono())) {
     return NextResponse.json({ erro: "sem acesso" }, { status: 401 });
   }
 

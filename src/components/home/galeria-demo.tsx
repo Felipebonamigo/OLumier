@@ -36,6 +36,9 @@ import { useEhCelular } from "./usa-celular";
  * a moldura. Por isso a tela virtual segue a janela: computador desenha em
  * 1200 px, celular em 390 px (ver `useEhCelular`). A altura da capa, que no
  * produto é `vh`, vira pixels da janela virtual pela variável `--g-capa-h`.
+ * A "Convite" olha também se a janela está deitada (`paisagem:`, 06/10/2026):
+ * no iPad em pé ela empilha mesmo na tela de 1200 px — é o desenho que o iPad
+ * mostra de verdade, e a moldura continua cheia.
  *
  * Até medir a moldura, o conteúdo fica transparente: a escala depende da
  * largura, e desenhar antes seria mostrar a galeria no tamanho errado por um
