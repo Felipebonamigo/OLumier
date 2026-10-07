@@ -42,8 +42,11 @@ import {
   ondeAparece,
 } from "../src/config/home-demonstracao.ts";
 import {
+  centroDaFaixa,
   chaveDaFotoDaHome,
   ehChaveDaFotoDaHome,
+  focoQueCentraliza,
+  fracaoVistaNaFaixa,
   mesclarFotosDaHome,
   normalizarFoco,
   recusaDaFotoDaHome,
@@ -120,6 +123,59 @@ try {
     const f = mesclarFotosDaHome(FOTOS_PADRAO, [linha("delicada-1", { chave_miniatura: "qualquer/coisa.webp" })]);
     igual(f["delicada-1"].miniatura, undefined, "miniatura");
     if (!f["delicada-1"].src.startsWith("/api/home/foto/delicada-1")) throw new Error("a troca se perdeu");
+  });
+
+  /*
+   * ── O FOCO DAS FOTOS PADRÃO (07/10/2026) ─────────────────────────────────
+   *
+   * Juan: "não tô conseguindo arrumar o centro focal, de nenhuma das fotos".
+   * O foco só se marcava em foto TROCADA; as fotos de verdade são as padrão.
+   * Agora o ajuste mora em `focos_da_home` e vale por cima do foco do código —
+   * mas não por cima do foco de uma foto trocada, que o admin marcou olhando
+   * para ela.
+   */
+  await etapa("o foco ajustado vale por cima do foco do código, só no lugar dele", () => {
+    const f = mesclarFotosDaHome(FOTOS_PADRAO, [], [{ lugar: "delicada-1", foco_x: 62, foco_y: 18 }]);
+    igual([f["delicada-1"].focoX, f["delicada-1"].focoY], [62, 18], "foco ajustado");
+    igual(f["delicada-1"].src, FOTOS_PADRAO["delicada-1"].src, "a foto continua a padrão");
+    igual(f["delicada-1"].descricao, FOTOS_PADRAO["delicada-1"].descricao, "a descrição continua a do site");
+    igual(f["delicada-2"], FOTOS_PADRAO["delicada-2"], "o vizinho não mudou");
+  });
+
+  await etapa("foto trocada mantém o foco da própria linha — o ajuste da padrão não a toca", () => {
+    const f = mesclarFotosDaHome(FOTOS_PADRAO, [linha("delicada-1")], [{ lugar: "delicada-1", foco_x: 62, foco_y: 18 }]);
+    igual([f["delicada-1"].focoX, f["delicada-1"].focoY], [40, 30], "foco da troca");
+  });
+
+  await etapa("ajuste de lugar que saiu do código é ignorado, e foco fora da foto volta para dentro", () => {
+    igual(mesclarFotosDaHome(FOTOS_PADRAO, [], [{ lugar: "foto1", foco_x: 10, foco_y: 10 }]), FOTOS_PADRAO, "lugar velho");
+    const f = mesclarFotosDaHome(FOTOS_PADRAO, [], [{ lugar: "delicada-2", foco_x: 400, foco_y: -3 }]);
+    igual([f["delicada-2"].focoX, f["delicada-2"].focoY], [100, 0], "foco");
+  });
+
+  /*
+   * O clique CENTRALIZA o recorte (07/10/2026). `object-position: y%` deixa o
+   * ponto de y% da foto perto do topo da faixa, não no meio; clicar no rosto
+   * cortava a cabeça. Foto 2:3 numa faixa 5:2 mostra 26,7% da altura.
+   */
+  await etapa("o clique no rosto deixa o rosto no meio da faixa larga, e o marcador volta ao clique", () => {
+    const vista = fracaoVistaNaFaixa(1333, 2000);
+    if (Math.abs(vista - 0.2666) > 0.001) throw new Error(`vista ${vista}`);
+    /* rosto a 28% da altura: o recorte vai de 14,7% a 41,3% — o rosto no meio */
+    const y = focoQueCentraliza(28, vista);
+    igual(y, 20, "foco que centraliza o rosto a 28%");
+    const topo = (y / 100) * (1 - vista) * 100;
+    if (Math.abs(topo + 50 * vista - 28) > 1) throw new Error(`o meio do recorte caiu em ${topo + 50 * vista}%`);
+    if (Math.abs(centroDaFaixa(y, vista) - 28) > 1) throw new Error("o marcador não volta ao ponto clicado");
+  });
+
+  await etapa("rosto na borda da foto encosta o foco em 0 ou 100, e foto larga demais não corta na vertical", () => {
+    const vista = fracaoVistaNaFaixa(1333, 2000);
+    igual(focoQueCentraliza(3, vista), 0, "rosto colado no topo");
+    igual(focoQueCentraliza(98, vista), 100, "rosto colado na base");
+    igual(fracaoVistaNaFaixa(3000, 1000), 1, "foto mais larga que a faixa");
+    igual(focoQueCentraliza(40, 1), 40, "sem corte vertical, o clique vale como está");
+    igual(fracaoVistaNaFaixa(0, 0), 1, "medida inválida");
   });
 
   console.log("\nA chave que o navegador manda\n");
@@ -238,6 +294,20 @@ try {
     igual(f["delicada-2"], FOTOS_PADRAO["delicada-2"], "o resto");
   });
 
+  await etapa("o ajuste de foco da padrão, no banco, chega à home — e a troca não é afetada", async () => {
+    await db.query(
+      "insert into focos_da_home (lugar, foco_x, foco_y) values ('delicada-2', 33, 12), ('delicada-1', 70, 70)",
+    );
+    try {
+      const f = await fotosDaHome();
+      igual([f["delicada-2"].focoX, f["delicada-2"].focoY], [33, 12], "ajustado");
+      igual(f["delicada-2"].src, FOTOS_PADRAO["delicada-2"].src, "continua a foto padrão");
+      igual([f["delicada-1"].focoX, f["delicada-1"].focoY], [40, 30], "delicada-1 está trocada: vale a linha dela");
+    } finally {
+      await db.query("delete from focos_da_home");
+    }
+  });
+
   let servidor = false;
   try {
     servidor = (await fetch(`${BASE}/api/healthz`, { signal: AbortSignal.timeout(4000) })).ok;
@@ -310,6 +380,17 @@ try {
       }
       const { rows } = await db.query("select count(*)::int n from fotos_da_home where lugar = 'delicada-1'");
       igual(rows[0].n, 1, "a troca continua lá — o DELETE recusado não apagou nada");
+    });
+
+    await etapa("estúdio comum não ajusta foco, nem com o corpo certo", async () => {
+      const r = await fetch(`${BASE}/api/admin/home/foto`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", cookie },
+        body: JSON.stringify({ lugar: "delicada-2", focoX: 5, focoY: 5 }),
+      });
+      igual(r.status, 404, "status");
+      const { rows } = await db.query("select count(*)::int n from focos_da_home");
+      igual(rows[0].n, 0, "nada foi gravado");
     });
   }
 } finally {

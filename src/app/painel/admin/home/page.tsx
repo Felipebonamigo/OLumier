@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { exigirAdmin, metadataDeAdmin } from "@/lib/portao-admin";
-import { fotosDaHome, trocasDaHome } from "@/lib/fotos-da-home";
+import { focosDaHome, fotosDaHome, trocasDaHome } from "@/lib/fotos-da-home";
 import { armazenamentoConfigurado } from "@/lib/r2";
 import {
+  FOTOS_PADRAO,
   GALERIAS_DA_HOME,
   identidadePorId,
   lugaresDaGaleria,
@@ -39,13 +40,15 @@ export const dynamic = "force-dynamic";
  */
 export default async function FotosDaHomePage() {
   await exigirAdmin();
-  const [fotos, trocas] = await Promise.all([
+  const [fotos, trocas, focos] = await Promise.all([
     fotosDaHome(),
     /* Sem a migração 043 a tabela não existe: a tela abre com tudo no padrão
        em vez de cair. */
     trocasDaHome().catch(() => []),
+    focosDaHome(),
   ]);
   const porLugar = new Map(trocas.map((t) => [t.lugar, t]));
+  const comFocoAjustado = new Set(focos.map((f) => f.lugar));
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -58,7 +61,7 @@ export default async function FotosDaHomePage() {
         Cada foto tem um lugar na página. A troca vale para quem abrir a página em seguida, e
         &ldquo;Voltar à padrão&rdquo; devolve a foto que vem com o site. Envie a foto em alta — a
         página prepara os tamanhos sozinha. Foto vertical funciona em todos os lugares; na capa larga,
-        marque o foco no rosto.
+        marque o foco no rosto — nas fotos padrão também, sem precisar trocá-las.
       </p>
       <p className="mt-2 text-sm">
         <Link href="/" target="_blank" className="text-acento underline underline-offset-4">
@@ -81,14 +84,14 @@ export default async function FotosDaHomePage() {
               {ident?.rotulo}
               {ident?.pretoEBranco ? " · aparece em preto e branco na página" : ""}
             </p>
-            <Lugares lugares={lugaresDaGaleria(g)} fotos={fotos} porLugar={porLugar} />
+            <Lugares lugares={lugaresDaGaleria(g)} fotos={fotos} porLugar={porLugar} ajustados={comFocoAjustado} />
           </section>
         );
       })}
 
       <section className="mt-10">
         <h2 className="text-lg font-semibold">Fora das galerias</h2>
-        <Lugares lugares={["respiro"]} fotos={fotos} porLugar={porLugar} />
+        <Lugares lugares={["respiro"]} fotos={fotos} porLugar={porLugar} ajustados={comFocoAjustado} />
       </section>
     </main>
   );
@@ -98,10 +101,12 @@ function Lugares({
   lugares,
   fotos,
   porLugar,
+  ajustados,
 }: {
   lugares: LugarDaHome[];
   fotos: FotosDaHome;
   porLugar: Map<string, { trocada_em: Date; quem: string | null }>;
+  ajustados: Set<string>;
 }) {
   return (
     <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -117,6 +122,8 @@ function Lugares({
             onde={ondeAparece(lugar)}
             foto={fotos[lugar]}
             trocada={troca ? { quando: dataHora(troca.trocada_em), quem: troca.quem } : null}
+            focoAjustado={ajustados.has(lugar)}
+            focoDoSite={{ x: FOTOS_PADRAO[lugar].focoX, y: FOTOS_PADRAO[lugar].focoY }}
           />
         );
       })}

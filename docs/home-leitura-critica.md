@@ -214,3 +214,32 @@ parecerem de outro fotógrafo) pode sair.
 **Verificado no Chromium** (1440 e 390): sem nome de casal real no texto nem nos
 endereços das imagens, sem rolagem lateral, sem erro no console. Safari segue
 pendente.
+
+### 7.2 O foco das fotos padrão (07/10/2026)
+
+O Juan, gravando um vídeo da home: "não tô conseguindo arrumar o centro focal,
+de nenhuma das fotos" e "tá cortando a cabeça da mulher". Duas causas, as duas
+resolvidas:
+
+- **A tela do admin só deixava marcar o foco em foto trocada.** As fotos de
+  verdade da Carol e do Juan são as padrão, que moram no repositório — então o
+  foco delas só mudava com publicação de código. Agora o clique na foto padrão
+  grava o foco em `focos_da_home` (migração 062), por cima do foco do código, sem
+  trocar a foto. "Voltar ao foco do site" apaga o ajuste. A foto trocada segue
+  com o foco da própria linha. A descrição da foto padrão continua sendo do
+  código: para escrever outra, troca-se a foto.
+- **Vários focos padrão cortavam o rosto na capa larga.** Foram revistos olhando
+  o recorte 5:2 de cada foto (a faixa "Recorte numa capa larga" da tela do
+  admin): a do casal no banquinho (a que o Juan viu) e mais seis das fotos do
+  Juan estavam com a cabeça fora do quadro. As que já vêm de detalhe — mãos,
+  tronco, rosto fora da própria foto — ficaram como estão.
+
+**O clique centraliza o recorte.** O foco é guardado como `object-position`
+(em %), e em % a borda de cima do recorte fica em y% da folga: o ponto de y% da
+foto cai perto do TOPO da faixa larga, não no meio. Clicar no rosto deixava a
+cabeça rente à borda — o mesmo "corta a cabeça". A tela agora converte o clique
+no foco que deixa o ponto no MEIO da faixa (`focoQueCentraliza`, em
+`lib/fotos-da-home-regras.ts`), e o marcador mostra o meio do recorte. O que
+já estava salvo não muda: o marcador só passa a cair onde o recorte de fato
+está centrado.
+

@@ -25,7 +25,8 @@ import {
  *
  *   POST   → duas URLs de envio (foto e miniatura)
  *   PUT    → confere o que REALMENTE chegou e grava o lugar
- *   PATCH  → descrição e foco de uma foto já trocada
+ *   PATCH  → descrição e foco de uma foto já trocada; só o foco, se ainda for
+ *            a padrão (tabela `focos_da_home`); `voltarFoco` devolve o do site
  *   DELETE → volta o lugar para a foto padrão
  *
  * Quem não é admin recebe 404, como nas páginas do admin (ver
@@ -154,13 +155,24 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  if (!(await adminDaRequisicao())) return NAO_EXISTE();
+  const admin = await adminDaRequisicao();
+  if (!admin) return NAO_EXISTE();
   const corpo = await corpoDe(request);
   const lugar = lugarDe(corpo);
   if (!corpo || !lugar) return NextResponse.json({ erro: "Lugar inválido." }, { status: 400 });
 
-  /* Só a foto TROCADA tem descrição e foco no banco; a padrão tem os dela no
-     repositório. Ajustar a padrão aqui criaria uma linha sem foto. */
+  /* Devolve o foco que vem com o site. Idempotente, e vale para qualquer
+     lugar: sem linha, não há o que apagar. */
+  if (corpo.voltarFoco === true) {
+    await consultarUm("delete from focos_da_home where lugar = $1", [lugar]);
+    revalidarHome();
+    return NextResponse.json({ ok: true });
+  }
+
+  /* A foto TROCADA tem descrição e foco na própria linha. A padrão tem a
+     descrição no repositório — que o admin não muda daqui — e o foco ajustado
+     vai para `focos_da_home`, e não para uma linha de `fotos_da_home` sem
+     foto (migração 062). */
   const r = await consultarUm<{ lugar: string }>(
     `update fotos_da_home set
        descricao = coalesce($2, descricao),
@@ -175,7 +187,23 @@ export async function PATCH(request: NextRequest) {
     ],
   );
   if (!r) {
-    return NextResponse.json({ erro: "Esta foto ainda é a padrão — troque a foto primeiro." }, { status: 409 });
+    if ("descricao" in corpo) {
+      return NextResponse.json(
+        { erro: "A descrição da foto padrão vem do site — troque a foto para escrever outra." },
+        { status: 409 },
+      );
+    }
+    if (!("focoX" in corpo) || !("focoY" in corpo)) {
+      return NextResponse.json({ erro: "Marque o foco na foto." }, { status: 400 });
+    }
+    await consultarUm(
+      `insert into focos_da_home (lugar, foco_x, foco_y, ajustado_em, ajustado_por)
+       values ($1, $2, $3, now(), $4)
+       on conflict (lugar) do update set
+         foco_x = excluded.foco_x, foco_y = excluded.foco_y,
+         ajustado_em = now(), ajustado_por = excluded.ajustado_por`,
+      [lugar, normalizarFoco(corpo.focoX), normalizarFoco(corpo.focoY), admin.id],
+    );
   }
   revalidarHome();
   return NextResponse.json({ ok: true });

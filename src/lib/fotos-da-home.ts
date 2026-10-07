@@ -1,7 +1,7 @@
 import "server-only";
 import { consultar } from "@/lib/db";
 import { FOTOS_PADRAO, type FotosDaHome } from "@/config/home-demonstracao";
-import { mesclarFotosDaHome, type LinhaFotoDaHome } from "@/lib/fotos-da-home-regras";
+import { mesclarFotosDaHome, type LinhaFocoDaHome, type LinhaFotoDaHome } from "@/lib/fotos-da-home-regras";
 
 /**
  * As fotos da página inicial: o padrão do repositório com as trocas do admin
@@ -14,14 +14,32 @@ import { mesclarFotosDaHome, type LinhaFotoDaHome } from "@/lib/fotos-da-home-re
  */
 export async function fotosDaHome(): Promise<FotosDaHome> {
   try {
-    const linhas = await consultar<LinhaFotoDaHome>(
-      `select lugar, chave, chave_miniatura, largura, altura, descricao, foco_x, foco_y
-         from fotos_da_home`,
-    );
-    return mesclarFotosDaHome(FOTOS_PADRAO, linhas);
+    const [linhas, focos] = await Promise.all([
+      consultar<LinhaFotoDaHome>(
+        `select lugar, chave, chave_miniatura, largura, altura, descricao, foco_x, foco_y
+           from fotos_da_home`,
+      ),
+      focosDaHome(),
+    ]);
+    return mesclarFotosDaHome(FOTOS_PADRAO, linhas, focos);
   } catch (e) {
     console.error("[home] fotos do admin indisponíveis, usando as padrão:", e);
     return FOTOS_PADRAO;
+  }
+}
+
+/**
+ * Os ajustes de foco das fotos padrão (migração 062). NUNCA LANÇA, pelo mesmo
+ * motivo de `fotosDaHome`: antes da migração a tabela não existe, e isso não
+ * pode levar junto as trocas de foto — sem ela, a home só fica com o foco do
+ * código.
+ */
+export async function focosDaHome(): Promise<LinhaFocoDaHome[]> {
+  try {
+    return await consultar<LinhaFocoDaHome>("select lugar, foco_x, foco_y from focos_da_home");
+  } catch (e) {
+    console.error("[home] focos ajustados indisponíveis, usando os do código:", e);
+    return [];
   }
 }
 
