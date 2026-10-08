@@ -1,8 +1,10 @@
+import type { ReactNode } from "react";
 import { desenhoDoTitulo, temPalavraQueNaoCabe } from "@/lib/titulo-da-capa";
 import {
   FONTES_TITULO,
   medidaDaLogo,
   proporcaoDaLogo,
+  posicaoDaLogo,
   fonteDoDetalhe,
   pesoDoTitulo,
   type Aparencia,
@@ -394,6 +396,78 @@ export function GaleriaCapa({
       </p>
     ) : null;
 
+  /*
+   * ── A PILHA DA CAPA: LOGO, NOME E DATA, NA ORDEM ESCOLHIDA (08/10/2026) ──
+   *
+   * Pedido de uma aluna, sobre a imersa: "a primeira coisa que aparece na foto
+   * é o logo e eu acho que pesa o layout" — ela queria a logo no início, no meio
+   * ou no final. Ver `PosicaoLogo`.
+   *
+   * Cada desenho de capa entrega o NOME (sobrancelha + título), a LEGENDA (data
+   * e local) e as MARGENS que já usava; aqui só se decide em que ordem eles
+   * saem. Quando a escolha é a que o desenho já fazia, o que sai é exatamente o
+   * que ele desenhava antes — mesmas tags, mesmas classes —, e é por isso que
+   * as margens vêm de quem chama: cada capa tem o seu ritmo, e uma tabela única
+   * aqui mudaria o desenho de capas entregues.
+   *
+   *   mtNome     margem do nome quando a logo vem ANTES dele;
+   *   mtLegenda  margem da legenda, onde quer que a logo esteja;
+   *   mtLogo     margem da logo quando algo vem antes dela.
+   *
+   * É uma função e não um componente: componente definido dentro de outro é
+   * recriado a cada desenho, e a logo piscaria a cada atualização da prévia.
+   */
+  const posicaoLogo = posicaoDaLogo(aparencia);
+  const pilha = ({
+    nome,
+    legenda,
+    mtPrimeiro = "",
+    mtNome = "",
+    mtLegenda = "",
+    mtLogo = "",
+    classeLogo = "",
+  }: {
+    /** O nome. Como função, recebe a margem de cima que deve usar — a redonda e
+        o arco têm essa margem DENTRO da sobrancelha, e não num embrulho. */
+    nome: ReactNode | ((mt: string) => ReactNode);
+    legenda: ReactNode;
+    /** Margem do PRIMEIRO item da pilha, seja ele a logo ou o nome. */
+    mtPrimeiro?: string;
+    mtNome?: string;
+    mtLegenda?: string;
+    mtLogo?: string;
+    classeLogo?: string;
+  }) => {
+    const comMargem = (classe: string, filho: ReactNode) =>
+      classe ? <div className={classe}>{filho}</div> : filho;
+    const desenhaNome = (mt: string) => (typeof nome === "function" ? nome(mt) : comMargem(mt, nome));
+    if (posicaoLogo === "inicio") {
+      return (
+        <>
+          {semAssinatura ? null : comMargem(mtPrimeiro, <Estudio className={classeLogo} />)}
+          {desenhaNome(mtNome)}
+          {comMargem(mtLegenda, legenda)}
+        </>
+      );
+    }
+    /* Sem assinatura o embrulho não existe: vazio, o `mt` dele deixaria um vão
+       morto no pé da capa. */
+    const logo = semAssinatura ? null : comMargem(mtLogo, <Estudio className={classeLogo} />);
+    return posicaoLogo === "meio" ? (
+      <>
+        {desenhaNome(mtPrimeiro)}
+        {logo}
+        {comMargem(mtLegenda, legenda)}
+      </>
+    ) : (
+      <>
+        {desenhaNome(mtPrimeiro)}
+        {comMargem(mtLegenda, legenda)}
+        {logo}
+      </>
+    );
+  };
+
   // --- IMERSA: foto ocupa a tela, texto por cima -----------------------------
   if (aparencia.capa === "imersa" && urlImagem) {
     return (
@@ -419,14 +493,18 @@ export function GaleriaCapa({
           }}
         />
         <div className={`relative z-10 w-full max-w-3xl px-6 pb-16 ${alinharTexto}`}>
-          <Estudio />
-          <div className="mt-5">
-            <Rotulo />
-            <Titulo base={TITULO_GRANDE} />
-          </div>
-          <div className="mt-4">
-            <Legenda />
-          </div>
+          {pilha({
+            nome: (
+              <>
+                <Rotulo />
+                <Titulo base={TITULO_GRANDE} />
+              </>
+            ),
+            legenda: <Legenda />,
+            mtNome: "mt-5",
+            mtLegenda: "mt-4",
+            mtLogo: "mt-5",
+          })}
         </div>
       </header>
     );
@@ -513,20 +591,22 @@ export function GaleriaCapa({
           />
         </div>
         <div className={`px-6 py-10 sm:py-12 ${alinharTexto}`}>
-          <Rotulo />
-          <div className="mt-2">
-            <Titulo base={TITULO_GRANDE} />
-          </div>
-          <div className="mt-4">
-            <Legenda />
-          </div>
-          {/* Como na redonda e no arco: o embrulho sai junto, senão o `mt-6`
-              dele deixa um vão morto no pé da capa. */}
-          {!semAssinatura && (
-            <div className="mt-6">
-              <Estudio />
-            </div>
-          )}
+          {/* Como na redonda e no arco: o embrulho da logo sai junto com ela,
+              senão o `mt-6` dele deixa um vão morto no pé da capa. */}
+          {pilha({
+            nome: (
+              <>
+                <Rotulo />
+                <div className="mt-2">
+                  <Titulo base={TITULO_GRANDE} />
+                </div>
+              </>
+            ),
+            legenda: <Legenda />,
+            mtNome: "mt-6",
+            mtLegenda: "mt-4",
+            mtLogo: "mt-6",
+          })}
         </div>
       </header>
     );
@@ -540,14 +620,18 @@ export function GaleriaCapa({
         className={`px-6 py-20 sm:py-28 ${grudada} ${alinharTexto}`}
         style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
       >
-        <Estudio />
-        <div className="mt-8">
-          <Rotulo />
-          <Titulo base={TITULO_GRANDE} />
-        </div>
-        <div className="mt-6">
-          <Legenda />
-        </div>
+        {pilha({
+          nome: (
+            <>
+              <Rotulo />
+              <Titulo base={TITULO_GRANDE} />
+            </>
+          ),
+          legenda: <Legenda />,
+          mtNome: "mt-8",
+          mtLegenda: "mt-6",
+          mtLogo: "mt-8",
+        })}
         {/*
           ── A JORNAL NÃO TEM MAIS BOTÃO (24/09/2026) ────────────────────────
 
@@ -654,7 +738,7 @@ export function GaleriaCapa({
               filhos, e é o de cima que empurra o texto para o pé da coluna. Com
               um filho só, o texto subiria para o topo — a capa CONVITE mudaria
               de desenho por causa de uma escolha que era só sobre a logo. */}
-          {semAssinatura ? (
+          {semAssinatura || posicaoLogo !== "inicio" ? (
             <span aria-hidden />
           ) : (
             <Estudio className={aEsquerda ? "self-start" : "self-center"} />
@@ -690,6 +774,14 @@ export function GaleriaCapa({
                 faz ela parecer papel de convite. */}
             <Rotulo />
             <Titulo base={TITULO_MEDIO} />
+            {/* A logo no MEIO e no FIM mora dentro deste bloco (o topo da coluna
+                fica reservado, vazio, para o texto continuar no pé). Ver
+                `PosicaoLogo`. */}
+            {posicaoLogo === "meio" && !semAssinatura && (
+              <div className="mt-6">
+                <Estudio />
+              </div>
+            )}
             <div className="mt-6">
               <Legenda />
             </div>
@@ -722,6 +814,11 @@ export function GaleriaCapa({
             >
               {dados.chamada ?? "Ver galeria"}
             </a>
+            {posicaoLogo === "fim" && !semAssinatura && (
+              <div className="mt-8">
+                <Estudio />
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -763,14 +860,19 @@ export function GaleriaCapa({
         <div
           className={`flex flex-col justify-center px-8 py-16 md:px-14 ${alinharTexto}`}
         >
-          <Estudio className={aEsquerda ? "self-start" : "self-center"} />
-          <div className="mt-6">
-            <Rotulo />
-            <Titulo base={TITULO_MEDIO} />
-          </div>
-          <div className="mt-5">
-            <Legenda />
-          </div>
+          {pilha({
+            nome: (
+              <>
+                <Rotulo />
+                <Titulo base={TITULO_MEDIO} />
+              </>
+            ),
+            legenda: <Legenda />,
+            mtNome: "mt-6",
+            mtLegenda: "mt-5",
+            mtLogo: "mt-6",
+            classeLogo: aEsquerda ? "self-start" : "self-center",
+          })}
         </div>
       </header>
     );
@@ -818,22 +920,27 @@ export function GaleriaCapa({
           />
         </div>
 
-        <div className="mt-8">
-          <Rotulo />
-        </div>
-        <div className="mt-2">
-          <Titulo base={TITULO_MIUDO} />
-        </div>
-        <div className="mt-4">
-          <Legenda />
-        </div>
-        {/* O embrulho sai junto: vazio, o `mt-6` dele deixaria um vão morto no pé
-            da capa — espaço reservado para uma assinatura que não vem. */}
-        {!semAssinatura && (
-          <div className="mt-6">
-            <Estudio />
-          </div>
-        )}
+        {/* O `mt-8` é o respiro entre a foto e o primeiro item da pilha (a logo,
+            ou a sobrancelha). O embrulho da logo sai junto com ela: vazio, o
+            `mt-6` dele deixaria um vão morto no pé da capa — espaço reservado
+            para uma assinatura que não vem. */}
+        {pilha({
+          nome: (mt) => (
+            <>
+              <div className={mt}>
+                <Rotulo />
+              </div>
+              <div className="mt-2">
+                <Titulo base={TITULO_MIUDO} />
+              </div>
+            </>
+          ),
+          legenda: <Legenda />,
+          mtPrimeiro: "mt-8",
+          mtNome: "mt-6",
+          mtLegenda: "mt-4",
+          mtLogo: "mt-6",
+        })}
       </header>
     );
   }
@@ -845,14 +952,18 @@ export function GaleriaCapa({
       className={`px-6 py-16 sm:py-20 ${grudada} ${alinharTexto}`}
       style={{ borderBottom: "1px solid var(--g-linha)", background: "var(--g-fundo)" }}
     >
-      <Estudio />
-      <div className="mt-6">
-        <Rotulo />
-        <Titulo base={TITULO_MIUDO} />
-      </div>
-      <div className="mt-4">
-        <Legenda />
-      </div>
+      {pilha({
+        nome: (
+          <>
+            <Rotulo />
+            <Titulo base={TITULO_MIUDO} />
+          </>
+        ),
+        legenda: <Legenda />,
+        mtNome: "mt-6",
+        mtLegenda: "mt-4",
+        mtLogo: "mt-6",
+      })}
     </header>
   );
 }

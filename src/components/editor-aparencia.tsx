@@ -15,6 +15,8 @@ import {
   TAMANHO_LOGO,
   proporcaoDaLogo,
   tamanhoLogoEquivalente,
+  posicaoDaLogo,
+  OPCOES_POSICAO_LOGO,
   temPesoLeve,
   comFormatoDe,
   type Aparencia,
@@ -256,6 +258,44 @@ function BarraDaLogo({ ap, mudar, logo }: PecaProps & { logo: LogoDoEditor | nul
           </button>
         ))}
       </div>
+
+      {/*
+        ONDE A LOGO FICA (08/10/2026). Uma aluna, sobre a capa imersa: "a
+        primeira coisa que aparece na foto é o logo e eu acho que pesa o layout.
+        Daí tenho que deixar sem" — ou seja, perdia a assinatura para ganhar
+        leveza. Aqui ela escolhe o degrau da pilha (logo, nome, data) em que a
+        logo fica, e a prévia mostra na hora. Aparece com ou sem arquivo de logo:
+        sem arquivo, é o nome do estúdio em texto que muda de lugar.
+      */}
+      {!semLogo && (
+        <div className="mt-3">
+          <span className="block text-xs font-medium text-texto-soft">Posição da logo</span>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {OPCOES_POSICAO_LOGO.map((op) => {
+              const ativo = posicaoDaLogo(ap) === op.id;
+              return (
+                <button
+                  key={op.id}
+                  type="button"
+                  title={op.desc}
+                  aria-pressed={ativo}
+                  onClick={() => mudar({ ...ap, posicaoLogo: op.id })}
+                  className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                    ativo
+                      ? "border-acento bg-acento/10 text-acento-alto"
+                      : "border-linha text-texto-soft hover:border-acento hover:bg-acento/5 hover:text-texto"
+                  }`}
+                >
+                  {op.nome}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1 text-[11px] leading-snug text-texto-faint">
+            Início: acima do nome. Meio: entre o nome e a data. Final: no pé da capa.
+          </p>
+        </div>
+      )}
 
       {logo && !semLogo && (
         <div className="mt-3">
@@ -753,6 +793,11 @@ const GRUPOS = [
 ] as const;
 type Grupo = (typeof GRUPOS)[number]["id"];
 
+/** Edições mais próximas que isto entram como UM passo do desfazer. Ver `registrarPasso`. */
+const JUNTA_MS = 800;
+/** Quantos passos a tela lembra. Uma sessão de ajuste são dezenas, e não milhares. */
+const LIMITE_DO_DESFAZER = 100;
+
 export function EditorAparencia({
   galeriaId,
   caminhoPublico,
@@ -814,6 +859,31 @@ export function EditorAparencia({
   const [erro, setErro] = useState<string | null>(null);
   const router = useRouter();
   const agendado = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /*
+   * ── DESFAZER E REFAZER (08/10/2026) ──────────────────────────────────────
+   *
+   * Uma aluna: "opção de voltar/desfazer ação quando tô arrumando como quero a
+   * capa, as cores, etc." Experimentar é o trabalho desta aba — e ela só tinha
+   * "descartar", que joga fora TUDO desde a última publicação. Errar o terceiro
+   * de dez ajustes custava os dez.
+   *
+   * Cada edição passa por `mudar`, e é lá que a pilha cresce. Duas regras:
+   *
+   *   · Uma rajada vira UMA entrada. Arrastar a barrinha da logo, ou o seletor
+   *     de cor, dispara dezenas de `mudar` por segundo; um "desfazer" por pixel
+   *     seria desfazer nenhum. Edições separadas por menos de `JUNTA_MS` entram
+   *     como um passo só — e o passo guardado é o estado de ANTES da rajada.
+   *   · Uma edição nova apaga o que se podia refazer, como em qualquer editor.
+   *
+   * É memória da tela (sai ao recarregar) e não vai para o banco: o que o
+   * servidor guarda é o rascunho, que já é o estado de agora. Desfazer volta a
+   * gravá-lo, então o rascunho nunca fica diferente do que se vê.
+   */
+  const [historico, setHistorico] = useState<{ passado: Aparencia[]; futuro: Aparencia[] }>({
+    passado: [],
+    futuro: [],
+  });
+  const ultimaEdicao = useRef(0);
 
   /*
    * ── DE SALVAMENTO AUTOMÁTICO PARA UM ATO (31/08/2026) ────────────────────
@@ -964,6 +1034,40 @@ export function EditorAparencia({
    * caminho.
    */
   function mudar(novo: Aparencia) {
+    if (JSON.stringify(novo) !== JSON.stringify(ap)) registrarPasso();
+    aplicar(novo);
+  }
+
+  /** Põe o estado de AGORA no passado, salvo se ainda é a mesma rajada de edição. */
+  function registrarPasso() {
+    const agora = Date.now();
+    const mesmaRajada = agora - ultimaEdicao.current < JUNTA_MS;
+    ultimaEdicao.current = agora;
+    const atual = ap;
+    setHistorico((h) => ({
+      passado: mesmaRajada ? h.passado : [...h.passado, atual].slice(-LIMITE_DO_DESFAZER),
+      futuro: [],
+    }));
+  }
+
+  function desfazer() {
+    const alvo = historico.passado.at(-1);
+    if (!alvo) return;
+    setHistorico({ passado: historico.passado.slice(0, -1), futuro: [ap, ...historico.futuro] });
+    ultimaEdicao.current = 0;
+    aplicar(alvo);
+  }
+
+  function refazer() {
+    const [alvo, ...resto] = historico.futuro;
+    if (!alvo) return;
+    setHistorico({ passado: [...historico.passado, ap], futuro: resto });
+    ultimaEdicao.current = 0;
+    aplicar(alvo);
+  }
+
+  /* A tela, a prévia e o rascunho passam a ser `novo` — sem mexer na pilha. */
+  function aplicar(novo: Aparencia) {
     setAp(novo);
     setErro(null);
     if (agendado.current) clearTimeout(agendado.current);
@@ -1017,6 +1121,49 @@ export function EditorAparencia({
 
   useEffect(() => () => void (agendado.current && clearTimeout(agendado.current)), []);
 
+  /* Ctrl/⌘+Z desfaz; com Shift (ou Ctrl+Y) refaz. Em campo de TEXTO o atalho é do
+     campo — o rótulo do evento, o nome do estilo —, e roubá-lo apagaria uma
+     letra que a pessoa queria desfazer, ou uma escolha que ela não queria. */
+  useEffect(() => {
+    function aoTecla(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const tecla = e.key.toLowerCase();
+      const ehDesfazer = tecla === "z" && !e.shiftKey;
+      const ehRefazer = (tecla === "z" && e.shiftKey) || tecla === "y";
+      if (!ehDesfazer && !ehRefazer) return;
+      const alvo = e.target as HTMLElement | null;
+      if (alvo?.closest("textarea, [contenteditable='true'], input:not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio])")) return;
+      e.preventDefault();
+      if (ehDesfazer) desfazer();
+      else refazer();
+    }
+    window.addEventListener("keydown", aoTecla);
+    return () => window.removeEventListener("keydown", aoTecla);
+  });
+
+  const botoesDeHistorico = (
+    <span className="flex items-center gap-1">
+      <button
+        type="button"
+        onClick={desfazer}
+        disabled={historico.passado.length === 0}
+        title="Desfazer a última mudança (Ctrl+Z)"
+        className="rounded-lg border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:border-acento hover:text-texto disabled:opacity-35 disabled:hover:border-linha disabled:hover:text-texto-soft"
+      >
+        ↶ desfazer
+      </button>
+      <button
+        type="button"
+        onClick={refazer}
+        disabled={historico.futuro.length === 0}
+        title="Refazer (Ctrl+Shift+Z)"
+        className="rounded-lg border border-linha px-2.5 py-1 text-xs text-texto-soft transition hover:border-acento hover:text-texto disabled:opacity-35 disabled:hover:border-linha disabled:hover:text-texto-soft"
+      >
+        refazer ↷
+      </button>
+    </span>
+  );
+
   return (
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
@@ -1033,6 +1180,8 @@ export function EditorAparencia({
           o que parecia esquecimento do sistema. Agora a resposta está escrita:
           o nome do preset, ou "personalizado" quando a combinação é dela.
         */}
+<div className="flex flex-wrap items-center gap-3">
+          {botoesDeHistorico}
         <span
           role="status"
           aria-live="polite"
@@ -1047,6 +1196,7 @@ export function EditorAparencia({
                   ? `no ar: ${estiloNoAr.nome}`
                   : `no ar: ${PRESETS.find((p) => p.id === presetAtivo)?.nome ?? "personalizado"}`)}
         </span>
+        </div>
       </div>
 
       {/*
@@ -1785,16 +1935,20 @@ export function EditorAparencia({
               </strong>
             </span>
             <div className="flex items-center gap-2">
+              {botoesDeHistorico}
               <button
                 type="button"
                 disabled={salvando}
                 onClick={() => {
-                  setAp(salvo);
+                  /* Com o desfazer, "descartar" deixa de ser um caminho sem
+                     volta: é um passo como os outros, e o "desfazer" o traz de
+                     volta. */
+                  ultimaEdicao.current = 0;
+                  registrarPasso();
                   setApPrevia(salvo);
-                  setErro(null);
                   /* Apaga o rascunho no servidor também: senão a escolha
                      descartada voltaria na próxima vez que a tela abrisse. */
-                  void salvarRascunhoAparenciaAction(corpo(salvo));
+                  aplicar(salvo);
                 }}
                 className="rounded-lg px-3 py-2 text-xs text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
               >
