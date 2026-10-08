@@ -336,6 +336,31 @@ quem recebe o link não carrega o original só para enfeitar a capa).
   (varredura), em `destruirGaleria` e em `apagarGaleriasDaConta`; trocar ou tirar
   o clipe apaga os dois arquivos antigos.
 
+**Na hora de montar a galeria.** O Felipe mandou o reel de uma capa em vídeo — o
+vídeo ocupa a tela e, ao rolar, vem a galeria — e pediu a opção *"na hora de
+montar a galeria"*. No assistente (etapa **Estilo**, logo depois do formato)
+há o bloco **Capa em vídeo (opcional)**:
+
+- o navegador prepara o clipe ali mesmo, com a barra andando, e mostra o
+  primeiro quadro antes de criar;
+- ao criar, a ação (`criarGaleriaAction`, campo `com_clipe`) faz a galeria
+  nascer com a capa **Imersa** na altura **Tela toda** (`aparenciaComCapaEmVideo`:
+  só troca o desenho da capa quando o estilo escolhido emoldura a foto; cor,
+  letra, grade e formato continuam os do estilo) e, em vez de redirecionar,
+  devolve o id; o navegador sobe o clipe e só então leva a pessoa à galeria;
+- se o envio falhar, a galeria **já existe**: a tela diz isso e oferece abri-la
+  (Design → Capa tenta de novo). Sem o campo, nada muda no caminho de sempre;
+- vale só para quem tem Pastas e Stream liberados (`formatosLiberadosPara`),
+  como o resto do bloco de formato.
+
+**Altura "Tela toda".** A quarta altura de capa (`alturaCapa: "tela"`, 100% da
+janela): a capa é a tela inteira e a galeria começa ao rolar. É `100svh`, e não
+`100vh` — no celular o `vh` conta a barra do navegador e o botão "Ver galeria"
+ficava escondido atrás dela. Entra por último na lista (`alturaCapaVh` cai na
+"cheia" para id desconhecido e esse índice não pode andar). Nos desenhos que
+multiplicam `--g-capa-h` (Convite, Dividida) ela os faz maiores que a tela, como
+faria com qualquer altura; é escolha de quem a usa.
+
 **Conferido em navegador de verdade** (Chromium, 08/10/2026): o clipe toca mudo e
 em laço nas três salas; com "reduzir movimento" fica só a imagem; o controle do
 Design aparece e a mensagem de erro sai em português. **Não conferido aqui: a
@@ -388,4 +413,5 @@ Edge e o Safari de verdade gravam). O resto do caminho (leitura, corte do som,
 | `src/app/api/galerias/[id]/capa-video/route.ts` | recebe e confere o clipe e o primeiro quadro |
 | `src/components/capa-em-video.tsx` | o controle no Design (grupo Capa) |
 | `src/components/clipe-da-capa-video.tsx` | o `<video>` mudo em laço, que a Stream e a capa comum dividem |
+| `src/components/capa-em-video-na-criacao.tsx`, `src/app/painel/galerias/nova/assistente.tsx` | o bloco no assistente de criação e o envio depois que a galeria nasce |
 | `scripts/testar-capa-em-video.mjs` | medidas, rota, apagar, página do cliente, nome do vídeo |

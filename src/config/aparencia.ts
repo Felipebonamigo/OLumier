@@ -1,3 +1,5 @@
+import { desenhoDaCapaUsaClipe } from "@/lib/clipe-da-capa-regras";
+
 /**
  * Aparência da galeria: eixos independentes + presets.
  *
@@ -163,7 +165,7 @@ export type Peso = "leve" | "normal" | "forte";
  *
  * `cheia` é o valor de antes, para nenhuma galeria entregue mudar de cara.
  */
-export type AlturaCapa = "baixa" | "media" | "cheia";
+export type AlturaCapa = "baixa" | "media" | "cheia" | "tela";
 
 /**
  * O canto das fotos na grade.
@@ -1149,6 +1151,14 @@ export const OPCOES = {
     { id: "baixa", nome: "Baixa", desc: "Uma faixa — a galeria começa logo", vh: 42 },
     { id: "media", nome: "Média", desc: "Metade da tela", vh: 60 },
     { id: "cheia", nome: "Cheia", desc: "Quase a tela inteira", vh: 78 },
+    /*
+     * TELA TODA (08/10/2026) — a quarta, e a primeira que nenhuma galeria já
+     * entregue usa. Felipe, mostrando um reel de uma capa em vídeo: "é um vídeo
+     * na tela toda, e conforme desce, tem uma galeria". Fica por ÚLTIMO de
+     * propósito: `alturaCapaVh` cai em `OPCOES.alturaCapa[2]` (a "cheia") quando
+     * não reconhece o id, e esse índice não pode andar.
+     */
+    { id: "tela", nome: "Tela toda", desc: "A tela inteira — a galeria começa ao rolar", vh: 100 },
   ],
   /*
    * ── `pilula`: O CANTO TAMBÉM GOVERNA OS BOTÕES (29/09/2026) ─────────────
@@ -1511,6 +1521,32 @@ export function comFormatoDe(estilo: Aparencia, atual: Aparencia): Aparencia {
 }
 
 /**
+ * A aparência da galeria que NASCE com capa em vídeo (08/10/2026).
+ *
+ * Felipe, com o reel de uma capa em vídeo: "é um vídeo na tela toda, e conforme
+ * desce, tem uma galeria — coloque essa opção na hora de montar a galeria".
+ * Quem escolhe o vídeo no assistente quer EXATAMENTE isso: a capa Imersa (a foto
+ * é o fundo, o clipe toca no lugar dela) na altura "Tela toda". O resto do
+ * estilo — cor, letra, grade, formato — continua o que a pessoa escolheu.
+ *
+ * Só troca o desenho quando o escolhido não toca o clipe (Convite, Jornal…): um
+ * estilo que já tem Imersa ou Cartaz fica como está, e só a altura vem junto.
+ * Tudo isso se desfaz em Design → Capa; o clipe, aí, fica guardado.
+ */
+export function aparenciaComCapaEmVideo(inicial: unknown | null): unknown {
+  const base: Partial<Aparencia> = inicial === null || inicial === undefined ? {} : lerAparencia(inicial);
+  const capa = base.capa ?? APARENCIA_PADRAO.capa;
+  return {
+    ...base,
+    /* O clipe só toca onde a foto é o fundo; num desenho que a emoldura ele
+       ficaria guardado e a capa continuaria parada — ver `desenhoDaCapaUsaClipe`. */
+    ...(desenhoDaCapaUsaClipe(capa) ? {} : { capa: "imersa" }),
+    alturaCapa: "tela",
+  };
+}
+
+
+/**
  * A aparência com que a galeria NOVA nasce, com o formato escolhido na
  * criação por cima do estilo (30/09/2026).
  *
@@ -1660,7 +1696,10 @@ function luminancia(hex: string): number {
  */
 export function variaveisDeForma(a: Aparencia): Record<string, string> {
   return {
-    "--g-capa-h": `${alturaCapaVh(a.alturaCapa)}vh`,
+    /* `svh` na tela toda: com `vh` o celular conta a barra do navegador, e o pé
+       da capa (o botão "Ver galeria") ficava escondido atrás dela. As outras
+       alturas continuam em `vh` — são frações da tela, e a barra não pesa. */
+    "--g-capa-h": a.alturaCapa === "tela" ? "100svh" : `${alturaCapaVh(a.alturaCapa)}vh`,
     "--g-canto": `${raioDoCantoPx(a.canto)}px`,
     /* O acabamento dos botões e das fichas. Sai do MESMO eixo do canto das
        fotos, de propósito — ver `OPCOES.canto`. */

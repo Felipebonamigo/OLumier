@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { criarGaleriaAction, type EstadoGaleria } from "../../actions";
 import {
@@ -21,6 +22,8 @@ import {
 import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
 import { EsquemaDoFormato } from "@/components/esquema-do-formato";
+import { CapaEmVideoNaCriacao } from "@/components/capa-em-video-na-criacao";
+import { ErroDoClipe, enviarClipeDaCapa, type ClipePronto } from "@/lib/clipe-da-capa";
 
 /**
  * Criar galeria em três etapas.
@@ -45,7 +48,7 @@ import { EsquemaDoFormato } from "@/components/esquema-do-formato";
 
 const ETAPAS = ["Dados", "Estilo", "Capítulos"] as const;
 
-function Botao({ ultima }: { ultima: boolean }) {
+function Botao({ ultima, bloqueado }: { ultima: boolean; bloqueado: boolean }) {
   const { pending } = useFormStatus();
   /*
    * Na última etapa "Criar galeria" É o caminho, e leva a ênfase. Antes dela,
@@ -53,7 +56,7 @@ function Botao({ ultima }: { ultima: boolean }) {
    * etapas opcionais — secundário, e da mesma altura. Ver `BOTAO_BASE`.
    */
   return (
-    <BotaoEnviar carregando={pending} emLinha variante={ultima ? "primario" : "secundario"}>
+    <BotaoEnviar carregando={pending || bloqueado} emLinha variante={ultima ? "primario" : "secundario"}>
       {ultima ? "Criar galeria" : "Criar mesmo assim"}
     </BotaoEnviar>
   );
@@ -92,6 +95,43 @@ export function AssistenteNovaGaleria({
     padraoDoEstudio?.formato ?? APARENCIA_PADRAO.formato,
   );
 
+  /*
+   * A CAPA EM VÍDEO, escolhida na etapa de estilo (08/10/2026). O clipe é
+   * preparado aqui, no navegador; depois que a ação cria a galeria e devolve o
+   * id, ele sobe — e só então a pessoa é levada a ela. Se o envio falhar a
+   * galeria JÁ existe: a tela diz isso e oferece abri-la, em vez de fingir que
+   * nada nasceu.
+   */
+  const router = useRouter();
+  const [clipe, setClipe] = useState<ClipePronto | null>(null);
+  const [preparandoClipe, setPreparandoClipe] = useState(false);
+  const [falhaDoClipe, setFalhaDoClipe] = useState<string | null>(null);
+  const galeriaCriada = estado.galeriaId ?? null;
+
+  useEffect(() => {
+    if (!galeriaCriada) return;
+    let cancelado = false;
+    void (async () => {
+      try {
+        if (clipe) await enviarClipeDaCapa(galeriaCriada, clipe);
+      } catch (e) {
+        if (!cancelado) {
+          setFalhaDoClipe(e instanceof ErroDoClipe ? e.message : "O envio do clipe não deu certo.");
+        }
+        return;
+      }
+      if (!cancelado) router.push(`/painel/galerias/${galeriaCriada}`);
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // O clipe é o desta criação e não muda depois do envio; refazer o envio a
+    // cada troca dele mandaria o mesmo arquivo duas vezes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galeriaCriada]);
+
+  /* Entre o "criar" e a galeria abrir — o clipe subindo — nada mais se aperta. */
+  const subindoClipe = Boolean(galeriaCriada) && !falhaDoClipe;
   const semNome = titulo.trim().length === 0;
 
   return (
@@ -207,6 +247,25 @@ export function AssistenteNovaGaleria({
             })}
           </div>
         </fieldset>
+        {/*
+          ── A CAPA EM VÍDEO (08/10/2026) ───────────────────────────────────
+
+          Felipe: "é um vídeo na tela toda, e conforme desce, tem uma galeria —
+          coloque essa opção na hora de montar a galeria". Fica logo depois do
+          formato (a estrutura) e antes dos estilos (a cara): ela decide a capa e
+          a altura, e o resto do estilo continua a escolha de quem monta.
+        */}
+        {formatosLiberados && (
+          <>
+            <input type="hidden" name="com_clipe" value={clipe ? "1" : ""} />
+            <CapaEmVideoNaCriacao
+              aoMudar={(pronto, preparando) => {
+                setClipe(pronto);
+                setPreparandoClipe(preparando);
+              }}
+            />
+          </>
+        )}
         {formatosLiberados && <p className="mt-6 text-xs font-medium text-texto-soft">Estilo</p>}
         <input type="hidden" name="preset" value={preset} />
         <input type="hidden" name="estilo" value={estilo} />
@@ -358,6 +417,20 @@ export function AssistenteNovaGaleria({
       </div>
 
       <Erro mensagem={estado.erro} />
+      {subindoClipe && (
+        <p role="status" className="mt-4 text-sm text-texto-soft">
+          Galeria criada. Enviando a capa em vídeo… você é levado a ela em seguida.
+        </p>
+      )}
+      {falhaDoClipe && galeriaCriada && (
+        <p role="alert" className="mt-4 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-sm text-alerta">
+          A galeria foi criada, mas a capa em vídeo não subiu: {falhaDoClipe}{" "}
+          <a href={`/painel/galerias/${galeriaCriada}/design`} className="underline underline-offset-4">
+            Abrir a galeria
+          </a>{" "}
+          e tentar de novo em Design → Capa.
+        </p>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         {etapa > 0 && (
@@ -387,7 +460,14 @@ export function AssistenteNovaGaleria({
           poupar trabalho, não para cobrar. Na última etapa ele muda de rótulo
           porque ali "criar" é o fim natural, não um atalho.
         */}
-        {!semNome && <Botao ultima={etapa === ETAPAS.length - 1} />}
+        {!semNome && (
+          <Botao
+            ultima={etapa === ETAPAS.length - 1}
+            /* O clipe ainda sendo preparado não sobe junto: criar agora faria
+               uma galeria sem a capa que a pessoa acabou de escolher. */
+            bloqueado={preparandoClipe || subindoClipe || Boolean(falhaDoClipe)}
+          />
+        )}
       </div>
     </form>
   );
