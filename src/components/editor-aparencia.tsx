@@ -41,6 +41,7 @@ import { AmostraDoPreset } from "@/components/amostra-do-preset";
 import { EsquemaDoEstilo, EsquemaDoFormato } from "@/components/esquema-do-formato";
 import { CapasDasPastas, NomesDosVideos } from "@/components/entrega-no-design";
 import type { PastaNoDesign, VideoNoDesign } from "@/lib/entrega-no-design";
+import { desenhoDaCapaUsaClipe } from "@/lib/clipe-da-capa-regras";
 
 /**
  * Editor de aparência com prévia ao vivo.
@@ -493,15 +494,18 @@ function SeletorDeFormato({
   galeriaId,
   videos,
   pastas,
-  slotClipe,
+  temClipe,
+  irParaCapa,
   aoGravar,
 }: PecaProps & {
   conteudo: ConteudoDaGaleria | null;
   galeriaId: string;
   videos: VideoNoDesign[];
   pastas: PastaNoDesign[];
-  /** A área da capa em vídeo — só o Stream a mostra. */
-  slotClipe: ReactNode;
+  /** A galeria tem um clipe de capa gravado. */
+  temClipe: boolean;
+  /** Abre o grupo Capa, onde a capa em vídeo mora. */
+  irParaCapa: () => void;
   /** Um nome de vídeo ou uma capa de pasta gravou: a prévia recarrega. */
   aoGravar: () => void;
 }) {
@@ -603,7 +607,17 @@ function SeletorDeFormato({
                 : "Cada estilo tem a própria capa. Para usar um desenho do grupo Capa (convite, arco…), escolha “A do grupo Capa”."}
             </p>
           </div>
-          {slotClipe}
+          {/* A capa em vídeo mora no grupo Capa, porque vale também para a
+              Imersa e o Cartaz de qualquer formato — aqui só o caminho. */}
+          <div>
+            <span className="block text-xs font-medium text-texto-soft">Capa em vídeo</span>
+            <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
+              Um clipe curto, mudo e em laço no fundo da capa do stream.{" "}
+              <button type="button" onClick={irParaCapa} className="text-acento-alto underline underline-offset-4">
+                {temClipe ? "Trocar ou tirar o clipe" : "Escolher o vídeo"}
+              </button>
+            </p>
+          </div>
           {/* Só onde existe rolar de lado: Vitrine e Mostra já descem. */}
           {(ap.estiloStream === "cinema" || ap.estiloStream === "episodios") && (
             <div>
@@ -818,9 +832,12 @@ export function EditorAparencia({
   videos = [],
   pastas = [],
   slotClipe = null,
+  temClipe = false,
 }: {
-  /** A área da capa em vídeo (formato Stream). Montada no servidor, como `slotCapa`. */
+  /** A área da capa em vídeo, no grupo Capa. Montada no servidor, como `slotCapa`. */
   slotClipe?: ReactNode;
+  /** A galeria tem um clipe gravado — para a tela dizer quando o desenho atual não o toca. */
+  temClipe?: boolean;
   /** Os vídeos e os capítulos da galeria, para o grupo Formato dar nome aos
       vídeos e escolher a capa das pastas. Ver `lib/entrega-no-design.ts`. */
   videos?: VideoNoDesign[];
@@ -1437,13 +1454,22 @@ export function EditorAparencia({
               galeriaId={galeriaId}
               videos={videos}
               pastas={pastas}
-              slotClipe={slotClipe}
+              temClipe={temClipe}
+              irParaCapa={() => setGrupo("capa")}
               aoGravar={() => router.refresh()}
             />
           )}
           {grupo === "capa" && (
             <>
               {slotCapa}
+              {slotClipe}
+              {temClipe && !(desenhoDaCapaUsaClipe(ap.capa) || (ap.formato === "stream" && ap.capaStream === "sala")) && (
+                <p className="rounded-lg border border-linha bg-carbon-2/60 px-3 py-2.5 text-[11px] leading-snug text-texto-soft">
+                  O clipe está guardado, mas o desenho de capa atual não o toca. Ele aparece nas capas{" "}
+                  <strong>Imersa</strong> e <strong>Cartaz</strong>
+                  {ap.formato === "stream" ? " e na capa do próprio estilo do stream" : ""}.
+                </p>
+              )}
               {/*
                 "ESCOLHI A CAPA MAS TÁ NÃO APARECENDO" — Juan, 05/09/2026.
 

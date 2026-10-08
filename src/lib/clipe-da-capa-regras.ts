@@ -19,6 +19,25 @@
  * versão leve (`versao-leve.ts`): o servidor nunca toca no vídeo.
  */
 
+/**
+ * ONDE O CLIPE TOCA (08/10/2026).
+ *
+ * Primeiro só na sala do Stream (Juan). Horas depois o Felipe mostrou uma capa
+ * Imersa em movimento — foto em tela cheia, título por cima, botão "Ver
+ * galeria" — e perguntou se dava para ter igual na galeria comum.
+ *
+ * Toca nos desenhos em que a foto É o fundo da capa: a **Imersa** e o
+ * **Cartaz**. Nos que emolduram a foto (Convite, Redonda, Arco, Dividida) um
+ * vídeo pequeno dentro de uma moldura parece defeito de reprodução, e no
+ * Jornal e na Mínima não há foto. O que o fotógrafo escolheu continua valendo:
+ * trocar o desenho não apaga o clipe, só o deixa guardado.
+ */
+export const CAPAS_COM_CLIPE: readonly string[] = ["imersa", "cartaz"];
+
+export function desenhoDaCapaUsaClipe(capa: string): boolean {
+  return CAPAS_COM_CLIPE.includes(capa);
+}
+
 /** Segundos. Passou disso, é filme, não capa. */
 export const DURACAO_MAXIMA_DO_CLIPE = 30;
 /** O teto do arquivo no bucket. 30 s a 2,5 Mbps dão ~9 MB; o resto é folga. */

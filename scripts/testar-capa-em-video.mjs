@@ -253,10 +253,11 @@ await etapa("trocar o clipe grava o novo e APAGA os dois antigos do bucket", asy
   primeiro = dados;
 });
 
-console.log("\nO que o cliente vê\n");
+console.log("\nO que o cliente vê — no Stream\n");
 
-/* Uma galeria só de vídeo, em Stream, com a sala desenhando a própria capa. */
-async function paginaDoStream(capaStream) {
+/* Uma galeria só de vídeo, em Stream. `capa` é o desenho da capa do grupo Capa:
+   sem dizer, o padrão do sistema é a Imersa — que também toca o clipe. */
+async function paginaDoStream(capaStream, capa = "convite") {
   const nome = "Filme da noite.mp4";
   await db.query("delete from medias where galeria_id = $1 and tipo = 'video'", [g.id]);
   await db.query(
@@ -265,18 +266,38 @@ async function paginaDoStream(capaStream) {
     [g.id, g.tenant_id, `${g.tenant_id}/${g.id}/stream-prova.mp4`, `${g.tenant_id}/${g.id}/stream-prova.mp4_thumb.webp`, nome],
   );
   await db.query(
-    `update galerias set aparencia = jsonb_build_object('formato','stream','estiloStream','cinema','capaStream',$2::text)
+    `update galerias set aparencia = jsonb_build_object('formato','stream','estiloStream','cinema','capaStream',$2::text,'capa',$3::text)
       where id = $1`,
-    [g.id, capaStream],
+    [g.id, capaStream, capa],
   );
   const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
   return html.replaceAll("\\u0026", "&").replaceAll("&amp;", "&");
 }
 
+/** A galeria comum (formato Galeria), com o desenho de capa pedido. */
+async function paginaComum(capa, formato = "galeria") {
+  await db.query(
+    `update galerias set aparencia = jsonb_build_object('formato',$2::text,'capa',$3::text) where id = $1`,
+    [g.id, formato, capa],
+  );
+  const html = await (await fetch(`${BASE}/g/${g.tslug}/${g.gslug}`, { cache: "no-store" })).text();
+  return html.replaceAll("\\u0026", "&").replaceAll("&amp;", "&");
+}
+/** O cabeçalho da capa, sem os scripts — é o que a pessoa vê, e onde o quadro tem de estar. */
+function cabecalhoDaCapa(html, desenho) {
+  const sem = html.replace(/<script[\s\S]*?<\/script>/g, "");
+  const i = sem.indexOf(`<header data-capa="${desenho}"`);
+  if (i === -1) throw new Error(`não achei o cabeçalho da capa ${desenho}`);
+  return sem.slice(i, sem.indexOf("</header>", i));
+}
+const nomesDoClipe = () => ({
+  clipe: primeiro.chave.split("/").pop(),
+  quadro: primeiro.posterChave.split("/").pop(),
+});
+
 await etapa("Stream com a capa da SALA: o clipe chega à página, e o fundo é o primeiro quadro", async () => {
   const html = await paginaDoStream("sala");
-  const nomeDoClipe = primeiro.chave.split("/").pop();
-  const nomeDoQuadro = primeiro.posterChave.split("/").pop();
+  const { clipe: nomeDoClipe, quadro: nomeDoQuadro } = nomesDoClipe();
   if (!html.includes(nomeDoClipe)) throw new Error("o endereço do clipe não está na página");
   if (!html.includes(nomeDoQuadro)) throw new Error("o primeiro quadro não está na página");
   // O fundo (imagem) é o quadro do clipe, para o vídeo não "pular" ao começar.
@@ -284,16 +305,53 @@ await etapa("Stream com a capa da SALA: o clipe chega à página, e o fundo é o
   if (!desenhado.includes(nomeDoQuadro)) throw new Error("o primeiro quadro não é a imagem de fundo");
 });
 
-await etapa("Stream com a capa do GRUPO Capa: o clipe NÃO vai (a imagem fica parada)", async () => {
-  const html = await paginaDoStream("galeria");
-  const nomeDoClipe = primeiro.chave.split("/").pop();
-  if (html.includes(nomeDoClipe)) throw new Error("o clipe foi enviado à página mesmo sem ser usado");
+await etapa("Stream com a capa do grupo Capa em CONVITE: o clipe NÃO vai (foto emoldurada)", async () => {
+  const html = await paginaDoStream("galeria", "convite");
+  if (html.includes(nomesDoClipe().clipe)) throw new Error("o clipe foi enviado à página mesmo sem ser usado");
+});
+
+await etapa("Stream com a capa do grupo Capa em IMERSA: o clipe toca na capa", async () => {
+  const html = await paginaDoStream("galeria", "imersa");
+  const { clipe, quadro } = nomesDoClipe();
+  if (!html.includes(clipe)) throw new Error("o clipe não chegou à página");
+  if (!cabecalhoDaCapa(html, "imersa").includes(quadro)) throw new Error("o quadro não é a imagem da capa");
+});
+
+console.log("\nA capa em vídeo na galeria comum (a do print do Felipe)\n");
+
+await etapa("capa IMERSA: o clipe chega à página, e a imagem de baixo é o primeiro quadro", async () => {
+  const html = await paginaComum("imersa");
+  const { clipe, quadro } = nomesDoClipe();
+  if (!html.includes(clipe)) throw new Error("o endereço do clipe não está na página");
+  if (!cabecalhoDaCapa(html, "imersa").includes(quadro)) throw new Error("o primeiro quadro não é a imagem da capa");
+});
+
+await etapa("capa CARTAZ: idem", async () => {
+  const html = await paginaComum("cartaz");
+  const { clipe, quadro } = nomesDoClipe();
+  if (!html.includes(clipe)) throw new Error("o endereço do clipe não está na página");
+  if (!cabecalhoDaCapa(html, "cartaz").includes(quadro)) throw new Error("o primeiro quadro não é a imagem da capa");
+});
+
+await etapa("Pastas com capa Imersa: o clipe toca também (vale em qualquer formato)", async () => {
+  const html = await paginaComum("imersa", "pastas");
+  if (!html.includes(nomesDoClipe().clipe)) throw new Error("o clipe não chegou à página");
+});
+
+await etapa("desenhos que emolduram a foto (Convite, Redonda, Arco, Dividida) e o Jornal NÃO tocam o clipe", async () => {
+  for (const capa of ["convite", "redonda", "arco", "dividida", "jornal", "minima"]) {
+    const html = await paginaComum(capa);
+    if (html.includes(nomesDoClipe().clipe)) throw new Error(`a capa ${capa} recebeu o clipe`);
+  }
 });
 
 await etapa("galeria sem clipe continua igual: nenhum endereço de clipe na página", async () => {
   await db.query("update galerias set capa_video_chave = null, capa_video_poster_chave = null where id = $1", [g.id]);
-  const html = await paginaDoStream("sala");
-  if (html.includes("clipe-")) throw new Error("apareceu um clipe que ninguém enviou");
+  for (const html of [await paginaDoStream("sala"), await paginaComum("imersa"), await paginaComum("cartaz")]) {
+    /* `/capa/clipe-`, e não só `clipe-`: o nome do componente
+       (`clipe-da-capa-video`) aparece nos scripts da página. */
+    if (html.includes("/capa/clipe-")) throw new Error("apareceu um clipe que ninguém enviou");
+  }
 });
 
 await etapa("tirar o clipe limpa as colunas E apaga os arquivos do bucket", async () => {

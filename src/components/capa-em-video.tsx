@@ -6,9 +6,12 @@ import { ErroDoClipe, enviarClipeDaCapa, prepararClipe, tirarClipeDaCapa } from 
 import { DURACAO_MAXIMA_DO_CLIPE } from "@/lib/clipe-da-capa-regras";
 
 /**
- * A CAPA EM VÍDEO do formato Stream — o clipe que toca mudo no fundo da capa.
+ * A CAPA EM VÍDEO — o clipe que toca mudo no fundo da capa.
  *
  * Juan, 08/10/2026: "adicionar opção de subir capa em VÍDEO no formato Stream".
+ * Felipe, no mesmo dia, mostrando uma capa Imersa em movimento: "tem como
+ * fazermos uma capa de galeria de vídeo assim?" — então o clipe toca também nas
+ * capas Imersa e Cartaz de qualquer formato (`desenhoDaCapaUsaClipe`).
  *
  * O fotógrafo escolhe o arquivo (o do CapCut serve); o navegador dele o refaz —
  * 720p, sem som, até 30 s — e sobe só o resultado, com o primeiro quadro em
@@ -16,20 +19,17 @@ import { DURACAO_MAXIMA_DO_CLIPE } from "@/lib/clipe-da-capa-regras";
  * filme original passa pelo servidor, e quem assiste no 4G recebe um arquivo de
  * poucos MB.
  *
- * Mora no grupo Formato, junto de "Capa do stream", porque só o Stream tem esta
- * capa. O clipe só toca quando a capa é a do próprio estilo (a tela diz isso);
- * na "capa do grupo Capa" a imagem continua parada.
+ * Mora no grupo Capa, junto da foto de capa. O clipe só toca nos desenhos em
+ * que a foto é o fundo (Imersa, Cartaz) e na sala do Stream; a tela do Design
+ * avisa quando o desenho escolhido não o toca.
  */
 export function CapaEmVideo({
   galeriaId,
   quadroAtual,
-  capaDoEstilo,
 }: {
   galeriaId: string;
   /** O primeiro quadro do clipe que a galeria tem hoje, ou null se não tem. */
   quadroAtual: string | null;
-  /** A capa do Stream é a do próprio estilo? Só assim o clipe aparece. */
-  capaDoEstilo: boolean;
 }) {
   const [estado, setEstado] = useState<"parado" | "preparando" | "enviando" | "tirando">("parado");
   const [fracao, setFracao] = useState(0);
@@ -81,11 +81,11 @@ export function CapaEmVideo({
     <div>
       <span className="block text-xs font-medium text-texto-soft">Capa em vídeo</span>
       <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
-        Um clipe de até {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, no fundo da capa do stream.
+        Um clipe de até {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, no fundo da capa.
         Seu navegador prepara o clipe antes de subir (720p, sem som, uns poucos MB), então o filme original
-        não precisa ser pequeno — mas o trecho precisa ser curto. Aparece nos estilos Cinema, Episódios e
-        Vitrine (a Mostra não tem imagem de capa). Em quem pediu menos movimento, ou está com economia de
-        dados, fica só o primeiro quadro.
+        não precisa ser pequeno — mas o trecho precisa ser curto. Toca nas capas <strong>Imersa</strong> e{" "}
+        <strong>Cartaz</strong> e na capa do próprio estilo do stream (Cinema, Episódios e Vitrine). Em quem
+        pediu menos movimento, ou está com economia de dados, fica só o primeiro quadro.
       </p>
 
       <div className="mt-2 flex items-center gap-3">
@@ -134,13 +134,6 @@ export function CapaEmVideo({
           )}
         </span>
       </div>
-
-      {quadroAtual && !capaDoEstilo && (
-        <p className="mt-2 text-[11px] leading-snug text-texto-faint">
-          O clipe está guardado, mas a capa do stream agora é o desenho do grupo Capa — por isso ele não toca.
-          Volte à capa do estilo (acima) para vê-lo.
-        </p>
-      )}
 
       <input
         ref={inputRef}

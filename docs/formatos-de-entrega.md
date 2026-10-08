@@ -303,9 +303,10 @@ arquivo como sugestão (o `copy 60CA8324-…` do CapCut aparece ali, esmaecido, 
 um clique o troca). É o mesmo componente nos dois lugares
 (`components/nome-do-video.tsx`) e a mesma gravação (`renomearVideoAction`).
 
-**A capa em vídeo.** Design → Formato → Stream → **Capa em vídeo**: o fotógrafo
-escolhe um vídeo e ele vira um **clipe de até 30 s, mudo, em laço**, no fundo da
-capa do stream — o "trailer" das plataformas de série. Não é o filme da galeria
+**A capa em vídeo.** Design → **Capa** → **Capa em vídeo**: o fotógrafo escolhe
+um vídeo e ele vira um **clipe de até 30 s, mudo, em laço**, no fundo da capa —
+o "trailer" das plataformas de série. (Em Formato → Stream há só um atalho para
+lá.) Não é o filme da galeria
 tocando de fundo (continua valendo o motivo de "o que ficou de fora": o 4G de
 quem recebe o link não carrega o original só para enfeitar a capa).
 
@@ -318,10 +319,16 @@ quem recebe o link não carrega o original só para enfeitar a capa).
 - **O primeiro quadro sobe junto, em JPEG**, e é a imagem de baixo: nada "pula"
   quando o clipe começa, e é o que fica para quem pediu **menos movimento**
   (`prefers-reduced-motion`) ou está com **economia de dados** (`saveData`).
-- **Onde toca:** nas salas que desenham a própria capa — Cinema, Episódios e
-  Vitrine. A **Mostra** não tem imagem de capa e não o mostra. Com a "capa do
-  grupo Capa" escolhida (convite, arco…), o clipe fica guardado e **não vai** à
-  página; a tela do Design diz isso.
+- **Onde toca:** na sala do Stream que desenha a própria capa (Cinema, Episódios
+  e Vitrine; a **Mostra** não tem imagem de capa) **e nas capas Imersa e Cartaz
+  de qualquer formato** — Galeria, Pastas ou Stream com "a do grupo Capa". Foi o
+  Felipe, horas depois da primeira entrega, mostrando uma capa Imersa em
+  movimento: *"tem como fazermos uma capa de galeria de vídeo assim?"*. Nos
+  desenhos que **emolduram** a foto (Convite, Redonda, Arco, Dividida) um vídeo
+  pequeno dentro da moldura parece defeito de reprodução, e no Jornal e na
+  Mínima não há foto: ali o clipe fica guardado e **não vai** à página, e a tela
+  do Design diz isso (`desenhoDaCapaUsaClipe`). Trocar o desenho não apaga o
+  clipe. A imagem de baixo é sempre o primeiro quadro dele.
 - **Pausa** fora da tela e com o player aberto por cima.
 - **Vive em duas colunas de `galerias`** (migração 066: `capa_video_chave`,
   `capa_video_poster_chave`), fora de `medias`: não é entrega, não entra na grade
@@ -379,5 +386,6 @@ Edge e o Safari de verdade gravam). O resto do caminho (leitura, corte do som,
 | `db/migracoes/066-capa-em-video.sql` | `galerias.capa_video_chave`, `capa_video_poster_chave` |
 | `src/lib/clipe-da-capa-regras.ts`, `src/lib/clipe-da-capa.ts` | medidas (as duas pontas) e preparo no navegador |
 | `src/app/api/galerias/[id]/capa-video/route.ts` | recebe e confere o clipe e o primeiro quadro |
-| `src/components/capa-em-video.tsx` | o controle no Design |
+| `src/components/capa-em-video.tsx` | o controle no Design (grupo Capa) |
+| `src/components/clipe-da-capa-video.tsx` | o `<video>` mudo em laço, que a Stream e a capa comum dividem |
 | `scripts/testar-capa-em-video.mjs` | medidas, rota, apagar, página do cliente, nome do vídeo |

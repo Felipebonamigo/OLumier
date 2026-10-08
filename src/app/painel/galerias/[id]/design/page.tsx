@@ -175,13 +175,10 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       logo={logo}
       slotClipe={
         liberado ? (
-          <CapaEmVideo
-            galeriaId={galeria.id}
-            quadroAtual={quadroDoClipe}
-            capaDoEstilo={lerAparencia(galeria.aparencia_rascunho ?? galeria.aparencia).capaStream === "sala"}
-          />
+          <CapaEmVideo galeriaId={galeria.id} quadroAtual={quadroDoClipe} />
         ) : null
       }
+      temClipe={Boolean(quadroDoClipe)}
     />
   );
 }

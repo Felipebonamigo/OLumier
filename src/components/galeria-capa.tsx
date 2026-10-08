@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { ClipeDaCapa } from "@/components/clipe-da-capa-video";
+import { desenhoDaCapaUsaClipe } from "@/lib/clipe-da-capa-regras";
 import { desenhoDoTitulo, temPalavraQueNaoCabe } from "@/lib/titulo-da-capa";
 import {
   FONTES_TITULO,
@@ -21,6 +23,12 @@ export interface DadosCapa {
   logoLargura?: number | null;
   logoAltura?: number | null;
   urlImagem: string | null;
+  /**
+   * O clipe da capa em vídeo (migração 066), quando a galeria tem um. Só a
+   * Imersa e o Cartaz o tocam — `desenhoDaCapaUsaClipe`. `quadro` é o primeiro
+   * quadro do clipe e vira a imagem de baixo: nada "pula" quando ele começa.
+   */
+  clipe?: { url: string; quadro: string } | null;
   /** Onde cortar a foto, em porcentagem. 50/50 é o centro — ver migração 031. */
   focoX: number;
   focoY: number;
@@ -80,6 +88,10 @@ export function GaleriaCapa({
   const TagDoTitulo = ilustracao ? "p" : "h1";
   const { titulo, subtitulo, dataFormatada, estudio, urlImagem, logoUrl, capaEscolhida } = dados;
   const legenda = [dataFormatada, subtitulo].filter(Boolean).join(" · ");
+  /* A imagem de fundo das capas em que a foto é o fundo: com clipe, o primeiro
+     quadro dele; sem, a foto de sempre. */
+  const clipe = aparencia.capa && desenhoDaCapaUsaClipe(aparencia.capa) ? (dados.clipe ?? null) : null;
+  const fundoDaCapa = clipe?.quadro ?? urlImagem;
 
   /*
    * ── AS LETRINHAS DA CAPA GANHARAM DONO (23/09/2026) ─────────────────────
@@ -469,7 +481,7 @@ export function GaleriaCapa({
   };
 
   // --- IMERSA: foto ocupa a tela, texto por cima -----------------------------
-  if (aparencia.capa === "imersa" && urlImagem) {
+  if (aparencia.capa === "imersa" && fundoDaCapa) {
     return (
       <header
         data-capa="imersa"
@@ -479,12 +491,13 @@ export function GaleriaCapa({
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
         <img
-          src={urlImagem}
+          src={fundoDaCapa}
           alt=""
           fetchPriority="high"
           style={foco}
           className="absolute inset-0 h-full w-full object-cover"
         />
+        <ClipeDaCapa src={clipe?.url} style={foco} className="absolute inset-0 h-full w-full" />
         <div
           className="absolute inset-0"
           style={{
@@ -549,7 +562,7 @@ export function GaleriaCapa({
    * — a capa rola e as fotos passam —, mas quem escolher "Fica no lugar" vai
    * ver pouca diferença. Fica escrito para a próxima sessão não ler como bug.
    */
-  if (aparencia.capa === "cartaz" && urlImagem) {
+  if (aparencia.capa === "cartaz" && fundoDaCapa) {
     return (
       <header
         data-capa="cartaz"
@@ -583,12 +596,13 @@ export function GaleriaCapa({
         <div className="relative min-h-[calc(var(--g-capa-h,78vh)*0.4)] w-full flex-1">
           {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada e temporária */}
           <img
-            src={urlImagem}
+            src={fundoDaCapa}
             alt=""
             fetchPriority="high"
             style={foco}
             className="absolute inset-0 h-full w-full object-cover"
           />
+          <ClipeDaCapa src={clipe?.url} style={foco} className="absolute inset-0 h-full w-full" />
         </div>
         <div className={`px-6 py-10 sm:py-12 ${alinharTexto}`}>
           {/* Como na redonda e no arco: o embrulho da logo sai junto com ela,
