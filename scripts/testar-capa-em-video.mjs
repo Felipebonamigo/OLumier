@@ -42,7 +42,7 @@ import {
 } from "../src/lib/clipe-da-capa-regras.ts";
 import { objetoExiste } from "../src/lib/r2.ts";
 import { readFileSync } from "node:fs";
-import { APARENCIA_PADRAO, PRESETS, aparenciaComCapaEmVideo, lerAparencia } from "../src/config/aparencia.ts";
+import { APARENCIA_PADRAO, PRESETS, aparenciaComCapaEmTelaCheia, lerAparencia } from "../src/config/aparencia.ts";
 
 await exigirBancoDeTeste();
 
@@ -375,10 +375,10 @@ await etapa("tirar o clipe limpa as colunas E apaga os arquivos do bucket", asyn
   igual(await objetoExiste(dados.posterChave), false, "quadro no bucket");
 });
 
-console.log("\nA capa em vídeo na hora de montar a galeria\n");
+console.log("\nA capa em tela cheia (foto ou vídeo) na hora de montar a galeria\n");
 
 await etapa("sem estilo escolhido: nasce Imersa, na altura Tela toda", () => {
-  const ap = lerAparencia(aparenciaComCapaEmVideo(null));
+  const ap = lerAparencia(aparenciaComCapaEmTelaCheia(null));
   igual(ap.capa, "imersa", "capa");
   igual(ap.alturaCapa, "tela", "altura");
   igual(ap.tema, APARENCIA_PADRAO.tema, "o resto continua o padrão");
@@ -388,7 +388,7 @@ await etapa("estilo cuja capa já toca o clipe (Imersa, Cartaz) fica como está;
   for (const capa of ["imersa", "cartaz"]) {
     const preset = PRESETS.find((p) => lerAparencia(p.aparencia).capa === capa);
     if (!preset) continue;
-    const ap = lerAparencia(aparenciaComCapaEmVideo(preset.aparencia));
+    const ap = lerAparencia(aparenciaComCapaEmTelaCheia(preset.aparencia));
     igual(ap.capa, capa, `capa do preset ${preset.id}`);
     igual(ap.alturaCapa, "tela", `altura do preset ${preset.id}`);
     igual(ap.tipografia, lerAparencia(preset.aparencia).tipografia, `a letra do preset ${preset.id} segue a escolhida`);
@@ -399,7 +399,7 @@ await etapa("estilo cuja capa emoldura a foto (Convite…) troca SÓ o desenho d
   const emoldurado = PRESETS.find((p) => !["imersa", "cartaz"].includes(lerAparencia(p.aparencia).capa));
   if (!emoldurado) throw new Error("nenhum preset com desenho que emoldure a foto");
   const antes = lerAparencia(emoldurado.aparencia);
-  const ap = lerAparencia(aparenciaComCapaEmVideo(emoldurado.aparencia));
+  const ap = lerAparencia(aparenciaComCapaEmTelaCheia(emoldurado.aparencia));
   igual(ap.capa, "imersa", "capa");
   igual(ap.alturaCapa, "tela", "altura");
   igual(ap.tema, antes.tema, "o tema do estilo escolhido");
@@ -407,12 +407,12 @@ await etapa("estilo cuja capa emoldura a foto (Convite…) troca SÓ o desenho d
 });
 
 await etapa("o formato escolhido atravessa: Stream continua Stream", () => {
-  const ap = lerAparencia(aparenciaComCapaEmVideo({ formato: "stream" }));
+  const ap = lerAparencia(aparenciaComCapaEmTelaCheia({ formato: "stream" }));
   igual(ap.formato, "stream", "formato");
   igual(ap.alturaCapa, "tela", "altura");
 });
 
-await etapa("a ação do servidor só honra o clipe a quem tem os formatos liberados, e só então devolve o id", () => {
+await etapa("a ação do servidor: tela cheia vale para qualquer conta; o clipe só para quem tem os formatos, e só então devolve o id", () => {
   /* Como os outros testes do assistente (`testar-estilos-do-estudio`): a ação é
      'use server' e não roda no Node — o que se prende aqui é o que ela diz. */
   const fonte = readFileSync(new URL("../src/app/painel/actions.ts", import.meta.url), "utf8");
@@ -421,13 +421,27 @@ await etapa("a ação do servidor só honra o clipe a quem tem os formatos liber
   if (!/const comClipe = liberado && String\(form\.get\("com_clipe"\)/.test(corpo)) {
     throw new Error("o campo com_clipe deixou de depender de formatosLiberadosPara");
   }
-  if (!/comClipe \? aparenciaComCapaEmVideo\(/.test(corpo)) throw new Error("a capa em vídeo não vira aparência");
+  /* A tela cheia com FOTO não depende de formato: é só uma altura e um desenho. */
+  if (!/const telaCheia = comClipe \|\| String\(form\.get\("capa_tela_cheia"\) \?\? ""\) === "1"/.test(corpo)) {
+    throw new Error("a tela cheia deixou de valer sem o clipe, ou deixou de ser implicada por ele");
+  }
+  if (/telaCheia[^\n]*liberado/.test(corpo)) throw new Error("a tela cheia com foto passou a exigir os formatos liberados");
+  if (!/telaCheia \? aparenciaComCapaEmTelaCheia\(/.test(corpo)) throw new Error("a tela cheia não vira aparência");
   if (!/if \(comClipe\) return \{ ok: true, galeriaId/.test(corpo)) throw new Error("não devolve o id com clipe");
   const iRetorno = corpo.indexOf("if (comClipe) return");
   const iRedirect = corpo.indexOf("redirect(");
   if (iRetorno === -1 || iRedirect === -1 || iRetorno > iRedirect) {
     throw new Error("o redirecionamento vem antes do retorno com clipe — o clipe nunca subiria");
   }
+});
+
+await etapa("sem clipe, a galeria de tela cheia com FOTO não passa pelo envio: segue o redirecionamento de sempre", () => {
+  const fonte = readFileSync(new URL("../src/app/painel/actions.ts", import.meta.url), "utf8");
+  const ini = fonte.indexOf("export async function criarGaleriaAction");
+  const corpo = fonte.slice(ini, fonte.indexOf("\n}\n", ini));
+  /* O retorno com id é SÓ do clipe: com `telaCheia` ele faria a foto esperar um
+     envio que nunca vem. */
+  if (/if \(telaCheia\) return/.test(corpo)) throw new Error("a tela cheia com foto devolve o id em vez de redirecionar");
 });
 
 console.log("\nO nome do vídeo\n");

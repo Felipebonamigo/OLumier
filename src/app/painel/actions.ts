@@ -27,7 +27,7 @@ import {
   tornarEstiloPadrao,
   type EstiloDoEstudio,
 } from "@/lib/estilos-do-estudio";
-import { aparenciaComCapaEmVideo, aparenciaComFormato, type Aparencia } from "@/config/aparencia";
+import { aparenciaComCapaEmTelaCheia, aparenciaComFormato, type Aparencia } from "@/config/aparencia";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 import { assinarTenant, escolherPlanoAntesDeAssinar } from "@/lib/assinar";
 import { assinarPacote, acrescentarAtomatiza } from "@/lib/pacote";
@@ -150,6 +150,9 @@ export async function criarGaleriaAction(
      pelo navegador. Mesma regra do formato — sem Pastas e Stream liberados o
      campo nem aparece, e o formulário é um endpoint. */
   const comClipe = liberado && String(form.get("com_clipe") ?? "") === "1";
+  /* A capa em tela cheia vale para qualquer conta, com foto ou com clipe: o
+     clipe a implica (sem tela cheia ele tocaria numa capa de 78% da tela). */
+  const telaCheia = comClipe || String(form.get("capa_tela_cheia") ?? "") === "1";
   const aparenciaDoEstilo = aparenciaComFormato(
     await aparenciaInicialDaGaleria(
       tenantId,
@@ -160,8 +163,8 @@ export async function criarGaleriaAction(
        nem aparece, e o formulário é um endpoint. Ver `acesso-formatos`. */
     liberado ? String(form.get("formato") ?? "") : "",
   );
-  /* Capa em vídeo: Imersa, na altura "Tela toda" — ver `aparenciaComCapaEmVideo`. */
-  const aparenciaInicial = comClipe ? aparenciaComCapaEmVideo(aparenciaDoEstilo) : aparenciaDoEstilo;
+  /* Capa em tela cheia: Imersa, na altura "Tela toda" — ver `aparenciaComCapaEmTelaCheia`. */
+  const aparenciaInicial = telaCheia ? aparenciaComCapaEmTelaCheia(aparenciaDoEstilo) : aparenciaDoEstilo;
   if (aparenciaInicial) {
     await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
       JSON.stringify(aparenciaInicial),

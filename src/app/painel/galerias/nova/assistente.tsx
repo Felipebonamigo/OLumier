@@ -103,6 +103,11 @@ export function AssistenteNovaGaleria({
    * nada nasceu.
    */
   const router = useRouter();
+  /* A capa em tela cheia (Felipe: "uma opção 'capa em tela cheia' e aí outra para
+     escolher vídeo ou foto"). A tela cheia é a decisão; foto ou vídeo, o que a
+     ocupa. Foto vale para qualquer conta; vídeo, para quem tem os formatos. */
+  const [telaCheia, setTelaCheia] = useState(false);
+  const [tipoDaCapa, setTipoDaCapa] = useState<"foto" | "video">("foto");
   const [clipe, setClipe] = useState<ClipePronto | null>(null);
   const [preparandoClipe, setPreparandoClipe] = useState(false);
   const [falhaDoClipe, setFalhaDoClipe] = useState<string | null>(null);
@@ -130,6 +135,14 @@ export function AssistenteNovaGaleria({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [galeriaCriada]);
 
+  const opcoesDaCapa: { id: "foto" | "video"; nome: string; desc: string }[] = [
+    { id: "foto", nome: "Foto", desc: "A foto de capa da galeria — você a escolhe depois, em Design → Capa." },
+    ...(formatosLiberados
+      ? [{ id: "video" as const, nome: "Vídeo", desc: "Um clipe de até 30 segundos, mudo e em laço." }]
+      : []),
+  ];
+  /* O vídeo é a escolha ATIVA: só vale com a tela cheia ligada e "Vídeo" marcado. */
+  const comVideo = telaCheia && tipoDaCapa === "video";
   /* Entre o "criar" e a galeria abrir — o clipe subindo — nada mais se aperta. */
   const subindoClipe = Boolean(galeriaCriada) && !falhaDoClipe;
   const semNome = titulo.trim().length === 0;
@@ -248,24 +261,72 @@ export function AssistenteNovaGaleria({
           </div>
         </fieldset>
         {/*
-          ── A CAPA EM VÍDEO (08/10/2026) ───────────────────────────────────
+          ── A CAPA EM TELA CHEIA (08/10/2026) ──────────────────────────────
 
-          Felipe: "é um vídeo na tela toda, e conforme desce, tem uma galeria —
-          coloque essa opção na hora de montar a galeria". Fica logo depois do
-          formato (a estrutura) e antes dos estilos (a cara): ela decide a capa e
-          a altura, e o resto do estilo continua a escolha de quem monta.
+          Felipe, com o reel de uma capa em vídeo: "é um vídeo na tela toda, e
+          conforme desce, tem uma galeria — coloque essa opção na hora de montar
+          a galeria". E, vendo a primeira versão, que só existia com vídeo: "uma
+          opção 'capa em tela cheia' e aí outra para escolher vídeo ou foto".
+
+          A TELA CHEIA é a decisão (a capa é a tela inteira, e a galeria começa ao
+          rolar); FOTO ou VÍDEO é o que a ocupa. Fica logo depois do formato (a
+          estrutura) e antes dos estilos (a cara): ela decide a capa e a altura, e
+          o resto do estilo continua a escolha de quem monta.
         */}
-        {formatosLiberados && (
-          <>
-            <input type="hidden" name="com_clipe" value={clipe ? "1" : ""} />
-            <CapaEmVideoNaCriacao
-              aoMudar={(pronto, preparando) => {
-                setClipe(pronto);
-                setPreparandoClipe(preparando);
-              }}
-            />
-          </>
-        )}
+        <input type="hidden" name="capa_tela_cheia" value={telaCheia ? "1" : ""} />
+        <input type="hidden" name="com_clipe" value={comVideo && clipe ? "1" : ""} />
+        <fieldset className="mt-5 max-w-3xl">
+          <legend className="text-xs font-medium text-texto-soft">Capa</legend>
+          <button
+            type="button"
+            aria-pressed={telaCheia}
+            onClick={() => setTelaCheia((v) => !v)}
+            className={`mt-2 block w-full rounded-xl border p-3 text-left transition ${
+              telaCheia ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+            }`}
+          >
+            <span className="block text-sm font-medium">
+              {telaCheia ? "✓ " : ""}Capa em tela cheia
+            </span>
+            <span className="mt-0.5 block text-xs text-texto-faint">
+              A capa ocupa a tela inteira e a galeria começa ao rolar. Nasce com a capa Imersa; o resto
+              do estilo continua o que você escolher. Dá para mudar depois, em Design → Capa.
+            </span>
+          </button>
+          {telaCheia && (
+            <div className="mt-3 pl-1">
+              <p className="text-xs font-medium text-texto-soft">O que ocupa a tela</p>
+              <div className="mt-2 grid max-w-xl gap-3 sm:grid-cols-2">
+                {opcoesDaCapa.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    aria-pressed={tipoDaCapa === o.id}
+                    onClick={() => setTipoDaCapa(o.id)}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      tipoDaCapa === o.id ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+                    }`}
+                  >
+                    <span className="block text-sm font-medium">{o.nome}</span>
+                    <span className="mt-0.5 block text-xs text-texto-faint">{o.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Montado sempre e só escondido: o clipe preparado (e o preparo em
+              andamento) não pode sumir se a pessoa alternar Foto e Vídeo. */}
+          {formatosLiberados && (
+            <div className={comVideo ? "pl-1" : "hidden"}>
+              <CapaEmVideoNaCriacao
+                aoMudar={(pronto, preparando) => {
+                  setClipe(pronto);
+                  setPreparandoClipe(preparando);
+                }}
+              />
+            </div>
+          )}
+        </fieldset>
         {formatosLiberados && <p className="mt-6 text-xs font-medium text-texto-soft">Estilo</p>}
         <input type="hidden" name="preset" value={preset} />
         <input type="hidden" name="estilo" value={estilo} />
@@ -465,7 +526,7 @@ export function AssistenteNovaGaleria({
             ultima={etapa === ETAPAS.length - 1}
             /* O clipe ainda sendo preparado não sobe junto: criar agora faria
                uma galeria sem a capa que a pessoa acabou de escolher. */
-            bloqueado={preparandoClipe || subindoClipe || Boolean(falhaDoClipe)}
+            bloqueado={(comVideo && preparandoClipe) || subindoClipe || Boolean(falhaDoClipe)}
           />
         )}
       </div>

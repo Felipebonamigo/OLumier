@@ -5,10 +5,11 @@ import { ErroDoClipe, prepararClipe, type ClipePronto } from "@/lib/clipe-da-cap
 import { DURACAO_MAXIMA_DO_CLIPE } from "@/lib/clipe-da-capa-regras";
 
 /**
- * A CAPA EM VÍDEO NA HORA DE MONTAR A GALERIA (08/10/2026).
+ * O VÍDEO DA CAPA, NA HORA DE MONTAR A GALERIA (08/10/2026).
  *
  * Felipe, com o reel de uma capa em vídeo — o vídeo ocupa a tela e, ao rolar,
- * vem a galeria: "coloque essa opção na hora de montar a galeria".
+ * vem a galeria: "coloque essa opção na hora de montar a galeria". Mora dentro da
+ * escolha "Capa em tela cheia" do assistente, como a alternativa à foto.
  *
  * Aqui só se ESCOLHE e se PREPARA o clipe. Quem o sobe é o assistente, depois que
  * a galeria existe — o envio precisa do id dela (`enviarClipeDaCapa`). Por isso
@@ -76,13 +77,12 @@ export function CapaEmVideoNaCriacao({
   }
 
   return (
-    <fieldset className="mt-5 max-w-3xl">
-      <legend className="text-xs font-medium text-texto-soft">Capa em vídeo (opcional)</legend>
+    <div className="mt-3">
+      <span className="block text-xs font-medium text-texto-soft">Vídeo da capa</span>
       <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
-        Um clipe de até {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, ocupando a tela toda; ao
-        rolar, vem a galeria. A galeria nasce com a capa Imersa e a altura “Tela toda” — o resto do estilo
-        continua o que você escolher. Seu navegador prepara o clipe (720p, sem som, uns poucos MB). Dá para
-        pôr, trocar ou tirar depois, em Design → Capa.
+        Um clipe de até {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, ocupando a tela. Seu
+        navegador prepara o clipe (720p, sem som, uns poucos MB). Dá para trocar ou tirar depois, em Design →
+        Capa.
       </p>
 
       <div className="mt-2 flex items-center gap-3">
@@ -156,6 +156,6 @@ export function CapaEmVideoNaCriacao({
           {erro}
         </p>
       )}
-    </fieldset>
+    </div>
   );
 }

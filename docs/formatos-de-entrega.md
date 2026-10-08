@@ -338,20 +338,25 @@ quem recebe o link não carrega o original só para enfeitar a capa).
 
 **Na hora de montar a galeria.** O Felipe mandou o reel de uma capa em vídeo — o
 vídeo ocupa a tela e, ao rolar, vem a galeria — e pediu a opção *"na hora de
-montar a galeria"*. No assistente (etapa **Estilo**, logo depois do formato)
-há o bloco **Capa em vídeo (opcional)**:
+montar a galeria"*. E, vendo a primeira versão (que só existia com vídeo):
+*"uma opção 'capa em tela cheia' e aí outra para escolher vídeo ou foto"*. No
+assistente (etapa **Estilo**, logo depois do formato) há o bloco **Capa**:
 
-- o navegador prepara o clipe ali mesmo, com a barra andando, e mostra o
-  primeiro quadro antes de criar;
-- ao criar, a ação (`criarGaleriaAction`, campo `com_clipe`) faz a galeria
-  nascer com a capa **Imersa** na altura **Tela toda** (`aparenciaComCapaEmVideo`:
-  só troca o desenho da capa quando o estilo escolhido emoldura a foto; cor,
-  letra, grade e formato continuam os do estilo) e, em vez de redirecionar,
-  devolve o id; o navegador sobe o clipe e só então leva a pessoa à galeria;
-- se o envio falhar, a galeria **já existe**: a tela diz isso e oferece abri-la
-  (Design → Capa tenta de novo). Sem o campo, nada muda no caminho de sempre;
-- vale só para quem tem Pastas e Stream liberados (`formatosLiberadosPara`),
-  como o resto do bloco de formato.
+- **Capa em tela cheia** (liga/desliga) é a decisão: a galeria nasce com a capa
+  **Imersa** na altura **Tela toda** (`aparenciaComCapaEmTelaCheia`: só troca o
+  desenho da capa quando o estilo escolhido emoldura a foto; cor, letra, grade e
+  formato continuam os do estilo). Vale para **qualquer conta**.
+- Ligada, **Foto ou Vídeo** diz o que ocupa a tela. **Foto**: a foto de capa da
+  galeria (escolhida depois, em Design → Capa). **Vídeo**: o navegador prepara o
+  clipe ali mesmo, com a barra andando, e mostra o primeiro quadro antes de
+  criar. Só para quem tem Pastas e Stream liberados (`formatosLiberadosPara`).
+- Com vídeo, a ação (`criarGaleriaAction`, campo `com_clipe`) **devolve o id em
+  vez de redirecionar**; o navegador sobe o clipe e só então leva a pessoa à
+  galeria. Com foto, o caminho é o de sempre (redireciona). Se o envio do clipe
+  falhar, a galeria **já existe**: a tela diz isso e oferece abri-la (Design →
+  Capa tenta de novo).
+- Alternar Foto e Vídeo não perde o clipe já preparado; desligar a tela cheia o
+  deixa de lado (não vai com a galeria).
 
 **Altura "Tela toda".** A quarta altura de capa (`alturaCapa: "tela"`, 100% da
 janela): a capa é a tela inteira e a galeria começa ao rolar. É `100svh`, e não

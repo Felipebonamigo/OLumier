@@ -1521,30 +1521,29 @@ export function comFormatoDe(estilo: Aparencia, atual: Aparencia): Aparencia {
 }
 
 /**
- * A aparência da galeria que NASCE com capa em vídeo (08/10/2026).
+ * A aparência da galeria que NASCE com a capa em tela cheia (08/10/2026).
  *
- * Felipe, com o reel de uma capa em vídeo: "é um vídeo na tela toda, e conforme
- * desce, tem uma galeria — coloque essa opção na hora de montar a galeria".
- * Quem escolhe o vídeo no assistente quer EXATAMENTE isso: a capa Imersa (a foto
- * é o fundo, o clipe toca no lugar dela) na altura "Tela toda". O resto do
- * estilo — cor, letra, grade, formato — continua o que a pessoa escolheu.
+ * Felipe, com o reel de uma capa em vídeo — o vídeo ocupa a tela e, ao rolar,
+ * vem a galeria — pediu a opção na hora de montar a galeria. E depois, olhando a
+ * primeira versão (que só existia com vídeo): "podemos colocar uma opção 'capa em
+ * tela cheia' e aí outra para escolher vídeo ou foto". A tela cheia é uma decisão
+ * da CAPA; o que a ocupa — foto ou clipe — é outra.
  *
- * Só troca o desenho quando o escolhido não toca o clipe (Convite, Jornal…): um
- * estilo que já tem Imersa ou Cartaz fica como está, e só a altura vem junto.
- * Tudo isso se desfaz em Design → Capa; o clipe, aí, fica guardado.
+ * É a capa Imersa (a foto é o fundo, o título por cima) na altura "Tela toda". O
+ * resto do estilo — cor, letra, grade, formato — continua o que a pessoa
+ * escolheu. Só troca o desenho quando o escolhido não ocupa a tela com a foto
+ * (Convite, Jornal…); Imersa e Cartaz ficam como estão, e só a altura vem junto.
+ * Tudo se desfaz em Design → Capa.
  */
-export function aparenciaComCapaEmVideo(inicial: unknown | null): unknown {
+export function aparenciaComCapaEmTelaCheia(inicial: unknown | null): unknown {
   const base: Partial<Aparencia> = inicial === null || inicial === undefined ? {} : lerAparencia(inicial);
   const capa = base.capa ?? APARENCIA_PADRAO.capa;
   return {
     ...base,
-    /* O clipe só toca onde a foto é o fundo; num desenho que a emoldura ele
-       ficaria guardado e a capa continuaria parada — ver `desenhoDaCapaUsaClipe`. */
     ...(desenhoDaCapaUsaClipe(capa) ? {} : { capa: "imersa" }),
     alturaCapa: "tela",
   };
 }
-
 
 /**
  * A aparência com que a galeria NOVA nasce, com o formato escolhido na
