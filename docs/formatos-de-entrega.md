@@ -198,6 +198,42 @@ O nome dos vídeos e a capa das pastas gravam fora do rascunho, como o nome de
 um capítulo; a prévia recarrega sozinha (entram na assinatura da prévia em
 `design/page.tsx`).
 
+## A cena da capa do filme é do fotógrafo (08/10/2026)
+
+Juan, vendo a aba Vídeo com 24 filmes "sem capa": *"existe a opção de a pessoa
+selecionar uma cena do próprio vídeo para ser a capa? Ou um 'selecionar cena
+aleatória do vídeo'."* Até então o quadro saía sozinho (segundo 1, ou 25% e 50%
+quando o primeiro vinha preto).
+
+Aba **Vídeo → Escolher a capa**: escolhido o arquivo do filme (do computador, como
+sempre — nada do filme sobe), abre uma janela com o filme, a linha do tempo, **−1 s /
++1 s**, **Cena aleatória** e **Usar esta cena**. O quadro sai do `<video>` por um
+canvas, é conferido (o Safari já devolveu quadro transparente sem erro) e sobe pelo
+mesmo caminho do JPG que o fotógrafo exporta; a duração do filme vai junto.
+
+- **Cena aleatória** nunca cai nos 5% das pontas (letreiro, tela preta, créditos);
+  mostra a cena antes de gravar, e dá para sortear de novo.
+- **Quadro automático** continua na janela: é o comportamento de antes, para quem
+  não quer escolher.
+- **Escolher uma imagem** no lugar do filme segue igual, sem janela — é a saída de
+  quem tem um codec que o navegador não abre. Um filme que o navegador não abre mostra
+  isso na janela (com o prazo de 15 s) em vez de ficar esperando.
+- `src/components/escolher-cena.tsx` (a janela), `src/lib/cena-do-filme.ts` (sorteio e
+  limites), preso em `scripts/testar-cena-do-filme.mjs`. Conferido no Chromium com um
+  filme de teste: escolher, sortear, ±1 s, Esc, cancelar, filme que não abre, quadro
+  automático e imagem direta.
+
+## A lista de capítulos diz o que é foto e o que é vídeo (08/10/2026)
+
+Juan, na aba Fotos: *"tá escrito só 'fotos', poderia descrever o que são fotos e o que
+são vídeos"* — um capítulo "Vídeos - Júlia e Gustavo" dizia "ver as 7 fotos". A
+contagem do capítulo sempre foi de mídias prontas, e a tela chamava tudo de foto. Agora
+`listarSecoes` traz `total_videos` e a lista fala: **229 fotos**, **7 vídeos**, ou
+**229 fotos · 3 vídeos** (o link vira "ver as 229 fotos", "ver os 7 vídeos", "ver 229
+fotos · 3 vídeos"). O mesmo vale para o grupo das soltas e para as confirmações de
+"tirar" e "apagar". A régua das palavras é `src/lib/contagem-de-midias.ts`, presa em
+`scripts/testar-contagem-de-midias.mjs`.
+
 ## O que ficou de fora, e por quê
 
 - **Trailer tocando sozinho no fundo da capa**, como na Netflix: o arquivo é o

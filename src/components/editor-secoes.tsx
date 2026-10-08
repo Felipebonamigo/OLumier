@@ -16,11 +16,14 @@ import {
 import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
 import { nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
 import { verNaGrade } from "@/lib/filtro-da-grade";
+import { contagemDe, textoDaContagem, textoDoLinkVer, textoDoTirar } from "@/lib/contagem-de-midias";
 
 export interface SecaoResumo {
   id: string;
   nome: string;
   total: number;
+  /** Quantas das `total` são vídeo — a lista diz "fotos" e "vídeos" à parte. */
+  videos: number;
 }
 
 /**
@@ -48,19 +51,22 @@ function aplicarPrevia(atual: SecaoResumo[], p: Previa): SecaoResumo[] {
   const nome = p.nome.trim();
   /* Nome repetido o servidor recusa — e a tela não promete o que não vai ter. */
   if (!nome || atual.some((s) => s.nome.toLowerCase() === nome.toLowerCase())) return atual;
-  return [...atual, { id: `novo:${nome}`, nome, total: 0 }];
+  return [...atual, { id: `novo:${nome}`, nome, total: 0, videos: 0 }];
 }
 
 export function EditorSecoes({
   galeriaId,
   secoes: secoesDoServidor,
   semCapitulo,
+  semCapituloVideos = 0,
   grupoSolto,
   sugestoes,
 }: {
   galeriaId: string;
   secoes: SecaoResumo[];
   semCapitulo: number;
+  /** Quantas das soltas são vídeo. Ausente = nenhuma. */
+  semCapituloVideos?: number;
   /** Como o fotógrafo chamou o grupo das soltas. Nulo = "Outras fotos". */
   grupoSolto: string | null;
   /**
@@ -124,6 +130,7 @@ export function EditorSecoes({
   const nomesCriados = new Set(secoes.map((s) => s.nome.toLowerCase()));
   /* Quantas fotos mudariam de lugar se todos os capítulos fossem apagados. */
   const fotosEmCapitulos = secoes.reduce((soma, s) => soma + s.total, 0);
+  const videosEmCapitulos = secoes.reduce((soma, s) => soma + s.videos, 0);
 
   const lista = ordem
     ? (ordem.map((id) => secoes.find((s) => s.id === id)).filter(Boolean) as SecaoResumo[])
@@ -334,7 +341,7 @@ export function EditorSecoes({
                       onClick={() => verNaGrade(galeriaId, `cap:${s.id}`)}
                       className="text-[11px] text-texto-faint underline decoration-dotted underline-offset-2 transition hover:text-acento"
                     >
-                      ver as {s.total} {s.total === 1 ? "foto" : "fotos"}
+                      {textoDoLinkVer(contagemDe(s.total, s.videos))}
                     </button>
                   ) : (
                     <span className="text-[11px] text-texto-faint">0 fotos</span>
@@ -445,11 +452,11 @@ export function EditorSecoes({
                       type="button"
                       disabled={ocupado}
                       onClick={() => {
-                        const quantas = `${s.total} ${s.total === 1 ? "foto" : "fotos"}`;
+                        const quantas = textoDaContagem(contagemDe(s.total, s.videos));
                         if (
                           confirm(
-                            `Tirar as ${quantas} de “${s.nome}”?\n\n` +
-                              `Elas voltam para o grupo das fotos sem capítulo. ` +
+                            `Tirar ${quantas} de “${s.nome}”?\n\n` +
+                              `Voltam para o grupo sem capítulo. ` +
                               `O capítulo continua, vazio.`,
                           )
                         ) {
@@ -458,7 +465,7 @@ export function EditorSecoes({
                       }}
                       className="rounded-md border border-linha px-2 py-1 text-xs text-texto-soft transition hover:bg-carbon-2 disabled:opacity-50"
                     >
-                      tirar as fotos
+                      {textoDoTirar(contagemDe(s.total, s.videos))}
                     </button>
                   )}
                   <button
@@ -478,7 +485,7 @@ export function EditorSecoes({
                     onClick={() => {
                       const aviso =
                         s.total > 0
-                          ? `Apagar o capítulo “${s.nome}”?\n\nAs ${s.total} fotos NÃO são apagadas — elas voltam para "sem capítulo".`
+                          ? `Apagar o capítulo “${s.nome}”?\n\nO que está dentro (${textoDaContagem(contagemDe(s.total, s.videos))}) NÃO é apagado — volta para "sem capítulo".`
                           : `Apagar o capítulo “${s.nome}”?`;
                       if (confirm(aviso))
                         executar(apagarSecaoAction, { secao_id: s.id }, undefined, { tipo: "apagar", id: s.id });
@@ -571,12 +578,10 @@ export function EditorSecoes({
                         onClick={() => verNaGrade(galeriaId, "sem-capitulo")}
                         className="underline decoration-dotted underline-offset-2 transition hover:text-acento"
                       >
-                        ver as {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
+                        {textoDoLinkVer(contagemDe(semCapitulo, semCapituloVideos))}
                       </button>
                     ) : (
-                      <>
-                        {semCapitulo} {semCapitulo === 1 ? "foto" : "fotos"}
-                      </>
+                      <>{textoDaContagem(contagemDe(semCapitulo, semCapituloVideos))}</>
                     )}
                     {temCapitulos
                       ? ` — ${semCapitulo === 1 ? "aparece" : "aparecem"} com esse nome, antes dos capítulos`
@@ -880,6 +885,8 @@ export function EditorSecoes({
                 ? secoes.length === 1
                   ? "Ele está vazio, nenhuma foto é tocada."
                   : "Estão todos vazios, nenhuma foto é tocada."
+                : videosEmCapitulos > 0
+                  ? `O que há ${secoes.length === 1 ? "dele" : "deles"} (${textoDaContagem(contagemDe(fotosEmCapitulos, videosEmCapitulos))}) não some — volta para “${nomeDoGrupoSolto(grupoSolto)}”.`
                 : fotosEmCapitulos === 1
                   ? `A foto ${secoes.length === 1 ? "dele" : "deles"} não some — volta para “${nomeDoGrupoSolto(grupoSolto)}”.`
                   : `As ${fotosEmCapitulos} fotos ${secoes.length === 1 ? "dele" : "deles"} não somem — voltam para “${nomeDoGrupoSolto(grupoSolto)}”.`}

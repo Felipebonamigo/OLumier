@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { gerarDerivadas } from "@/lib/derivadas-client";
+import { gerarDerivadas, type Derivadas } from "@/lib/derivadas-client";
 import { esquecerMiniaturasDe } from "@/lib/miniaturas-do-painel";
+import { reconhecerArquivo } from "@/lib/tipos-de-arquivo";
+import { EscolherCena } from "@/components/escolher-cena";
 
 /**
  * A capa de UM vídeo — escolhida do arquivo que está no computador.
@@ -19,6 +21,14 @@ import { esquecerMiniaturasDe } from "@/lib/miniaturas-do-painel";
  * Do disco não há nada disso: o filme nunca sai da máquina, e o que sobe é a
  * miniatura de ~50 KB. É a mesma arquitetura do envio normal — o arquivo não
  * passa pelo servidor.
+ *
+ * ── A CENA É DO FOTÓGRAFO (08/10/2026) ───────────────────────────────────
+ *
+ * Escolhido o filme, abre a janela de `escolher-cena.tsx`: ele passa pelo
+ * filme, sorteia uma cena ou segue o "quadro automático" de sempre. Juan:
+ * "existe a opção de a pessoa selecionar uma cena do próprio vídeo para ser
+ * a capa?". O quadro escolhido sobe como imagem — o mesmo caminho do JPG que o
+ * fotógrafo exporta —, e a duração do filme segue junto, como seguia.
  *
  * ── O MESMO SELETOR ACEITA IMAGEM ────────────────────────────────────────
  *
@@ -38,14 +48,33 @@ export function CapaDeVideo({
 }) {
   const [estado, setEstado] = useState<"parado" | "gerando" | "enviando">("parado");
   const [erro, setErro] = useState<string | null>(null);
+  /* O filme que está sendo escolhido, e o endereço local dele. O endereço nasce
+     no clique e é revogado ao fechar — num efeito, o modo estrito do React o
+     revogaria antes de a janela usá-lo. */
+  const [cena, setCena] = useState<{ arquivo: File; url: string } | null>(null);
   const router = useRouter();
   const campo = `capa-${mediaId}`;
 
-  async function escolher(arquivo: File) {
+  function aoEscolher(arquivo: File) {
+    if (reconhecerArquivo(arquivo.name, arquivo.type)?.tipo === "video") {
+      setErro(null);
+      setCena({ arquivo, url: URL.createObjectURL(arquivo) });
+      return;
+    }
+    void enviar(() => gerarDerivadas(arquivo));
+  }
+
+  function fecharCena() {
+    if (cena) URL.revokeObjectURL(cena.url);
+    setCena(null);
+  }
+
+  /** `duracaoDoFilme` vence a da imagem: um quadro não sabe quanto o filme dura. */
+  async function enviar(gerar: () => Promise<Derivadas | null>, duracaoDoFilme?: number) {
     setErro(null);
     setEstado("gerando");
     try {
-      const derivadas = await gerarDerivadas(arquivo);
+      const derivadas = await gerar();
       if (!derivadas) {
         /*
          * A mensagem diz O QUE FAZER, e não só que falhou. Quem chega aqui é
@@ -84,7 +113,7 @@ export function CapaDeVideo({
         body: JSON.stringify({
           largura: derivadas.largura,
           altura: derivadas.altura,
-          duracao: derivadas.duracao,
+          duracao: duracaoDoFilme ?? derivadas.duracao,
         }),
       });
       if (!confirmacao.ok) throw new Error((await confirmacao.json()).erro ?? "Falha ao gravar.");
@@ -144,7 +173,7 @@ export function CapaDeVideo({
         onChange={(e) => {
           const arquivo = e.target.files?.[0];
           e.target.value = "";
-          if (arquivo) void escolher(arquivo);
+          if (arquivo) aoEscolher(arquivo);
         }}
       />
 
@@ -152,6 +181,23 @@ export function CapaDeVideo({
         <p role="alert" className="mt-2 text-[11px] text-alerta">
           {erro}
         </p>
+      )}
+
+      {cena && (
+        <EscolherCena
+          nome={nome}
+          url={cena.url}
+          aoCancelar={fecharCena}
+          aoUsar={(quadro, duracao) => {
+            fecharCena();
+            void enviar(() => gerarDerivadas(quadro), duracao);
+          }}
+          aoAutomatico={() => {
+            const filme = cena.arquivo;
+            fecharCena();
+            void enviar(() => gerarDerivadas(filme));
+          }}
+        />
       )}
     </div>
   );

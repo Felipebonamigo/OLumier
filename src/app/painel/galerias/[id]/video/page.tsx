@@ -73,9 +73,9 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
           {videos.length} {videos.length === 1 ? "vídeo" : "vídeos"}
         </h2>
         <p className="mt-0.5 text-xs text-texto-faint">
-          Escolha o arquivo do filme, que está no seu computador, e a capa sai de um quadro dele — o
-          filme não sobe de novo. Se o seu navegador não abrir o formato, escolha uma imagem em vez
-          disso.
+          Escolha o arquivo do filme, que está no seu computador, e depois a cena que vira a capa —
+          ou sorteie uma. O filme não sobe de novo. Se o seu navegador não abrir o formato, escolha
+          uma imagem em vez disso.
         </p>
 
         {videos.length === 0 ? (
