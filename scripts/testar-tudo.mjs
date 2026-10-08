@@ -190,6 +190,47 @@ try {
   servidorNoAr = false;
 }
 
+/*
+ * ── O SERVIDOR PODE ESTAR NO AR E MESMO ASSIM SEM AS ROTAS ────────────────
+ *
+ * Quatro vezes em 07–08/10/2026 o `next dev` continuou respondendo `/healthz`
+ * e passou a devolver a PÁGINA 404, em HTML, para uma rota de API que existe
+ * no disco. Quem usa essa rota reprova com mensagens sem pé nem cabeça —
+ * "esperava 401, veio 404", "Unexpected token '<'" — e manda caçar defeito num
+ * produto que está inteiro. Três vezes isso custou uma suíte completa, de
+ * ~20 minutos, para terminar em "reinicie o servidor".
+ *
+ * Uma requisição antes de começar paga isso de uma vez. A rota escolhida é uma
+ * que responde SEM sessão: o que se quer saber é se o Next ainda a conhece, e
+ * um 401 em JSON responde isso tão bem quanto um 200.
+ */
+const ROTA_DE_PROVA =
+  "/api/galerias/00000000-0000-0000-0000-000000000000/secoes/00000000-0000-0000-0000-000000000000/capa";
+
+async function rotasInteiras() {
+  try {
+    const r = await fetch(`${BASE}${ROTA_DE_PROVA}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+      signal: AbortSignal.timeout(8000),
+    });
+    /* O que denuncia é o TIPO da resposta, não o código: a rota viva responde
+       JSON, e o Next sem ela devolve a página de erro em HTML. */
+    return (r.headers.get("content-type") ?? "").includes("json");
+  } catch {
+    /* Sem resposta não dá para afirmar que as rotas sumiram — e o aviso de
+       servidor fora do ar, logo abaixo, já cobre esse caso. */
+    return true;
+  }
+}
+
+if (servidorNoAr && !(await rotasInteiras())) {
+  console.log("✗ o servidor está no ar, mas perdeu rotas de API — ele devolve a página 404 em HTML");
+  console.log("  não é defeito do código: pare o next dev e suba de novo antes de rodar a suíte");
+  process.exit(1);
+}
+
 if (!servidorNoAr) {
   console.log(`⚠ servidor de desenvolvimento fora do ar, ou sem banco/armazém (${BASE})`);
   console.log("  as suítes que dependem dele serão puladas — rode `npm run dev` para cobrir tudo\n");

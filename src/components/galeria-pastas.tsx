@@ -139,8 +139,8 @@ export function GaleriaPastas({
     case "mosaico":
       desenho = <PastasEmMosaico pastas={pastas} letras={letras} />;
       break;
-    case "lista":
-      desenho = <PastasEmLista pastas={pastas} letras={letras} />;
+    case "feed":
+      desenho = <PastasEmFeed pastas={pastas} letras={letras} />;
       break;
     default:
       desenho = <PastasEmPilha pastas={pastas} letras={letras} alinhamento={alinhamento} />;
@@ -295,79 +295,6 @@ function PastasEmCapas({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: L
  * No hover a linha ganha o fundo da superfície e o nome anda um pouco para a
  * direita — o dedo correndo o índice.
  */
-/* ── LISTA ────────────────────────────────────────────────────────────────
- *
- * Juan, 07/10/2026, com o vídeo da Flor da Luz no celular: "eu queria poder ver
- * as pastas sem ser assim, tipo uma versão compacta, sem ficar tão grande a
- * pasta".
- *
- * Medido naquela galeria, num aparelho de 812 px de altura: cada pasta ocupava
- * 429 px. Menos de duas por tela — e as 20 pastas dela davam DOZE telas de
- * rolagem só para ver o que existe, antes de abrir qualquer coisa. Uma entrega
- * com muitas pastas vira um corredor.
- *
- * ── POR QUE UM ESTILO NOVO, E NÃO OS OUTROS MENORES ───────────────────────
- *
- * Porque os outros quatro já estão no ar em galeria entregue. Encolher o
- * Índice redesenharia, de uma vez, a entrega de quem escolheu o Índice
- * justamente por ele ser grande.
- *
- * ── E POR QUE A MINIATURA FICA ────────────────────────────────────────────
- *
- * A versão mais curta possível seria texto puro, e ela diz menos: "M&R · 252
- * fotos" não ajuda ninguém a lembrar qual pasta é qual. A estratégia é que a
- * fotografia é protagonista — a miniatura é pequena, mas é ela que faz a linha
- * ser uma PASTA e não um item de menu.
- *
- * Quadrada, e não 4/5: é o retrato 4/5 que empurra a altura nos outros quatro,
- * e o quadrado deixa a linha na altura do texto que está ao lado dela.
- */
-function PastasEmLista({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: Letras }) {
-  return (
-    <ol className="border-t" style={{ borderColor: "var(--g-linha)" }}>
-      {pastas.map((p, i) => (
-        <li key={p.id} className="pasta-entra border-b" style={{ ["--i" as string]: i, borderColor: "var(--g-linha)" }}>
-          <Link
-            href={p.href}
-            className={`group flex items-center gap-4 rounded-[var(--g-canto,6px)] px-2 py-3 sm:gap-5 sm:px-4 ${CLASSE_FOCO} hover:bg-[var(--g-superficie)] ${SUAVE}`}
-            style={FOCO}
-          >
-            <span className="w-14 shrink-0 overflow-hidden rounded-[var(--g-canto,6px)] sm:w-16" style={{ aspectRatio: "1 / 1" }}>
-              {/* As primeiras entram sem esperar: são as que já estão na tela
-                  quando a página abre. */}
-              <Foto src={p.imagens[0]} eager={i < 6} className="h-full w-full" />
-            </span>
-
-            <span className="min-w-0 flex-1">
-              <span className="flex items-baseline gap-2">
-                <span className="shrink-0 text-xs tabular-nums" style={{ ...letras.detalhe.style, color: "var(--g-tenue)" }}>
-                  {numero(i)}
-                </span>
-                {/* `truncate` e não quebra de linha: o que mantém a altura da
-                    linha previsível é o nome caber em UMA. "Casa na Chácara"
-                    numa segunda linha devolveria metade do que foi ganho. */}
-                <span
-                  className={`truncate text-base leading-tight sm:text-lg ${SUAVE} group-hover:translate-x-0.5`}
-                  style={{ ...letras.titulo, color: "var(--g-texto)" }}
-                >
-                  {p.nome}
-                </span>
-              </span>
-              <span className={`mt-0.5 block text-[11px] ${letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...letras.detalhe.style }}>
-                {contagem(p.fotos, p.videos)}
-              </span>
-            </span>
-
-            <span aria-hidden className={`shrink-0 text-sm ${SUAVE} group-hover:translate-x-1`} style={{ color: "var(--g-tenue)" }}>
-              →
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 function PastasEmIndice({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: Letras }) {
   return (
     <ol className="border-t" style={{ borderColor: "var(--g-linha)" }}>
@@ -410,6 +337,82 @@ function PastasEmIndice({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: 
         </li>
       ))}
     </ol>
+  );
+}
+
+/* ── FEED ─────────────────────────────────────────────────────────────────
+ *
+ * Juan, 07–08/10/2026, com o vídeo da Flor da Luz no celular: "eu queria poder
+ * ver as pastas sem ser assim, tipo uma versão compacta". E depois, vendo a
+ * primeira resposta: "a distribuição visual do capas poderia ser mais
+ * compacta, pois no computador fica lindo, no celular não. No celular fica
+ * apenas uma por tela, poderia ser 2 ou 3. Semelhante à distribuição visual do
+ * feed do instagram".
+ *
+ * ── O QUE FOI MEDIDO, NUM CELULAR DE 375 × 812 ────────────────────────────
+ *
+ *   Capas     1 por fileira · 429 px · 12 pastas em 7,7 telas
+ *   Índice    1 por fileira · 429 px · as 20 da Flor da Luz em 12 telas
+ *   Pilha     2 por fileira · 263 px · 12 pastas em 3,4 telas
+ *
+ * A densidade não é novidade — o Pilha, que é o PADRÃO, já põe duas por
+ * fileira. O que o Feed traz é outra coisa: quadrado e colado. O retrato 4/5 e
+ * os 40 px de respiro entre as linhas do Pilha são o que fazem a página andar;
+ * aqui a altura da fileira é metade da largura e o vão é de 6 px.
+ *
+ * ── A PRIMEIRA TENTATIVA FOI UMA LISTA, E ELE RECUSOU ─────────────────────
+ *
+ * Saiu antes uma "Lista", de uma linha por pasta. Juan: "o formato lista tá
+ * muito parecido com o índice. Entre eles o índice tá mais bonito." Ela foi
+ * retirada — nasceu de uma recomendação minha, não de um pedido, e nenhuma
+ * galeria a usava quando saiu (conferido em produção antes de tirar).
+ *
+ * ── E O CAPAS CONTINUA COMO ESTÁ ──────────────────────────────────────────
+ *
+ * Era UMA LINHA pôr o Capas em duas colunas no celular, e três galerias já
+ * entregues mudariam de cara sem os donos terem pedido. Quem quiser a grade
+ * escolhe o Feed.
+ */
+function PastasEmFeed({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: Letras }) {
+  return (
+    <ul className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2">
+      {pastas.map((p, i) => (
+        <li key={p.id} className="pasta-entra" style={{ ["--i" as string]: i }}>
+          <Link
+            href={p.href}
+            className={`group relative block aspect-square overflow-hidden rounded-[var(--g-canto,6px)] ${CLASSE_FOCO}`}
+            style={{ ...FOCO, background: "var(--g-superficie)" }}
+          >
+            <Foto
+              src={p.imagens[0]}
+              eager={i < 6}
+              className={`absolute inset-0 h-full w-full group-hover:scale-[1.05] ${SUAVE} !duration-[1200ms]`}
+            />
+            {/* O véu só embaixo, e só o quanto o nome precisa: num quadrado
+                pequeno, escurecer a foto inteira apagaria justamente o que
+                diferencia uma pasta da outra. */}
+            <span
+              aria-hidden
+              className="absolute inset-x-0 bottom-0 h-1/2"
+              style={{ background: "linear-gradient(to top, rgba(0,0,0,.72), rgba(0,0,0,0))" }}
+            />
+            <span className="absolute inset-x-0 bottom-0 p-2 sm:p-2.5">
+              {/* `line-clamp-2`: "Casa na Chácara" cabe em duas linhas sem
+                  esticar o quadrado, que é o que mantém a fileira alinhada. */}
+              <span className="line-clamp-2 text-xs leading-tight text-white sm:text-sm" style={letras.titulo}>
+                {p.nome}
+              </span>
+              <span
+                className={`mt-0.5 block text-[10px] text-white/70 ${letras.detalhe.className}`}
+                style={letras.detalhe.style}
+              >
+                {contagem(p.fotos, p.videos)}
+              </span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 

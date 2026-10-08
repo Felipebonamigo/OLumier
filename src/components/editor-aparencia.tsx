@@ -506,24 +506,10 @@ function SeletorDeFormato({
         </p>
       )}
       {/*
-        A CAPA DE CADA PASTA — e a posição é o pedido.
-
-        30/09/2026 ela saiu da aba Fotos para cá, porque "existia e ninguém
-        achou". 01/10/2026 Juan voltou: "dificuldade em alterar a capa das
-        pastas, fazer ser mais fácil, VISÍVEL NO COMEÇO DA PÁGINA". Estava no
-        fim do grupo, depois dos cartões de formato, dos cartões de estilo e dos
-        nomes dos vídeos — achável por quem rolasse.
-
-        Agora é a primeira coisa depois de escolher o formato. Acima da escolha
-        do formato não dá: perguntar a capa das pastas antes de a entrega ser em
-        pastas seria perguntar sobre uma tela que ninguém vai ver.
-      */}
-      {ap.formato === "pastas" && <CapasDasPastas galeriaId={galeriaId} pastas={pastas} aoGravar={aoGravar} />}
-      {/*
-        O ESTILO DO FORMATO, logo abaixo dele (30/09/2026): "vamos pensar em
-        estilos para pastas e stream". Só aparece o do formato escolhido —
-        quatro cartões de pasta numa entrega em Stream seriam uma pergunta
-        sobre uma tela que ninguém vai ver. A prévia ao lado mostra a escolha.
+        O ESTILO DAS PASTAS, logo abaixo do formato (30/09/2026): "vamos pensar
+        em estilos para pastas e stream". Só aparece o do formato escolhido —
+        cartões de pasta numa entrega em Stream seriam uma pergunta sobre uma
+        tela que ninguém vai ver. A prévia ao lado mostra a escolha.
       */}
       {ap.formato === "pastas" && (
         <EstilosDoFormato
@@ -533,6 +519,29 @@ function SeletorDeFormato({
           escolher={(id) => mudar({ ...ap, estiloPastas: id })}
         />
       )}
+      {/*
+        A CAPA DE CADA PASTA, DEPOIS DO ESTILO — e a posição é o pedido, duas
+        vezes, em sentidos opostos.
+
+        30/09/2026 ela saiu da aba Fotos para cá, porque "existia e ninguém
+        achou". 01/10/2026 Juan voltou: "dificuldade em alterar a capa das
+        pastas, fazer ser mais fácil, VISÍVEL NO COMEÇO DA PÁGINA" — e ela
+        subiu para antes dos cartões de estilo.
+
+        08/10/2026 ele pediu o contrário: "poderia ter ESTILO DAS PASTAS, e
+        depois sim ter a opção de capa de cada pasta".
+
+        Os dois pedidos são coerentes entre si, e é por isso que este não
+        desfaz aquele: em 01/10 a capa estava no FIM de tudo, depois dos nomes
+        dos vídeos, e ninguém a achava. Hoje ela está acima da decisão que muda
+        o QUANTO a capa aparece — no estilo Lista ela é uma miniatura de 56 px;
+        no Capas, um cartaz de tela inteira. Escolher a imagem antes de saber
+        de que tamanho ela vai sair é escolher no escuro.
+
+        `scripts/testar-aparencia.mjs` guarda esta ordem: ela já foi trocada
+        duas vezes, e a terceira seria alguém "arrumando" sem saber da segunda.
+      */}
+      {ap.formato === "pastas" && <CapasDasPastas galeriaId={galeriaId} pastas={pastas} aoGravar={aoGravar} />}
       {ap.formato === "stream" && (
         <EstilosDoFormato
           titulo="Estilo do stream"

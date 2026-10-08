@@ -65,6 +65,22 @@ etapa("estourar o teto é vermelho, e diz que foi o teto", () => {
   return "distingue";
 });
 
+etapa("o corredor confere se o servidor ainda tem as rotas", () => {
+  /*
+   * Quatro vezes nesta sessao o `next dev` passou a devolver a PAGINA 404 em
+   * HTML para uma rota de API que existe no disco. O teste que a usa reprova
+   * com mensagens sem pe nem cabeca — "esperava 401, veio 404", "Unexpected
+   * token <" — e manda procurar defeito no produto, que esta inteiro.
+   *
+   * Cada descoberta dessas custou uma suite inteira, que leva ~20 minutos.
+   * Uma requisicao antes de comecar paga isso uma vez so.
+   */
+  if (!/rotasInteiras|servidorInteiro/.test(fonte)) {
+    throw new Error("o corredor nao confere se o servidor perdeu rotas — a suite acusa defeito que nao existe");
+  }
+  return "confere";
+});
+
 if (vermelhas) {
   console.log(`\n✗ ${vermelhas} vermelha(s)\n`);
   process.exit(1);

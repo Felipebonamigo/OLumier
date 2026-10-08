@@ -318,6 +318,34 @@ const COM_PECA_PROPRIA = {
   estiloPastas: "opcoes={OPCOES.estiloPastas}",
   estiloStream: "opcoes={OPCOES.estiloStream}",
 };
+/*
+ * A ORDEM DENTRO DE "PASTAS": ESTILO ANTES DA CAPA (08/10/2026).
+ *
+ * Juan: "na área formatos, quando selecionada a opção pastas, logo abaixo tem a
+ * opção CAPA DE CADA PASTA, mas poderia ter ESTILO DAS PASTAS, e depois sim ter
+ * a opção de capa de cada pasta".
+ *
+ * É o INVERSO do que ele próprio pediu em 01/10, quando a capa subiu para o
+ * topo do grupo ("visível no começo da página"). Os dois pedidos são
+ * coerentes entre si: naquele dia a capa estava escondida no fim de tudo; hoje
+ * ela está acima da decisão que MUDA o quanto a capa aparece — o estilo Lista
+ * mostra uma miniatura, o Capas mostra um cartaz.
+ *
+ * Esta etapa existe porque a ordem já foi trocada duas vezes e nada a
+ * guardava: a terceira troca seria de alguém "arrumando" sem saber da segunda.
+ */
+const posEstilo = editor.indexOf('titulo="Estilo das pastas"');
+const posCapa = editor.indexOf("<CapasDasPastas");
+if (posEstilo === -1 || posCapa === -1) {
+  console.error("  ✗ não achei o estilo das pastas ou a capa de cada pasta no editor");
+  falhou = true;
+} else if (posEstilo > posCapa) {
+  console.error("  ✗ a capa de cada pasta está ANTES do estilo das pastas — ver o pedido de 08/10/2026");
+  falhou = true;
+} else {
+  console.log("  ✓ dentro de Pastas, o estilo vem antes da capa de cada pasta");
+}
+
 const forasDaTela = Object.keys(OPCOES).filter((eixo) =>
   COM_PECA_PROPRIA[eixo] ? !editor.includes(COM_PECA_PROPRIA[eixo]) : !editor.includes(`eixo="${eixo}"`),
 );
