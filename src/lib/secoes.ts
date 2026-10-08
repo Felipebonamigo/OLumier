@@ -25,6 +25,8 @@ export interface Secao {
   slug: string;
   ordem: number;
   total?: number;
+  /** Quantas das `total` são vídeo (o resto é foto). Ver `lib/contagem-de-midias.ts`. */
+  total_videos?: number;
   /** A foto de frente da pasta (migração 052). Null = a primeira do capítulo. */
   capa_media_id?: string | null;
   /** Capa enviada como arquivo (migração 057). Vence `capa_media_id`. */
@@ -53,7 +55,10 @@ export const CAPITULOS_SUGERIDOS = [
 
 export async function listarSecoes(galeriaId: string) {
   return consultar<Secao>(
-    `select s.*, (select count(*)::int from medias m where m.secao_id = s.id and m.pronto) as total
+    `select s.*,
+            (select count(*)::int from medias m where m.secao_id = s.id and m.pronto) as total,
+            (select count(*)::int from medias m
+              where m.secao_id = s.id and m.pronto and m.tipo = 'video') as total_videos
        from secoes s
       where s.galeria_id = $1
       order by s.ordem, s.criado_em`,
