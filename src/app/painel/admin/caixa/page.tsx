@@ -26,11 +26,13 @@ import {
   montarCaixa,
   nomeDoMes,
   resumirSociedade,
+  sistemaDaReferencia,
   SISTEMAS_DA_SOCIEDADE,
   type ResumoDaSociedade,
   somarAReceber,
   type CaixaDoMes,
   type AReceber,
+  type PagamentoDoAsaas,
   type Sistema,
 } from "@/lib/caixa-dos-socios";
 import { SOCIOS } from "@/config/socios";
@@ -77,17 +79,28 @@ type Leitura =
   | { tipo: "sem-asaas" }
   | { tipo: "erro"; mensagem: string };
 
+/**
+ * A conta do Asaas é uma só e recebe também cobranças de outros negócios
+ * (as inscrições do Padelizou, por exemplo), que chegam sem o prefixo de
+ * produto. Felipe, 08/10/2026: "aqui não deve aparecer coisas do padelizou".
+ * Elas saem aqui, na entrada, e por isso não aparecem em lugar nenhum da
+ * página: nem na lista, nem nos cartões, nem na tabela por carteira.
+ */
+const daSociedade = (p: PagamentoDoAsaas) => sistemaDaReferencia(p.externalReference) !== "outros";
+
 async function lerAsaas(mes: string): Promise<Leitura> {
   if (!asaasConfigurado()) return { tipo: "sem-asaas" };
   const { de, ate } = limitesDoMes(mes);
   try {
     const [recebidos, confirmados] = await Promise.all([pagamentosRecebidos(de, ate), pagamentosAReceber()]);
+    const doMes = recebidos.pagamentos.filter(daSociedade);
+    const esperando = confirmados.pagamentos.filter(daSociedade);
     return {
       tipo: "ok",
       mes,
-      caixa: montarCaixa(recebidos.pagamentos, carteirasConhecidas()),
-      aReceber: somarAReceber(confirmados.pagamentos),
-      aReceberPorCarteira: montarCaixa(confirmados.pagamentos, carteirasConhecidas(), new Set(["CONFIRMED"])),
+      caixa: montarCaixa(doMes, carteirasConhecidas()),
+      aReceber: somarAReceber(esperando),
+      aReceberPorCarteira: montarCaixa(esperando, carteirasConhecidas(), new Set(["CONFIRMED"])),
       incompleto: recebidos.incompleto || confirmados.incompleto,
     };
   } catch (e) {
@@ -193,7 +206,8 @@ export default async function CaixaDosSociosPage({
       <p className="mt-12 max-w-3xl text-xs text-texto-faint">
         Fora desta conta: a comissão que o Atomatiza recebe em cobranças feitas pelas contas dos
         fornecedores (ela cai como repasse de cobranças de outras contas, não como pagamento desta),
-        estornos e o que foi lançado à mão fora do Asaas.
+        estornos, cobranças sem produto de outros negócios que passam pela mesma conta do Asaas e o que foi
+        lançado à mão fora dele.
       </p>
     </main>
   );
@@ -272,7 +286,7 @@ function Receita({ leitura }: { leitura: Extract<Leitura, { tipo: "ok" }> }) {
               key={s}
               rotulo={NOME_DO_SISTEMA[s]}
               valor={formatarReais(caixa.porSistema[s].brutoCentavos)}
-              nota={`${plural(caixa.porSistema[s].pagamentos, "pagamento", "pagamentos")}${s === "outros" ? " · não é da sociedade" : ""}`}
+              nota={plural(caixa.porSistema[s].pagamentos, "pagamento", "pagamentos")}
             />
           ))}
           <Cartao
@@ -316,7 +330,6 @@ function Receita({ leitura }: { leitura: Extract<Leitura, { tipo: "ok" }> }) {
 function Socios({ caixa, sociedade, mes }: { caixa: CaixaDoMes; sociedade: ResumoDaSociedade; mes: string }) {
   const produtos = SISTEMAS_DA_SOCIEDADE.filter((s) => SEMPRE.includes(s) || caixa.porSistema[s].pagamentos > 0);
   const dono = sociedade.socios.find((s) => s.donoDaConta)?.nome ?? null;
-  const fora = sociedade.foraDaSociedade;
   const aReceber = sociedade.socios.reduce((t, s) => t + s.aReceberCentavos, 0);
 
   /** De onde sai a porcentagem de cada produto, em palavras. */
@@ -431,15 +444,6 @@ function Socios({ caixa, sociedade, mes }: { caixa: CaixaDoMes; sociedade: Resum
         </ul>
       </div>
 
-      {fora.pagamentos > 0 && (
-        <p className="mt-3 rounded-xl border border-linha bg-carbon/40 px-4 py-3 text-xs text-texto-soft">
-          <strong>Fora da sociedade:</strong> {plural(fora.pagamentos, "cobrança", "cobranças")} sem produto na
-          mesma conta do Asaas (lançadas à mão no painel de lá), {formatarReais(fora.liquidoCentavos)} líquidos —{" "}
-          {formatarReais(fora.repassadoCentavos)} repassados para outras carteiras e{" "}
-          {formatarReais(fora.naContaCentavos)} na conta principal. Não entra na conta dos sócios nem no resultado.
-        </p>
-      )}
-
       <ParaOndeFoi caixa={caixa} sistemas={sistemasComDinheiro(caixa)} />
     </Bloco>
   );
@@ -545,8 +549,8 @@ function ParaOndeFoi({ caixa, sistemas }: { caixa: CaixaDoMes; sistemas: Sistema
     <details className="mt-4 rounded-xl border border-linha bg-carbon/40 p-4">
       <summary className="cursor-pointer text-sm font-semibold">Ver por carteira, como o Asaas registrou</summary>
       <p className="mt-1 text-xs text-texto-faint">
-        Cada carteira que recebeu dinheiro da conta no mês, por produto — inclusive o que não é da sociedade. A
-        porcentagem é sobre o líquido daquele produto.
+        Cada carteira que recebeu dinheiro da conta no mês, por produto. A porcentagem é sobre o líquido daquele
+        produto.
       </p>
       <div className="mt-3 overflow-x-auto rounded-xl border border-linha">
         <table className="w-full min-w-[560px] text-sm">

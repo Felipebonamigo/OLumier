@@ -254,8 +254,12 @@ export async function apagarGaleriasDaConta(
       chave: string;
       chave_thumb: string | null;
       chave_preview: string | null;
+      chave_reproducao: string | null;
       armazem: string | null;
-    }>("select chave, chave_thumb, chave_preview, armazem from medias where galeria_id = $1", [g.id]);
+    }>(
+      "select chave, chave_thumb, chave_preview, chave_reproducao, armazem from medias where galeria_id = $1",
+      [g.id],
+    );
 
     const apagou = await consultar("delete from galerias where id = $1 returning id", [g.id]);
     if (apagou.length === 0) continue;

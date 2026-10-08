@@ -622,7 +622,8 @@ export async function galeriasVencidasNaLixeira() {
     `select g.id, g.tenant_id, g.titulo,
             coalesce(
               array_remove(
-                array_agg(m.chave) || array_agg(m.chave_thumb) || array_agg(m.chave_preview),
+                array_agg(m.chave) || array_agg(m.chave_thumb) || array_agg(m.chave_preview)
+                  || array_agg(m.chave_reproducao),
                 null
               ),
               '{}'
@@ -704,8 +705,9 @@ export async function destruirGaleria(
     chave: string;
     chave_thumb: string | null;
     chave_preview: string | null;
+    chave_reproducao: string | null;
     armazem: string | null;
-  }>("select chave, chave_thumb, chave_preview, armazem from medias where galeria_id = $1", [
+  }>("select chave, chave_thumb, chave_preview, chave_reproducao, armazem from medias where galeria_id = $1", [
     galeriaId,
   ]);
   /* As capas de capítulo enviadas como arquivo (migração 057). Mesma razão de
@@ -717,7 +719,7 @@ export async function destruirGaleria(
     [galeriaId],
   );
   const quantos =
-    medias.reduce((n, m) => n + [m.chave, m.chave_thumb, m.chave_preview].filter(Boolean).length, 0) +
+    medias.reduce((n, m) => n + [m.chave, m.chave_thumb, m.chave_preview, m.chave_reproducao].filter(Boolean).length, 0) +
     (antes?.capa_chave ? 1 : 0) +
     capasDePasta.length;
 

@@ -99,8 +99,8 @@ interface PropsGrade {
    */
   listaCompleta?: boolean;
   /**
-   * Itens maiores nesta seção — hoje só o capítulo que é só vídeo e tem poucos
-   * (ver `VIDEOS_GRANDES_ATE` em `galeria-cliente.tsx`).
+   * Itens maiores nesta seção — hoje só o capítulo que é só vídeo (ver
+   * `capitulosDeVideo` em `galeria-cliente.tsx`).
    *
    * Juan, 30/09/2026: "como são poucos vídeos, acho que podemos aumentar a
    * visualização deles". Não é eixo de aparência: o fotógrafo não escolheu nada,

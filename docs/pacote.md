@@ -97,7 +97,13 @@ Pedido:
 - `forma`: `"cartao"` ou `"fatura"` (Pix/boleto). Cada lado traduz pela sua
   `formaDaAssinatura`.
 - `vencimento`: o primeiro vencimento de quem chama. Quem recebe usa
-  `max(vencimento, hoje)`.
+  `max(vencimento, hoje)`. A conta que nasce aqui tem os 14 dias de teste de
+  sempre, então a primeira fatura pode vencer com o teste correndo — e isso é
+  escolha de quem comprou. O que a Galeria faz com o atraso nesse intervalo:
+  o aviso de "vencida" **não** marca a conta como inadimplente enquanto o teste
+  vale (`api/asaas/webhook`); a fatura segue em aberto no Asaas e, se o teste
+  acabar sem pagamento, vale a regra de sempre. Até 08/10/2026 marcava, e isso
+  travava o envio de quem ainda tinha dias grátis (migração 065 desfez).
 - `pacote: true` → preço com o combo de `parceiro` desde já, e a marca
   `· pacote` na descrição. `pacote: false` (acrescentar o outro produto a quem
   já assina um) → preço pela regra de sempre, lida no Asaas.

@@ -56,6 +56,9 @@ export const ACOES = {
    * e por qual regra. "Cancelei no segundo mês e não me devolveram nada" é a
    * reclamação previsível do anual, e a resposta tem de ter data e valor. */
   DEVOLUCAO_PEDIDA: "assinatura.devolucao",
+  /* `conta.status_corrigido` NÃO é constante de propósito: só a migração 065
+   * a grava (SQL), e constante que nenhum código chama é o que
+   * `testar-auditoria` reprova. Se um dia código passar a gravá-la, nasce aqui. */
   /* Galeria criada por um programa, não por um clique no painel — hoje, o
    * Atomatiza criando a galeria de um contrato pela chave de API. Entra na
    * lista porque é ACESSO: a pergunta de disputa é "quem criou isto?", e a

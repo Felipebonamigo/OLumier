@@ -528,3 +528,17 @@ export function chaveDerivadaDoOriginal(chaveOriginal: string, sufixo = "_thumb"
   const semExtensao = chaveOriginal.replace(/\.[a-z0-9]{1,10}$/i, "");
   return `${semExtensao}${sufixo}.${FORMATOS_DERIVADA.webp.ext}`;
 }
+
+/**
+ * Onde mora a VERSÃO LEVE de um vídeo — a cópia H.264 que o cliente assiste
+ * (`lib/versao-leve.ts`, migração 065).
+ *
+ * Mesma regra da capa: deduzida do original, nunca recebida do navegador. A
+ * extensão e o tipo são fixos porque quem gera é sempre o conversor do painel,
+ * e ele só escreve MP4.
+ */
+export const MIME_DA_VERSAO_LEVE = "video/mp4";
+export function chaveDaVersaoLeve(chaveOriginal: string): string {
+  const semExtensao = chaveOriginal.replace(/\.[a-z0-9]{1,10}$/i, "");
+  return `${semExtensao}_leve.mp4`;
+}
