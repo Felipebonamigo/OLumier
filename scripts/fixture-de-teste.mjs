@@ -216,14 +216,14 @@ export async function limparRodada(db) {
   if (!estudio) return { estudios: 0, galerias: 0, objetos: 0 };
 
   const { rows: midias } = await db.query(
-    `select m.chave, m.chave_thumb, m.chave_preview, m.armazem
+    `select m.chave, m.chave_thumb, m.chave_preview, m.chave_reproducao, m.armazem
        from medias m where m.tenant_id = $1`,
     [estudio.id],
   );
 
   let objetos = 0;
   for (const m of midias) {
-    for (const chave of [m.chave, m.chave_thumb, m.chave_preview]) {
+    for (const chave of [m.chave, m.chave_thumb, m.chave_preview, m.chave_reproducao]) {
       if (!chave) continue;
       try {
         /* Derivada vive sempre no R2; o original segue a coluna `armazem`.

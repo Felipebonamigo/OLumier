@@ -118,11 +118,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     id: string;
     chave: string;
     chave_preview: string | null;
+    chave_reproducao: string | null;
     nome_original: string;
     armazem: string;
     capitulo: string | null;
   }>(
-    `select m.id, m.chave, m.chave_preview, m.nome_original, m.armazem,
+    `select m.id, m.chave, m.chave_preview, m.chave_reproducao, m.nome_original, m.armazem,
             s.nome as capitulo
        from medias m
        left join secoes s on s.id = m.secao_id
@@ -167,7 +168,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const armazem = armazemDe(m.armazem);
       const url =
         tipo === "preview"
-          ? await urlDaDerivada(m.chave_preview, m.chave, armazem, VALIDADE)
+          ? /* Vídeo assiste a VERSÃO LEVE quando ela existe (migração 065) —
+               H.264 no R2, perto e sem taxa de saída; foto, a prévia de 2048 px.
+               Sem nenhuma das duas, o original, como sempre. */
+            await urlDaDerivada(m.chave_reproducao ?? m.chave_preview, m.chave, armazem, VALIDADE)
           : await urlDoOriginal(
               m.chave,
               armazem,

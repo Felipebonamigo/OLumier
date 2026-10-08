@@ -71,6 +71,7 @@ import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { fotosDaPasta, type FotoDaPasta } from "@/lib/entrega-no-design";
 import { definirTituloDoVideo } from "@/lib/medias";
+import { videosParaPreparar } from "@/lib/videos-para-preparar";
 
 /** Toda action começa por aqui: quem não tem sessão válida não faz nada. */
 async function exigirTenant(): Promise<string> {
@@ -627,6 +628,16 @@ export async function renomearVideoAction(form: FormData): Promise<{ ok: boolean
   const ok = await definirTituloDoVideo(galeriaId, tenantId, mediaId, String(form.get("titulo") ?? ""));
   revalidatePath(`/painel/galerias/${galeriaId}`);
   return { ok };
+}
+
+/**
+ * Os vídeos desta galeria que ainda tocam o original, com o endereço para o
+ * navegador converter a versão leve. Ver `lib/videos-para-preparar.ts`.
+ */
+export async function videosParaPrepararAction(galeriaId: string) {
+  const tenantId = await exigirTenant();
+  if (!galeriaId) return [];
+  return videosParaPreparar(galeriaId, tenantId);
 }
 
 // --- seleção do álbum -------------------------------------------------------

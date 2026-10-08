@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * QUEM VIROU INADIMPLENTE COM O TESTE AINDA VALENDO — a migração 064. Uso:
+ * QUEM VIROU INADIMPLENTE COM O TESTE AINDA VALENDO — a migração 065. Uso:
  *   node --env-file=.env.local --experimental-strip-types \
  *     --import ./scripts/registrar-ts.mjs scripts/testar-atraso-no-teste.mjs
  *
@@ -57,7 +57,7 @@ const status = async (id) => (await db.query("select status from tenants where i
 const DIA = 24 * 60 * 60 * 1000;
 
 try {
-  console.log("A migração 064:\n");
+  console.log("A migração 065:\n");
 
   const errada = await conta({ status: "inadimplente", trialAte: new Date(Date.now() + 5 * DIA) });
   const teste_vencido = await conta({ status: "inadimplente", trialAte: new Date(Date.now() - 2 * DIA) });
@@ -104,7 +104,7 @@ try {
 }
 
 if (falhou) {
-  console.log("\n✗ a migração 064 pega a conta errada");
+  console.log("\n✗ a migração 065 pega a conta errada");
   process.exit(1);
 }
-console.log("\n✓ migração 064: só quem tem de ser corrigido");
+console.log("\n✓ migração 065: só quem tem de ser corrigido");

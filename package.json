@@ -16,6 +16,7 @@
     "@aws-sdk/lib-storage": "^3.1117.0",
     "@aws-sdk/s3-request-presigner": "^3.1112.0",
     "@vladmandic/face-api": "^1.7.15",
+    "mediabunny": "1.58.1",
     "next": "16.3.8",
     "pg": "^8.23.0",
     "react": "19.2.8",

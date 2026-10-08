@@ -79,7 +79,7 @@ export function deOutroAmbiente(chave, donos) {
 
 export async function chavesConhecidas(db) {
   const { rows: midias } = await db.query(
-    "select chave, chave_thumb, chave_preview, armazem from medias",
+    "select chave, chave_thumb, chave_preview, chave_reproducao, armazem from medias",
   );
   const { rows: marcas } = await db.query(
     "select logo_chave, fonte_chave from tenants where logo_chave is not null or fonte_chave is not null",
@@ -125,6 +125,10 @@ export async function chavesConhecidas(db) {
     if (m.chave) (m.armazem === "b2" ? b2 : r2).add(m.chave);
     if (m.chave_thumb) r2.add(m.chave_thumb);
     if (m.chave_preview) r2.add(m.chave_preview);
+    /* A versão leve do vídeo (migração 065) — derivada, então R2. Sem esta
+       linha a varredura a acharia sem dono e apagaria a cópia que o cliente
+       assiste. */
+    if (m.chave_reproducao) r2.add(m.chave_reproducao);
   }
   for (const t of marcas) {
     if (t.logo_chave) r2.add(t.logo_chave);

@@ -245,6 +245,7 @@ export async function apagarArquivosDasMedias(
     chave: string;
     chave_thumb?: string | null;
     chave_preview?: string | null;
+    chave_reproducao?: string | null;
     armazem?: string | null;
   }[],
 ): Promise<{ apagadas: number; falhou: string | null }> {
@@ -255,6 +256,7 @@ export async function apagarArquivosDasMedias(
     /* As DERIVADAS ficam sempre no R2 — é a regra deste módulo inteiro. */
     if (m.chave_thumb) noR2.push(m.chave_thumb);
     if (m.chave_preview) noR2.push(m.chave_preview);
+    if (m.chave_reproducao) noR2.push(m.chave_reproducao);
     if (m.chave) (armazemDe(m.armazem) === "b2" ? noB2 : noR2).push(m.chave);
   }
 

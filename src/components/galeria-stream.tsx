@@ -17,6 +17,7 @@ import {
   relogio,
 } from "@/lib/formato-da-entrega";
 import { baixarNoComputador } from "@/lib/salvar-client";
+import { AvisoDoVideo, useSaudeDoVideo } from "./aviso-do-video";
 
 /**
  * A ENTREGA EM STREAM — os vídeos numa tela de cinema, em fileiras, com
@@ -1279,6 +1280,8 @@ function Player({
   const seguirTocando = useRef(false);
   const esconder = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ultimoToque = useRef<string>("mouse");
+  /* O filme que não abre, ou não anda, diz isso — ver `aviso-do-video`. */
+  const saude = useSaudeDoVideo(id);
 
   /* O navegador deixa mudar o volume? No iPhone, não — ver acima. */
   useEffect(() => {
@@ -1554,6 +1557,8 @@ function Player({
               playsInline
               preload="metadata"
               className="absolute inset-0 h-full w-full object-contain"
+              onError={saude.eventos.onError}
+              onLoadedData={saude.eventos.onLoadedData}
               onPointerDown={(e) => {
                 ultimoToque.current = e.pointerType;
               }}
@@ -1577,7 +1582,8 @@ function Player({
                   void v.play().catch(() => {});
                 }
               }}
-              onPlay={() => {
+              onPlay={(e) => {
+                saude.eventos.onPlay(e);
                 setRodando(true);
                 setContagem(null);
                 mostrarControles();
@@ -1591,6 +1597,7 @@ function Player({
                 }).catch(() => {});
               }}
               onTimeUpdate={(e) => {
+                saude.eventos.onTimeUpdate(e);
                 setTempo(e.currentTarget.currentTime);
                 guardar();
               }}
@@ -1599,10 +1606,17 @@ function Player({
                 setMudo(e.currentTarget.muted);
                 setVolume(e.currentTarget.volume);
               }}
-              onWaiting={() => setEsperando(true)}
-              onPlaying={() => setEsperando(false)}
+              onWaiting={() => {
+                saude.eventos.onWaiting();
+                setEsperando(true);
+              }}
+              onPlaying={() => {
+                saude.eventos.onPlaying();
+                setEsperando(false);
+              }}
               onCanPlay={() => setEsperando(false)}
               onPause={() => {
+                saude.eventos.onPause();
                 setRodando(false);
                 setVisiveis(true);
                 guardar(true);
@@ -1626,7 +1640,13 @@ function Player({
                 <IconePlay className="ml-1 h-7 w-7" />
               </button>
             )}
-            {esperando && rodando && (
+            <AvisoDoVideo
+              tom="escuro"
+              saude={saude.saude}
+              baixar={permiteDownload ? () => void baixar() : undefined}
+              dispensar={saude.dispensar}
+            />
+            {esperando && rodando && saude.saude === "ok" && (
               <span
                 aria-hidden
                 className="pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 animate-spin rounded-full border-2 border-white/25 border-t-white"

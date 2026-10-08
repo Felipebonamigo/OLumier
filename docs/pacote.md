@@ -103,7 +103,7 @@ Pedido:
   o aviso de "vencida" **não** marca a conta como inadimplente enquanto o teste
   vale (`api/asaas/webhook`); a fatura segue em aberto no Asaas e, se o teste
   acabar sem pagamento, vale a regra de sempre. Até 08/10/2026 marcava, e isso
-  travava o envio de quem ainda tinha dias grátis (migração 064 desfez).
+  travava o envio de quem ainda tinha dias grátis (migração 065 desfez).
 - `pacote: true` → preço com o combo de `parceiro` desde já, e a marca
   `· pacote` na descrição. `pacote: false` (acrescentar o outro produto a quem
   já assina um) → preço pela regra de sempre, lida no Asaas.

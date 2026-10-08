@@ -33,6 +33,8 @@ import {
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
 import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio } from "@/lib/velocidade-regras";
 import { encaixarNaOrdemDaPastaAction, garantirSecoesAction } from "@/app/painel/actions";
+import { prepararVideoParaAssistir } from "@/lib/versao-leve";
+import { reconhecerArquivo } from "@/lib/tipos-de-arquivo";
 
 /**
  * O ENVIO QUE SOBREVIVE À TROCA DE ABA.
@@ -89,7 +91,12 @@ export interface ItemFila {
   erro?: string;
   /** Quantos rostos a busca por rosto guardou desta foto. */
   rostos?: number;
+  /** A versão leve do vídeo, que o navegador converte depois do envio. */
+  leve?: { estado: EstadoDaLeve; progresso?: number; motivo?: string };
 }
+
+/** "fila"/"convertendo" enquanto anda; os outros são o que `prepararVideoParaAssistir` devolveu. */
+type EstadoDaLeve = "fila" | "convertendo" | "pronta" | "dispensada" | "impossivel" | "falhou";
 
 export interface OpcoesDeEnvio {
   /**
@@ -217,6 +224,9 @@ export function ProvedorDeEnvio({
 }) {
   const [fila, setFila] = useState<ItemFila[]>([]);
   const [rodando, setRodando] = useState(false);
+  /* A conversão dos vídeos para a versão leve corre DEPOIS do envio, numa fila
+     própria — ver `converterVideos`. */
+  const [convertendo, setConvertendo] = useState(false);
   const [pausado, setPausado] = useState(false);
   const [avisoRostos, setAvisoRostos] = useState<string | null>(null);
   const [inicio, setInicio] = useState<number | null>(null);
@@ -284,8 +294,10 @@ export function ProvedorDeEnvio({
    * `lib/aviso-de-saida-client.ts`.
    */
   useAvisoDeSaida(
-    rodando,
-    "O envio ainda está em andamento. Se sair agora, os arquivos que faltam não sobem.",
+    rodando || convertendo,
+    rodando
+      ? "O envio ainda está em andamento. Se sair agora, os arquivos que faltam não sobem."
+      : "Os vídeos estão sendo preparados para assistir. Se sair agora, os que faltam tocam o original, mais pesado.",
     /*
      * As quatro abas DESTA galeria não são saída: este provedor mora no layout
      * delas e não é remontado na troca — é o que o bloco "POR QUE O LAYOUT
@@ -405,6 +417,49 @@ export function ProvedorDeEnvio({
   /* As pastas a pôr na ordem quando a fila secar, por galeria e lote. */
   const encaixes = useRef(new Map<string, { galeriaId: string; lote: string; pasta: ArquivoConhecido[] }>());
 
+  /*
+   * ── A VERSÃO LEVE, UM VÍDEO DE CADA VEZ (08/10/2026) ───────────────────
+   *
+   * Galeria do Mirna e Diogo: 32 `.MOV` do iPhone em HEVC, até 54 Mbps, que
+   * "abrem e nem executam". Depois que o original sobe, o navegador converte
+   * uma cópia H.264 leve para o cliente ASSISTIR (`lib/versao-leve.ts`).
+   *
+   * Fila própria, separada do envio e de UM em UM: converter usa o
+   * codificador de vídeo do computador inteiro, e dois ao mesmo tempo só
+   * dividiriam a mesma máquina. Corre DEPOIS do envio de cada vídeo — o
+   * original já está entregue, e o que falhar aqui só deixa o vídeo tocando o
+   * original, como antes; nunca desfaz o envio.
+   */
+  const paraConverter = useRef<{ itemId: string; mediaId: string; arquivo: File; semCapa: boolean }[]>([]);
+  const convertendoRef = useRef(false);
+  const converterVideos = useCallback(async () => {
+    if (convertendoRef.current) return;
+    convertendoRef.current = true;
+    setConvertendo(true);
+    try {
+      for (let v = paraConverter.current.shift(); v; v = paraConverter.current.shift()) {
+        const { itemId } = v;
+        let ultimo = -1;
+        atualizar(itemId, { leve: { estado: "convertendo", progresso: 0 } });
+        const r = await prepararVideoParaAssistir(v.mediaId, v.arquivo, {
+          semCapa: v.semCapa,
+          aoProgresso: (fracao) => {
+            /* Um redesenho por ponto percentual, não por quadro convertido. */
+            const pct = Math.floor(fracao * 100);
+            if (pct === ultimo) return;
+            ultimo = pct;
+            atualizar(itemId, { leve: { estado: "convertendo", progresso: pct } });
+          },
+        });
+        atualizar(itemId, { leve: { estado: r.estado, motivo: r.motivo } });
+      }
+    } finally {
+      convertendoRef.current = false;
+      setConvertendo(false);
+      router.refresh();
+    }
+  }, [router]);
+
   const enviarUm = useCallback(
     async (tarefa: Tarefa) => {
       /*
@@ -426,6 +481,9 @@ export function ProvedorDeEnvio({
         | { emPartes: false; url: string }
       );
       let preparado: Preparo | null = null;
+      /* O vídeo cuja capa não saiu (o navegador não tirou o quadro) ganha uma
+         da versão leve, se ela sair — ver `prepararVideoParaAssistir`. */
+      let saiuSemCapa = false;
       let arquivo = tarefa.arquivo;
       /* O tempo do envio do ORIGINAL na tentativa que deu certo — a parte que
          depende da rede. Ver `medidas`. */
@@ -465,6 +523,7 @@ export function ProvedorDeEnvio({
               vezDaMiniatura(() => gerarDerivadas(arquivo, { medirRostos: tarefa.medidor })),
               dataDaFoto(arquivo),
             ]);
+            saiuSemCapa = !derivadas;
 
             atualizar(tarefa.item.id, { situacao: "enviando" });
 
@@ -620,6 +679,16 @@ export function ProvedorDeEnvio({
 
         atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false, motivo: undefined });
         anotar({ galeriaId: tarefa.galeriaId, bytes: arquivo.size, ms: envioMs, ok: true, erro: null });
+        if (preparado && reconhecerArquivo(arquivo.name, arquivo.type)?.tipo === "video") {
+          paraConverter.current.push({
+            itemId: tarefa.item.id,
+            mediaId: (preparado as Preparo).mediaId,
+            arquivo,
+            semCapa: saiuSemCapa,
+          });
+          atualizar(tarefa.item.id, { leve: { estado: "fila" } });
+          void converterVideos();
+        }
       } catch (e) {
         /*
          * Desistiu de vez: solta a reserva agora em vez de deixar o espaço
@@ -649,7 +718,7 @@ export function ProvedorDeEnvio({
         });
       }
     },
-    [anotar],
+    [anotar, converterVideos],
   );
 
   const trabalhar = useCallback(async () => {
@@ -948,6 +1017,10 @@ function BarraDeEnvio({
   const pct = fila.length ? (enviados / fila.length) * 100 : 0;
   /* Só quando aberta: fechada, a barra não precisa nem separar a fila. */
   const resumo = aberta ? linhasDaFila(fila) : null;
+  /* A conversão dos vídeos corre depois do envio: com a barra recolhida em
+     "Envio concluído", sem esta linha ninguém saberia que ainda há trabalho. */
+  const aPreparar = fila.filter((i) => i.leve?.estado === "fila" || i.leve?.estado === "convertendo");
+  const agora = aPreparar.find((i) => i.leve?.estado === "convertendo");
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-linha bg-carbon/95 backdrop-blur">
@@ -975,6 +1048,9 @@ function BarraDeEnvio({
             {enviados} de {fila.length}
             {comErro > 0 ? ` · ${comErro} com erro` : ""}
             {restante ? ` · ~${restante} restantes` : ""}
+            {aPreparar.length > 0 &&
+              ` · preparando ${aPreparar.length === 1 ? "1 vídeo" : `${aPreparar.length} vídeos`} para assistir` +
+                (agora ? ` (${agora.leve?.progresso ?? 0}%)` : "")}
           </span>
 
           <div className="ml-auto flex items-center gap-2">
@@ -1041,6 +1117,7 @@ function BarraDeEnvio({
                         enviado
                         {item.rostos !== undefined &&
                           ` · ${item.rostos} ${item.rostos === 1 ? "rosto" : "rostos"}`}
+                        <TextoDaLeve leve={item.leve} />
                       </span>
                     ) : item.semRede ? (
                       <span className="text-alerta">sem internet — continua quando voltar</span>
@@ -1092,5 +1169,24 @@ function BarraDeEnvio({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * O que a linha do vídeo diz sobre a versão leve. "Já toca bem" não aparece:
+ * vídeo que não precisou de cópia não tem novidade para contar.
+ */
+function TextoDaLeve({ leve }: { leve: ItemFila["leve"] }) {
+  if (!leve || leve.estado === "dispensada") return null;
+  if (leve.estado === "fila") return <span className="text-texto-faint"> · na fila para preparar</span>;
+  if (leve.estado === "convertendo") {
+    return <span className="text-texto-faint"> · preparando para assistir {leve.progresso ?? 0}%</span>;
+  }
+  if (leve.estado === "pronta") return <span> · pronto para assistir</span>;
+  return (
+    <span className="text-alerta" title={leve.motivo}>
+      {" "}
+      · toca o original ({leve.motivo})
+    </span>
   );
 }
