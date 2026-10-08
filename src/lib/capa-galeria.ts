@@ -163,3 +163,58 @@ export async function definirCapaPorMedia(
   );
   return linhas.length > 0;
 }
+
+/* ── A CAPA EM VÍDEO (migração 066) ────────────────────────────────────────
+ *
+ * Um clipe curto e mudo, mais o primeiro quadro em imagem, que fica no lugar
+ * enquanto o clipe carrega (e para quem pediu menos movimento). Duas colunas de
+ * chave em `galerias`, no mesmo molde da `capa_chave`. As medidas e as recusas
+ * moram em `clipe-da-capa-regras.ts`, que o navegador também lê. */
+
+/** Dentro de `capa/`, como a capa: `chaveDaGaleria` já a reconhece, e a limpeza distingue. */
+export function chavesDoClipe(tenantId: string, galeriaId: string) {
+  const id = randomUUID();
+  return {
+    clipe: `${tenantId}/${galeriaId}/capa/clipe-${id}.mp4`,
+    poster: `${tenantId}/${galeriaId}/capa/clipe-${id}-quadro.jpg`,
+  };
+}
+
+/** A galeria, se for deste estúdio — com o clipe que ela tem hoje. */
+export function galeriaParaClipe(galeriaId: string, tenantId: string) {
+  return consultarUm<{ id: string; capa_video_chave: string | null; capa_video_poster_chave: string | null }>(
+    "select id, capa_video_chave, capa_video_poster_chave from galerias where id = $1 and tenant_id = $2",
+    [galeriaId, tenantId],
+  );
+}
+
+/**
+ * Grava (ou tira, com `null`) o clipe da capa e devolve as chaves ANTERIORES,
+ * para quem chama apagá-las do bucket.
+ *
+ * Lê e troca num comando só: `for update` segura a linha entre ler o que havia
+ * e gravar o novo, e dois envios seguidos não deixam um arquivo sem dono.
+ */
+export async function trocarClipeDaCapa(
+  galeriaId: string,
+  tenantId: string,
+  novo: { clipe: string; poster: string } | null,
+): Promise<string[] | null> {
+  const linhas = await consultar<{ clipe_antigo: string | null; poster_antigo: string | null }>(
+    `with antes as (
+       select id, capa_video_chave, capa_video_poster_chave
+         from galerias where id = $3 and tenant_id = $4 for update
+     )
+     update galerias g
+        set capa_video_chave = $1, capa_video_poster_chave = $2, atualizado_em = now()
+       from antes
+      where g.id = antes.id
+      returning antes.capa_video_chave as clipe_antigo, antes.capa_video_poster_chave as poster_antigo`,
+    [novo?.clipe ?? null, novo?.poster ?? null, galeriaId, tenantId],
+  );
+  if (linhas.length === 0) return null;
+  const { clipe_antigo, poster_antigo } = linhas[0];
+  return [clipe_antigo, poster_antigo].filter(
+    (c): c is string => Boolean(c) && c !== novo?.clipe && c !== novo?.poster,
+  );
+}

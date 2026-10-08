@@ -13,6 +13,8 @@ export interface Media {
   /** A cópia H.264 de vídeo para assistir, no R2 (migração 065). Nula: toca o original. */
   chave_reproducao: string | null;
   nome_original: string;
+  /** O nome que o fotógrafo escreveu para a tela do Stream (migração 055). Nulo: vale o do arquivo. */
+  titulo: string | null;
   tipo: "foto" | "video";
   mime: string;
   bytes: string;

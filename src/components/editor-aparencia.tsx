@@ -493,12 +493,15 @@ function SeletorDeFormato({
   galeriaId,
   videos,
   pastas,
+  slotClipe,
   aoGravar,
 }: PecaProps & {
   conteudo: ConteudoDaGaleria | null;
   galeriaId: string;
   videos: VideoNoDesign[];
   pastas: PastaNoDesign[];
+  /** A área da capa em vídeo — só o Stream a mostra. */
+  slotClipe: ReactNode;
   /** Um nome de vídeo ou uma capa de pasta gravou: a prévia recarrega. */
   aoGravar: () => void;
 }) {
@@ -600,6 +603,7 @@ function SeletorDeFormato({
                 : "Cada estilo tem a própria capa. Para usar um desenho do grupo Capa (convite, arco…), escolha “A do grupo Capa”."}
             </p>
           </div>
+          {slotClipe}
           {/* Só onde existe rolar de lado: Vitrine e Mostra já descem. */}
           {(ap.estiloStream === "cinema" || ap.estiloStream === "episodios") && (
             <div>
@@ -813,7 +817,10 @@ export function EditorAparencia({
   formatosLiberados = false,
   videos = [],
   pastas = [],
+  slotClipe = null,
 }: {
+  /** A área da capa em vídeo (formato Stream). Montada no servidor, como `slotCapa`. */
+  slotClipe?: ReactNode;
   /** Os vídeos e os capítulos da galeria, para o grupo Formato dar nome aos
       vídeos e escolher a capa das pastas. Ver `lib/entrega-no-design.ts`. */
   videos?: VideoNoDesign[];
@@ -1430,6 +1437,7 @@ export function EditorAparencia({
               galeriaId={galeriaId}
               videos={videos}
               pastas={pastas}
+              slotClipe={slotClipe}
               aoGravar={() => router.refresh()}
             />
           )}

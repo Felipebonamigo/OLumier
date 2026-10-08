@@ -945,6 +945,11 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   let fileiras: FileiraDoStream[] = [];
   let amostraDeFotos: string[] = [];
   let fundoDoStream: string | null = null;
+  /* A capa em vídeo (migração 066): o clipe do Stream, quando a sala desenha a
+     própria capa. Na "capa do grupo Capa" a imagem fica parada — o clipe é da
+     sala, e a tela do Design diz isso. O primeiro quadro do clipe é a imagem de
+     baixo, para o vídeo não "pular" ao começar. */
+  let clipeDaCapa: { url: string; quadro: string } | null = null;
   const fotosNaGaleria = todasAsMedias.filter((m) => m.tipo === "foto").length;
   if (tela === "stream") {
     let numero = 0;
@@ -991,6 +996,14 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        do primeiro episódio. O pôster tem 640 px — num monitor grande fica
        macio, e por isso a capa vem antes. */
     fundoDoStream = urlCapa ?? fileiras[0]?.episodios.find((e) => e.poster)?.poster ?? null;
+    if (aparencia.capaStream === "sala" && galeria.capa_video_chave && galeria.capa_video_poster_chave) {
+      const [url, quadro] = await Promise.all([
+        urlDeLeitura(galeria.capa_video_chave, VALIDADE),
+        urlDeLeitura(galeria.capa_video_poster_chave, VALIDADE),
+      ]);
+      clipeDaCapa = { url, quadro };
+      fundoDoStream = quadro;
+    }
   }
 
   /* A entrega em stream, desenhada com a capa da própria sala ou embaixo da
@@ -1008,6 +1021,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         logoLargura={galeria.estudio_logo_largura}
         logoAltura={galeria.estudio_logo_altura}
         fundo={fundoDoStream}
+        fundoVideo={clipeDaCapa?.url ?? null}
         focoX={galeria.capa_foco_x}
         focoY={galeria.capa_foco_y}
         fileiras={fileiras}

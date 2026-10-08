@@ -5,6 +5,8 @@ import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { listarMedias } from "@/lib/medias";
 import { urlDeLeitura } from "@/lib/r2";
 import { CapaDeVideo } from "@/components/capa-de-video";
+import { CampoDoNomeDoVideo } from "@/components/nome-do-video";
+import { tituloDoEpisodio } from "@/lib/formato-da-entrega";
 import { PrepararVideos } from "@/components/preparar-videos";
 
 export const metadata: Metadata = { title: "Vídeos da galeria" };
@@ -47,6 +49,9 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     videos.map(async (m) => ({
       id: m.id,
       nome: m.nome_original,
+      /* O nome que o cliente lê no Stream: o escrito pelo fotógrafo, ou null. */
+      titulo: m.titulo ?? null,
+      doArquivo: tituloDoEpisodio(m.nome_original),
       /* Só a miniatura, e só quando ela existe. Nada de assinar o filme. */
       capa: m.chave_thumb ? await urlDeLeitura(m.chave_thumb, 3600) : null,
       leve: Boolean(m.chave_reproducao),
@@ -102,6 +107,11 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
           ou sorteie uma. O filme não sobe de novo. Se o seu navegador não abrir o formato, escolha
           uma imagem em vez disso.
         </p>
+        <p className="mt-2 text-xs text-texto-faint">
+          <strong className="font-medium text-texto-soft">Nome na tela</strong> é o nome que o cliente lê
+          no formato Stream. Vazio usa o nome do arquivo (o que vem do CapCut, por exemplo). O arquivo
+          baixado continua com o nome original.
+        </p>
 
         {videos.length === 0 ? (
           <p className="mt-4 text-sm text-texto-faint">Nenhum vídeo nesta galeria.</p>
@@ -110,6 +120,16 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
             {comCapa.map((v) => (
               <li key={v.id} className="rounded-lg border border-linha bg-carbon-2 p-3">
                 <CapaDeVideo mediaId={v.id} nome={v.nome} capa={v.capa} />
+                <div className="mt-3">
+                  <CampoDoNomeDoVideo
+                    galeriaId={galeria.id}
+                    mediaId={v.id}
+                    titulo={v.titulo}
+                    doArquivo={v.doArquivo}
+                    nomeDoArquivo={v.nome}
+                    rotulo="Nome na tela"
+                  />
+                </div>
                 {v.leve && <p className="mt-2 text-[11px] text-ok">pronto para assistir</p>}
               </li>
             ))}

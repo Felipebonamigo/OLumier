@@ -121,6 +121,7 @@ export function GaleriaStream({
   logoLargura = null,
   logoAltura = null,
   fundo,
+  fundoVideo = null,
   focoX,
   focoY,
   fileiras,
@@ -141,6 +142,8 @@ export function GaleriaStream({
   logoLargura?: number | null;
   logoAltura?: number | null;
   fundo: string | null;
+  /** O clipe da capa em vídeo (migração 066): toca mudo, em laço, por cima de `fundo`. */
+  fundoVideo?: string | null;
   focoX: number;
   focoY: number;
   fileiras: FileiraDoStream[];
@@ -216,6 +219,8 @@ export function GaleriaStream({
     meta,
     metaDosVideos,
     fundo,
+    fundoVideo,
+    fundoParado: tocando !== null,
     foco: { objectPosition: `${focoX}% ${focoY}%` },
     fileiras,
     episodios,
@@ -319,6 +324,10 @@ interface Sala {
   /** Só a quantidade e a duração — o que a barra diz embaixo da capa do grupo Capa. */
   metaDosVideos: string[];
   fundo: string | null;
+  /** O clipe da capa em vídeo, ou null. */
+  fundoVideo: string | null;
+  /** O player está aberto por cima: o clipe da capa não precisa tocar atrás dele. */
+  fundoParado: boolean;
   foco: CSSProperties;
   fileiras: FileiraDoStream[];
   episodios: EpisodioDoStream[];
@@ -434,6 +443,83 @@ function Imagem({
   );
 }
 
+/**
+ * O CLIPE DA CAPA — vídeo mudo em laço por cima da imagem (08/10/2026).
+ *
+ * Juan: "adicionar opção de subir capa em VÍDEO no formato Stream". A imagem
+ * embaixo é o primeiro quadro do próprio clipe, então nada "pula" quando ele
+ * começa; o clipe só se junta a ela depois de montar, porque preferência do
+ * navegador não existe no servidor.
+ *
+ * Quando NÃO toca, e a imagem fica sozinha:
+ *   · `prefers-reduced-motion`: movimento de fundo é o caso de livro;
+ *   · economia de dados (`saveData`): o clipe é o único peso que a capa tem;
+ *   · o clipe falhou em carregar (`onError`);
+ *   · fora da tela ou com o player aberto por cima — pausa, e a bateria agradece.
+ *
+ * `muted` + `playsInline` + `autoPlay` é a combinação que o iPhone e o Chrome
+ * aceitam tocar sozinha. Sem som, sem controles, e fora do alcance do teclado.
+ */
+function ClipeDaCapa({
+  src,
+  parado,
+  className = "",
+  style,
+}: {
+  src: string | null | undefined;
+  parado: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const [pode, setPode] = useState(false);
+  const [falhou, setFalhou] = useState(false);
+  const [visivel, setVisivel] = useState(true);
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const reduzir = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const economia = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+    /* eslint-disable-next-line react-hooks/set-state-in-effect --
+       As preferências do navegador só existem depois de montar; ver acima. */
+    setPode(!reduzir && !economia);
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !pode || typeof IntersectionObserver === "undefined") return;
+    const olho = new IntersectionObserver(([e]) => setVisivel(e.isIntersecting), { threshold: 0.05 });
+    olho.observe(el);
+    return () => olho.disconnect();
+  }, [pode, src]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (parado || !visivel) el.pause();
+    else void el.play().catch(() => {});
+  }, [parado, visivel, pode]);
+
+  if (!src || !pode || falhou) return null;
+  return (
+    <video
+      ref={ref}
+      src={src}
+      muted
+      loop
+      autoPlay
+      playsInline
+      preload="auto"
+      disablePictureInPicture
+      disableRemotePlayback
+      aria-hidden
+      tabIndex={-1}
+      onError={() => setFalhou(true)}
+      style={style}
+      className={`pointer-events-none block object-cover ${className}`}
+    />
+  );
+}
+
 function BarraVista({ marca, className = "" }: { marca: Marca | undefined; className?: string }) {
   const visto = marca ? fracaoAssistida(marca.t, marca.d) : 0;
   if (visto <= 0) return null;
@@ -473,6 +559,7 @@ function SalaCinema({ sala }: { sala: Sala }) {
       ) : (
         <header className="relative isolate flex min-h-[88svh] flex-col overflow-hidden">
           <Imagem src={sala.fundo} prioridade style={sala.foco} className="absolute inset-0 -z-10 h-full w-full" />
+          <ClipeDaCapa src={sala.fundoVideo} parado={sala.fundoParado} style={sala.foco} className="absolute inset-0 -z-10 h-full w-full" />
           <div
             aria-hidden
             className="absolute inset-0 -z-10"
@@ -602,6 +689,7 @@ function SalaEpisodios({ sala }: { sala: Sala }) {
               style={{ background: "var(--g-superficie)" }}
             >
               <Imagem src={sala.fundo} prioridade style={sala.foco} className="h-full w-full transition duration-700 group-hover:scale-[1.03] motion-reduce:transition-none" />
+              <ClipeDaCapa src={sala.fundoVideo} parado={sala.fundoParado} style={sala.foco} className="absolute inset-0 h-full w-full" />
               <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/10 transition group-hover:bg-black/25">
                 <span className="grid h-16 w-16 place-items-center rounded-full bg-white/90 text-black shadow-xl transition group-hover:scale-110 motion-reduce:transition-none">
                   <IconePlay className="ml-1 h-5 w-5" />
@@ -825,6 +913,9 @@ function SalaVitrine({ sala }: { sala: Sala }) {
             style={sala.fundo && !sala.semCapa ? sala.foco : undefined}
             className="absolute inset-0 h-full w-full transition duration-[1200ms] group-hover:scale-[1.03] motion-reduce:transition-none"
           />
+          {!sala.semCapa && (
+            <ClipeDaCapa src={sala.fundoVideo} parado={sala.fundoParado} style={sala.foco} className="absolute inset-0 h-full w-full" />
+          )}
           <span aria-hidden className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,.7), rgba(0,0,0,.1) 50%, transparent 70%)" }} />
           <span className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-4 p-6 text-white sm:p-10">
             <span className="min-w-0">

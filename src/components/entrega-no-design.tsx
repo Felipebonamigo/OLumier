@@ -1,11 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import {
-  definirCapaDaPastaAction,
-  fotosDaPastaAction,
-  renomearVideoAction,
-} from "@/app/painel/actions";
+import { definirCapaDaPastaAction, fotosDaPastaAction } from "@/app/painel/actions";
+import { CampoDoNomeDoVideo } from "@/components/nome-do-video";
 import type { FotoDaPasta, PastaNoDesign, VideoNoDesign } from "@/lib/entrega-no-design";
 
 /**
@@ -56,32 +53,6 @@ function NomeDoVideo({
   video: VideoNoDesign;
   aoGravar: () => void;
 }) {
-  const [valor, setValor] = useState(video.titulo ?? "");
-  const [gravado, setGravado] = useState(video.titulo ?? "");
-  const [estado, setEstado] = useState<"" | "gravando" | "ok" | "erro">("");
-  const [, iniciar] = useTransition();
-
-  function gravar() {
-    const limpo = valor.replace(/\s+/g, " ").trim();
-    if (limpo === gravado) return;
-    setEstado("gravando");
-    iniciar(async () => {
-      const f = new FormData();
-      f.set("galeria_id", galeriaId);
-      f.set("media_id", video.id);
-      f.set("titulo", limpo);
-      const r = await renomearVideoAction(f);
-      if (!r.ok) {
-        setEstado("erro");
-        return;
-      }
-      setValor(limpo);
-      setGravado(limpo);
-      setEstado("ok");
-      aoGravar();
-    });
-  }
-
   return (
     <li className="flex items-center gap-3 p-2">
       <span className="block aspect-video w-20 shrink-0 overflow-hidden rounded bg-carbon-2">
@@ -91,36 +62,17 @@ function NomeDoVideo({
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <input
-          value={valor}
-          onChange={(e) => {
-            setValor(e.target.value.slice(0, 120));
-            setEstado("");
-          }}
-          onBlur={gravar}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              (e.target as HTMLInputElement).blur();
-            }
-            if (e.key === "Escape") setValor(gravado);
-          }}
-          maxLength={120}
-          placeholder={video.doArquivo}
-          aria-label={`Nome do vídeo ${video.nomeDoArquivo}`}
-          className="w-full rounded-md border border-linha bg-void px-2.5 py-1.5 text-sm text-texto placeholder:text-texto-faint focus:border-acento focus:outline-none"
+        <CampoDoNomeDoVideo
+          galeriaId={galeriaId}
+          mediaId={video.id}
+          titulo={video.titulo}
+          doArquivo={video.doArquivo}
+          nomeDoArquivo={video.nomeDoArquivo}
+          aoGravar={aoGravar}
         />
-        <span className="mt-1 flex gap-2 truncate text-[10px] text-texto-faint">
-          <span className="truncate">
-            {video.nomeDoArquivo}
-            {video.capitulo ? ` · ${video.capitulo}` : ""}
-          </span>
-          <span
-            role="status"
-            className={`ml-auto shrink-0 ${estado === "erro" ? "text-alerta" : "text-texto-faint"}`}
-          >
-            {estado === "gravando" ? "gravando…" : estado === "ok" ? "gravado" : estado === "erro" ? "não gravou" : ""}
-          </span>
+        <span className="block truncate text-[10px] text-texto-faint">
+          {video.nomeDoArquivo}
+          {video.capitulo ? ` · ${video.capitulo}` : ""}
         </span>
       </span>
     </li>

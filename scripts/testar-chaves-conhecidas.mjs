@@ -88,6 +88,23 @@ await etapa("a CAPA enviada como arquivo está na lista", async () => {
   return "capa reconhecida";
 });
 
+await etapa("o CLIPE da capa em vídeo e o primeiro quadro estão na lista", async () => {
+  /* Migração 066: duas colunas de chave novas. Fora da lista, a varredura
+     apagaria o clipe de uma galeria Stream no ar. */
+  const base = `${g.tenant_id}/${g.id}/capa/clipe-prova-${Date.now()}`;
+  const clipe = `${base}.mp4`;
+  const quadro = `${base}-quadro.jpg`;
+  await db.query("update galerias set capa_video_chave = $1, capa_video_poster_chave = $2 where id = $3", [
+    clipe,
+    quadro,
+    g.id,
+  ]);
+  const { r2 } = await chavesConhecidas(db);
+  if (!r2.has(clipe)) throw new Error("o clipe da capa ficaria órfão");
+  if (!r2.has(quadro)) throw new Error("o primeiro quadro do clipe ficaria órfão");
+  return "clipe e quadro reconhecidos";
+});
+
 await etapa("a capa de PASTA enviada como arquivo está na lista", async () => {
   /* Mesma natureza, mesma armadilha: coluna nova, lista esquecida. */
   const { rows: [s] } = await db.query(
@@ -163,6 +180,8 @@ await etapa("TODA coluna de chave do banco está coberta por esta lista", async 
     "medias.chave_preview",
     "medias.chave_reproducao",
     "galerias.capa_chave",
+    "galerias.capa_video_chave",
+    "galerias.capa_video_poster_chave",
     "secoes.capa_chave",
     "tenants.logo_chave",
     "tenants.fonte_chave",

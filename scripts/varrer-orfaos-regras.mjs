@@ -100,6 +100,12 @@ export async function chavesConhecidas(db) {
   const { rows: capasDePasta } = await db.query(
     "select capa_chave from secoes where capa_chave is not null",
   );
+  /* O clipe da capa em vídeo do Stream e o primeiro quadro dele (migração 066):
+     duas colunas de chave novas, e o teste que varre o `information_schema`
+     reprova a que ficar de fora. */
+  const { rows: clipes } = await db.query(
+    "select capa_video_chave, capa_video_poster_chave from galerias where capa_video_chave is not null or capa_video_poster_chave is not null",
+  );
   /*
    * AS FOTOS DA PÁGINA INICIAL (migração 043) — a quarta coluna de chave que
    * estava fora desta lista, achada em 02/10/2026 pelo teste que varre o
@@ -145,6 +151,10 @@ export async function chavesConhecidas(db) {
   }
   /* As capas são sempre do R2: nenhum caminho de envio de capa escreve no B2. */
   for (const c of [...capas, ...capasDePasta]) if (c.capa_chave) r2.add(c.capa_chave);
+  for (const c of clipes) {
+    if (c.capa_video_chave) r2.add(c.capa_video_chave);
+    if (c.capa_video_poster_chave) r2.add(c.capa_video_poster_chave);
+  }
   for (const f of daHome) {
     if (f.chave) r2.add(f.chave);
     if (f.chave_miniatura) r2.add(f.chave_miniatura);

@@ -290,12 +290,60 @@ play deixa de puxar o original do B2, que cobra saída acima da franquia de 3×.
 só de vídeo é grande com 3 ou com 30 (`capitulosDeVideo`,
 `scripts/testar-videos-maiores.mjs`).
 
+## A capa em vídeo e o nome na aba Vídeo (08/10/2026)
+
+Juan, em duas linhas no grupo: *"adicionar possibilidade de trocar o nome do
+vídeo, pois está aparecendo o nome completo que vem do CapCut"* e *"adicionar
+opção de subir capa em VÍDEO no formato Stream"*.
+
+**O nome.** O campo já existia desde 30/09 (Design → Formato → "Nome de cada
+vídeo"), mas quem procurava o nome do vídeo estava na aba Vídeo, onde só havia a
+capa. Agora cada cartão da aba Vídeo tem **Nome na tela**, com o nome tirado do
+arquivo como sugestão (o `copy 60CA8324-…` do CapCut aparece ali, esmaecido, e
+um clique o troca). É o mesmo componente nos dois lugares
+(`components/nome-do-video.tsx`) e a mesma gravação (`renomearVideoAction`).
+
+**A capa em vídeo.** Design → Formato → Stream → **Capa em vídeo**: o fotógrafo
+escolhe um vídeo e ele vira um **clipe de até 30 s, mudo, em laço**, no fundo da
+capa do stream — o "trailer" das plataformas de série. Não é o filme da galeria
+tocando de fundo (continua valendo o motivo de "o que ficou de fora": o 4G de
+quem recebe o link não carrega o original só para enfeitar a capa).
+
+- **Quem prepara é o navegador do fotógrafo** (`lib/clipe-da-capa.ts`, mesma
+  arquitetura da versão leve): H.264 em MP4, no máximo 720p, ~2,5 Mbps, **sem
+  som**, índice na frente. Trinta segundos pesam menos de 10 MB. O servidor nunca
+  toca no vídeo; só confere TIPO e TAMANHO do que chegou (`LIMITE_CLIPE`, 25 MB).
+- **Mais de 30 s é recusado**, com a conta na mensagem ("tem 1min12"); o corte é
+  do fotógrafo, no editor dele — não se corta sozinho um filme que ele escolheu.
+- **O primeiro quadro sobe junto, em JPEG**, e é a imagem de baixo: nada "pula"
+  quando o clipe começa, e é o que fica para quem pediu **menos movimento**
+  (`prefers-reduced-motion`) ou está com **economia de dados** (`saveData`).
+- **Onde toca:** nas salas que desenham a própria capa — Cinema, Episódios e
+  Vitrine. A **Mostra** não tem imagem de capa e não o mostra. Com a "capa do
+  grupo Capa" escolhida (convite, arco…), o clipe fica guardado e **não vai** à
+  página; a tela do Design diz isso.
+- **Pausa** fora da tela e com o player aberto por cima.
+- **Vive em duas colunas de `galerias`** (migração 066: `capa_video_chave`,
+  `capa_video_poster_chave`), fora de `medias`: não é entrega, não entra na grade
+  nem na quota, e não vai no "baixar tudo". Entra em `chavesConhecidas`
+  (varredura), em `destruirGaleria` e em `apagarGaleriasDaConta`; trocar ou tirar
+  o clipe apaga os dois arquivos antigos.
+
+**Conferido em navegador de verdade** (Chromium, 08/10/2026): o clipe toca mudo e
+em laço nas três salas; com "reduzir movimento" fica só a imagem; o controle do
+Design aparece e a mensagem de erro sai em português. **Não conferido aqui: a
+conversão para H.264** — o Chromium desta máquina não grava H.264 (o Chrome, o
+Edge e o Safari de verdade gravam). O resto do caminho (leitura, corte do som,
+720p, índice na frente, JPG do primeiro quadro) foi conferido com VP9 no lugar.
+`scripts/testar-capa-em-video.mjs` prende as medidas, a rota, o apagar e a página.
+
 ## O que ficou de fora, e por quê
 
-- **Trailer tocando sozinho no fundo da capa**, como na Netflix: tocar o
-  original de fundo no 4G do convidado é o custo que a entrega existe para não
-  ter. A versão leve (acima) existe desde 08/10/2026, mas só para os vídeos que
-  a ganharam — o trailer de fundo precisaria contar com ela sempre.
+- **O FILME da galeria tocando sozinho no fundo da capa**: tocar o original de
+  fundo no 4G do convidado é o custo que a entrega existe para não ter. A versão
+  leve (acima) existe desde 08/10/2026, mas só para os vídeos que a ganharam. O
+  que existe é o **clipe próprio** da capa em vídeo (seção acima): curto, mudo e
+  preparado antes de subir.
 - **Pôster em alta para a capa**: o pôster do vídeo tem 640 px. Em monitor
   grande, sem capa de galeria escolhida, o fundo fica macio. A saída hoje é o
   fotógrafo escolher uma capa da galeria.
@@ -327,3 +375,9 @@ só de vídeo é grande com 3 ou com 30 (`capitulosDeVideo`,
 | `src/components/aviso-do-video.tsx` | o player que diz que não abriu |
 | `scripts/testar-versao-leve.mjs` | régua, índice byte a byte, rota, URL da galeria, apagar |
 | `src/lib/entrega-no-design.ts`, `src/components/entrega-no-design.tsx` | nomes dos vídeos e capas das pastas no Design |
+| `src/components/nome-do-video.tsx` | o campo do nome do vídeo (Design e aba Vídeo) |
+| `db/migracoes/066-capa-em-video.sql` | `galerias.capa_video_chave`, `capa_video_poster_chave` |
+| `src/lib/clipe-da-capa-regras.ts`, `src/lib/clipe-da-capa.ts` | medidas (as duas pontas) e preparo no navegador |
+| `src/app/api/galerias/[id]/capa-video/route.ts` | recebe e confere o clipe e o primeiro quadro |
+| `src/components/capa-em-video.tsx` | o controle no Design |
+| `scripts/testar-capa-em-video.mjs` | medidas, rota, apagar, página do cliente, nome do vídeo |

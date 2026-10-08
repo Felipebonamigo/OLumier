@@ -243,8 +243,14 @@ export async function apagarGaleriasDaConta(
   estudio: string,
   motivo: "teste_abandonado" | "conta_encerrada",
 ): Promise<{ galerias: number; arquivos: number }> {
-  const galerias = await consultar<{ id: string; titulo: string; capa_chave: string | null }>(
-    "select id, titulo, capa_chave from galerias where tenant_id = $1",
+  const galerias = await consultar<{
+    id: string;
+    titulo: string;
+    capa_chave: string | null;
+    capa_video_chave: string | null;
+    capa_video_poster_chave: string | null;
+  }>(
+    "select id, titulo, capa_chave, capa_video_chave, capa_video_poster_chave from galerias where tenant_id = $1",
     [tenantId],
   );
 
@@ -278,10 +284,10 @@ export async function apagarGaleriasDaConta(
      * `varrer-orfaos.mjs` recolhe — mesma regra de `destruirGaleria`. */
     const r = await apagarArquivosDasMedias(medias);
     if (r.falhou) console.error(`[${motivo}] galeria ${g.id}: ${r.falhou}`);
-    if (g.capa_chave) {
-      await apagarObjetos([g.capa_chave]).catch((e) =>
-        console.error(`[${motivo}] capa da galeria ${g.id}:`, e),
-      );
+    /* A capa enviada e o clipe da capa em vídeo (migração 066), com o quadro dele. */
+    const capas = [g.capa_chave, g.capa_video_chave, g.capa_video_poster_chave].filter((c): c is string => Boolean(c));
+    if (capas.length > 0) {
+      await apagarObjetos(capas).catch((e) => console.error(`[${motivo}] capa da galeria ${g.id}:`, e));
     }
     arquivos += medias.length;
   }
