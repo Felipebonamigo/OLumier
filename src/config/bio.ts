@@ -93,6 +93,27 @@ export const PRODUTOS_DA_BIO: readonly ProdutoDaBio[] = [
   },
 ];
 
+/**
+ * OS CANAIS COM ENDEREÇO LIMPO — `/bio/<canal>`.
+ *
+ * O Juan olhou o link da bio com UTM e disse: "a única coisa feia é o link do
+ * UTM" (08/10/2026). O UTM era o jeito de dizer à página "esta visita veio do
+ * Instagram" quando o navegador de dentro do app não informa a origem. O canal
+ * diz a mesma coisa no próprio endereço: `galeriaatomo.com.br/bio/instagram` é
+ * o link do perfil do Instagram — curto, legível na bio, e sem `?`.
+ *
+ * Canal novo (TikTok, YouTube, o cartão de visita…) é uma linha aqui. O UTM
+ * continua valendo por cima (`?utm_campaign=story-x` separa posts), só que
+ * deixou de ser obrigatório.
+ */
+export const CANAIS_DA_BIO: Readonly<Record<string, { fonte: string; meio: string }>> = {
+  instagram: { fonte: "instagram", meio: "bio" },
+};
+
+export function canalDaBio(nome: string): { fonte: string; meio: string } | null {
+  return Object.hasOwn(CANAIS_DA_BIO, nome) ? CANAIS_DA_BIO[nome] : null;
+}
+
 /** O selo do produto, se ainda vale hoje. `hoje` é AAAA-MM-DD (de Brasília). */
 export function destaqueVigente(p: ProdutoDaBio, hoje: string): string | null {
   if (!p.destaque) return null;
