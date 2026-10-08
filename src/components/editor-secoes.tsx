@@ -16,6 +16,9 @@ import {
 import { ORDENS_DAS_FOTOS } from "@/config/ordens-das-fotos";
 import { nomeDoGrupoSolto } from "@/lib/nome-de-arquivo";
 import { verNaGrade } from "@/lib/filtro-da-grade";
+import { MenuDeAcoes } from "@/components/menu-de-acoes";
+import { MoverParaOutraGaleria } from "@/components/mover-para-outra-galeria";
+import type { EscopoDoMovimento } from "@/lib/mover-entre-galerias";
 import { contagemDe, textoDaContagem, textoDoLinkVer, textoDoTirar } from "@/lib/contagem-de-midias";
 
 export interface SecaoResumo {
@@ -84,6 +87,14 @@ export function EditorSecoes({
   const [nomeEditado, setNomeEditado] = useState("");
   const [ocupado, iniciar] = useTransition();
   const [aviso, setAviso] = useState<string | null>(null);
+  /* "Mover as fotos para outra galeria" — o modal. Mora aqui no alto, e não na
+     linha que o abriu: a linha é redesenhada (e pode até sumir, se o capítulo
+     for apagado em outra aba) enquanto a pessoa escolhe. */
+  const [mover, setMover] = useState<{
+    escopo: EscopoDoMovimento;
+    resumo: string;
+    quantidade: string;
+  } | null>(null);
   /* O segundo tempo do "apagar todos": ver o comentário lá embaixo. */
   const [confirmandoTudo, setConfirmandoTudo] = useState(false);
   /*
@@ -494,6 +505,31 @@ export function EditorSecoes({
                   >
                     apagar
                   </button>
+                  {/*
+                    O MENU ⋯ (08/10/2026). A linha já tem sete controles; mover
+                    o capítulo INTEIRO para outra galeria é raro (a aluna que
+                    leva as prévias para a galeria final) e ganha o menu em vez
+                    do oitavo botão. O capítulo em si fica — vão as fotos.
+                  */}
+                  <MenuDeAcoes
+                    rotulo={`Mais ações de ${s.nome}`}
+                    desabilitado={ocupado || s.id.startsWith("novo:")}
+                    itens={[
+                      {
+                        rotulo: "Mover as fotos deste capítulo para outra galeria…",
+                        desabilitado: s.total === 0,
+                        dica: "Este capítulo está vazio",
+                        aoEscolher: () => {
+                          const quantidade = textoDaContagem(contagemDe(s.total, s.videos));
+                          setMover({
+                            escopo: { tipo: "capitulo", secaoId: s.id },
+                            quantidade,
+                            resumo: `${quantidade} de “${s.nome}”`,
+                          });
+                        },
+                      },
+                    ]}
+                  />
                 </span>
               </>
             )}
@@ -733,6 +769,29 @@ export function EditorSecoes({
                     ))}
                   </select>
                   )}
+                  {/* O mesmo menu ⋯ dos capítulos: as soltas também são "um capítulo
+                      todo" para quem leva as prévias para a galeria final. */}
+                  <MenuDeAcoes
+                    rotulo={`Mais ações de ${temCapitulos ? nomeDoGrupoSolto(grupoSolto) : "todas as fotos"}`}
+                    desabilitado={ocupado}
+                    itens={[
+                      {
+                        rotulo: temCapitulos
+                          ? `Mover as fotos de “${nomeDoGrupoSolto(grupoSolto)}” para outra galeria…`
+                          : "Mover todas as fotos para outra galeria…",
+                        aoEscolher: () => {
+                          const quantidade = textoDaContagem(contagemDe(semCapitulo, semCapituloVideos));
+                          setMover({
+                            escopo: { tipo: "soltas" },
+                            quantidade,
+                            resumo: temCapitulos
+                              ? `${quantidade} de “${nomeDoGrupoSolto(grupoSolto)}”`
+                              : `${quantidade} da galeria`,
+                          });
+                        },
+                      },
+                    ]}
+                  />
                 </span>
               </>
             )}
@@ -743,6 +802,15 @@ export function EditorSecoes({
 
   return (
     <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
+      {mover && (
+        <MoverParaOutraGaleria
+          origemId={galeriaId}
+          escopo={mover.escopo}
+          resumo={mover.resumo}
+          quantidade={mover.quantidade}
+          aoFechar={() => setMover(null)}
+        />
+      )}
       {/*
         ── O CARTÃO DIZ O QUE ELE FAZ, E NÃO SÓ O QUE ELE OFERECE ───────────
 
