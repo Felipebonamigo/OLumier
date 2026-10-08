@@ -22,6 +22,10 @@ import {
   moverFotosAction,
 } from "@/app/painel/actions";
 import { depoisDoClique } from "@/lib/trecho-selecionado";
+import { contagemDe, textoDaContagem } from "@/lib/contagem-de-midias";
+import { MenuDeAcoes } from "@/components/menu-de-acoes";
+import { MoverParaOutraGaleria } from "@/components/mover-para-outra-galeria";
+import type { EscopoDoMovimento } from "@/lib/mover-entre-galerias";
 import { moverBloco, type DestinoDoBloco } from "@/lib/ordem-em-bloco";
 import {
   chaveDaMiniatura,
@@ -105,6 +109,14 @@ export function GradeMedias({
   const [apagandoTudo, setApagandoTudo] = useState(false);
   const [apagandoSelecao, setApagandoSelecao] = useState(false);
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
+  /* O modal de "mover para outra galeria". Vive aqui, e não dentro da barra de
+     seleção: a barra some assim que as fotos saem da grade, e o modal precisa
+     ficar de pé para mostrar para onde elas foram. */
+  const [mover, setMover] = useState<{
+    escopo: EscopoDoMovimento;
+    resumo: string;
+    quantidade: string;
+  } | null>(null);
   /* Aberta por padrão: quem acabou de subir quer VER o que subiu. Recolher é
    * para depois, quando a grade vira obstáculo entre a pessoa e o resto da
    * página. Mora em `lib/filtro-da-grade.ts` junto do recorte, porque o "ver
@@ -210,6 +222,24 @@ export function GradeMedias({
       f.set("secao_id", secaoId === "__nenhum" ? "" : secaoId);
       await moverMediasAction(f);
       setSelecao(new Set());
+    });
+  }
+
+  /**
+   * MOVER AS MARCADAS PARA OUTRA GALERIA (08/10/2026) — o item do menu ⋯.
+   *
+   * Vão os ids que estão À VISTA (`marcadas`), pela mesma razão do apagar: a
+   * seleção escondida em outro recorte fica guardada, mas não age.
+   */
+  function abrirMoverParaOutraGaleria() {
+    const ids = [...marcadas];
+    if (ids.length === 0) return;
+    const videos = medias.reduce((n, m) => n + (marcadas.has(m.id) && m.tipo === "video" ? 1 : 0), 0);
+    const quantidade = textoDaContagem(contagemDe(ids.length, videos));
+    setMover({
+      escopo: { tipo: "ids", ids },
+      quantidade,
+      resumo: `${quantidade} da seleção`,
     });
   }
 
@@ -594,13 +624,30 @@ export function GradeMedias({
     };
   }, [galeriaId, aberta, naGrade, recorte, daJanela, arrastandoAgora]);
 
-  if (medias.length === 0) return null;
+  /* O modal fica de pé mesmo se a galeria esvaziou: mover TODAS as fotos é o
+     caso da aluna que leva as prévias inteiras, e a confirmação não pode
+     sumir junto com a grade. */
+  const modalDeMover = mover && (
+    <MoverParaOutraGaleria
+      origemId={galeriaId}
+      escopo={mover.escopo}
+      resumo={mover.resumo}
+      quantidade={mover.quantidade}
+      aoFechar={(moveu) => {
+        setMover(null);
+        if (moveu) setSelecao(new Set());
+      }}
+    />
+  );
+
+  if (medias.length === 0) return modalDeMover || null;
 
   const nomeSecao = (id: string | null) =>
     id ? (secoes.find((s) => s.id === id)?.nome ?? null) : null;
 
   return (
     <section id={ID_DA_GRADE} className="mt-8 scroll-mt-4">
+      {modalDeMover}
       {/*
         RECOLHER EXISTE POR CAUSA DO TAMANHO REAL.
 
@@ -756,7 +803,8 @@ export function GradeMedias({
       {aberta && (
         <p className="mt-1.5 text-xs text-texto-faint">
           Selecionar serve para agir em várias de uma vez: levar para o início ou o fim, mover
-          para um capítulo, ou remover — e arrastar uma das marcadas leva todas juntas. Clique na
+          para um capítulo (ou, no menu <span aria-hidden="true">⋯</span>, para outra galeria),
+          ou remover — e arrastar uma das marcadas leva todas juntas. Clique na
           foto (ou na bolinha) para marcar. Para pegar um trecho inteiro, clique na primeira e,
           segurando <kbd className="rounded border border-linha px-1">Shift</kbd>, clique na
           última.
@@ -838,6 +886,23 @@ export function GradeMedias({
             >
               {apagandoSelecao ? "apagando…" : `apagar selecionadas (${marcadas.size})`}
             </button>
+
+            {/*
+              O MENU ⋯ (08/10/2026). Felipe: "uma opção dentro de um submenu '…'
+              para não ficar muito poluído visualmente". A barra já tem cinco
+              controles; o que muda fotos de GALERIA é raro e ganha o menu, não
+              o sexto botão.
+            */}
+            <MenuDeAcoes
+              rotulo="Mais ações para as fotos selecionadas"
+              desabilitado={ocupado || apagandoSelecao}
+              itens={[
+                {
+                  rotulo: "Mover selecionadas para outra galeria…",
+                  aoEscolher: abrirMoverParaOutraGaleria,
+                },
+              ]}
+            />
           </span>
         </div>
       )}

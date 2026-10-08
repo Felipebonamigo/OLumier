@@ -66,6 +66,17 @@ import {
   ORDENS_DAS_FOTOS,
   type OrdemDasFotos,
 } from "@/lib/secoes";
+import {
+  galeriasParaMover,
+  moverMediasParaOutraGaleria,
+  opcoesDoDestino,
+  ehUuid,
+  MAXIMO_POR_MOVIMENTO,
+  type DestinoPossivel,
+  type EscopoDoMovimento,
+  type OpcoesDoDestino,
+  type ResultadoDoMovimento,
+} from "@/lib/mover-entre-galerias";
 import { definirRegrasSelecao, reabrirSelecao } from "@/lib/favoritas";
 import { desligarRostos, fotosSemRosto, ligarRostos } from "@/lib/rostos";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
@@ -1804,6 +1815,72 @@ export async function moverFotosAction(form: FormData) {
   const { moverBlocoNaOrdem } = await import("@/lib/medias");
   await moverBlocoNaOrdem(galeriaId, tenantId, ids, destino);
   revalidatePath(`/painel/galerias/${galeriaId}/fotos`);
+}
+
+/**
+ * ── MOVER PARA OUTRA GALERIA (08/10/2026) ─────────────────────────────────
+ *
+ * Uma aluna manda só as prévias do ensaio numa galeria e, quando o resto fica
+ * pronto, leva essas fotos para a final — sem subir tudo de novo. A regra
+ * inteira mora em `lib/mover-entre-galerias.ts`; aqui há a sessão, a conversão
+ * do que veio do navegador e a revalidação.
+ *
+ * Duas leituras e uma gravação, e as leituras são ações (e não dados da página)
+ * de propósito: a aba Fotos é a mais pesada do painel, e a lista de galerias do
+ * estúdio só interessa a quem abre o modal.
+ */
+function escopoDoMovimento(bruto: unknown): EscopoDoMovimento | null {
+  if (!bruto || typeof bruto !== "object") return null;
+  const e = bruto as Record<string, unknown>;
+  if (e.tipo === "soltas") return { tipo: "soltas" };
+  if (e.tipo === "capitulo" && ehUuid(e.secaoId)) return { tipo: "capitulo", secaoId: e.secaoId };
+  if (e.tipo === "ids" && Array.isArray(e.ids)) {
+    const ids = e.ids.filter(ehUuid).slice(0, MAXIMO_POR_MOVIMENTO);
+    return ids.length > 0 ? { tipo: "ids", ids } : null;
+  }
+  return null;
+}
+
+export async function galeriasParaMoverAction(origemId: string): Promise<DestinoPossivel[]> {
+  const tenantId = await exigirTenant();
+  if (!ehUuid(origemId)) return [];
+  return galeriasParaMover(tenantId, origemId);
+}
+
+export async function opcoesDoDestinoAction(
+  origemId: string,
+  destinoId: string,
+): Promise<OpcoesDoDestino | null> {
+  const tenantId = await exigirTenant();
+  return opcoesDoDestino(tenantId, origemId, destinoId);
+}
+
+export async function moverParaOutraGaleriaAction(dados: {
+  origemId: string;
+  destinoId: string;
+  /** Nulo/vazio = "Outras fotos" do destino. */
+  secaoDestinoId: string | null;
+  escopo: unknown;
+}): Promise<ResultadoDoMovimento> {
+  const tenantId = await exigirTenant();
+  const escopo = escopoDoMovimento(dados?.escopo);
+  if (!escopo) return { ok: false, erro: "Não há fotos para mover." };
+
+  const r = await moverMediasParaOutraGaleria({
+    tenantId,
+    origemId: String(dados.origemId ?? ""),
+    destinoId: String(dados.destinoId ?? ""),
+    secaoDestinoId: dados.secaoDestinoId ? String(dados.secaoDestinoId) : null,
+    escopo,
+  });
+  if (r.ok) {
+    /* As duas pontas mudaram: a que perdeu as fotos e a que as recebeu. */
+    for (const id of [dados.origemId, dados.destinoId]) {
+      revalidatePath(`/painel/galerias/${id}`);
+      revalidatePath(`/painel/galerias/${id}/fotos`);
+    }
+  }
+  return r;
 }
 
 /**
