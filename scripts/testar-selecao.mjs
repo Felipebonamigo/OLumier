@@ -72,7 +72,7 @@ await db.query("update galerias set publicada = true, senha_hash = null where id
  * Texto da página com as tags fora.
  *
  * Sem isto o `<strong>` que destaca o número parte a frase no meio: o HTML traz
- * `até <strong …>4 fotos</strong>`, e uma busca por "até 4" não casa. O teste
+ * `até <strong …>4 favoritas</strong>`, e uma busca por "até 4" não casa. O teste
  * ficaria vermelho com a correção já no lugar — pior que teste nenhum, porque
  * mandaria procurar defeito onde não há.
  */
@@ -159,7 +159,9 @@ await etapa("o limite é dito antes de o casal marcar a primeira", async () => {
   const texto = await textoDaPagina();
 
   /* Sem nenhuma favorita marcada: é exatamente o estado em que o casal chega. */
-  if (!/escolha até 4 fotos/i.test(texto)) {
+  /* "favoritas", e nao "fotos": desde 07/10/2026 a entrega pode ser de
+     video, e o aviso nao pode chamar filme de foto. Ver palavra-da-entrega.ts. */
+  if (!/escolha até 4 favoritas/i.test(texto)) {
     throw new Error(
       "a galeria não diz quantas fotos podem ser escolhidas antes da primeira marcação — " +
         "o casal só descobriria a regra ao ser recusado",

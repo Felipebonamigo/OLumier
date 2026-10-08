@@ -86,27 +86,33 @@ export function fonteDoEndereco(host: string | null): string | null {
 /**
  * De onde veio a visita.
  *
- * O `utm_source` do link manda: é a escolha de quem pôs o link na bio, e vale
- * mais que um palpite. Sem ele, o endereço de onde a pessoa veio (o Instagram
- * abre o link por `l.instagram.com`). Sem nenhum dos dois, "direto" — que também
- * é o que o Instagram vira quando o navegador de dentro dele omite o endereço
- * de origem, e por isso o link da bio precisa levar o UTM.
+ * Do mais certo para o mais palpite:
+ *   1. o `utm_source` do link — a escolha de quem pôs o link;
+ *   2. o CANAL do endereço (`/bio/instagram`) — também escolha de quem pôs o
+ *      link, e sem `?utm_…` feio na bio. É o caminho recomendado;
+ *   3. o endereço de onde a pessoa veio (o Instagram abre o link por
+ *      `l.instagram.com`), que o navegador de dentro do app nem sempre informa;
+ *   4. "direto".
  *
  * Um endereço NOSSO como origem (a pessoa recarregou, ou voltou) não conta
- * como origem nenhuma.
+ * como origem nenhuma. E o `utm_campaign` vale em qualquer caminho: o canal diz
+ * ONDE está o link, a campanha diz QUAL post.
  */
 export function origemDaVisita(entrada: {
   utm_source?: unknown;
   utm_medium?: unknown;
   utm_campaign?: unknown;
   referrer?: string | null;
+  /** O canal do endereço (`CANAIS_DA_BIO`), quando a pessoa chegou por `/bio/<canal>`. */
+  canal?: { fonte: string; meio: string } | null;
 }): OrigemDaBio {
   const host = hostDe(entrada.referrer);
   const hostExterno = host && host !== marca.dominio && !host.endsWith(`.${marca.dominio}`) ? host : null;
   const doEndereco = fonteDoEndereco(hostExterno);
 
-  const fonte = rotulo(entrada.utm_source) ?? doEndereco ?? (hostExterno ? "outro" : "direto");
-  const meio = rotulo(entrada.utm_medium) ?? (doEndereco || hostExterno ? "referral" : "nenhum");
+  const fonte = rotulo(entrada.utm_source) ?? entrada.canal?.fonte ?? doEndereco ?? (hostExterno ? "outro" : "direto");
+  const meio =
+    rotulo(entrada.utm_medium) ?? entrada.canal?.meio ?? (doEndereco || hostExterno ? "referral" : "nenhum");
   return { fonte, meio, campanha: rotulo(entrada.utm_campaign) };
 }
 

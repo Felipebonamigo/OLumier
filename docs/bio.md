@@ -126,15 +126,42 @@ conquistado.
 
 ## Como usar
 
-1. Na bio do Instagram, o link com UTM (a tela do admin mostra o pronto):
-   `https://galeriaatomo.com.br/bio?utm_source=instagram&utm_medium=bio&utm_campaign=link-da-bio`
-2. Para separar posts, anúncios ou stories, troque o `utm_campaign`
-   (`lancamento-galeria`, `story-outubro`). Só minúsculas, números, `.`, `-`, `_`.
-3. **Por que o UTM no link:** o navegador de dentro do Instagram nem sempre diz de
-   onde a pessoa veio. Sem UTM, a visita vira "direto" quando ele omite — com
-   UTM, a origem fica certa de qualquer jeito. Sem UTM e com o endereço de origem
-   (`l.instagram.com`), a fonte é inferida como `instagram`.
+1. **Na bio do Instagram, o endereço limpo:**
+   `https://galeriaatomo.com.br/bio/instagram`
+   O canal (`instagram`) está no próprio endereço e diz à página de onde a visita
+   veio — sem `?utm_…` na bio, que o Juan achou feio (08/10/2026). Os canais moram
+   em `CANAIS_DA_BIO` (`config/bio.ts`); canal novo é uma linha. `/bio/<canal que
+   não existe>` volta para `/bio`.
+2. Para separar posts, anúncios ou stories, acrescente a campanha:
+   `…/bio/instagram?utm_campaign=lancamento-galeria`. Só minúsculas, números,
+   `.`, `-`, `_`. O UTM completo (`utm_source`, `utm_medium`) continua valendo e
+   manda sobre o canal — útil para um anúncio pago, por exemplo.
+3. **Por que o canal (ou o UTM) existe:** o navegador de dentro do Instagram nem
+   sempre diz de onde a pessoa veio, e a visita virava "direto". `/bio` sem canal
+   continua funcionando e infere a fonte pelo endereço de origem (`l.instagram.com`
+   → `instagram`) quando o navegador o informa.
 4. Ler em `/painel/admin/bio` (só admin).
+
+## E o que o Instagram já mede?
+
+O Instagram (Insights → "Atividade do perfil") mostra **visitas ao perfil** e
+**toques no link da bio**. Isso é o TOPO do funil, e vale olhar junto. O que ele
+não mostra, e a página mede:
+
+| | Instagram | `/bio` |
+|---|---|---|
+| Visitas ao perfil, toques no link | ✓ | — |
+| Quantos tocaram **e a página abriu** | — | ✓ (a diferença é queda no caminho) |
+| **Qual produto** foi clicado, e a fatia de cada um | — | ✓ |
+| Cliques em "Entrar" (já são clientes) | — | ✓ |
+| **Contas criadas** vindas da bio | — | ✓ (Galeria) |
+| De qual post/campanha | parcial | ✓ (`utm_campaign`) |
+
+A medição própria custa nada rodando (uma linha por acesso) e é o que responde "para
+onde foi o interesse" e "quantos viraram conta" — as duas perguntas do pedido.
+Uma boa conferência: comparar, na mesma semana, os "toques no link" do Instagram
+com os `page_view` daqui. Perto é saudável; muito abaixo indica gente tocando e
+desistindo antes de a página abrir.
 
 ## Privacidade
 

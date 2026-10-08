@@ -8,6 +8,7 @@ import { marca } from "@/config/marca";
 import { CAMINHO_PUBLICO } from "@/proxy";
 import { COOKIE_PREVIA } from "@/config/previa";
 import { urlDeLeitura } from "@/lib/r2";
+import { creditoDaEntrega } from "@/lib/palavra-da-entrega";
 import { iconeDoEstudio } from "@/lib/icone-do-estudio";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { fotosDeDemonstracao } from "@/config/fotos-demonstracao";
@@ -123,7 +124,17 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         year: "numeric",
       })
     : null;
-  const descricao = [g.subtitulo, dataEvento, `Fotos por ${g.estudio_nome}`]
+  /*
+   * "Fotos por X" era escrito à mão aqui, de quando a plataforma só pensava em
+   * fotografia. A GM Creative mandou a galeria dela — que é filme — para o
+   * cliente e viu o cartão anunciar fotos: "se aparecer fotos ali eles vão
+   * confundir muuuito!". Ver `palavra-da-entrega.ts`.
+   */
+  const descricao = [
+    g.subtitulo,
+    dataEvento,
+    creditoDaEntrega({ fotos: g.qtd_fotos, videos: g.qtd_videos, estudio: g.estudio_nome }),
+  ]
     .filter(Boolean)
     .join(" · ");
 

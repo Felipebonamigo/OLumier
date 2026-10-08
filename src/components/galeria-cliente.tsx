@@ -158,6 +158,26 @@ const GLIFO_SOBRE_FOTO = "drop-shadow(0 1px 1.5px rgba(0,0,0,.85)) drop-shadow(0
  * procurar por rótulo — e foi exatamente assim que ele passou verde medindo só
  * os botões de baixar, porque o rótulo do coração é o nome da foto.
  */
+/*
+ * ── A ENTREGA NEM SEMPRE É DE FOTO (07/10/2026) ───────────────────────────
+ *
+ * A GM Creative entregou um casamento em FILME por aqui e escreveu: "sei que a
+ * galeria é para fotógrafos... porém, se aparecer fotos ali eles vão confundir
+ * muuuito!". A tela inteira falava em foto porque a plataforma nasceu pensando
+ * só nisso.
+ *
+ * A saída fácil seria uma palavra que nunca erra — "arquivos" —, e ela está
+ * errada aqui: quem abre este link é um casal recebendo o próprio casamento,
+ * não alguém administrando uma pasta.
+ *
+ * Então cada texto diz a coisa verdadeira com a palavra que o contexto já tem:
+ * a contagem do que a pessoa marcou é de FAVORITAS (serve a foto, vídeo e
+ * mistura); o vazio é "nada"; o que falha ao montar o zip é o DOWNLOAD, que é
+ * literalmente um arquivo. Onde "foto" continua verdade ela fica — a busca por
+ * rosto, por exemplo, só encontra foto.
+ *
+ * O cartão do link tem a mesma regra, em `palavra-da-entrega.ts`.
+ */
 const SOBRE_A_FOTO = "data-sobre-a-foto";
 
 const BOTAO_DA_GALERIA =
@@ -816,7 +836,7 @@ export function GaleriaCliente({
           mexer(eraFavorita);
           if (d.erro === "cheia") {
             setAviso(
-              `Você já escolheu ${d.limite} fotos, que é o combinado. Desmarque uma para trocar.`,
+              `Você já escolheu ${d.limite} favoritas, que é o combinado. Desmarque uma para trocar.`,
             );
           } else {
             /* Guardado fora do callback: dentro dele o TypeScript não mantém o
@@ -853,8 +873,8 @@ export function GaleriaCliente({
   const encerrarSelecao = useCallback(async () => {
     if (
       !confirm(
-        `Encerrar a escolha com ${favoritas.size} ${favoritas.size === 1 ? "foto" : "fotos"}?\n\n` +
-          "Depois disso a lista fica travada e quem fez as fotos é avisado. Para mudar, será preciso pedir a ele.",
+        `Encerrar a escolha com ${favoritas.size} ${favoritas.size === 1 ? "favorita" : "favoritas"}?\n\n` +
+          "Depois disso a lista fica travada e quem fez a entrega é avisado. Para mudar, será preciso pedir a ele.",
       )
     ) {
       return;
@@ -1136,19 +1156,19 @@ export function GaleriaCliente({
       const r = await fetch(`/api/g/${galeriaId}/lista${pedido.consulta}`, { cache: "no-store" });
       if (r.status === 428) {
         setEntrega(null);
-        setFimDaEntrega("diga o seu e-mail marcando uma foto — as favoritas são de quem escolheu");
+        setFimDaEntrega("diga o seu e-mail marcando uma favorita — a lista é de quem escolheu");
         return;
       }
       if (!r.ok) throw new Error(String(r.status));
       fotos = ((await r.json()) as { fotos: FotoParaEntregar[] }).fotos;
     } catch {
       setEntrega(null);
-      setFimDaEntrega("não consegui preparar as fotos. Confira sua conexão e tente de novo.");
+      setFimDaEntrega("não consegui preparar o download. Confira sua conexão e tente de novo.");
       return;
     }
     if (fotos.length === 0) {
       setEntrega(null);
-      setFimDaEntrega("não há fotos para salvar aqui.");
+      setFimDaEntrega("não há nada para salvar aqui.");
       return;
     }
 
@@ -1523,7 +1543,7 @@ export function GaleriaCliente({
         <div ref={sentinelaDoDesenho} aria-hidden className="h-px" />
       ) : fatia && !acabou ? (
         <div ref={sentinela} className="my-8 text-center text-xs" aria-live="polite">
-          {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais fotos…</span>}
+          {buscando && <span style={{ color: "var(--g-tenue)" }}>carregando mais…</span>}
           {falhou && !buscando && (
             /* O BOTÃO QUE O COMENTÁRIO DO `catch` PROMETIA desde sempre e que
                não existia: a rolagem parava, nada aparecia, e a galeria
@@ -1915,7 +1935,7 @@ export function GaleriaCliente({
       */}
       {limite !== null && selecao.aberta && favoritas.size === 0 && (
         <p className="mt-6 text-center text-sm" style={{ color: "var(--g-suave)" }}>
-          Escolha até <strong style={{ color: "var(--g-destaque)" }}>{limite} fotos</strong> para o
+          Escolha até <strong style={{ color: "var(--g-destaque)" }}>{limite} favoritas</strong> para o
           álbum — toque no coração das que você quer.
         </p>
       )}
@@ -2000,7 +2020,7 @@ export function GaleriaCliente({
                 className="rounded-lg px-4 py-2 text-xs font-semibold transition hover:opacity-85 disabled:opacity-60"
                 style={{ background: "var(--g-destaque)", color: "var(--g-sobre-destaque)" }}
               >
-                {identificando ? "guardando…" : "escolher esta foto"}
+                {identificando ? "guardando…" : "guardar esta escolha"}
               </button>
             </div>
           </div>
@@ -2138,8 +2158,8 @@ export function GaleriaCliente({
       {!selecao.aberta && selecao.motivo && (
         <p className="mt-6 text-center text-sm" style={{ color: "var(--g-suave)" }}>
           {selecao.motivo === "prazo"
-            ? "O prazo para escolher as fotos terminou."
-            : `Escolha encerrada${favoritas.size > 0 ? ` com ${favoritas.size} ${favoritas.size === 1 ? "foto" : "fotos"}` : ""}.`}{" "}
+            ? "O prazo para escolher terminou."
+            : `Escolha encerrada${favoritas.size > 0 ? ` com ${favoritas.size} ${favoritas.size === 1 ? "favorita" : "favoritas"}` : ""}.`}{" "}
           Para mudar alguma coisa, fale com quem enviou o link.
         </p>
       )}
@@ -2754,7 +2774,7 @@ function PainelDaEntrega({
 
   let detalhe: string;
   if (!listaChegou) detalhe = "preparando a lista…";
-  else if (suaVez) detalhe = "as fotos já estão prontas — toque para abrir o menu e escolha “Salvar imagens”";
+  else if (suaVez) detalhe = "já está tudo pronto — toque para abrir o menu e escolha “Salvar imagens”";
   else if (p.fase === "baixando") detalhe = "baixando — deixe esta tela aberta até terminar";
   else detalhe = `preparando ${p.preparadas} de ${p.doLote}…`;
 

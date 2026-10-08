@@ -46,7 +46,7 @@ import {
   rotulo,
   urlComOrigem,
 } from "../src/lib/bio-regras.ts";
-import { ALVOS_DA_BIO, EVENTOS_DA_BIO, PRODUTOS_DA_BIO, alvoDaBio, destaqueVigente } from "../src/config/bio.ts";
+import { ALVOS_DA_BIO, CANAIS_DA_BIO, EVENTOS_DA_BIO, PRODUTOS_DA_BIO, alvoDaBio, canalDaBio, destaqueVigente } from "../src/config/bio.ts";
 import { criarTenant } from "../src/lib/tenants.ts";
 import { PLANO_INICIAL } from "../src/config/planos.ts";
 import { resumoDaBio, quemPede } from "../src/lib/bio.ts";
@@ -131,6 +131,22 @@ try {
       "nosso próprio endereço não é origem",
     );
     igual(origemDaVisita({ utm_source: "<b>x</b>" }).fonte, "direto", "UTM sujo é descartado");
+  });
+
+  await etapa("o canal do endereço (/bio/instagram) vale no lugar do UTM, e o UTM ainda manda por cima", () => {
+    const canal = canalDaBio("instagram");
+    igual(canal, { fonte: "instagram", meio: "bio" }, "canal");
+    igual(
+      origemDaVisita({ canal }),
+      { fonte: "instagram", meio: "bio", campanha: null },
+      "só o canal: sem UTM, sem endereço de origem",
+    );
+    igual(origemDaVisita({ canal, utm_campaign: "story-x" }).campanha, "story-x", "a campanha vale em qualquer caminho");
+    igual(origemDaVisita({ canal, utm_source: "whatsapp", utm_medium: "grupo" }), { fonte: "whatsapp", meio: "grupo", campanha: null }, "UTM vence o canal");
+    igual(origemDaVisita({ canal, referrer: "https://blog.exemplo.com/" }).fonte, "instagram", "o canal vence o palpite do endereço");
+    igual(canalDaBio("constructor"), null, "nome do protótipo não é canal");
+    igual(canalDaBio("tiktok"), null, "canal que não existe");
+    igual(Object.keys(CANAIS_DA_BIO), ["instagram"], "canais");
   });
 
   await etapa("o cookie vai e volta, e o forjado é recusado", () => {
@@ -245,8 +261,28 @@ try {
     });
 
     await etapa("o botão é <a> comum, e não <Link>: o Link pré-carregaria o redirecionador", () => {
-      const fonte = readFileSync(path.join(RAIZ, "src/app/bio/page.tsx"), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-      if (/from "next\/link"|<Link\b/.test(fonte)) throw new Error("a página usa <Link>");
+      for (const arquivo of ["pagina.tsx", "page.tsx", "[canal]/page.tsx"]) {
+        const fonte = readFileSync(path.join(RAIZ, "src/app/bio", arquivo), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+        if (/from "next\/link"|<Link\b/.test(fonte)) throw new Error(`${arquivo} usa <Link>`);
+      }
+    });
+
+    await etapa("/bio/instagram: o endereço limpo já nasce atribuído ao Instagram, sem UTM", async () => {
+      const limpa = await (await pegar("/bio/instagram", { headers: { "user-agent": CELULAR, "x-forwarded-for": IP } })).text();
+      const hrefs = [...limpa.matchAll(/<a\b[^>]*?\shref="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&")).filter((h) => h.startsWith("/bio/ir/"));
+      igual(hrefs.length, ALVOS_DA_BIO.length, "quatro caminhos");
+      if (!hrefs.every((h) => h.includes("fonte=instagram") && h.includes("meio=bio"))) throw new Error(`origem fora dos links: ${hrefs[0]}`);
+      if (!/name="robots" content="noindex/.test(limpa)) throw new Error("sem noindex");
+      if (!/rel="canonical" href="[^"]*\/bio"/.test(limpa)) throw new Error("o canônico não é /bio");
+      const comCampanha = await (await pegar("/bio/instagram?utm_campaign=story-x", { headers: { "user-agent": CELULAR, "x-forwarded-for": IP } })).text();
+      if (!comCampanha.includes("campanha=story-x")) throw new Error("a campanha não chegou aos links");
+    });
+
+    await etapa("canal que não existe, e /bio/ir sem destino, voltam para /bio em vez de dar erro", async () => {
+      for (const c of ["/bio/tiktok", "/bio/ir", "/bio/instagrm"]) {
+        const r = await pegar(c);
+        igual([c, r.status, new URL(r.headers.get("location") ?? "", BASE).pathname], [c, 307, "/bio"], "redireciona");
+      }
     });
 
     await etapa("não vai para o Google: noindex, canônico em /bio, fora do sitemap", async () => {

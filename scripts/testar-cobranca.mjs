@@ -96,6 +96,36 @@ await etapa("responde 200 mesmo ao ignorar (não trava a fila do Asaas)", async 
 
 console.log("\nCiclo de cobrança:\n");
 
+await etapa("atraso com o teste ainda valendo NÃO derruba o estúdio", async () => {
+  /* A primeira fatura pode vencer com o teste correndo (a ponte do Atomatiza
+   * usa o vencimento que o comprador escolheu). Marcar inadimplente travava o
+   * envio de quem ainda tinha dias grátis — 08/10/2026. */
+  await db.query(
+    "update tenants set status = 'trial', trial_ate = now() + interval '5 days', pago_ate = null where id = $1",
+    [tenantId],
+  );
+  const r = await enviarEvento(
+    { event: "PAYMENT_OVERDUE", payment: { externalReference: `olumier:${tenantId}` } },
+    token,
+  );
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const s = await statusDoTenant();
+  if (s !== "trial") throw new Error(`o teste valia e o status virou "${s}"`);
+  return "segue em teste";
+});
+
+await etapa("atraso com o teste VENCIDO marca inadimplente", async () => {
+  await db.query("update tenants set status = 'trial', trial_ate = now() - interval '1 day' where id = $1", [tenantId]);
+  const r = await enviarEvento(
+    { event: "PAYMENT_OVERDUE", payment: { externalReference: `olumier:${tenantId}` } },
+    token,
+  );
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const s = await statusDoTenant();
+  if (s !== "inadimplente") throw new Error(`teste vencido e o status ficou "${s}"`);
+  return "trial vencido → inadimplente";
+});
+
 await etapa("pagamento confirmado ativa o estúdio", async () => {
   const r = await enviarEvento(
     { event: "PAYMENT_CONFIRMED", payment: { externalReference: `olumier:${tenantId}`, value: 129 } },

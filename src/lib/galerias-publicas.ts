@@ -73,6 +73,9 @@ export interface GaleriaPublica {
   /** Para `galeriasNoAr` — a carência do trial abandonado. */
   estudio_status: string;
   estudio_trial_ate: Date | null;
+  /** Quantas fotos e quantos vídeos PRONTOS — ver a consulta abaixo. */
+  qtd_fotos: number;
+  qtd_videos: number;
 }
 
 /**
@@ -100,7 +103,20 @@ export async function buscarGaleriaPublica(
             -- Para galeriasNoAr: o trial abandonado deixa de servir a galeria
             -- 15 dias depois de vencer. Sem estas duas colunas a regra recebe
             -- undefined e libera todo mundo — falha que nenhuma tela denuncia.
-            t.status as estudio_status, t.trial_ate as estudio_trial_ate
+            t.status as estudio_status, t.trial_ate as estudio_trial_ate,
+            -- O QUE A ENTREGA TEM, para o cartão do link não chamar filme de
+            -- foto (ver palavra-da-entrega.ts). Duas contagens sobre o
+            -- indice de medias(galeria_id), na mesma ida ao banco: uma
+            -- segunda consulta só para escolher uma palavra seria uma viagem
+            -- a mais em toda abertura de galeria.
+            --
+            -- A coluna pronto entra porque arquivo no meio do envio não está na
+            -- galeria para ninguém — sem isso a palavra mudaria durante o
+            -- upload e voltaria depois, sem ninguém entender por quê.
+            (select count(*) from medias m
+              where m.galeria_id = g.id and m.tipo = 'foto' and m.pronto)::int as qtd_fotos,
+            (select count(*) from medias m
+              where m.galeria_id = g.id and m.tipo = 'video' and m.pronto)::int as qtd_videos
        from galerias g
        join tenants t on t.id = g.tenant_id
       where t.slug = $1 and g.slug = $2

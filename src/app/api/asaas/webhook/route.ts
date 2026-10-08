@@ -204,10 +204,30 @@ export async function POST(request: NextRequest) {
      * vencimento seria desproporcional. O estado muda, o painel avisa, e a
      * decisão de bloquear fica para uma régua de cobrança depois.
      */
-    await consultar(
-      `update tenants set status = 'inadimplente', atualizado_em = now() where id = $1`,
+    /*
+     * ...e quem ainda está NO TESTE também não vira inadimplente (08/10/2026).
+     *
+     * A primeira fatura pode vencer com o teste correndo: pelo botão de Conta
+     * ela vence no fim dele, mas pela ponte do Atomatiza o vencimento é o que
+     * o comprador escolheu (`docs/pacote.md`), e a conta nasce com 14 dias de
+     * teste. Fatura de Pix/boleto que ninguém pagou em dia virava
+     * `inadimplente` — e o status trava o envio (`situacaoDoTenant`) de quem
+     * ainda tinha dias grátis pela frente, e esconde a data do teste no admin.
+     *
+     * Com o teste valendo, o aviso só é registrado: o teste segue sendo o
+     * estado, e se ele acabar sem pagamento vale a regra de sempre (teste
+     * vencido, carência, e só então a limpeza). Depois do teste, atraso é
+     * atraso.
+     */
+    const marcou = await consultar<{ id: string }>(
+      `update tenants set status = 'inadimplente', atualizado_em = now()
+        where id = $1 and not (status = 'trial' and trial_ate > now())
+        returning id`,
       [tenantId],
     );
+    if (marcou.length === 0) {
+      console.log(`[asaas] ${evento} com o teste ainda valendo → estúdio ${tenantId} segue em teste`);
+    }
   } else if (efeito === "cancelou") {
     // `pago_ate` fica de pé: o dinheiro do período corrente continua conosco, e
     // o serviço dele é devido. Ver db/migracoes/021-periodo-pago.sql.

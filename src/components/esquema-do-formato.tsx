@@ -109,6 +109,21 @@ export function EsquemaDoEstilo({ estilo }: { estilo: EstiloPastas | EstiloStrea
           ))}
         </div>
       );
+    case "lista":
+      /* Cinco linhas finas, e não três: o que este estilo vende é caber mais
+         pasta na mesma tela — um desenho com a mesma contagem dos outros não
+         mostraria a diferença que fez ele existir. */
+      return (
+        <div className="flex h-full flex-col justify-center gap-1 px-2.5" aria-hidden>
+          {[0, 1, 2, 3, 4].map((i) => (
+            <span key={i} className="flex items-center gap-1.5 border-b border-texto-faint/20 pb-0.5">
+              <span className={`h-2.5 w-2.5 shrink-0 ${f}`} />
+              <span className="h-1 flex-1 rounded-full bg-texto-faint/50" />
+              <span className="h-1 w-1 rounded-full bg-texto-faint/40" />
+            </span>
+          ))}
+        </div>
+      );
     case "cinema":
       return (
         <div className="flex h-full flex-col gap-1 bg-neutral-900 p-1.5" aria-hidden>
