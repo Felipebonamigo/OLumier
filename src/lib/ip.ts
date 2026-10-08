@@ -79,3 +79,23 @@ export function hashDeEmail(email: string): string {
     .digest("hex")
     .slice(0, 32);
 }
+
+/**
+ * O visitante do DIA, para contar "pessoas" na página-ponte (`/bio`) sem cookie.
+ *
+ * É o IP + o navegador + a data, com o sal da plataforma. A data entra de
+ * propósito: o hash GIRA todo dia, então não há como seguir uma pessoa de um dia
+ * para o outro — nem a gente, nem quem um dia lesse a tabela. Serve para dizer
+ * "quantas pessoas diferentes vieram hoje", e só isso.
+ *
+ * É uma ESTIMATIVA e o painel diz que é: duas pessoas na mesma rede móvel com o
+ * mesmo modelo de celular caem no mesmo hash. O prefixo `bio:` separa este
+ * espaço de hash do do IP e do e-mail.
+ */
+export function hashDeVisitanteDoDia(ip: string, agente: string, dia: string): string {
+  return createHash("sha256")
+    .update(`${segredo()}bio:${dia}:${ip}|${agente}`)
+    .digest("hex")
+    .slice(0, 24);
+}
+

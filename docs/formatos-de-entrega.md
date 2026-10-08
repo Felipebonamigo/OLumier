@@ -6,21 +6,40 @@ arquivos dentro) e uma outra forma de Stream (estilo Netflix), que vai passando
 os episódios — mais para vídeos, pois hoje nossa entrega de vídeos ainda é meio
 feia/pobre."*
 
-## Quem vê (30/09/2026)
+## Quem vê
+
+### Hoje: todas as contas (07/10/2026)
+
+"Libere as pastas e stream para todos." A chave `FORMATOS_ABERTOS_A_TODOS`
+(`src/config/formatos-liberados.ts`) está ligada: toda conta vê o grupo Formato
+no Design, a escolha na criação da galeria e o "capa da pasta", e a galeria
+pública desenha o formato gravado. Nenhuma migração — a 054 e o carimbo
+`formatos_liberados_em` continuam no banco.
+
+- **No Admin**, o bloco "Pastas e Stream" da ficha diz "Aberto a todas as
+  contas" e o botão sai (com a chave ligada ele não mudaria nada para ninguém).
+- **Fechar de novo** é trocar a chave por `false`: volta a regra de baixo, e as
+  contas que tinham o carimbo (inclusive as que a 054 liberou) seguem vendo.
+- **Abrir o painel não abre a comunicação.** Entrega real para um cliente em
+  Pastas ou Stream segue **não validada** (tabela abaixo), então home e vendas
+  continuam sem falar dos formatos — §6 da estratégia de marca.
+
+### A regra por conta (30/09/2026, guardada)
 
 "Isso só ficará visível para sócios primeiramente (eu, Carol, Sirius)."
 Pastas e Stream aparecem só para a conta **liberada** na ficha do estúdio no
 Admin (botão "Liberar Pastas e Stream", `tenants.formatos_liberados_em`,
 migração 054) e para as contas de **admin** (`ADMINS`), que não precisam
-liberar a si mesmas. Regra em `src/config/formatos-liberados.ts`; abrir para
-todo mundo é trocar o corpo dela por `return true`.
+liberar a si mesmas. Regra em `src/config/formatos-liberados.ts`, valendo só
+com a chave `FORMATOS_ABERTOS_A_TODOS` em `false`.
 
 Sem liberação: o grupo Formato some do Design, a escolha some da criação, o
 "capa da pasta" some da aba Fotos, e a galeria pública desenha a galeria de
 sempre mesmo que a aparência gravada diga outra coisa (o servidor decide —
 `aparenciaPermitida`). A migração 054 já nasce liberando quem usou pastas ou
 stream no intervalo em que estiveram abertos, para nenhuma entrega mudar
-sozinha. Preso em `scripts/testar-formatos-liberados.mjs`.
+sozinha. Preso em `scripts/testar-formatos-liberados.mjs`, que vale nos dois estados da
+chave (a regra por conta é conferida com ela fechada à força).
 
 ## Estado
 
@@ -28,6 +47,7 @@ sozinha. Preso em `scripts/testar-formatos-liberados.mjs`.
 |---|---|
 | Código das três telas, escolha no painel, capa da pasta, duração do vídeo | **existe** (branch `claude/relaxed-dirac-opy782`) |
 | Conferido no navegador com fotos e vídeos de teste, computador e celular | **feito** na bancada local |
+| Aberto a todas as contas do painel | **sim, desde 07/10/2026** (pedido do Felipe) |
 | Entrega real para um cliente em Pastas ou Stream | **não validado** |
 | Comunicação pública (home, vendas) | **não fazer ainda** — §6 da estratégia: vídeo e filmmaker só entram na comunicação depois de testados com entrega real |
 
@@ -177,6 +197,42 @@ que sumiu para todos.
 O nome dos vídeos e a capa das pastas gravam fora do rascunho, como o nome de
 um capítulo; a prévia recarrega sozinha (entram na assinatura da prévia em
 `design/page.tsx`).
+
+## A cena da capa do filme é do fotógrafo (08/10/2026)
+
+Juan, vendo a aba Vídeo com 24 filmes "sem capa": *"existe a opção de a pessoa
+selecionar uma cena do próprio vídeo para ser a capa? Ou um 'selecionar cena
+aleatória do vídeo'."* Até então o quadro saía sozinho (segundo 1, ou 25% e 50%
+quando o primeiro vinha preto).
+
+Aba **Vídeo → Escolher a capa**: escolhido o arquivo do filme (do computador, como
+sempre — nada do filme sobe), abre uma janela com o filme, a linha do tempo, **−1 s /
++1 s**, **Cena aleatória** e **Usar esta cena**. O quadro sai do `<video>` por um
+canvas, é conferido (o Safari já devolveu quadro transparente sem erro) e sobe pelo
+mesmo caminho do JPG que o fotógrafo exporta; a duração do filme vai junto.
+
+- **Cena aleatória** nunca cai nos 5% das pontas (letreiro, tela preta, créditos);
+  mostra a cena antes de gravar, e dá para sortear de novo.
+- **Quadro automático** continua na janela: é o comportamento de antes, para quem
+  não quer escolher.
+- **Escolher uma imagem** no lugar do filme segue igual, sem janela — é a saída de
+  quem tem um codec que o navegador não abre. Um filme que o navegador não abre mostra
+  isso na janela (com o prazo de 15 s) em vez de ficar esperando.
+- `src/components/escolher-cena.tsx` (a janela), `src/lib/cena-do-filme.ts` (sorteio e
+  limites), preso em `scripts/testar-cena-do-filme.mjs`. Conferido no Chromium com um
+  filme de teste: escolher, sortear, ±1 s, Esc, cancelar, filme que não abre, quadro
+  automático e imagem direta.
+
+## A lista de capítulos diz o que é foto e o que é vídeo (08/10/2026)
+
+Juan, na aba Fotos: *"tá escrito só 'fotos', poderia descrever o que são fotos e o que
+são vídeos"* — um capítulo "Vídeos - Júlia e Gustavo" dizia "ver as 7 fotos". A
+contagem do capítulo sempre foi de mídias prontas, e a tela chamava tudo de foto. Agora
+`listarSecoes` traz `total_videos` e a lista fala: **229 fotos**, **7 vídeos**, ou
+**229 fotos · 3 vídeos** (o link vira "ver as 229 fotos", "ver os 7 vídeos", "ver 229
+fotos · 3 vídeos"). O mesmo vale para o grupo das soltas e para as confirmações de
+"tirar" e "apagar". A régua das palavras é `src/lib/contagem-de-midias.ts`, presa em
+`scripts/testar-contagem-de-midias.mjs`.
 
 ## O que ficou de fora, e por quê
 

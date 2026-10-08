@@ -6,6 +6,7 @@ import { useRef, useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
 import type { FotoDemo, LugarDaHome } from "@/config/home-demonstracao";
+import { centroDaFaixa, focoQueCentraliza, fracaoVistaNaFaixa } from "@/lib/fotos-da-home-regras";
 
 /**
  * UM LUGAR DA PÁGINA INICIAL, na tela do admin: a foto de agora, onde ela
@@ -20,6 +21,12 @@ import type { FotoDemo, LugarDaHome } from "@/config/home-demonstracao";
  * capa de galeria perde a maior parte da altura, e o centro geométrico
  * costuma cair no peito das pessoas: um toque no rosto resolve. A tira
  * embaixo mostra o recorte como ele fica.
+ *
+ * O FOCO SE AJUSTA TAMBÉM NA FOTO PADRÃO (07/10/2026). Só a trocada deixava
+ * — e as fotos de verdade da Carol e do Juan são as padrão. Juan, gravando um
+ * vídeo da home: "não tô conseguindo arrumar o centro focal, de nenhuma das
+ * fotos… tá cortando a cabeça da mulher". O ajuste vai para `focos_da_home`
+ * (migração 062) sem trocar a foto, e "Voltar ao foco do site" o desfaz.
  */
 export function FotoDaHomeAdmin({
   lugar,
@@ -27,6 +34,8 @@ export function FotoDaHomeAdmin({
   onde,
   foto,
   trocada,
+  focoAjustado = false,
+  focoDoSite,
 }: {
   lugar: LugarDaHome;
   nome: string;
@@ -34,6 +43,10 @@ export function FotoDaHomeAdmin({
   foto: FotoDemo;
   /** Quando e quem trocou. `null` = é a foto padrão do site. */
   trocada: { quando: string; quem: string | null } | null;
+  /** A foto padrão tem o foco ajustado pelo admin (e não o do código). */
+  focoAjustado?: boolean;
+  /** O foco que a foto padrão traz no código — para onde "Voltar ao foco do site" leva o ponto. */
+  focoDoSite: { x: number; y: number };
 }) {
   const router = useRouter();
   const arquivoRef = useRef<HTMLInputElement>(null);
@@ -42,6 +55,7 @@ export function FotoDaHomeAdmin({
   const [aviso, setAviso] = useState<string | null>(null);
   const [descricao, setDescricao] = useState(foto.descricao);
   const [foco, setFoco] = useState({ x: foto.focoX, y: foto.focoY });
+  const [ajustado, setAjustado] = useState(focoAjustado);
 
   async function pedir(metodo: "POST" | "PUT" | "PATCH" | "DELETE", corpo: object = {}) {
     const r = await fetch("/api/admin/home/foto", {
@@ -107,13 +121,33 @@ export function FotoDaHomeAdmin({
     }
   }
 
+  /* Quanto da altura da foto a faixa larga mostra: é com ela que o clique vira
+     um foco que CENTRALIZA o recorte no ponto (ver `focoQueCentraliza`). */
+  const vista = fracaoVistaNaFaixa(foto.largura, foto.altura);
+
   function marcarFoco(e: MouseEvent<HTMLImageElement>) {
-    if (!trocada || ocupado) return;
+    if (ocupado) return;
     const r = e.currentTarget.getBoundingClientRect();
     const x = Math.round(((e.clientX - r.left) / r.width) * 100);
-    const y = Math.round(((e.clientY - r.top) / r.height) * 100);
+    const y = focoQueCentraliza(((e.clientY - r.top) / r.height) * 100, vista);
     setFoco({ x, y });
+    if (!trocada) setAjustado(true);
     void ajustar({ focoX: x, focoY: y }, "Foco salvo.");
+  }
+
+  /* Devolve o foco que vem com o site. `foto.focoX/Y` é o que o servidor
+     mandou — o ajustado, se houver —, então o do código vem de fora. */
+  async function voltarFocoDoSite() {
+    setErro(null);
+    try {
+      await pedir("PATCH", { voltarFoco: true });
+      setFoco(focoDoSite);
+      setAjustado(false);
+      setAviso("Foco do site de volta.");
+      router.refresh();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível voltar ao foco do site.");
+    }
   }
 
   async function voltarAoPadrao() {
@@ -157,20 +191,29 @@ export function FotoDaHomeAdmin({
             src={foto.src}
             alt={foto.descricao}
             onClick={marcarFoco}
-            className={`block max-h-52 max-w-full rounded ${trocada ? "cursor-crosshair" : ""}`}
+            className="block max-h-52 max-w-full cursor-crosshair rounded"
           />
           <span
             aria-hidden
             className="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.6)]"
-            style={{ left: `${foco.x}%`, top: `${foco.y}%` }}
+            style={{ left: `${foco.x}%`, top: `${centroDaFaixa(foco.y, vista)}%` }}
           />
         </span>
       </div>
       <p className="mt-2 text-[11px] text-texto-faint">
-        {trocada
-          ? "Toque na foto para marcar o foco — o ponto que a capa larga não corta."
-          : "O foco da foto padrão vem do site."}
+        Toque na foto sobre o rosto — a faixa abaixo mostra o recorte da capa larga, centrado no ponto.
+        {!trocada && (ajustado ? " Foco ajustado por você." : " Hoje vale o foco que vem com o site.")}
       </p>
+      {!trocada && ajustado && (
+        <button
+          type="button"
+          disabled={Boolean(ocupado)}
+          onClick={voltarFocoDoSite}
+          className="mt-1 self-start text-[11px] text-texto-faint underline underline-offset-4 transition hover:text-texto disabled:opacity-40"
+        >
+          Voltar ao foco do site
+        </button>
+      )}
       <div className="mt-2 aspect-[5/2] overflow-hidden rounded bg-void">
         <img
           src={foto.src}

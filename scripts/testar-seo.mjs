@@ -107,6 +107,27 @@ await etapa("sitemap.xml lista as páginas públicas no domínio canônico", asy
   return `domínio ${marca.dominio}`;
 });
 
+await etapa("a página-ponte do Instagram é a exceção: fora do sitemap e fora do índice", async () => {
+  /*
+   * Toda página pública da casa entra no sitemap (`metadadosDaCasa`) — menos a
+   * `/bio` (07/10/2026), de propósito. É página de campanha, um seletor entre
+   * dois produtos: no índice ela brigaria na busca com a home, que é a que
+   * precisa ser achada por "Galeria Átomo". O cartão do link (WhatsApp,
+   * Instagram) continua funcionando, e `noindex` + canônico próprio dizem ao
+   * robô o que ela é. Os redirecionadores `/bio/ir/*` saem do robots: cada
+   * visita é um clique contado.
+   */
+  const mapa = await pegar("/sitemap.xml");
+  if (mapa.corpo.includes("/bio")) throw new Error("a /bio entrou no sitemap");
+  const p = await pegar("/bio");
+  if (p.status !== 200) throw new Error(`HTTP ${p.status}`);
+  if (!/noindex/.test(meta(p.corpo, "robots") ?? "")) throw new Error("a /bio não é noindex");
+  if (!(canonico(p.corpo) ?? "").endsWith("/bio")) throw new Error(`canônico: ${canonico(p.corpo)}`);
+  if (!(meta(p.corpo, "og:title") ?? "").includes(marca.nome)) throw new Error("o cartão do link perdeu o título");
+  const r = await pegar("/robots.txt");
+  if (!/Disallow: \/bio\/ir/.test(r.corpo)) throw new Error("os redirecionadores estão abertos para robô");
+});
+
 await etapa("a home tem Open Graph completo", async () => {
   const r = await pegar("/");
   for (const p of ["og:title", "og:description", "og:image", "og:url"]) {

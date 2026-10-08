@@ -62,6 +62,11 @@ export default function PrivacidadePage() {
           pessoa: não pode haver duas contas com o mesmo documento. É também o que vai na
           cobrança, quando você assina — o processador de pagamento exige para emiti-la.
         </li>
+        <li>
+          <strong>De onde veio a conta</strong> — se você chegou pela página do link da bio do
+          nosso Instagram, anotamos isso (por exemplo, &ldquo;instagram&rdquo;). Serve só para
+          entendermos de onde vêm os cadastros.
+        </li>
       </ul>
 
       <h2>Registro de atividade da conta</h2>
@@ -144,6 +149,29 @@ export default function PrivacidadePage() {
         nenhum para ninguém.
       </p>
 
+      <h2>Visitantes da página do link da bio</h2>
+      <p>
+        O perfil da {marca.nome} no Instagram aponta para uma página ({marca.dominio}/bio) onde a
+        pessoa escolhe entre os nossos produtos. Contamos quantas pessoas a abrem e em qual produto
+        clicam, para entender de onde vem o interesse. O que fica guardado:
+      </p>
+      <ul>
+        <li>o que aconteceu (abriu a página, clicou em tal botão) e quando;</li>
+        <li>
+          de onde veio — por exemplo, &ldquo;instagram&rdquo;, que o próprio endereço do link
+          informa;
+        </li>
+        <li>
+          um <strong>código que muda todo dia</strong>, calculado a partir do endereço IP e do
+          navegador. Serve só para contar pessoas diferentes no mesmo dia: não guarda o IP, não é
+          cookie e não permite reconhecer ninguém no dia seguinte.
+        </li>
+      </ul>
+      <p>
+        Não usamos ferramenta de análise de terceiros nessa página, e ela não é indexada por
+        buscadores.
+      </p>
+
       <h2>As fotos e vídeos</h2>
       <p>
         O conteúdo enviado é <strong>do fotógrafo</strong>. Nós apenas armazenamos e entregamos. Não
@@ -157,14 +185,23 @@ export default function PrivacidadePage() {
       </p>
 
       <h2>Cookies</h2>
-      <p>Usamos apenas o necessário para o serviço funcionar — nenhum cookie de publicidade:</p>
+      <p>
+        Usamos apenas o necessário para o serviço funcionar e para saber de onde vieram as contas —
+        nenhum cookie de publicidade:
+      </p>
       <ul>
         <li>
           <strong>sessão do fotógrafo</strong> — mantém você logado no painel;
         </li>
         <li>
           <strong>liberação de galeria</strong> — depois de acertar a senha, evita pedir de novo a
-          cada foto.
+          cada foto;
+        </li>
+        <li>
+          <strong>origem do cadastro</strong> — se você chega pela página do link da bio e clica
+          num produto, guardamos por 30 dias uma anotação de onde veio (por exemplo,
+          &ldquo;instagram&rdquo;). Não identifica você, só é lida quando você cria a conta, e é
+          apagada nesse momento.
         </li>
       </ul>
 

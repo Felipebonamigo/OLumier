@@ -183,12 +183,13 @@ export default async function FotosPage({ params }: { params: Promise<{ id: stri
       */}
       <EditorSecoes
         galeriaId={galeria.id}
-        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0 }))}
+        secoes={secoes.map((s) => ({ id: s.id, nome: s.nome, total: s.total ?? 0, videos: s.total_videos ?? 0 }))}
         /* Os momentos típicos, para clicar um a um. Descem por propriedade
            porque `lib/secoes.ts` é `server-only` e o editor é do cliente — o
            mesmo caminho do assistente de galeria nova. */
         sugestoes={CAPITULOS_SUGERIDOS}
         semCapitulo={medias.filter((m) => !m.secao_id).length}
+        semCapituloVideos={medias.filter((m) => !m.secao_id && m.tipo === "video").length}
         /* Como esta galeria chama o grupo das soltas (migração 037). Nulo é o
            normal e quer dizer "Outras fotos". */
         grupoSolto={galeria.grupo_solto}

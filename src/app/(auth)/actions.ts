@@ -20,7 +20,8 @@ import {
   criarPedido,
   enviarEmailDeRecuperacao,
 } from "@/lib/recuperacao";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { NOME_DO_COOKIE_DA_BIO, lerCookieDaBio, origemDoCadastro } from "@/lib/bio-regras";
 
 /**
  * O recado de cada recusa de senha. Fica junto porque as três telas que definem
@@ -130,6 +131,16 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
    * clicar. Ver `lib/confirmacao-email.ts`. */
   const pedirConfirmacao = emailConfigurado();
 
+  /*
+   * DE ONDE VEIO A CONTA (migração 063). Quem clicou num produto na página-ponte
+   * `/bio` leva um cookie de 30 dias com a origem; ele só diz "instagram/bio/
+   * galeria", sem identificar ninguém. Cookie é texto que o navegador devolve
+   * como quiser, então `lerCookieDaBio` o confere inteiro antes de gravar.
+   */
+  const jar = await cookies();
+  const daBio = lerCookieDaBio(jar.get(NOME_DO_COOKIE_DA_BIO)?.value);
+  const origem = daBio ? origemDoCadastro(daBio) : null;
+
   let tenant;
   try {
     tenant = await criarTenant({
@@ -139,6 +150,8 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
       planoId,
       cpfCnpj: documento,
       emailConfirmado: !pedirConfirmacao,
+      origem: origem?.origem ?? null,
+      origemCampanha: origem?.campanha ?? null,
     });
   } catch (e) {
     // Dois cadastros com o mesmo documento no mesmo segundo: o índice segura o segundo.
@@ -172,6 +185,7 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
     alvoId: tenant.id,
     detalhe: {
       plano: planoId,
+      ...(origem ? { origem: origem.origem } : {}),
       email_hash: hashDeEmail(email),
       aceitou: { termos: VERSOES_LEGAIS.termos, privacidade: VERSOES_LEGAIS.privacidade },
     },
@@ -184,6 +198,9 @@ export async function cadastrarAction(_estado: EstadoForm, form: FormData): Prom
     console.warn(`[cadastro] link de confirmação não saiu para ${tenant.id}; conta liberada`);
     await consultar("update tenants set email_confirmado_em = now() where id = $1", [tenant.id]);
   }
+
+  /* A origem já está na conta; o cookie cumpriu o papel. */
+  if (daBio) jar.delete(NOME_DO_COOKIE_DA_BIO);
 
   await criarSessao(tenant.id);
   redirect("/painel");

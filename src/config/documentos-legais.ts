@@ -18,7 +18,7 @@
  */
 export const VERSOES_LEGAIS = {
   termos: "2026-09-30",
-  privacidade: "2026-10-02",
+  privacidade: "2026-10-07",
 } as const;
 
 /** "2026-09-30" → "30 de setembro de 2026", sem depender do fuso do servidor. */

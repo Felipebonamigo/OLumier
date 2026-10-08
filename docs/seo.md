@@ -214,3 +214,10 @@ de preferência, os números de busca (3.3) para escolher a ordem.
   maior elemento da tela. Com o Lighthouse em 96 não é urgente; se um dia o
   celular piorar, o lugar é a prop `ilustracao` de `GaleriaCapa` (prioridade
   alta só para a galeria da frente do hero). Fica para quem cuida da home.
+- **A página-ponte do Instagram (`/bio`, 07/10/2026) fora do índice e do
+  sitemap.** É a exceção à regra "página da casa entra no sitemap": é um seletor
+  de campanha entre dois produtos, e no índice brigaria na busca com a home, que
+  é a que precisa ser achada por "Galeria Átomo". Tem `noindex`, canônico próprio
+  e cartão de link normal (a pré-visualização no WhatsApp e no Instagram
+  funciona); os redirecionadores `/bio/ir/*` estão fechados no `robots.txt`.
+  `scripts/testar-seo.mjs` prende os dois lados. Ver `docs/bio.md`.
