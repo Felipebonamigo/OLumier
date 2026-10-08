@@ -728,6 +728,17 @@ export default async function AdminPage({
                             até {data(e.trial_ate)}
                           </span>
                         )}
+                        {/* A data do teste não some com o status: conta que
+                            aparece como inadimplente mas ainda tem teste pela
+                            frente é a primeira coisa a conferir. */}
+                        {e.status !== "trial" &&
+                          e.status !== "ativo" &&
+                          e.trial_ate &&
+                          new Date(e.trial_ate).getTime() > agora.getTime() && (
+                            <span className="mt-1 block text-[11px] text-alerta">
+                              teste até {data(e.trial_ate)}
+                            </span>
+                          )}
                         {!e.cpf_cnpj && !e.tem_assinatura && (
                           <span className="mt-1 block text-[11px] text-alerta">sem CPF/CNPJ</span>
                         )}
