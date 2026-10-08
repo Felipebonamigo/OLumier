@@ -112,7 +112,7 @@ export function MoverParaOutraGaleria({
     setSecaoId("");
     setPasso("capitulo");
     const meu = ++pedido.current;
-    opcoesDoDestinoAction(origemId, g.id, escopo)
+    opcoesDoDestinoAction(origemId, g.id)
       .then((o) => {
         if (meu !== pedido.current) return;
         if (o) setOpcoes(o);
@@ -144,7 +144,7 @@ export function MoverParaOutraGaleria({
           return;
         }
         moveu.current = r.movidas > 0;
-        setResultado({ movidas: r.movidas, favoritas: r.favoritasRemovidas });
+        setResultado({ movidas: r.movidas, favoritas: r.favoritasMantidas });
         setPasso("pronto");
       } catch {
         setErro("Não foi possível mover agora. Nada foi alterado — tente de novo.");
@@ -330,15 +330,6 @@ export function MoverParaOutraGaleria({
                   As fotos entram no fim{temCapitulos ? " do capítulo" : " da galeria"}, na mesma ordem em
                   que estão agora. O arquivo não sobe de novo e continua ocupando o mesmo espaço.
                 </p>
-                {opcoes.favoritas > 0 && (
-                  <p className="mt-2 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-[11px] text-alerta">
-                    {opcoes.favoritas === 1
-                      ? "1 marcação de favorita nestas fotos será removida"
-                      : `${opcoes.favoritas} marcações de favorita nestas fotos serão removidas`}
-                    : elas pertencem aos visitantes da galeria de origem e não existem na nova.
-                  </p>
-                )}
-
                 <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                   <span className="mr-auto text-[11px] text-texto-faint">
                     {nomeDoDestinoFinal && `vão para “${nomeDoDestinoFinal}”`}
@@ -370,9 +361,9 @@ export function MoverParaOutraGaleria({
             {resultado.favoritas > 0 && (
               <p className="mt-1 text-[11px] text-texto-faint">
                 {resultado.favoritas === 1
-                  ? "1 marcação de favorita foi removida"
-                  : `${resultado.favoritas} marcações de favorita foram removidas`}{" "}
-                junto.
+                  ? "1 marcação de favorita veio junto"
+                  : `${resultado.favoritas} marcações de favorita vieram junto`}
+                : quem escolheu por e-mail reencontra as dela ao se identificar nesta galeria.
               </p>
             )}
             <div className="mt-4 flex flex-wrap justify-end gap-2">

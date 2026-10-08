@@ -29,8 +29,12 @@ import { consultar, emTransacao, type Consulta } from "./db";
  *   capa da galeria / capa de capítulo (origem)  aponta para a foto → solta;
  *       uma capa apontando para foto de outra galeria é imagem que não é daquela
  *       entrega.
- *   favoritas   são de um visitante ANÔNIMO DAQUELA galeria (cookie por galeria)
- *       → não fazem sentido na nova; apagam, e a tela AVISA antes.
+ *   favoritas   ACOMPANHAM a foto: foto favorita continua favorita. A linha muda
+ *       de galeria junto com ela. Quem se identificou por e-mail é recriado no
+ *       destino pelo MESMO e-mail (a pessoa existe dentro de uma galeria só,
+ *       migração 033) — ao se identificar lá, a cliente reencontra as dela. A
+ *       marcação anônima de antes da 033 segue como está e continua contando no
+ *       painel do fotógrafo.
  *   rostos      são dado biométrico (LGPD) e só existem em galeria com a busca
  *       ligada → seguem a foto se o destino tem a busca ligada, e saem se não.
  *   acessos     são o histórico DA ENTREGA de origem ("o cliente baixou isto")
@@ -67,12 +71,10 @@ export interface OpcoesDoDestino {
   capitulos: CapituloDoDestino[];
   /** O nome do grupo das soltas NESTA galeria. Nulo = "Outras fotos". */
   grupoSolto: string | null;
-  /** Quantas marcações de favorita se perdem no caminho. */
-  favoritas: number;
 }
 
 export type ResultadoDoMovimento =
-  | { ok: true; movidas: number; favoritasRemovidas: number }
+  | { ok: true; movidas: number; favoritasMantidas: number }
   | { ok: false; erro: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -161,8 +163,7 @@ async function idsDoEscopo(
 }
 
 /**
- * O que o destino oferece (capítulos, nome do grupo das soltas) e o que se
- * perde no caminho (favoritas) — para o modal dizer ANTES de a pessoa confirmar.
+ * O que o destino oferece: capítulos e nome do grupo das soltas.
  *
  * Devolve null quando o destino não é um destino válido: o modal trata como
  * "não achei essa galeria", que é a verdade para quem forjou o id.
@@ -171,7 +172,6 @@ export async function opcoesDoDestino(
   tenantId: string,
   origemId: string,
   destinoId: string,
-  escopo: EscopoDoMovimento,
 ): Promise<OpcoesDoDestino | null> {
   if (!ehUuid(destinoId) || !ehUuid(origemId) || destinoId === origemId) return null;
 
@@ -191,17 +191,7 @@ export async function opcoesDoDestino(
     [destinoId],
   );
 
-  const ids = await idsDoEscopo(consultar, tenantId, origemId, escopo, false);
-  let favoritas = 0;
-  if (ids.length > 0) {
-    const [f] = await consultar<{ n: number }>(
-      `select count(*)::int as n from favoritas where media_id = any($1::uuid[])`,
-      [ids],
-    );
-    favoritas = f?.n ?? 0;
-  }
-
-  return { capitulos, grupoSolto: destino.grupo_solto, favoritas };
+  return { capitulos, grupoSolto: destino.grupo_solto };
 }
 
 /**
@@ -265,7 +255,7 @@ export async function moverMediasParaOutraGaleria(dados: {
        pela outra, e a segunda encontra a lista já vazia em vez de mover duas
        vezes. */
     const ids = await idsDoEscopo(q, tenantId, origemId, escopo, true);
-    if (ids.length === 0) return { ok: true, movidas: 0, favoritasRemovidas: 0 };
+    if (ids.length === 0) return { ok: true, movidas: 0, favoritasMantidas: 0 };
 
     /* O fim da galeria de destino, contando também o que ainda está subindo:
        linha pendente já ocupa a posição dela (ver `criarMediaPendente`). */
@@ -301,9 +291,33 @@ export async function moverMediasParaOutraGaleria(dados: {
       [origemId, ids],
     );
 
-    const apagadas = await q<{ id: string }>(
-      `delete from favoritas where media_id = any($1::uuid[]) returning id`,
-      [ids],
+    /* A FAVORITA SEGUE A FOTO. Primeiro as pessoas: quem escolheu por e-mail
+       precisa existir no destino (pelo mesmo e-mail, sem diferenciar
+       maiúsculas) para a linha poder apontar para ela. Depois a linha muda de
+       galeria e de dona. Sem `pessoa_id` (lista antiga) o `visitante` fica como
+       estava. Os índices únicos não colidem: a foto é a mesma e só existe numa
+       galeria por vez. */
+    await q(
+      `insert into pessoas_da_galeria (galeria_id, email, nome)
+       select $1, p.email, p.nome
+         from pessoas_da_galeria p
+        where p.id in (select pessoa_id from favoritas
+                        where media_id = any($2::uuid[]) and pessoa_id is not null)
+       on conflict (galeria_id, lower(email))
+       do update set nome = coalesce(pessoas_da_galeria.nome, excluded.nome)`,
+      [destinoId, ids],
+    );
+    const favoritas = await q<{ id: string }>(
+      `update favoritas f
+          set galeria_id = $1,
+              pessoa_id = (select d.id
+                             from pessoas_da_galeria o
+                             join pessoas_da_galeria d
+                               on d.galeria_id = $1 and lower(d.email) = lower(o.email)
+                            where o.id = f.pessoa_id)
+        where f.media_id = any($2::uuid[])
+        returning f.id`,
+      [destinoId, ids],
     );
 
     /* Dado biométrico só mora em galeria com a busca ligada. */
@@ -316,6 +330,6 @@ export async function moverMediasParaOutraGaleria(dados: {
       await q(`delete from rostos where media_id = any($1::uuid[])`, [ids]);
     }
 
-    return { ok: true, movidas: ids.length, favoritasRemovidas: apagadas.length };
+    return { ok: true, movidas: ids.length, favoritasMantidas: favoritas.length };
   });
 }

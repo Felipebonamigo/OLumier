@@ -1839,12 +1839,9 @@ export async function galeriasParaMoverAction(origemId: string): Promise<Destino
 export async function opcoesDoDestinoAction(
   origemId: string,
   destinoId: string,
-  escopo: unknown,
 ): Promise<OpcoesDoDestino | null> {
   const tenantId = await exigirTenant();
-  const e = escopoDoMovimento(escopo);
-  if (!e) return null;
-  return opcoesDoDestino(tenantId, origemId, destinoId, e);
+  return opcoesDoDestino(tenantId, origemId, destinoId);
 }
 
 export async function moverParaOutraGaleriaAction(dados: {

@@ -16,8 +16,9 @@
  * 1. O arquivo NÃO se mexe: a chave no bucket continua a mesma. É isso que torna
  *    o movimento barato e seguro — ver `lib/mover-entre-galerias.ts`.
  * 2. O espaço das duas galerias é refeito, e o do estúdio fica igual.
- * 3. O que apontava para a foto na origem (capa da galeria, capa do capítulo,
- *    favoritas) não fica pendurado em foto que já não é de lá.
+ * 3. O que apontava para a foto na origem (capa da galeria, capa do capítulo)
+ *    não fica pendurado em foto que já não é de lá. A FAVORITA, ao contrário,
+ *    vai junto: foto favorita continua favorita no destino, com a mesma dona.
  * 4. Rosto (dado biométrico) só acompanha a foto se o destino tem a busca ligada.
  * 5. O id vindo do navegador não alcança nada que não seja do estúdio: foto,
  *    galeria ou capítulo de outro estúdio — ou de outra galeria — são recusados
@@ -87,9 +88,25 @@ await db.query("update medias set secao_id = $1 where id = $2", [festa.id, final
 /* Tudo o que penduraria na origem: capas, favorita, rostos. */
 await db.query("update galerias set capa_media_id = $1 where id = $2", [m1, origem.id]);
 await db.query("update secoes set capa_media_id = $1 where id = $2", [m2, cerimonia.id]);
+/* Duas donas possíveis: a pessoa que se identificou por e-mail (m1, m4) e a
+   marcação anônima de antes da migração 033 (m3). O destino `final` JÁ conhece a
+   Ana, com o e-mail em outra caixa — não pode virar duas Anas. */
+const pessoa = async (galeriaId, email) =>
+  (await db.query(
+    "insert into pessoas_da_galeria (galeria_id, email, nome) values ($1, $2, 'Ana') returning id",
+    [galeriaId, email],
+  )).rows[0].id;
+const anaOrigem = await pessoa(origem.id, "Ana@Exemplo.com");
+const anaFinal = await pessoa(final.id, "ana@exemplo.com");
+for (const m of [m1, m4]) {
+  await db.query(
+    "insert into favoritas (galeria_id, media_id, visitante, pessoa_id) values ($1, $2, 'visitante-a', $3)",
+    [origem.id, m, anaOrigem],
+  );
+}
 await db.query(
-  "insert into favoritas (galeria_id, media_id, visitante) values ($1, $2, 'visitante-a')",
-  [origem.id, m1],
+  "insert into favoritas (galeria_id, media_id, visitante) values ($1, $2, 'visitante-b')",
+  [origem.id, m3],
 );
 for (const m of [m0, m4]) {
   await db.query(
@@ -122,16 +139,14 @@ await etapa("a lista de destinos: as MINHAS galerias no ar, menos a de origem", 
   return "sem a de origem, a do vizinho, a arquivada e a da lixeira";
 });
 
-await etapa("as opções do destino: capítulos, e quantas favoritas se perdem", async () => {
-  const o = await opcoesDoDestino(tenantId, origem.id, final.id, { tipo: "ids", ids: [m1, m3] });
+await etapa("as opções do destino: capítulos e o nome do grupo das soltas", async () => {
+  const o = await opcoesDoDestino(tenantId, origem.id, final.id);
   igual(o.capitulos.map((c) => c.nome), ["Festa", "Making of"], "capítulos do destino");
   igual(o.capitulos[0].total, 1, "a Festa já tem uma foto");
-  igual(o.favoritas, 1, "favoritas que se perdem");
   igual(o.grupoSolto, null, "sem nome próprio para as soltas");
 });
 
 await etapa("destino que não é meu / é a própria origem / não está no ar → sem opções", async () => {
-  const escopo = { tipo: "ids", ids: [m1] };
   for (const [quem, id] of [
     ["do vizinho", alheia.id],
     ["a própria origem", origem.id],
@@ -139,7 +154,7 @@ await etapa("destino que não é meu / é a própria origem / não está no ar �
     ["na lixeira", lixeira.id],
     ["inventado", "00000000-0000-4000-8000-000000000000"],
   ]) {
-    if ((await opcoesDoDestino(tenantId, origem.id, id, escopo)) !== null) {
+    if ((await opcoesDoDestino(tenantId, origem.id, id)) !== null) {
       throw new Error(`destino ${quem} devolveu opções`);
     }
   }
@@ -172,7 +187,7 @@ await etapa("RECUSA: quem é de OUTRO estúdio não entra no movimento, mesmo co
     secaoDestinoId: null,
     escopo: { tipo: "ids", ids: [idAlheio] },
   });
-  igual(r, { ok: true, movidas: 0, favoritasRemovidas: 0 }, "resposta");
+  igual(r, { ok: true, movidas: 0, favoritasMantidas: 0 }, "resposta");
   igual((await linha(idAlheio)).galeria_id, alheia.id, "a foto do vizinho ficou onde estava");
   /* E pedindo a origem do vizinho: o tenant da sessão não é o dono. */
   const r2 = await moverMediasParaOutraGaleria({
@@ -195,7 +210,7 @@ await etapa("fotos marcadas → destino SEM capítulo: vão para as soltas, no f
     secaoDestinoId: null,
     escopo: { tipo: "ids", ids: [m3, m1] },
   });
-  igual(r, { ok: true, movidas: 2, favoritasRemovidas: 1 }, "resposta");
+  igual(r, { ok: true, movidas: 2, favoritasMantidas: 2 }, "resposta");
   const a = await linha(m1);
   const b = await linha(m3);
   igual([a.galeria_id, a.secao_id, b.galeria_id, b.secao_id], [final.id, null, final.id, null], "destino");
@@ -213,11 +228,30 @@ await etapa("o espaço das duas galerias foi refeito; o do estúdio ficou igual"
   igual(await bytesDaGaleria(final.id), 4 * MB, "destino");
 });
 
-await etapa("a capa que era uma das fotos movidas foi solta; a favorita foi junto", async () => {
+await etapa("a capa que era uma das fotos movidas foi solta", async () => {
   const capa = (await db.query("select capa_media_id from galerias where id = $1", [origem.id])).rows[0];
   igual(capa.capa_media_id, null, "capa da galeria");
-  const f = (await db.query("select count(*)::int as n from favoritas where media_id = $1", [m1])).rows[0];
-  igual(f.n, 0, "favoritas da foto movida");
+});
+
+await etapa("a FAVORITA vai junto: continua favorita, com a mesma dona, e sem duplicar a pessoa", async () => {
+  const { rows } = await db.query(
+    "select media_id, galeria_id, pessoa_id, visitante from favoritas where media_id = any($1::uuid[]) order by visitante",
+    [[m1, m3]],
+  );
+  igual(rows.length, 2, "uma favorita por foto");
+  const daAna = rows.find((r) => r.media_id === m1);
+  const anonima = rows.find((r) => r.media_id === m3);
+  igual([daAna.galeria_id, anonima.galeria_id], [final.id, final.id], "as duas mudaram de galeria");
+  igual(daAna.pessoa_id, anaFinal, "a Ana do destino (a que já existia, não uma nova)");
+  igual([anonima.pessoa_id, anonima.visitante], [null, "visitante-b"], "a anônima ficou como estava");
+  const anas = (await db.query(
+    "select count(*)::int as n from pessoas_da_galeria where galeria_id = $1 and lower(email) = 'ana@exemplo.com'",
+    [final.id],
+  )).rows[0].n;
+  igual(anas, 1, "Anas no destino");
+  /* O que a cliente vê ao se identificar no destino. */
+  const dela = (await db.query("select media_id from favoritas where galeria_id = $1 and pessoa_id = $2", [final.id, anaFinal])).rows;
+  igual(dela.map((r) => r.media_id), [m1], "as favoritas da Ana no destino");
 });
 
 await etapa("o capítulo INTEIRO → capítulo escolhido do destino, depois do que já estava lá", async () => {
@@ -264,6 +298,14 @@ await etapa("as soltas → galeria com a busca DESLIGADA: os rostos são apagado
   igual(n, 0, "rostos de m4");
 });
 
+await etapa("favorita de pessoa que o destino NÃO conhece: a pessoa é recriada lá, pelo mesmo e-mail", async () => {
+  const f = (await db.query("select galeria_id, pessoa_id from favoritas where media_id = $1", [m4])).rows;
+  igual(f.length, 1, "a favorita de m4 existe");
+  igual(f[0].galeria_id, final2.id, "na galeria nova");
+  const p = (await db.query("select galeria_id, email, nome from pessoas_da_galeria where id = $1", [f[0].pessoa_id])).rows[0];
+  igual([p.galeria_id, p.email.toLowerCase(), p.nome], [final2.id, "ana@exemplo.com", "Ana"], "pessoa criada no destino");
+});
+
 await etapa("o que ainda estava SUBINDO não vai junto", async () => {
   igual((await linha(pendente.id)).galeria_id, origem.id, "pendente");
 });
@@ -276,7 +318,7 @@ await etapa("mover de novo o que já saiu não move nada (nem quebra)", async ()
     secaoDestinoId: null,
     escopo: { tipo: "ids", ids: [m1, m3] },
   });
-  igual(r, { ok: true, movidas: 0, favoritasRemovidas: 0 }, "resposta");
+  igual(r, { ok: true, movidas: 0, favoritasMantidas: 0 }, "resposta");
 });
 
 await etapa("dá para voltar: o movimento é reversível", async () => {
