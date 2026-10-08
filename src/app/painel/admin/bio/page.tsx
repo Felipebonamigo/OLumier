@@ -3,7 +3,6 @@ import Link from "next/link";
 import { exigirAdmin, metadataDeAdmin } from "@/lib/portao-admin";
 import { marca } from "@/config/marca";
 import { PRODUTOS_DA_BIO } from "@/config/bio";
-import { CAMPANHA_PADRAO } from "@/lib/bio-regras";
 import { resumoDaBio } from "@/lib/bio";
 import { Bloco, Barra, Cartao, porcento } from "@/components/admin-pecas";
 
@@ -42,7 +41,7 @@ export default async function BioAdminPage({
   const r = await resumoDaBio(dias);
 
   const cliquesNosProdutos = PRODUTOS_DA_BIO.reduce((soma, p) => soma + (r.cliques[p.evento] ?? 0), 0);
-  const link = `https://${marca.dominio}/bio?utm_source=instagram&utm_medium=bio&utm_campaign=${CAMPANHA_PADRAO}`;
+  const link = `https://${marca.dominio}/bio/instagram`;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -218,16 +217,21 @@ export default async function BioAdminPage({
 
       <Bloco
         titulo="O link para colocar na bio"
-        explicacao="Com o UTM, a origem fica certa mesmo quando o navegador do Instagram não diz de onde a pessoa veio."
+        explicacao="Limpo, e já diz que a visita veio do Instagram — o navegador de dentro dele nem sempre informa de onde a pessoa veio."
       >
         <p className="break-all rounded-xl border border-linha bg-carbon px-4 py-3 font-mono text-xs">{link}</p>
         <p className="mt-3 max-w-3xl text-xs text-texto-faint">
-          Troque <span className="font-mono">utm_campaign</span> para separar posts, anúncios ou stories
-          (<span className="font-mono">utm_campaign=lancamento-galeria</span>). Só letras minúsculas,
+          Para separar posts, anúncios ou stories, acrescente a campanha:{" "}
+          <span className="font-mono">{link}?utm_campaign=lancamento-galeria</span>. Só letras minúsculas,
           números, ponto, hífen e sublinhado. Os números são estimativas honestas, e não auditoria:
           &ldquo;pessoas&rdquo; é um hash que muda todo dia (sem cookie), então a mesma pessoa em dois
           dias conta duas vezes e duas pessoas na mesma rede móvel com o mesmo modelo de celular contam
           uma só. Robôs e pré-visualizações de link não entram.
+        </p>
+        <p className="mt-2 max-w-3xl text-xs text-texto-faint">
+          O que o Instagram já mostra em &ldquo;Atividade do perfil&rdquo; (visitas ao perfil e toques
+          no link da bio) vem ANTES desta tela: ele conta quem tocou no link; aqui se vê quem abriu a
+          página, em qual produto clicou e quem criou conta.
         </p>
       </Bloco>
     </main>
