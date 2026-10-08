@@ -17,11 +17,27 @@ import { ehAdmin } from "./admin";
  * galeria de sempre mesmo que a aparência gravada diga outra coisa (o
  * formulário é um endpoint, e o que decide é o servidor).
  *
- * Abrir para todo mundo é trocar o corpo desta função por `return true`.
+ * ── ABERTO A TODAS AS CONTAS (07/10/2026) ───────────────────────────────
+ *
+ * Felipe: "Libere as pastas e stream para todos". `FORMATOS_ABERTOS_A_TODOS`
+ * liga o formato para toda conta, sem carimbo e sem admin. A regra por conta
+ * (carimbo OU admin) e o botão da ficha ficam guardados: fechar de novo é
+ * trocar a chave por `false` — nenhuma migração, e quem foi liberado antes
+ * volta a ver sem apertar nada.
+ *
+ * Abrir o painel não abre a comunicação: o §6 da estratégia de marca segue
+ * valendo para home e vendas (vídeo e filmmaker só entram depois de entrega
+ * real). Ver docs/formatos-de-entrega.md.
  */
-export function formatosLiberados(conta: {
-  formatos_liberados_em?: Date | string | null;
-  email?: string | null;
-}): boolean {
-  return Boolean(conta.formatos_liberados_em) || ehAdmin(conta.email);
+export const FORMATOS_ABERTOS_A_TODOS = true;
+
+export function formatosLiberados(
+  conta: {
+    formatos_liberados_em?: Date | string | null;
+    email?: string | null;
+  },
+  /** Só os testes passam isto: a regra por conta, com a chave fechada. */
+  aberto: boolean = FORMATOS_ABERTOS_A_TODOS,
+): boolean {
+  return aberto || Boolean(conta.formatos_liberados_em) || ehAdmin(conta.email);
 }

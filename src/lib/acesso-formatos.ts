@@ -2,11 +2,13 @@ import "server-only";
 import { consultarUm } from "@/lib/db";
 import { ACOES, registrarEvento } from "@/lib/eventos";
 import { hashDeEmail } from "@/lib/ip";
-import { formatosLiberados } from "@/config/formatos-liberados";
+import { FORMATOS_ABERTOS_A_TODOS, formatosLiberados } from "@/config/formatos-liberados";
 import type { Aparencia } from "@/config/aparencia";
 
 /** A conta pode usar Pastas e Stream? Ver `config/formatos-liberados.ts`. */
 export async function formatosLiberadosPara(tenantId: string): Promise<boolean> {
+  /* Aberto a todos: a resposta não depende da conta, então nem consulta. */
+  if (FORMATOS_ABERTOS_A_TODOS) return true;
   const conta = await consultarUm<{ email: string | null; formatos_liberados_em: Date | null }>(
     "select email, formatos_liberados_em from tenants where id = $1",
     [tenantId],

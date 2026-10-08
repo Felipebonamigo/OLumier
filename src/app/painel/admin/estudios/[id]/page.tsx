@@ -16,6 +16,7 @@ import { marca } from "@/config/marca";
 import { PLATAFORMAS } from "@/config/plataformas-de-origem";
 import { permitirLoginAction, liberarFormatosAction } from "./actions";
 import { ehAdmin } from "@/config/admin";
+import { FORMATOS_ABERTOS_A_TODOS } from "@/config/formatos-liberados";
 import {
   Cartao,
   Bloco,
@@ -258,15 +259,35 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
         Sirius)". Mesma forma do bloco do Pixieset. A conta de admin já vê
         sem liberar, e o recado diz isso — senão o botão parece não ter
         efeito na própria conta.
+
+        07/10/2026: "Libere as pastas e stream para todos". Com a chave
+        `FORMATOS_ABERTOS_A_TODOS` ligada o botão não muda nada para ninguém,
+        então ele sai e o bloco diz o que vale — um botão que não faz nada
+        é pior que nenhum botão. O carimbo de quem foi liberado antes fica
+        guardado, para fechar de novo sem perder ninguém.
       */}
       <Bloco
         id="formatos"
         titulo="Pastas e Stream"
-        explicacao="Os formatos de entrega em validação. Só aparecem para a conta liberada aqui — e para as contas de admin."
+        explicacao={
+          FORMATOS_ABERTOS_A_TODOS
+            ? "Os formatos de entrega estão abertos a todas as contas. A liberação por conta fica guardada para o caso de fechar de novo."
+            : "Os formatos de entrega em validação. Só aparecem para a conta liberada aqui — e para as contas de admin."
+        }
       >
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-linha bg-carbon px-4 py-3">
           <div className="text-sm">
-            {e.formatos_liberados_em ? (
+            {FORMATOS_ABERTOS_A_TODOS ? (
+              <>
+                <span className="font-medium text-ok">Aberto a todas as contas</span>
+                {e.formatos_liberados_em && (
+                  <span className="text-texto-faint">
+                    {" "}
+                    — esta já estava liberada desde {dataHora(e.formatos_liberados_em)}
+                  </span>
+                )}
+              </>
+            ) : e.formatos_liberados_em ? (
               <>
                 <span className="font-medium text-ok">Liberado</span>
                 <span className="text-texto-faint"> desde {dataHora(e.formatos_liberados_em)}</span>
@@ -277,20 +298,22 @@ export default async function EstudioPage({ params }: { params: Promise<{ id: st
               <span className="text-texto-soft">Não liberado</span>
             )}
           </div>
-          <form action={liberarFormatosAction}>
-            <input type="hidden" name="id" value={e.id} />
-            <input type="hidden" name="liberar" value={e.formatos_liberados_em ? "0" : "1"} />
-            <button
-              type="submit"
-              className={
-                e.formatos_liberados_em
-                  ? "rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
-                  : "rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
-              }
-            >
-              {e.formatos_liberados_em ? "Bloquear Pastas e Stream" : "Liberar Pastas e Stream"}
-            </button>
-          </form>
+          {!FORMATOS_ABERTOS_A_TODOS && (
+            <form action={liberarFormatosAction}>
+              <input type="hidden" name="id" value={e.id} />
+              <input type="hidden" name="liberar" value={e.formatos_liberados_em ? "0" : "1"} />
+              <button
+                type="submit"
+                className={
+                  e.formatos_liberados_em
+                    ? "rounded-lg border border-linha-forte px-4 py-2 text-sm transition hover:bg-carbon-2"
+                    : "rounded-lg bg-acento px-4 py-2 text-sm font-semibold text-void transition hover:bg-acento-alto"
+                }
+              >
+                {e.formatos_liberados_em ? "Bloquear Pastas e Stream" : "Liberar Pastas e Stream"}
+              </button>
+            </form>
+          )}
         </div>
       </Bloco>
 

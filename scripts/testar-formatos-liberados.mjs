@@ -15,6 +15,12 @@
  *   3. O Design da conta sem liberação não oferece o grupo Formato.
  *   4. A regra: carimbo OU admin.
  *
+ * 07/10/2026 — "Libere as pastas e stream para todos": a chave
+ * `FORMATOS_ABERTOS_A_TODOS` abre para toda conta. Os passos 1 e 3 esperam o
+ * que a chave manda (aberta: a conta sem carimbo também vê; fechada: não vê),
+ * então o arquivo vale nos dois estados, e a regra por conta do passo 4 é
+ * conferida com a chave fechada à força.
+ *
  * Os dados são desta rodada (ver o aviso em `testar-tudo.mjs`): um estúdio
  * próprio, uma galeria com dois capítulos e uma foto em cada. As fotos não
  * precisam existir no armazém — a página só ASSINA a miniatura, não a busca.
@@ -31,9 +37,9 @@ const db = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await db.connect();
 
 let falhou = false;
-async function etapa(nome, fn) {
+async function etapa(nome, fn, detalhe) {
   try {
-    const d = await fn();
+    const d = (await fn()) ?? detalhe;
     console.log(`  ✓ ${nome}${d ? ` — ${d}` : ""}`);
   } catch (e) {
     falhou = true;
@@ -41,17 +47,25 @@ async function etapa(nome, fn) {
   }
 }
 
-console.log("Pastas e Stream só para as contas liberadas:\n");
+console.log("Pastas e Stream — a trava por conta e a chave de abrir a todos:\n");
 
 /* ── 4. a regra, sem servidor ─────────────────────────────────────────── */
 const antes = process.env.ADMINS;
 process.env.ADMINS = "socio@teste.local";
-const { formatosLiberados } = await import("../src/config/formatos-liberados.ts");
-await etapa("carimbo ou admin libera; nenhum dos dois, não", () => {
-  if (!formatosLiberados({ formatos_liberados_em: new Date(), email: "x@y.z" })) throw new Error("carimbo não liberou");
-  if (!formatosLiberados({ formatos_liberados_em: null, email: "SOCIO@teste.local" })) throw new Error("admin não liberou");
-  if (formatosLiberados({ formatos_liberados_em: null, email: "cliente@y.z" })) throw new Error("liberou sem nada");
+const { formatosLiberados, FORMATOS_ABERTOS_A_TODOS } = await import("../src/config/formatos-liberados.ts");
+await etapa("chave fechada: carimbo ou admin libera; nenhum dos dois, não", () => {
+  if (!formatosLiberados({ formatos_liberados_em: new Date(), email: "x@y.z" }, false)) throw new Error("carimbo não liberou");
+  if (!formatosLiberados({ formatos_liberados_em: null, email: "SOCIO@teste.local" }, false)) throw new Error("admin não liberou");
+  if (formatosLiberados({ formatos_liberados_em: null, email: "cliente@y.z" }, false)) throw new Error("liberou sem nada");
 });
+await etapa("chave aberta: toda conta libera, com ou sem carimbo", () => {
+  if (!formatosLiberados({ formatos_liberados_em: null, email: "cliente@y.z" }, true)) throw new Error("conta comum não liberou");
+  if (!formatosLiberados({}, true)) throw new Error("conta sem dados não liberou");
+});
+await etapa("sem argumento vale a chave do código", () => {
+  const sem = formatosLiberados({ formatos_liberados_em: null, email: "cliente@y.z" });
+  if (sem !== FORMATOS_ABERTOS_A_TODOS) throw new Error(`devolveu ${sem} com a chave em ${FORMATOS_ABERTOS_A_TODOS}`);
+}, `chave em ${FORMATOS_ABERTOS_A_TODOS}`);
 process.env.ADMINS = antes ?? "";
 
 /* ── a bancada ─────────────────────────────────────────────────────────── */
@@ -79,20 +93,29 @@ await db.query("update galerias set aparencia = $1 where id = $2", [
 const endereco = `${BASE}/g/${estudio.slug}/${galeria.slug}`;
 const ehPastas = (html) => html.includes('aria-label="Pastas"') && html.includes("Cerimônia");
 
-/* ── 1. sem liberação, a galeria de sempre ─────────────────────────────── */
-await etapa("sem liberação, a galeria pública abre como galeria", async () => {
+/* ── 1. sem carimbo: o que a chave manda ──────────────────────────────── */
+const abre = FORMATOS_ABERTOS_A_TODOS ? "abre em pastas" : "abre como galeria";
+await etapa(`sem carimbo, a galeria pública ${abre}`, async () => {
   const html = await (await fetch(endereco)).text();
-  if (ehPastas(html)) throw new Error("abriu em pastas sem a conta estar liberada");
-});
+  if (ehPastas(html) !== FORMATOS_ABERTOS_A_TODOS) {
+    throw new Error(
+      FORMATOS_ABERTOS_A_TODOS
+        ? "a chave está aberta e a conta sem carimbo não viu pastas"
+        : "abriu em pastas sem a conta estar liberada",
+    );
+  }
+}, `chave em ${FORMATOS_ABERTOS_A_TODOS}`);
 
-/* ── 3. o Design não oferece o formato ─────────────────────────────────── */
-await etapa("sem liberação, o Design não mostra o grupo Formato", async () => {
+/* ── 3. o Design oferece (ou não) o formato ─────────────────────────────── */
+await etapa(`sem carimbo, o Design ${FORMATOS_ABERTOS_A_TODOS ? "mostra" : "não mostra"} o grupo Formato`, async () => {
   const r = await fetch(`${BASE}/painel/galerias/${galeria.id}/design`, {
     headers: { cookie: cookieDeSessao(estudio.id) },
   });
   const html = await r.text();
   if (r.status !== 200) throw new Error(`design respondeu ${r.status}`);
-  if (html.includes(">Formato<")) throw new Error("o grupo Formato apareceu");
+  if (html.includes(">Formato<") !== FORMATOS_ABERTOS_A_TODOS) {
+    throw new Error(FORMATOS_ABERTOS_A_TODOS ? "o grupo Formato não apareceu" : "o grupo Formato apareceu");
+  }
 });
 
 /* ── 2. liberada, pastas ───────────────────────────────────────────────── */
