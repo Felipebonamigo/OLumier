@@ -24,6 +24,7 @@ import {
 import { depoisDoClique } from "@/lib/trecho-selecionado";
 import { contagemDe, textoDaContagem } from "@/lib/contagem-de-midias";
 import { MenuDeAcoes } from "@/components/menu-de-acoes";
+import { AmpliarFoto } from "@/components/ampliar-foto";
 import { MoverParaOutraGaleria } from "@/components/mover-para-outra-galeria";
 import type { EscopoDoMovimento } from "@/lib/mover-entre-galerias";
 import { moverBloco, type DestinoDoBloco } from "@/lib/ordem-em-bloco";
@@ -112,6 +113,8 @@ export function GradeMedias({
   /* O modal de "mover para outra galeria". Vive aqui, e não dentro da barra de
      seleção: a barra some assim que as fotos saem da grade, e o modal precisa
      ficar de pé para mostrar para onde elas foram. */
+  /* A foto aberta em tela cheia (id), ou nada. Ver `ampliar-foto.tsx`. */
+  const [ampliando, setAmpliando] = useState<string | null>(null);
   const [mover, setMover] = useState<{
     escopo: EscopoDoMovimento;
     resumo: string;
@@ -489,6 +492,7 @@ export function GradeMedias({
   useLayoutEffect(() => {
     atuais.current = {
       marcar: alternarSelecao,
+      ampliar: (id) => setAmpliando(id),
       capa: definirCapa,
       capaDaPasta: definirCapaDaPasta,
       remover,
@@ -500,6 +504,7 @@ export function GradeMedias({
   const acoes = useMemo<AcoesDoLadrilho>(
     () => ({
       marcar: (id, comShift) => atuais.current?.marcar(id, comShift),
+      ampliar: (id) => atuais.current?.ampliar(id),
       capa: (m) => atuais.current?.capa(m),
       capaDaPasta: (m) => atuais.current?.capaDaPasta(m),
       remover: (m) => atuais.current?.remover(m),
@@ -640,6 +645,31 @@ export function GradeMedias({
     />
   );
 
+  /* Só fotos: o vídeo já tem o próprio player no ladrilho. A lista é a da
+     grade AGORA (o recorte e a busca valem), para as setas andarem por ela. */
+  const fotosDoRecorte = visiveis.filter((m) => m.tipo === "foto");
+  const visualizador = ampliando && (
+    <AmpliarFoto
+      galeriaId={galeriaId}
+      fotos={fotosDoRecorte}
+      idInicial={ampliando}
+      marcadas={marcadas}
+      capituloDe={(secaoId) => (secaoId ? (secoes.find((s) => s.id === secaoId)?.nome ?? null) : null)}
+      aoMarcar={(id) => alternarSelecao(id)}
+      aoFechar={(ultimoId) => {
+        setAmpliando(null);
+        /* A grade acompanha onde a pessoa parou: passou 40 fotos pelas setas, a
+           lista não pode ficar onde ela estava. Fora da janela desenhada o
+           ladrilho não existe na página, e então não há para onde rolar. */
+        requestAnimationFrame(() =>
+          document
+            .querySelector(`[data-ladrilho="${ultimoId}"]`)
+            ?.scrollIntoView({ block: "nearest" }),
+        );
+      }}
+    />
+  );
+
   if (medias.length === 0) return modalDeMover || null;
 
   const nomeSecao = (id: string | null) =>
@@ -648,6 +678,7 @@ export function GradeMedias({
   return (
     <section id={ID_DA_GRADE} className="mt-8 scroll-mt-4">
       {modalDeMover}
+      {visualizador}
       {/*
         RECOLHER EXISTE POR CAUSA DO TAMANHO REAL.
 
@@ -993,6 +1024,7 @@ export function GradeMedias({
 
 interface AcoesDoLadrilho {
   marcar: (id: string, comShift: boolean) => void;
+  ampliar: (id: string) => void;
   capa: (m: MediaExibida) => void;
   capaDaPasta: (m: MediaExibida) => void;
   remover: (m: MediaExibida) => void;
@@ -1109,7 +1141,7 @@ const Ladrilho = memo(function Ladrilho({
       onDragEnd={acoes.soltar}
       /* `data-ladrilho` é como a janela acha um ladrilho para medir a linha;
          o `content-visibility` que morava aqui saiu com ela (01/10/2026). */
-      data-ladrilho=""
+      data-ladrilho={m.id}
       className={`group relative ${
         esmaecido ? "opacity-40" : ""
       }`}
@@ -1191,10 +1223,43 @@ const Ladrilho = memo(function Ladrilho({
             if (e.shiftKey) e.preventDefault();
           }}
           onClick={(e) => acoes.marcar(m.id, e.shiftKey)}
+          /* Duplo clique AMPLIA. Os dois cliques antes dele marcam e desmarcam,
+             então a foto volta ao estado em que estava — abrir não mexe na
+             seleção de ninguém. */
+          onDoubleClick={() => acoes.ampliar(m.id)}
           aria-label={`${selecionada ? "Desmarcar" : "Selecionar"} ${m.nome}`}
           aria-pressed={selecionada}
           className="absolute inset-x-0 top-0 aspect-[4/5] w-full cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-acento"
         />
+      )}
+
+      {/*
+        A LUPA (08/10/2026). Uma aluna: "poder ampliar/abrir a foto enquanto
+        estou organizando a galeria". Clicar na foto marca — é o que a mão faz
+        o dia inteiro —, então ampliar tem o botão próprio, no canto de baixo
+        (o de cima é da bolinha e dos botões de capa/remover).
+
+        Aparece sob o ponteiro, como os outros botões do ladrilho; no celular,
+        onde não existe "sob o ponteiro", fica sempre visível.
+      */}
+      {m.tipo === "foto" && (
+        /* Ancorada na FOTO, e não no item inteiro (que inclui a linha do nome):
+           o invólucro tem a altura exata da imagem — o mesmo truque do alvo de
+           clique e das pastilhas de favorita —, e não captura o clique. */
+        <span className="pointer-events-none absolute inset-x-0 top-0 aspect-[4/5]">
+          <button
+            type="button"
+            onClick={() => acoes.ampliar(m.id)}
+            aria-label={`Ampliar ${m.nome}`}
+            title="Ampliar (ou duplo clique na foto)"
+            className="pointer-events-auto absolute bottom-1.5 left-1.5 z-10 grid h-7 w-7 place-items-center rounded-full bg-void/80 text-texto opacity-0 transition focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+          >
+            <svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <circle cx="8.5" cy="8.5" r="5.5" />
+              <path d="M12.7 12.7 18 18M6 8.5h5M8.5 6v5" strokeLinecap="round" />
+            </svg>
+          </button>
+        </span>
       )}
 
       {/* Bolinha de seleção — sempre visível, para ficar óbvio que dá para selecionar. */}
