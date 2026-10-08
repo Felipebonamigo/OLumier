@@ -76,10 +76,10 @@ await db.query("update galerias set rostos_ativos = true where id = $1", [final.
 
 const cerimonia = await criarSecao(origem.id, tenantId, "Cerimônia");
 const festa = await criarSecao(final.id, tenantId, "Festa");
-const makingOf = await criarSecao(final.id, tenantId, "Making of");
+await criarSecao(final.id, tenantId, "Making of");
 const secaoAlheia = await criarSecao(alheia.id, vizinho.id, "Alheia");
 
-const [m0, m1, m2, m3, m4, m5] = origem.midias.map((m) => m.id);
+const [m0, m1, m2, m3, m4] = origem.midias.map((m) => m.id);
 await db.query("update medias set secao_id = $1 where id = any($2::uuid[])", [cerimonia.id, [m0, m1, m2]]);
 /* Uma foto já na Festa do destino, para provar que as novas entram DEPOIS dela. */
 await db.query("update medias set secao_id = $1 where id = $2", [festa.id, final.midias[0].id]);
