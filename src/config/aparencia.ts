@@ -475,7 +475,7 @@ export type Formato = "galeria" | "pastas" | "stream";
  * Os dois andam JUNTO do formato, e não dos estilos: são a estrutura da
  * entrega vista de perto. Ver `EIXOS_DA_ESTRUTURA`.
  */
-export type EstiloPastas = "pilha" | "capas" | "indice" | "mosaico";
+export type EstiloPastas = "pilha" | "capas" | "indice" | "mosaico" | "lista";
 export type EstiloStream = "cinema" | "episodios" | "vitrine" | "mostra";
 
 /**
@@ -1186,6 +1186,7 @@ export const OPCOES = {
     { id: "capas", nome: "Capas", desc: "Cada pasta é um cartaz: foto alta com o nome por cima" },
     { id: "indice", nome: "Índice", desc: "Um sumário: número, nome grande e uma tira de fotos" },
     { id: "mosaico", nome: "Mosaico", desc: "Folha de contato: a capa e três fotos de cada pasta" },
+    { id: "lista", nome: "Lista", desc: "Uma linha por pasta, com miniatura — para entrega com muitas pastas" },
   ],
   estiloStream: [
     { id: "cinema", nome: "Cinema", desc: "Sala escura: capa em tela cheia e fileiras que rolam de lado" },

@@ -139,6 +139,9 @@ export function GaleriaPastas({
     case "mosaico":
       desenho = <PastasEmMosaico pastas={pastas} letras={letras} />;
       break;
+    case "lista":
+      desenho = <PastasEmLista pastas={pastas} letras={letras} />;
+      break;
     default:
       desenho = <PastasEmPilha pastas={pastas} letras={letras} alinhamento={alinhamento} />;
   }
@@ -292,6 +295,79 @@ function PastasEmCapas({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: L
  * No hover a linha ganha o fundo da superfície e o nome anda um pouco para a
  * direita — o dedo correndo o índice.
  */
+/* ── LISTA ────────────────────────────────────────────────────────────────
+ *
+ * Juan, 07/10/2026, com o vídeo da Flor da Luz no celular: "eu queria poder ver
+ * as pastas sem ser assim, tipo uma versão compacta, sem ficar tão grande a
+ * pasta".
+ *
+ * Medido naquela galeria, num aparelho de 812 px de altura: cada pasta ocupava
+ * 429 px. Menos de duas por tela — e as 20 pastas dela davam DOZE telas de
+ * rolagem só para ver o que existe, antes de abrir qualquer coisa. Uma entrega
+ * com muitas pastas vira um corredor.
+ *
+ * ── POR QUE UM ESTILO NOVO, E NÃO OS OUTROS MENORES ───────────────────────
+ *
+ * Porque os outros quatro já estão no ar em galeria entregue. Encolher o
+ * Índice redesenharia, de uma vez, a entrega de quem escolheu o Índice
+ * justamente por ele ser grande.
+ *
+ * ── E POR QUE A MINIATURA FICA ────────────────────────────────────────────
+ *
+ * A versão mais curta possível seria texto puro, e ela diz menos: "M&R · 252
+ * fotos" não ajuda ninguém a lembrar qual pasta é qual. A estratégia é que a
+ * fotografia é protagonista — a miniatura é pequena, mas é ela que faz a linha
+ * ser uma PASTA e não um item de menu.
+ *
+ * Quadrada, e não 4/5: é o retrato 4/5 que empurra a altura nos outros quatro,
+ * e o quadrado deixa a linha na altura do texto que está ao lado dela.
+ */
+function PastasEmLista({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: Letras }) {
+  return (
+    <ol className="border-t" style={{ borderColor: "var(--g-linha)" }}>
+      {pastas.map((p, i) => (
+        <li key={p.id} className="pasta-entra border-b" style={{ ["--i" as string]: i, borderColor: "var(--g-linha)" }}>
+          <Link
+            href={p.href}
+            className={`group flex items-center gap-4 rounded-[var(--g-canto,6px)] px-2 py-3 sm:gap-5 sm:px-4 ${CLASSE_FOCO} hover:bg-[var(--g-superficie)] ${SUAVE}`}
+            style={FOCO}
+          >
+            <span className="w-14 shrink-0 overflow-hidden rounded-[var(--g-canto,6px)] sm:w-16" style={{ aspectRatio: "1 / 1" }}>
+              {/* As primeiras entram sem esperar: são as que já estão na tela
+                  quando a página abre. */}
+              <Foto src={p.imagens[0]} eager={i < 6} className="h-full w-full" />
+            </span>
+
+            <span className="min-w-0 flex-1">
+              <span className="flex items-baseline gap-2">
+                <span className="shrink-0 text-xs tabular-nums" style={{ ...letras.detalhe.style, color: "var(--g-tenue)" }}>
+                  {numero(i)}
+                </span>
+                {/* `truncate` e não quebra de linha: o que mantém a altura da
+                    linha previsível é o nome caber em UMA. "Casa na Chácara"
+                    numa segunda linha devolveria metade do que foi ganho. */}
+                <span
+                  className={`truncate text-base leading-tight sm:text-lg ${SUAVE} group-hover:translate-x-0.5`}
+                  style={{ ...letras.titulo, color: "var(--g-texto)" }}
+                >
+                  {p.nome}
+                </span>
+              </span>
+              <span className={`mt-0.5 block text-[11px] ${letras.detalhe.className}`} style={{ color: "var(--g-suave)", ...letras.detalhe.style }}>
+                {contagem(p.fotos, p.videos)}
+              </span>
+            </span>
+
+            <span aria-hidden className={`shrink-0 text-sm ${SUAVE} group-hover:translate-x-1`} style={{ color: "var(--g-tenue)" }}>
+              →
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function PastasEmIndice({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: Letras }) {
   return (
     <ol className="border-t" style={{ borderColor: "var(--g-linha)" }}>
