@@ -4,7 +4,7 @@ import { armazemDe, urlDoOriginal } from "./armazem";
 
 /**
  * Os vídeos de uma galeria que ainda tocam o ORIGINAL — os candidatos à versão
- * leve (`lib/versao-leve.ts`, migração 064) —, com o endereço do original para
+ * leve (`lib/versao-leve.ts`, migração 065) —, com o endereço do original para
  * o navegador do fotógrafo ler.
  *
  * Só quando o botão é apertado: a aba Vídeo não assina filme nenhum ao abrir

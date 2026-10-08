@@ -168,7 +168,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const armazem = armazemDe(m.armazem);
       const url =
         tipo === "preview"
-          ? /* Vídeo assiste a VERSÃO LEVE quando ela existe (migração 064) —
+          ? /* Vídeo assiste a VERSÃO LEVE quando ela existe (migração 065) —
                H.264 no R2, perto e sem taxa de saída; foto, a prévia de 2048 px.
                Sem nenhuma das duas, o original, como sempre. */
             await urlDaDerivada(m.chave_reproducao ?? m.chave_preview, m.chave, armazem, VALIDADE)

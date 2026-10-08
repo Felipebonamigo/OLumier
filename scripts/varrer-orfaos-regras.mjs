@@ -125,7 +125,7 @@ export async function chavesConhecidas(db) {
     if (m.chave) (m.armazem === "b2" ? b2 : r2).add(m.chave);
     if (m.chave_thumb) r2.add(m.chave_thumb);
     if (m.chave_preview) r2.add(m.chave_preview);
-    /* A versão leve do vídeo (migração 064) — derivada, então R2. Sem esta
+    /* A versão leve do vídeo (migração 065) — derivada, então R2. Sem esta
        linha a varredura a acharia sem dono e apagaria a cópia que o cliente
        assiste. */
     if (m.chave_reproducao) r2.add(m.chave_reproducao);

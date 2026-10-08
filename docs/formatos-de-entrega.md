@@ -254,7 +254,7 @@ SOM com a tela preta, que foi o que o Chrome fez no teste.
 
 **O conserto tem três partes, e nenhuma custa servidor:**
 
-1. **A versão leve** (`src/lib/versao-leve.ts`, migração 064). Depois que o
+1. **A versão leve** (`src/lib/versao-leve.ts`, migração 065). Depois que o
    original sobe, o navegador do FOTÓGRAFO converte uma cópia H.264, no máximo
    1080p, ~5 Mbps, quadro-chave a cada 2 s, som AAC copiado, e o índice na
    frente (`src/lib/indice-na-frente.ts`, que move o índice montando o arquivo
@@ -320,7 +320,7 @@ só de vídeo é grande com 3 ou com 30 (`capitulosDeVideo`,
 | `src/components/grade-medias.tsx` | botão e selo "capa da pasta" |
 | `db/migracoes/052-capa-da-pasta.sql` | `secoes.capa_media_id` |
 | `db/migracoes/055-titulo-do-video.sql` | `medias.titulo` — o nome do vídeo na tela |
-| `db/migracoes/064-versao-leve-do-video.sql` | `medias.chave_reproducao` — a cópia para assistir |
+| `db/migracoes/065-versao-leve-do-video.sql` | `medias.chave_reproducao` — a cópia para assistir |
 | `src/lib/versao-leve.ts`, `src/lib/indice-na-frente.ts` | conversão no navegador, índice na frente |
 | `src/app/api/medias/[id]/reproducao/route.ts` | recebe e confere a cópia |
 | `src/components/preparar-videos.tsx`, `src/lib/videos-para-preparar.ts` | o botão da aba Vídeo |

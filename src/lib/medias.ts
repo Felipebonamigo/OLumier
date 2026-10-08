@@ -10,7 +10,7 @@ export interface Media {
   chave: string;
   chave_thumb: string | null;
   chave_preview: string | null;
-  /** A cópia H.264 de vídeo para assistir, no R2 (migração 064). Nula: toca o original. */
+  /** A cópia H.264 de vídeo para assistir, no R2 (migração 065). Nula: toca o original. */
   chave_reproducao: string | null;
   nome_original: string;
   tipo: "foto" | "video";
@@ -727,7 +727,7 @@ export async function definirMiniatura(
 }
 
 /**
- * Liga a versão leve a um vídeo (migração 064) — depois de a rota conferir que
+ * Liga a versão leve a um vídeo (migração 065) — depois de a rota conferir que
  * o arquivo chegou. Aproveita para preencher largura, altura e duração quando
  * faltam: vídeo cuja capa não saiu no envio (o navegador não abriu o HEVC)
  * ficou sem elas, e a grade precisa da proporção para reservar o lugar.

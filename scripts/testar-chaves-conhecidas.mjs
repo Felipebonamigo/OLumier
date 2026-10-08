@@ -68,7 +68,7 @@ await etapa("as fotos e as derivadas estão na lista", async () => {
 });
 
 await etapa("a VERSÃO LEVE do vídeo está na lista", async () => {
-  /* Migração 064: a cópia H.264 que o cliente assiste. Fora da lista, a
+  /* Migração 065: a cópia H.264 que o cliente assiste. Fora da lista, a
      varredura a apagaria e o player voltaria ao original pesado. */
   const leve = g.midias[0].chave.replace(/\.jpg$/, "_leve.mp4");
   await db.query("update medias set chave_reproducao = $1 where id = $2", [leve, g.midias[0].id]);
@@ -155,7 +155,7 @@ await etapa("TODA coluna de chave do banco está coberta por esta lista", async 
      order by table_name, column_name`);
   /* `chave_%` entrou em 08/10/2026: o filtro só olhava `%_chave`, e as colunas
      de derivada (`chave_thumb`, `chave_preview`) e a da versão leve
-     (`chave_reproducao`, migração 064) passavam por baixo dele — a lista abaixo
+     (`chave_reproducao`, migração 065) passavam por baixo dele — a lista abaixo
      as citava, mas uma QUARTA nasceria sem ninguém notar. */
   const cobertas = new Set([
     "medias.chave",

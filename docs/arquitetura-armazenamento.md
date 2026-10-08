@@ -65,7 +65,7 @@ Três regras sustentam o desenho:
 
 Até aqui o vídeo furava a regra 1: não tinha derivada de reprodução, e o player
 tocava o ORIGINAL direto do B2 — distante, e pesado (os `.MOV` do iPhone da
-galeria do Mirna e Diogo iam a 54 Mbps). Desde a migração 064 o vídeo tem
+galeria do Mirna e Diogo iam a 54 Mbps). Desde a migração 065 o vídeo tem
 `chave_reproducao`: uma cópia H.264 leve, gerada no navegador do fotógrafo, que
 mora no R2 como toda derivada. A galeria toca a cópia; o B2 volta a servir só o
 download. Vídeo sem cópia (navegador que não converteu, ou que já tocava bem)

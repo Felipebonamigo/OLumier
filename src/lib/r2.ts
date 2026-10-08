@@ -531,7 +531,7 @@ export function chaveDerivadaDoOriginal(chaveOriginal: string, sufixo = "_thumb"
 
 /**
  * Onde mora a VERSÃO LEVE de um vídeo — a cópia H.264 que o cliente assiste
- * (`lib/versao-leve.ts`, migração 064).
+ * (`lib/versao-leve.ts`, migração 065).
  *
  * Mesma regra da capa: deduzida do original, nunca recebida do navegador. A
  * extensão e o tipo são fixos porque quem gera é sempre o conversor do painel,
