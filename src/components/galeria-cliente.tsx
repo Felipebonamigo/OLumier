@@ -40,6 +40,7 @@ import { fotoVisivel, indicesVisiveis, SEGUNDOS_POR_FOTO } from "@/lib/fotos-vis
 import { capitulosComOsExtras } from "@/lib/capitulos-da-rolagem";
 import { recortarParaDesenhar, PRIMEIRA_LEVA, LEVA } from "@/lib/grade-por-partes";
 import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
+import { AvisoDoVideo, useSaudeDoVideo } from "./aviso-do-video";
 
 export interface ItemGaleria {
   id: string;
@@ -164,15 +165,6 @@ const BOTAO_DA_GALERIA =
   "active:bg-[color-mix(in_srgb,var(--g-texto)_16%,transparent)] " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 " +
   "focus-visible:outline-[var(--g-texto)]";
-
-/**
- * Até quantos vídeos um capítulo pode ter e ainda sair grande.
- *
- * Seis é a conta de duas fileiras na grade "normal" com as colunas pela metade
- * (três por fileira): o capítulo cabe na tela sem virar rolagem. Acima disso é
- * uma lista de filmes, e lista se lê melhor pequena.
- */
-const VIDEOS_GRANDES_ATE = 6;
 
 export function GaleriaCliente({
   itens: itensIniciais,
@@ -519,8 +511,16 @@ export function GaleriaCliente({
     const ids = new Set<string>();
     if (fatia) return ids;
     for (const c of capitulos) {
-      const quantos = c.indices.length;
-      if (quantos === 0 || quantos > VIDEOS_GRANDES_ATE) continue;
+      /*
+       * SEM TETO DE QUANTIDADE (08/10/2026). Até aqui só saía grande o capítulo
+       * de ATÉ SEIS vídeos — "acima disso é uma lista, e lista se lê melhor
+       * pequena". Na galeria do Mirna e Diogo, Making Of (5) saiu grande e
+       * Cerimônia (13) pequena, e a pergunta do Juan foi a mais natural: "por
+       * que uns grandes e outros pequeninos?". Para quem assiste, os dois são
+       * filmes do mesmo casamento; o número de arquivos é detalhe de quem
+       * exportou. Capítulo só de vídeo sai grande, com 3 ou com 30.
+       */
+      if (c.indices.length === 0) continue;
       if (c.indices.every((i) => itens[i]?.tipo === "video")) ids.add(c.id);
     }
     return ids;
@@ -1675,6 +1675,8 @@ export function GaleriaCliente({
   /* O preview da foto aberta: o já conhecido, o que a rota devolveu, ou nada
      ainda — e aí a foto mostra a miniatura e o vídeo avisa que está vindo. */
   const urlGrandeAberta = item ? (item.urlGrande ?? previews.get(item.id)) : undefined;
+  /* O vídeo aberto que não abre, ou não anda, diz isso — ver `aviso-do-video`. */
+  const videoAberto = useSaudeDoVideo(item?.id ?? "");
 
   return (
     <>
@@ -2637,30 +2639,39 @@ export function GaleriaCliente({
                 className="max-h-full max-w-full rounded-[var(--g-canto,6px)] object-contain"
               />
             ) : urlGrandeAberta ? (
-              <video
-                src={urlGrandeAberta}
-                /*
-                 * O PÔSTER É A OUTRA METADE DO CONSERTO (16/09/2026).
-                 *
-                 * `autoPlay` com som é BLOQUEADO por todo navegador desde 2018,
-                 * e o resultado era o que o Sirius descreveu — "clicou para
-                 * abrir e o sistema não roda": a tela ficava preta, parada, com
-                 * uma barra de controles em cima. Parecia player quebrado, e
-                 * era política de autoplay.
-                 *
-                 * Com `poster`, a tela abre no quadro do filme e o play fica
-                 * evidente. O `autoPlay` continua: quando o navegador permite
-                 * (e ele costuma permitir logo depois de um clique), o filme
-                 * começa sozinho; quando não, a pessoa vê a imagem certa e um
-                 * botão, em vez de um retângulo preto.
-                 */
-                poster={item.temPoster ? item.url : undefined}
-                controls
-                autoPlay
-                playsInline
-                preload="metadata"
-                className="max-h-full max-w-full rounded-[var(--g-canto,6px)]"
-              />
+              <span className="relative flex h-full w-full items-center justify-center">
+                <video
+                  key={item.id}
+                  {...videoAberto.eventos}
+                  src={urlGrandeAberta}
+                  /*
+                   * O PÔSTER É A OUTRA METADE DO CONSERTO (16/09/2026).
+                   *
+                   * `autoPlay` com som é BLOQUEADO por todo navegador desde 2018,
+                   * e o resultado era o que o Sirius descreveu — "clicou para
+                   * abrir e o sistema não roda": a tela ficava preta, parada, com
+                   * uma barra de controles em cima. Parecia player quebrado, e
+                   * era política de autoplay.
+                   *
+                   * Com `poster`, a tela abre no quadro do filme e o play fica
+                   * evidente. O `autoPlay` continua: quando o navegador permite
+                   * (e ele costuma permitir logo depois de um clique), o filme
+                   * começa sozinho; quando não, a pessoa vê a imagem certa e um
+                   * botão, em vez de um retângulo preto.
+                   */
+                  poster={item.temPoster ? item.url : undefined}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="metadata"
+                  className="max-h-full max-w-full rounded-[var(--g-canto,6px)]"
+                />
+                <AvisoDoVideo
+                  saude={videoAberto.saude}
+                  baixar={permiteDownload ? () => salvarUm(item) : undefined}
+                  dispensar={videoAberto.dispensar}
+                />
+              </span>
             ) : (
               <span className="text-sm" style={{ color: "var(--g-suave)" }}>
                 preparando o vídeo…

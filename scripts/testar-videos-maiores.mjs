@@ -18,13 +18,14 @@
  *
  * ── A REGRA, E POR QUE ELA É ESTREITA ─────────────────────────────────────
  *
- * Só capítulo em que TODOS os itens são vídeo, e poucos. As duas condições
- * existem para não estragar o resto:
+ * Só capítulo em que TODOS os itens são vídeo. Capítulo MISTO cresceria junto
+ * com as fotos, e trinta fotos gigantes é exatamente a queixa contrária — foi
+ * por isso que a grade tem densidade.
  *
- *  · capítulo MISTO cresceria junto com as fotos, e trinta fotos gigantes é
- *    exatamente a queixa contrária — foi por isso que a grade tem densidade;
- *  · capítulo com MUITOS vídeos é uma lista, e lista grande em cartão grande
- *    só vira rolagem.
+ * Havia uma segunda condição — "e poucos", até seis —, tirada em 08/10/2026:
+ * na galeria do Mirna e Diogo o Making Of (5) saiu grande e a Cerimônia (13)
+ * pequena, e o Juan perguntou por que uns grandes e outros pequeninos. Quantos
+ * arquivos o filme virou é detalhe de quem exportou, não de quem assiste.
  *
  * ── COMO O TESTE MEDE TAMANHO SEM UM NAVEGADOR ────────────────────────────
  *
@@ -125,10 +126,12 @@ await etapa("o capítulo com poucos vídeos aparece maior", async () => {
   return `${a}px contra ${alturaDasFotos}px`;
 });
 
-await etapa("capítulo com MUITOS vídeos não cresce", async () => {
-  /* Doze vídeos em cartão grande viram rolagem, não visualização. */
+await etapa("capítulo com MUITOS vídeos cresce igual ao de poucos", async () => {
+  /* Doze vídeos: o mesmo tamanho do capítulo de três — é a Cerimônia (13) do
+     Mirna e Diogo, que saía pequena ao lado do Making Of (5). */
+  const poucos = alturaDoPrimeiro(await html("filmes"), filmes);
   const a = alturaDoPrimeiro(await html("lista"), lista);
-  if (a !== alturaDasFotos) throw new Error(`cresceu para ${a}px com 12 vídeos`);
+  if (a !== poucos) throw new Error(`12 vídeos em ${a}px, 3 vídeos em ${poucos}px`);
   return `${a}px`;
 });
 

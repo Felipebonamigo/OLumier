@@ -10,6 +10,8 @@ export interface Media {
   chave: string;
   chave_thumb: string | null;
   chave_preview: string | null;
+  /** A cópia H.264 de vídeo para assistir, no R2 (migração 064). Nula: toca o original. */
+  chave_reproducao: string | null;
   nome_original: string;
   tipo: "foto" | "video";
   mime: string;
@@ -720,6 +722,31 @@ export async function definirMiniatura(
       where id = $1 and tenant_id = $2 and tipo = 'video'
       returning id`,
     [mediaId, tenantId, chaveThumb, largura ?? null, altura ?? null, duracaoSeg ?? null],
+  );
+  return linhas.length > 0;
+}
+
+/**
+ * Liga a versão leve a um vídeo (migração 064) — depois de a rota conferir que
+ * o arquivo chegou. Aproveita para preencher largura, altura e duração quando
+ * faltam: vídeo cuja capa não saiu no envio (o navegador não abriu o HEVC)
+ * ficou sem elas, e a grade precisa da proporção para reservar o lugar.
+ */
+export async function definirVersaoLeve(
+  mediaId: string,
+  tenantId: string,
+  chave: string,
+  medidas: { largura?: number | null; altura?: number | null; duracaoSeg?: number | null } = {},
+): Promise<boolean> {
+  const linhas = await consultar<{ id: string }>(
+    `update medias
+        set chave_reproducao = $3,
+            largura = coalesce(largura, $4),
+            altura = coalesce(altura, $5),
+            duracao_seg = coalesce(duracao_seg, $6)
+      where id = $1 and tenant_id = $2 and tipo = 'video'
+      returning id`,
+    [mediaId, tenantId, chave, medidas.largura ?? null, medidas.altura ?? null, medidas.duracaoSeg ?? null],
   );
   return linhas.length > 0;
 }

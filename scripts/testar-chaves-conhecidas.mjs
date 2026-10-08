@@ -67,6 +67,16 @@ await etapa("as fotos e as derivadas estão na lista", async () => {
   return `${g.midias.length} fotos com derivadas`;
 });
 
+await etapa("a VERSÃO LEVE do vídeo está na lista", async () => {
+  /* Migração 064: a cópia H.264 que o cliente assiste. Fora da lista, a
+     varredura a apagaria e o player voltaria ao original pesado. */
+  const leve = g.midias[0].chave.replace(/\.jpg$/, "_leve.mp4");
+  await db.query("update medias set chave_reproducao = $1 where id = $2", [leve, g.midias[0].id]);
+  const { r2 } = await chavesConhecidas(db);
+  if (!r2.has(leve)) throw new Error("a versão leve ficaria órfã");
+  return "versão leve reconhecida";
+});
+
 await etapa("a CAPA enviada como arquivo está na lista", async () => {
   /* Era o buraco: capa com dono no banco e sem dono na varredura. */
   const capa = `${g.tenant_id}/${g.id}/capa/prova-${Date.now()}.jpg`;
@@ -141,12 +151,17 @@ await etapa("TODA coluna de chave do banco está coberta por esta lista", async 
     select table_name, column_name
       from information_schema.columns
      where table_schema = 'public'
-       and (column_name like '%_chave' or column_name = 'chave')
+       and (column_name like '%\\_chave' or column_name like 'chave\\_%' or column_name = 'chave')
      order by table_name, column_name`);
+  /* `chave_%` entrou em 08/10/2026: o filtro só olhava `%_chave`, e as colunas
+     de derivada (`chave_thumb`, `chave_preview`) e a da versão leve
+     (`chave_reproducao`, migração 064) passavam por baixo dele — a lista abaixo
+     as citava, mas uma QUARTA nasceria sem ninguém notar. */
   const cobertas = new Set([
     "medias.chave",
     "medias.chave_thumb",
     "medias.chave_preview",
+    "medias.chave_reproducao",
     "galerias.capa_chave",
     "secoes.capa_chave",
     "tenants.logo_chave",

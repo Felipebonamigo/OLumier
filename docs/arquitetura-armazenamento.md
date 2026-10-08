@@ -61,6 +61,16 @@ Três regras sustentam o desenho:
    `medias.armazem`, que a fase 1 da obra já criou — uma linha, não uma
    arquitetura.
 
+### O vídeo voltou para a regra 1 (08/10/2026)
+
+Até aqui o vídeo furava a regra 1: não tinha derivada de reprodução, e o player
+tocava o ORIGINAL direto do B2 — distante, e pesado (os `.MOV` do iPhone da
+galeria do Mirna e Diogo iam a 54 Mbps). Desde a migração 064 o vídeo tem
+`chave_reproducao`: uma cópia H.264 leve, gerada no navegador do fotógrafo, que
+mora no R2 como toda derivada. A galeria toca a cópia; o B2 volta a servir só o
+download. Vídeo sem cópia (navegador que não converteu, ou que já tocava bem)
+segue tocando o original, como antes. Ver `docs/formatos-de-entrega.md`.
+
 ### Por que não tudo no R2
 
 Custa 2,36× mais e não tem trava de exclusão. A economia num cliente de 5 TB é

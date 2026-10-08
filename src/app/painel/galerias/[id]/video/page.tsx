@@ -5,6 +5,7 @@ import { galeriaDoPainel } from "@/lib/galeria-painel";
 import { listarMedias } from "@/lib/medias";
 import { urlDeLeitura } from "@/lib/r2";
 import { CapaDeVideo } from "@/components/capa-de-video";
+import { PrepararVideos } from "@/components/preparar-videos";
 
 export const metadata: Metadata = { title: "Vídeos da galeria" };
 export const dynamic = "force-dynamic";
@@ -23,9 +24,11 @@ export const dynamic = "force-dynamic";
  * estavam em produção com capa branca antes do conserto de 29/09. Sem esta
  * aba, a saída para qualquer um deles seria apagar e reenviar o filme.
  *
- * ── ESTA ABA NÃO ASSINA O FILME ──────────────────────────────────────────
+ * ── ESTA ABA NÃO ASSINA O FILME (AO ABRIR) ───────────────────────────────
  *
- * Só a miniatura. A divisão em abas nasceu para cada uma pagar o que é dela
+ * Só a miniatura. O original só é assinado quando o fotógrafo aperta
+ * "Preparar para assistir" (08/10/2026), e só o dos vídeos que precisam —
+ * ver `videosParaPreparar`. A divisão em abas nasceu para cada uma pagar o que é dela
  * (ver `menu-galeria.tsx`), e assinar o original de cada vídeo aqui seria
  * refazer o que ela veio cortar. A capa nova não vem do armazém: vem do arquivo
  * que o fotógrafo ainda tem no computador — ver `CapaDeVideo`.
@@ -46,10 +49,12 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
       nome: m.nome_original,
       /* Só a miniatura, e só quando ela existe. Nada de assinar o filme. */
       capa: m.chave_thumb ? await urlDeLeitura(m.chave_thumb, 3600) : null,
+      leve: Boolean(m.chave_reproducao),
     })),
   );
 
   const semCapa = comCapa.filter((v) => !v.capa).length;
+  const semVersaoLeve = comCapa.filter((v) => !v.leve).length;
 
   return (
     <>
@@ -68,6 +73,26 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
         )}
       </section>
 
+      {videos.length > 0 && (
+        <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
+          <h2 className="text-sm font-semibold">Para assistir sem travar</h2>
+          <p className="mt-0.5 max-w-prose text-xs text-texto-faint">
+            Vídeo de iPhone costuma vir em HEVC, um formato que nem todo navegador abre, e vídeo
+            exportado em alta qualidade costuma ser pesado demais para o 4G. Aqui o seu navegador faz
+            uma cópia leve de cada um, que é a que o casal assiste. O original não muda e continua sendo o que se baixa. Vídeo que já toca
+            bem é conferido e pulado.
+          </p>
+          <p className="mt-2 text-xs text-texto-soft">
+            {semVersaoLeve === 0
+              ? "Todos os vídeos têm a versão para assistir."
+              : `${semVersaoLeve} de ${videos.length} ${videos.length === 1 ? "vídeo toca" : "vídeos tocam"} o original.`}
+          </p>
+          <div className="mt-3">
+            <PrepararVideos galeriaId={galeria.id} faltam={semVersaoLeve} />
+          </div>
+        </section>
+      )}
+
       <section className="mt-8 rounded-xl border border-linha bg-carbon p-5">
         <h2 className="text-sm font-semibold">
           {videos.length} {videos.length === 1 ? "vídeo" : "vídeos"}
@@ -85,6 +110,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
             {comCapa.map((v) => (
               <li key={v.id} className="rounded-lg border border-linha bg-carbon-2 p-3">
                 <CapaDeVideo mediaId={v.id} nome={v.nome} capa={v.capa} />
+                {v.leve && <p className="mt-2 text-[11px] text-ok">pronto para assistir</p>}
               </li>
             ))}
           </ul>

@@ -234,17 +234,78 @@ fotos · 3 vídeos"). O mesmo vale para o grupo das soltas e para as confirmaç�
 "tirar" e "apagar". A régua das palavras é `src/lib/contagem-de-midias.ts`, presa em
 `scripts/testar-contagem-de-midias.mjs`.
 
+## O vídeo que abre e não toca (08/10/2026)
+
+Felipe, na galeria do Mirna e Diogo (GM Creative): *"os vídeos abrem e nem
+executam"*, e o Juan antes: *"a galeria que testei o vídeo estava demorando a
+carregar"*. Medido nos 32 vídeos, lendo só o cabeçalho de cada um:
+
+| | |
+|---|---|
+| formato | **HEVC** (`hvc1`) nos 32 — `.MOV` exportado do iPhone, 8 bits, 30 fps |
+| peso | **13 a 18 Mbps** em 23; **52 a 54 Mbps** em 9 (um clipe de 1 min = 400 MB) |
+| índice (`moov`) | no **fim** do arquivo nos 32 |
+| de onde tocava | o original, no B2 (EUA): 100–850 ms por pedido |
+| capa | 4 sem capa — o navegador de quem enviou não abriu o HEVC |
+
+HEVC não abre no Firefox nem em boa parte dos Chrome de computador; onde abre,
+54 Mbps não passam num 4G. O `<video>` ficava parado no pôster — ou tocava só o
+SOM com a tela preta, que foi o que o Chrome fez no teste.
+
+**O conserto tem três partes, e nenhuma custa servidor:**
+
+1. **A versão leve** (`src/lib/versao-leve.ts`, migração 064). Depois que o
+   original sobe, o navegador do FOTÓGRAFO converte uma cópia H.264, no máximo
+   1080p, ~5 Mbps, quadro-chave a cada 2 s, som AAC copiado, e o índice na
+   frente (`src/lib/indice-na-frente.ts`, que move o índice montando o arquivo
+   por fatias — não copia o filme). A cópia mora no R2, em
+   `medias.chave_reproducao`; a galeria e o Stream tocam ela, o download
+   continua sendo o original. Vídeo que já é H.264 até 1080p e até 10 Mbps é
+   dispensado (`precisaDeVersaoLeve`). Coluna própria e não `chave_preview`
+   porque capa, vitrine, cartão de link e e-mail leem `chave_preview` como
+   IMAGEM.
+2. **O botão "Preparar para assistir"**, na aba Vídeo, para o que subiu antes:
+   lê o original do armazém aos pedaços (`UrlSource`), converte e sobe, um por
+   vez — o fotógrafo não precisa ter o arquivo. Vídeo sem capa ganha uma tirada
+   da própria cópia (H.264 abre onde o HEVC não abriu).
+3. **O player que avisa** (`src/components/aviso-do-video.tsx`), na tela cheia
+   da galeria e no Stream: erro de formato ou "som sem imagem" viram *"Este
+   vídeo não abre neste navegador"* com o botão de baixar (e o som para); 10 s
+   esperando depois do play viram *"O vídeo está demorando para carregar"*.
+
+**O que depende do navegador de quem converte.** A conversão é WebCodecs: precisa
+abrir o original e gravar H.264. Safari e Chrome no Mac abrem HEVC; Chrome no
+Linux não (testado), e aí a linha do envio diz *"toca o original (este navegador
+não abre HEVC — no Safari, ou no Chrome do Mac, ele abre)"*. Conferido no Chrome
+155 em 08/10/2026: 25 Mbps → 4,9 Mbps, 1080×1920, 20 s em ~12 s de conversão por
+software; envio + conversão de dois vídeos em 16–20 s; a galeria tocou
+`_leve.mp4` e o HEVC mostrou o aviso.
+
+**Custo.** A cópia é ~1/3 a 1/10 do original e fica no R2 (R$ 0,1155/GB/mês):
+as 32 cópias da galeria do Mirna e Diogo dariam ~0,7 GB, uns R$ 0,08/mês. Cada
+play deixa de puxar o original do B2, que cobra saída acima da franquia de 3×.
+
+**A grade.** Na mesma galeria, o Making Of (5 vídeos) saía grande e a Cerimônia
+(13) pequena: o capítulo só de vídeo crescia até 6 itens. O teto saiu — capítulo
+só de vídeo é grande com 3 ou com 30 (`capitulosDeVideo`,
+`scripts/testar-videos-maiores.mjs`).
+
 ## O que ficou de fora, e por quê
 
-- **Trailer tocando sozinho no fundo da capa**, como na Netflix: o arquivo é o
-  original de 4K, às vezes dezenas de GB. Tocar isso de fundo no 4G do convidado
-  é o custo que a entrega existe para não ter. Precisaria de uma derivada de
-  vídeo leve, que não existe hoje.
+- **Trailer tocando sozinho no fundo da capa**, como na Netflix: tocar o
+  original de fundo no 4G do convidado é o custo que a entrega existe para não
+  ter. A versão leve (acima) existe desde 08/10/2026, mas só para os vídeos que
+  a ganharam — o trailer de fundo precisaria contar com ela sempre.
 - **Pôster em alta para a capa**: o pôster do vídeo tem 640 px. Em monitor
   grande, sem capa de galeria escolhida, o fundo fica macio. A saída hoje é o
   fotógrafo escolher uma capa da galeria.
-- **Legenda, qualidade adaptativa (HLS)**: o player toca o arquivo original,
-  como o visualizador já fazia.
+- **Legenda, qualidade adaptativa (HLS)**: o player toca um arquivo só — a
+  versão leve quando existe, o original quando não.
+- **HDR do iPhone (Dolby Vision, HEVC 10 bits)** não foi testado: a cópia é
+  H.264 de 8 bits, e sem ajuste de tom as cores podem sair lavadas. Os 32 da
+  galeria do Mirna e Diogo eram 8 bits, sem HDR.
+- **Filme acima de ~2 h** não ganha versão leve: a cópia passaria de 4,5 GB, o
+  teto de um envio único ao R2. Precisaria de envio em partes da cópia.
 
 ## Arquivos
 
@@ -259,4 +320,10 @@ fotos · 3 vídeos"). O mesmo vale para o grupo das soltas e para as confirmaç�
 | `src/components/grade-medias.tsx` | botão e selo "capa da pasta" |
 | `db/migracoes/052-capa-da-pasta.sql` | `secoes.capa_media_id` |
 | `db/migracoes/055-titulo-do-video.sql` | `medias.titulo` — o nome do vídeo na tela |
+| `db/migracoes/064-versao-leve-do-video.sql` | `medias.chave_reproducao` — a cópia para assistir |
+| `src/lib/versao-leve.ts`, `src/lib/indice-na-frente.ts` | conversão no navegador, índice na frente |
+| `src/app/api/medias/[id]/reproducao/route.ts` | recebe e confere a cópia |
+| `src/components/preparar-videos.tsx`, `src/lib/videos-para-preparar.ts` | o botão da aba Vídeo |
+| `src/components/aviso-do-video.tsx` | o player que diz que não abriu |
+| `scripts/testar-versao-leve.mjs` | régua, índice byte a byte, rota, URL da galeria, apagar |
 | `src/lib/entrega-no-design.ts`, `src/components/entrega-no-design.tsx` | nomes dos vídeos e capas das pastas no Design |
