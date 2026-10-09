@@ -36,6 +36,7 @@ import {
   LIMITE_POSTER_DO_CLIPE,
   bitsDoClipe,
   recusaDaDuracao,
+  trechoDoClipe,
   recusaDoClipe,
   recusaDoPosterDoClipe,
   tamanhoDoClipe,
@@ -91,13 +92,37 @@ await etapa("o bitrate acompanha a resolução, com piso", () => {
   return `30 s ≈ ${Math.round(bytes / 1e6)} MB`;
 });
 
-await etapa("até 30 s passa; mais que isso é filme, e a mensagem diz quanto", () => {
-  igual(recusaDaDuracao(30), null, "30 s");
-  igual(recusaDaDuracao(8.4), null, "8 s");
-  const longo = recusaDaDuracao(72);
-  if (!longo?.includes("30 segundos") || !longo.includes("1min12")) throw new Error(`mensagem: ${longo}`);
-  if (!recusaDaDuracao(30.5)) throw new Error("30,5 s passou");
+await etapa("vídeo longo não é mais recusado: o clipe leva os 30 primeiros segundos", () => {
+  /*
+   * ── A RECUSA VIROU RECORTE (09/10/2026) ─────────────────────────────────
+   *
+   * Juan: "o vídeo precisar ser recortado externamente para poder ser capa. É
+   * o único caminho possível? Não existe a opção de reproduzir os 30 primeiros
+   * segundos de um vídeo já upado na galeria?".
+   *
+   * Até aqui a resposta era não: mais de 30 s e a mensagem mandava cortar no
+   * CapCut e voltar com o arquivo pronto. Só que o navegador JÁ reconverte o
+   * vídeo antes de enviar — encolhe para 720p e descarta o áudio — e a
+   * biblioteca que faz isso aceita um trecho. Recusar era pedir a quem usa um
+   * trabalho que a máquina já estava fazendo.
+   */
+  igual(trechoDoClipe(72)?.fim, DURACAO_MAXIMA_DO_CLIPE, "filme de 1min12 vira 30 s");
+  igual(trechoDoClipe(72)?.inicio, 0, "começa no início");
+  igual(trechoDoClipe(8.4), null, "vídeo curto sai inteiro, e sem recorte nenhum");
+  igual(trechoDoClipe(30), null, "exatamente 30 s não precisa de recorte");
+  igual(trechoDoClipe(12), null, "curto não precisa de recorte");
+  return "corta sozinho";
+});
+
+await etapa("duração ilegível continua recusada — ela decide o recorte", () => {
+  /* Sem saber quanto o filme dura não dá para dizer onde cortar, e um recorte
+     chutado entregaria capa vazia ou arquivo gigante. */
   if (!recusaDaDuracao(0) || !recusaDaDuracao(Number.NaN)) throw new Error("duração inválida passou");
+  igual(recusaDaDuracao(72), null, "filme longo NÃO é mais recusado");
+  igual(recusaDaDuracao(30), null, "30 s");
+  igual(trechoDoClipe(Number.NaN), null, "sem duração, sem trecho");
+  igual(trechoDoClipe(0), null, "duração zero, sem trecho");
+  return "só a ilegível";
 });
 
 await etapa("o servidor só aceita MP4 de até 25 MB, e quadro JPG de até 2 MB", () => {

@@ -74,21 +74,40 @@ export function bitsDoClipe(largura: number, altura: number): number {
   );
 }
 
-/** "1min12" / "45s" — como a mensagem fala do filme escolhido. */
-function falaDaDuracao(segundos: number): string {
-  const s = Math.round(segundos);
-  if (s < 60) return `${s}s`;
-  const resto = s % 60;
-  return `${Math.floor(s / 60)}min${resto ? String(resto).padStart(2, "0") : ""}`;
-}
-
-/** O filme escolhido é curto o bastante para ser capa? Null quando serve. */
+/**
+ * O filme serve para virar capa? Null quando serve.
+ *
+ * ── A RECUSA POR TAMANHO VIROU RECORTE (09/10/2026) ───────────────────────
+ *
+ * Juan: "o vídeo precisar ser recortado externamente para poder ser capa. É o
+ * único caminho possível? Não existe a opção de reproduzir os 30 primeiros
+ * segundos?".
+ *
+ * Até aqui esta função recusava qualquer filme acima de 30 s e mandava cortar
+ * no CapCut. Só que o navegador JÁ reconverte o vídeo antes de enviar —
+ * encolhe para 720p e descarta o áudio — e a biblioteca que faz isso aceita um
+ * trecho. Recusar era pedir à pessoa um trabalho que a máquina já fazia.
+ *
+ * O que sobrou aqui é a única recusa que o recorte não resolve: sem saber
+ * quanto o filme dura, não há onde cortar. Ver `trechoDoClipe`.
+ */
 export function recusaDaDuracao(segundos: number): string | null {
   if (!Number.isFinite(segundos) || segundos <= 0) return "Não consegui ler a duração deste vídeo.";
-  if (segundos > DURACAO_MAXIMA_DO_CLIPE) {
-    return `A capa em vídeo tem no máximo ${DURACAO_MAXIMA_DO_CLIPE} segundos, e este tem ${falaDaDuracao(segundos)}. Corte um trecho no editor (CapCut, por exemplo) e escolha o arquivo cortado.`;
-  }
   return null;
+}
+
+/**
+ * Que pedaço do filme vira a capa. Null quando o filme inteiro já serve — e aí
+ * quem converte não passa recorte nenhum, em vez de passar "o arquivo todo".
+ *
+ * Os PRIMEIROS 30 s, e não um trecho do meio: é o que foi pedido, é o que a
+ * pessoa consegue prever sem abrir nada, e é o único ponto que existe antes de
+ * alguém escolher outro. A cena do pôster continua sendo escolhida à parte.
+ */
+export function trechoDoClipe(segundos: number): { inicio: number; fim: number } | null {
+  if (!Number.isFinite(segundos) || segundos <= 0) return null;
+  if (segundos <= DURACAO_MAXIMA_DO_CLIPE) return null;
+  return { inicio: 0, fim: DURACAO_MAXIMA_DO_CLIPE };
 }
 
 /** O que o servidor aceita do clipe já no bucket. */

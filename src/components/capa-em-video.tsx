@@ -81,9 +81,10 @@ export function CapaEmVideo({
     <div>
       <span className="block text-xs font-medium text-texto-soft">Capa em vídeo</span>
       <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
-        Um clipe de até {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, no fundo da capa.
-        Seu navegador prepara o clipe antes de subir (720p, sem som, uns poucos MB), então o filme original
-        não precisa ser pequeno — mas o trecho precisa ser curto. Toca nas capas <strong>Imersa</strong> e{" "}
+        Um clipe de {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, no fundo da capa. Escolha
+        o vídeo e pronto: o navegador prepara o clipe antes de subir (720p, sem som, uns poucos MB) e, se
+        o filme for mais longo, leva os {DURACAO_MAXIMA_DO_CLIPE} primeiros segundos — não precisa cortar
+        nada antes. Toca nas capas <strong>Imersa</strong> e{" "}
         <strong>Cartaz</strong> e na capa do próprio estilo do stream (Cinema, Episódios e Vitrine). Em quem
         pediu menos movimento, ou está com economia de dados, fica só o primeiro quadro.
       </p>

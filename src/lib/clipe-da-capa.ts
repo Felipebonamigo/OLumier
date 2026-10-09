@@ -3,6 +3,7 @@ import {
   TIPO_DO_POSTER_DO_CLIPE,
   bitsDoClipe,
   recusaDaDuracao,
+  trechoDoClipe,
   recusaDoClipe,
   tamanhoDoClipe,
 } from "./clipe-da-capa-regras";
@@ -55,8 +56,11 @@ export async function prepararClipe(
 
     const duracao =
       (await entrada.getDurationFromMetadata().catch(() => null)) ?? (await entrada.computeDuration());
-    const longo = recusaDaDuracao(duracao);
-    if (longo) throw new ErroDoClipe(longo);
+    const ilegivel = recusaDaDuracao(duracao);
+    if (ilegivel) throw new ErroDoClipe(ilegivel);
+    /* Filme longo não é recusado: leva os primeiros segundos. Ver
+       `trechoDoClipe` para por que os PRIMEIROS. */
+    const trecho = trechoDoClipe(duracao);
 
     if (!(await video.canDecode())) {
       throw new ErroDoClipe(
@@ -88,6 +92,10 @@ export async function prepararClipe(
         forceTranscode: true,
       },
       audio: { discard: true },
+      /* O recorte entra na conversão que já acontecia. Omitido quando o filme
+         inteiro cabe: passar "de 0 até a duração" faria a biblioteca procurar
+         um quadro-chave à toa num arquivo que não precisa de nada. */
+      ...(trecho ? { trim: { start: trecho.inicio, end: trecho.fim } } : {}),
       showWarnings: false,
     });
     if (!conversao.isValid || !conversao.utilizedTracks.some((t) => t.isVideoTrack())) {

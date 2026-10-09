@@ -80,8 +80,9 @@ export function CapaEmVideoNaCriacao({
     <div className="mt-3">
       <span className="block text-xs font-medium text-texto-soft">Vídeo da capa</span>
       <p className="mt-0.5 text-[11px] leading-snug text-texto-faint">
-        Um clipe de até {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, ocupando a tela. Seu
-        navegador prepara o clipe (720p, sem som, uns poucos MB). Dá para trocar ou tirar depois, em Design →
+        Um clipe de {DURACAO_MAXIMA_DO_CLIPE} segundos que toca mudo, em laço, ocupando a tela. O navegador
+        prepara o clipe (720p, sem som, uns poucos MB) e, se o filme for mais longo, leva os
+        {DURACAO_MAXIMA_DO_CLIPE} primeiros segundos. Dá para trocar ou tirar depois, em Design →
         Capa.
       </p>
 
