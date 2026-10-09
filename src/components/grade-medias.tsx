@@ -22,6 +22,7 @@ import {
   moverFotosAction,
 } from "@/app/painel/actions";
 import { depoisDoClique } from "@/lib/trecho-selecionado";
+import { ESPERA_PARA_MARCAR_MS, TOLERANCIA_DO_DEDO_PX, viraMarcacao } from "@/lib/gesto-da-grade";
 import { contagemDe, textoDaContagem } from "@/lib/contagem-de-midias";
 import { MenuDeAcoes } from "@/components/menu-de-acoes";
 import { AmpliarFoto } from "@/components/ampliar-foto";
@@ -208,6 +209,96 @@ export function GradeMedias({
     setSelecao(new Set());
     mudarEstadoDaGrade(galeriaId, { filtro: novo, aberta: true });
   };
+
+  /*
+   * ── MARCAR ARRASTANDO (09/10/2026) ────────────────────────────────────
+   *
+   * Juan, repassando: "clicar em um, e arrastar, seja para cima e para baixo,
+   * assim como no celular também" — em vez de marcar uma por uma.
+   *
+   * Segurou parado e andou, marca; andou logo, reordena. A régua dos dois
+   * números está em `lib/gesto-da-grade.ts`.
+   *
+   * ── TRÊS DECISÕES QUE O ARQUIVO JÁ TINHA ENSINADO ─────────────────────
+   *
+   * OS OUVINTES FICAM NO <ul>, e não em cada ladrilho: são 4.577, e este
+   * arquivo já avisa que mexer em todos custa caro.
+   *
+   * QUEM RECUSA O REORDENAR É `comecarArrasto`, como já era — ligar e
+   * desligar o `draggable` redesenharia a grade inteira a cada clique.
+   *
+   * QUEM ESTÁ EMBAIXO DO DEDO SE DESCOBRE POR `elementFromPoint`, e não por
+   * `pointerenter` nos vizinhos: no TOQUE o ponteiro fica preso ao elemento
+   * de origem, e os vizinhos nunca recebem o evento. Sem isto funcionaria no
+   * mouse e não no celular — que é justamente onde o gesto foi pedido.
+   */
+  const marcando = useRef(false);
+  const toque = useRef<{ id: string; x: number; y: number; em: number; relogio: number } | null>(null);
+
+  /* `marcar` e não `alternar`: varrer por cima de uma já marcada tem de
+     deixá-la marcada. Alternar faria a segunda passada apagar a primeira. */
+  const marcarNaVarredura = (id: string) => {
+    setSelecao((atual) => (atual.has(id) ? atual : new Set(atual).add(id)));
+    ancora.current = id;
+  };
+
+  const ladrilhoEm = (x: number, y: number): string | null =>
+    (document.elementFromPoint(x, y)?.closest("[data-ladrilho]") as HTMLElement | null)?.dataset.ladrilho ?? null;
+
+  const pararDeMarcar = useCallback(() => {
+    if (toque.current?.relogio) window.clearTimeout(toque.current.relogio);
+    toque.current = null;
+    marcando.current = false;
+    if (grade.current) grade.current.style.touchAction = "";
+  }, []);
+
+  useEffect(() => {
+    const ul = grade.current;
+    if (!ul) return;
+
+    const encostou = (e: PointerEvent) => {
+      const id = ladrilhoEm(e.clientX, e.clientY);
+      if (!id) return;
+      const relogio = window.setTimeout(() => {
+        if (!toque.current) return;
+        marcando.current = true;
+        /* `touch-action` no CONTÊINER, uma vez: sem isto o dedo rola a página
+           em vez de varrer. Nos ladrilhos seriam 4.577 mudanças de estilo. */
+        if (grade.current) grade.current.style.touchAction = "none";
+        marcarNaVarredura(toque.current.id);
+      }, ESPERA_PARA_MARCAR_MS);
+      toque.current = { id, x: e.clientX, y: e.clientY, em: Date.now(), relogio };
+    };
+
+    const andou = (e: PointerEvent) => {
+      const t = toque.current;
+      if (!t) return;
+      if (marcando.current) {
+        const id = ladrilhoEm(e.clientX, e.clientY);
+        if (id) marcarNaVarredura(id);
+        return;
+      }
+      /* Ainda esperando: andar demais antes da hora quer dizer que a pessoa
+         está arrastando a foto, e não segurando para marcar. */
+      const px = Math.hypot(e.clientX - t.x, e.clientY - t.y);
+      if (!viraMarcacao({ ms: Date.now() - t.em, px }) && px > TOLERANCIA_DO_DEDO_PX) pararDeMarcar();
+    };
+
+    ul.addEventListener("pointerdown", encostou);
+    ul.addEventListener("pointermove", andou);
+    window.addEventListener("pointerup", pararDeMarcar);
+    window.addEventListener("pointercancel", pararDeMarcar);
+    return () => {
+      ul.removeEventListener("pointerdown", encostou);
+      ul.removeEventListener("pointermove", andou);
+      window.removeEventListener("pointerup", pararDeMarcar);
+      window.removeEventListener("pointercancel", pararDeMarcar);
+      /* A limpeza NÃO cancela o gesto em curso. Este efeito roda a cada
+         render, e marcar a primeira foto causa um render: cancelar aqui
+         matava a varredura no instante em que ela começava — a primeira
+         marcava e as seguintes não. Quem encerra é o `pointerup`. */
+    };
+  });
 
   const alternarSelecao = (id: string, comShift = false) => {
     const r = depoisDoClique(ordemNaTela, marcadas, id, ancora.current, comShift);
@@ -409,6 +500,13 @@ export function GradeMedias({
   }
 
   function comecarArrasto(id: string, e: DragEvent<HTMLLIElement>) {
+    /* Segurou para marcar: o arrasto nativo não começa. A recusa mora AQUI,
+       e não num `draggable` que liga e desliga — ver o comentário do ladrilho:
+       alternar o atributo redesenhava os 4.577 a cada clique da aba. */
+    if (marcando.current) {
+      e.preventDefault();
+      return;
+    }
     /* Nas repetidas a ordem é a do NOME, para as cópias ficarem lado a lado:
        arrastar ali mexeria numa ordem que não é a da galeria. */
     if (ocupado || apagandoSelecao || filtro === "repetidas") {
@@ -838,7 +936,8 @@ export function GradeMedias({
           ou remover — e arrastar uma das marcadas leva todas juntas. Clique na
           foto (ou na bolinha) para marcar. Para pegar um trecho inteiro, clique na primeira e,
           segurando <kbd className="rounded border border-linha px-1">Shift</kbd>, clique na
-          última.
+          última. Para marcar várias de uma vez, segure um instante numa foto e
+          arraste por cima das outras — no computador e no celular.
         </p>
       )}
 
