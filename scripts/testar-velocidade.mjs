@@ -18,6 +18,14 @@
  *   - sem sessão, ou com chave só de leitura, nada é gravado;
  *   - lote torto ou grande demais é recusado inteiro;
  *   - o painel lê o que a rota gravou.
+ *
+ * 09/10/2026 (migração 069), depois de 153 "desistências" que eram quase todas
+ * um estúdio no teto dos 10 GB do teste:
+ *
+ *   - a RECUSA do servidor fica marcada e fora das desistências de rede, e o
+ *     painel a mostra agrupada por estúdio e motivo;
+ *   - a LEVA (a pasta inteira, do primeiro ao último arquivo) é gravada e lida,
+ *     e leva torta recusa o pedido.
  */
 import pg from "pg";
 import { cookieDeSessao } from "./sessao-de-teste.mjs";
@@ -25,7 +33,7 @@ import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 
 exigirBancoDeTeste();
 
-const { resumoDeVelocidade, formatarVelocidade, navegadorResumido, lerMedidas, LOTE_MAXIMO_DE_MEDIDAS } =
+const { resumoDeVelocidade, formatarVelocidade, navegadorResumido, lerMedidas, lerLeva, LOTE_MAXIMO_DE_MEDIDAS } =
   await import("../src/lib/velocidade-regras.ts");
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
@@ -122,6 +130,41 @@ await etapa("a peneira: lixo sai, o resto entra, falha não tem tempo", () => {
   return "3 de 6";
 });
 
+await etapa("recusa só vale em falha, e só quando o navegador diz", () => {
+  const r = lerMedidas([
+    { bytes: MB, ok: false, erro: "No período de teste o espaço é de 10 GB.", recusa: true },
+    { bytes: MB, ok: false, erro: "conexão interrompida" },
+    { bytes: MB, ok: false, erro: "x", recusa: "sim" },
+    { bytes: MB, ms: 1000, ok: true, recusa: true },
+  ]);
+  igual(r[0].recusa, true, "recusa marcada");
+  igual(r[1].recusa, false, "queda de rede");
+  igual(r[2].recusa, false, "só true vale");
+  igual(r[3].recusa, false, "sucesso não é recusa");
+  return "1 de 4 é recusa";
+});
+
+await etapa("a peneira da leva", () => {
+  const boa = lerLeva({ bytes: 300 * MB, ms: 60_000.4, arquivos: 30, falhas: 1, paralelos: 6 });
+  igual(boa?.ms, 60_000, "ms arredondado");
+  igual(boa?.arquivos, 30, "arquivos");
+  igual(lerLeva({ bytes: 300 * MB, ms: 60_000, arquivos: 30, paralelos: 6 })?.falhas, 0, "sem falhas é zero");
+  for (const torta of [
+    null,
+    [],
+    "leva",
+    { bytes: 0, ms: 1000, arquivos: 1, paralelos: 6 },
+    { bytes: MB, ms: 0, arquivos: 1, paralelos: 6 },
+    { bytes: MB, ms: 1000, arquivos: 0, paralelos: 6 },
+    { bytes: MB, ms: 1000, arquivos: 1, paralelos: 0 },
+    { bytes: MB, ms: 1000, arquivos: 1, falhas: -1, paralelos: 6 },
+    { bytes: "muito", ms: 1000, arquivos: 1, paralelos: 6 },
+  ]) {
+    igual(lerLeva(torta), null, JSON.stringify(torta));
+  }
+  return "1 boa, 9 tortas";
+});
+
 /* ── A rota e o painel ─────────────────────────────────────────────────── */
 
 const db = new pg.Client({ connectionString: DATABASE_URL });
@@ -140,16 +183,24 @@ try {
   const SAFARI =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15";
 
-  const mandar = (medidas, cabecalhos = { cookie }) =>
+  const postar = (corpo, cabecalhos = { cookie }) =>
     fetch(`${BASE}/api/envio/medidas`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "User-Agent": SAFARI, ...cabecalhos },
-      body: JSON.stringify({ medidas }),
+      body: JSON.stringify(corpo),
     });
+  const mandar = (medidas, cabecalhos) => postar({ medidas }, cabecalhos);
+  const levas = async () =>
+    (
+      await db.query(
+        "select bytes::float8 as bytes, ms, arquivos, falhas, paralelos, navegador from envios_levas where tenant_id = $1 order by id",
+        [estudio.id],
+      )
+    ).rows;
   const linhas = async () =>
     (
       await db.query(
-        "select galeria_id, bytes::float8 as bytes, ms, ok, erro, navegador from envios_medidos where tenant_id = $1 order by id",
+        "select galeria_id, bytes::float8 as bytes, ms, ok, erro, recusa, navegador from envios_medidos where tenant_id = $1 order by id",
         [estudio.id],
       )
     ).rows;
@@ -218,6 +269,55 @@ try {
     return "medida fica, vínculo não";
   });
 
+  await etapa("a recusa é gravada marcada", async () => {
+    const teto = "No período de teste o espaço é de 10 GB. Assine para liberar o espaço completo do seu plano.";
+    const r = await mandar([
+      { galeriaId: minha.id, bytes: 9 * MB, ok: false, erro: teto, recusa: true },
+      { galeriaId: minha.id, bytes: 9 * MB, ok: false, erro: teto, recusa: true },
+    ]);
+    igual(r.status, 200, "status");
+    const l = await linhas();
+    const recusas = l.filter((x) => x.recusa);
+    igual(recusas.length, 2, "recusas");
+    igual(l.filter((x) => !x.ok && !x.recusa).length, 1, "a queda de rede de antes continua queda");
+    return "2 recusas, 1 queda";
+  });
+
+  await etapa("a leva é gravada, sozinha ou com medidas", async () => {
+    const sozinha = await postar({ leva: { bytes: 250 * MB, ms: 50_000, arquivos: 10, falhas: 1, paralelos: 6 } });
+    igual(sozinha.status, 200, "status da leva sozinha");
+    const junto = await postar({
+      medidas: [{ galeriaId: minha.id, bytes: 5 * MB, ms: 2000, ok: true }],
+      leva: { bytes: 60 * MB, ms: 30_000, arquivos: 4, paralelos: 6 },
+    });
+    igual(junto.status, 200, "status junto");
+    const l = await levas();
+    igual(l.length, 2, "levas");
+    igual(l[0].bytes, 250 * MB, "bytes");
+    igual(l[0].falhas, 1, "falhas");
+    igual(l[1].falhas, 0, "falhas ausentes viram zero");
+    igual(l[0].navegador, "Safari · macOS", "navegador");
+    return "2 levas";
+  });
+
+  await etapa("leva torta recusa o pedido inteiro", async () => {
+    const antes = (await linhas()).length;
+    for (const corpo of [
+      { leva: { bytes: 0, ms: 1, arquivos: 1, paralelos: 6 } },
+      { leva: "x" },
+      { medidas: [{ bytes: MB, ms: 1000, ok: true }], leva: { ms: 1000 } },
+      {},
+    ]) {
+      const r = await postar(corpo);
+      igual(r.status, 400, `status de ${JSON.stringify(corpo).slice(0, 40)}`);
+    }
+    igual((await levas()).length, 2, "levas");
+    igual((await linhas()).length, antes, "medidas");
+    const intrusa = await postar({ leva: { bytes: MB, ms: 1000, arquivos: 1, paralelos: 6 } }, {});
+    igual(intrusa.status, 401, "sem sessão");
+    return "4 recusas e 1 sem sessão, nada gravado";
+  });
+
   await etapa("o painel lê o que a rota gravou", async () => {
     const { velocidadeReal } = await import("../src/lib/velocidade.ts");
     const v = await velocidadeReal();
@@ -227,7 +327,14 @@ try {
     if (v.falhas.n < 1 || v.falhas.estudios < 1) throw new Error(`falhas: ${JSON.stringify(v.falhas)}`);
     const nossa = v.falhas.ultimas.find((f) => f.estudio === estudio.nome_estudio);
     if (nossa && nossa.navegador !== "Safari · macOS") throw new Error(`navegador: ${nossa.navegador}`);
-    return `envio ${formatarVelocidade(v.envio.mediana)} (n=${v.envio.n}) · ${v.falhas.n} desistência(s)`;
+    if (v.falhas.ultimas.some((f) => f.erro?.startsWith("No período de teste"))) {
+      throw new Error("recusa do plano apareceu entre as quedas de rede");
+    }
+    const grupo = v.recusas.grupos.find((g) => g.estudio === estudio.nome_estudio);
+    if (!grupo || grupo.n !== 2) throw new Error(`recusas agrupadas: ${JSON.stringify(v.recusas)}`);
+    /* A leva de 250 MB em 50 s passa do piso (20 MB, 3 arquivos). */
+    if (!v.leva || v.leva.n < 2) throw new Error(`leva: ${JSON.stringify(v.leva)}`);
+    return `envio ${formatarVelocidade(v.envio.mediana)} (n=${v.envio.n}) · pasta ${formatarVelocidade(v.leva.mediana)} (n=${v.leva.n}) · ${v.falhas.n} queda(s) · ${v.recusas.n} recusa(s)`;
   });
 } finally {
   await limparRodada(db);

@@ -23,6 +23,7 @@ import {
   type ArquivoConhecido,
   comRetentativa,
   erroDefinitivo,
+  ehDefinitivo,
   emParaleloDeFila,
   manterAcordado,
   ordenarNaturalPorCaminho,
@@ -31,7 +32,7 @@ import {
   linhasDaFila,
 } from "@/lib/fila-upload";
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
-import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio } from "@/lib/velocidade-regras";
+import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio, type MedidaDeLeva } from "@/lib/velocidade-regras";
 import { encaixarNaOrdemDaPastaAction, garantirSecoesAction } from "@/app/painel/actions";
 import { prepararVideoParaAssistir } from "@/lib/versao-leve";
 import { reconhecerArquivo } from "@/lib/tipos-de-arquivo";
@@ -383,6 +384,27 @@ export function ProvedorDeEnvio({
     },
     [enviarMedidas],
   );
+  /*
+   * A LEVA — a fila inteira, do começo até secar (09/10/2026, migração 069).
+   *
+   * A medida de cada arquivo cronometra só o PUT do original, com outros
+   * cinco subindo junto, e o painel mostrava "3,1 MB/s" sem dizer se isso era
+   * a internet do fotógrafo inteira ocupada ou não. Aqui vai o que ELE sente:
+   * os bytes que subiram e o relógio de parede, com miniatura, preparo,
+   * confirmação e retentativa dentro.
+   *
+   * `descartar` é a leva cujo relógio mede a pessoa, não o envio: pausada,
+   * parada, ou que ficou esperando a rede voltar.
+   */
+  const leva = useRef({ bytes: 0, arquivos: 0, falhas: 0, descartar: false });
+  const enviarLeva = useCallback((m: MedidaDeLeva) => {
+    fetch("/api/envio/medidas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leva: m }),
+      keepalive: true,
+    }).catch(() => {});
+  }, []);
   /* Quem fecha a aba no meio ainda manda o que já mediu. */
   useEffect(() => {
     window.addEventListener("pagehide", enviarMedidas);
@@ -667,18 +689,22 @@ export function ProvedorDeEnvio({
               }
             }
           },
-          (tentativa, semRede, erro) =>
+          (tentativa, semRede, erro) => {
+            if (semRede) leva.current.descartar = true;
             atualizar(tarefa.item.id, {
               tentativa,
               semRede,
               situacao: "esperando",
               progresso: 0,
               motivo: erro instanceof Error ? erro.message : undefined,
-            }),
+            });
+          },
         );
 
         atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false, motivo: undefined });
-        anotar({ galeriaId: tarefa.galeriaId, bytes: arquivo.size, ms: envioMs, ok: true, erro: null });
+        anotar({ galeriaId: tarefa.galeriaId, bytes: arquivo.size, ms: envioMs, ok: true, erro: null, recusa: false });
+        leva.current.bytes += arquivo.size;
+        leva.current.arquivos++;
         if (preparado && reconhecerArquivo(arquivo.name, arquivo.type)?.tipo === "video") {
           paraConverter.current.push({
             itemId: tarefa.item.id,
@@ -707,6 +733,10 @@ export function ProvedorDeEnvio({
           erro: e instanceof Error ? e.message : "falhou",
         });
         falhas.current.set(tarefa.item.id, tarefa);
+        /* Recusa do servidor (teto do plano, sessão, tipo) não é a rede de
+           ninguém: o painel conta à parte. Ver a migração 069. */
+        const recusa = ehDefinitivo(e);
+        if (!recusa) leva.current.falhas++;
         anotar({
           galeriaId: tarefa.galeriaId,
           bytes: arquivo.size,
@@ -715,6 +745,7 @@ export function ProvedorDeEnvio({
           /* "também pelo R2" separa, no painel, a rede de quem envia (os dois
              caminhos falharam) de um problema só do B2. */
           erro: `${e instanceof Error ? e.message : "falhou"}${alternativo ? " (também pelo R2)" : ""}`,
+          recusa,
         });
       }
     },
@@ -728,6 +759,8 @@ export function ProvedorDeEnvio({
     setInicio((atual) => atual ?? Date.now());
     setAgora(Date.now()); // sem isto, o primeiro segundo mostraria tempo negativo
 
+    leva.current = { bytes: 0, arquivos: 0, falhas: 0, descartar: false };
+    const inicioDaLeva = performance.now();
     const soltar = await manterAcordado();
     await emParaleloDeFila(
       () => pendentes.current.shift() ?? null,
@@ -735,8 +768,13 @@ export function ProvedorDeEnvio({
       enviarUm,
       async () => (paradoRef.current ? "parar" : pausadoRef.current ? "esperar" : "seguir"),
     );
+    const duracaoDaLeva = Math.round(performance.now() - inicioDaLeva);
     soltar();
     enviarMedidas();
+    const l = leva.current;
+    if (!l.descartar && !paradoRef.current && l.arquivos > 0 && duracaoDaLeva > 0) {
+      enviarLeva({ bytes: l.bytes, ms: duracaoDaLeva, arquivos: l.arquivos, falhas: l.falhas, paralelos: PARALELOS });
+    }
 
     trabalhandoRef.current = false;
     setRodando(false);
@@ -765,7 +803,7 @@ export function ProvedorDeEnvio({
       await encaixarNaOrdemDaPastaAction(e.galeriaId, e.lote, e.pasta).catch(() => 0);
     }
     router.refresh();
-  }, [enviarUm, enviarMedidas, router]);
+  }, [enviarUm, enviarMedidas, enviarLeva, router]);
 
   const enfileirar = useCallback(
     async (brutos: ArquivoComCaminho[], opcoes: OpcoesDeEnvio) => {
@@ -897,6 +935,7 @@ export function ProvedorDeEnvio({
       enfileirar,
       pausar: () => {
         pausadoRef.current = true;
+        leva.current.descartar = true;
         setPausado(true);
       },
       retomar: () => {
