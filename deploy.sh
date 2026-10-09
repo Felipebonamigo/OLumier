@@ -359,6 +359,30 @@ if ! BASE_URL="$BASE_PORTAO" npm test -- --exigir-tudo; then
   echo "✗ suíte reprovada ou incompleta — nada foi publicado."
   echo "  A suíte falou com o servidor DESTE commit ($BASE_PORTAO), não com o da 3040."
   echo "  Então 'cobertura parcial' aqui é defeito de verdade, não servidor fora."
+  #
+  # ── O LOG DO SERVIDOR, ANTES QUE O TRAP O APAGUE (09/10/2026) ────────────
+  #
+  # O `next dev` deste portao escreve em $LOG_PORTAO, e o `trap` apaga esse
+  # arquivo na saida. Ate aqui, quem reprovava via so QUAIS suites cairam --
+  # e o motivo (rota que o Next nao registrou, erro de compilacao, porta
+  # ocupada) ficava no arquivo que ninguem leu.
+  #
+  # Custou uma investigacao inteira numa publicacao que reprovou com tres
+  # suites dando 404 numa rota que existia no git, no build de producao e num
+  # servidor novo na maquina de quem escreveu. A resposta estava neste log, e
+  # ele foi apagado.
+  #
+  # So o rabo: o `next dev` fala muito, e as ultimas linhas sao as da hora em
+  # que a suite rodou. Linha nenhuma aqui e segredo -- e saida de compilador.
+  #
+  if [ -s "$LOG_PORTAO" ]; then
+    echo
+    echo "  ── as ultimas 60 linhas do servidor do portao ──────────────────"
+    tail -n 60 "$LOG_PORTAO" | sed 's/^/  | /'
+    echo "  ───────────────────────────────────────────────────────────────"
+  else
+    echo "  (o servidor do portao nao deixou log -- veja $LOG_PORTAO)"
+  fi
   exit 1
 fi
 

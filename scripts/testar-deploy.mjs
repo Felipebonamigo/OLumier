@@ -181,6 +181,29 @@ etapa("a bancada é migrada bem antes de tocar em produção", () => {
  * pela sessão do Atomatiza em 27/08/2026, depois de custar uma publicação
  * errada lá.)
  */
+etapa("suíte reprovada mostra o log do servidor do portão", () => {
+  /*
+   * 09/10/2026, depois de a quinta publicação reprovar sem explicação.
+   *
+   * O portão levanta um `next dev` e manda a saída dele para um arquivo que o
+   * `trap` APAGA no fim. Quando a suíte reprova, a tela mostra só quais suítes
+   * caíram — e a razão (rota que o Next não registrou, erro de compilação,
+   * porta ocupada) fica naquele arquivo, que ninguém vê.
+   *
+   * Custou, naquele dia, uma investigação inteira terminando em "retenta e
+   * torce": a rota existia no git, no build de produção e num servidor novo
+   * aqui, e mesmo assim dava 404 lá. A informação que explicaria estava sendo
+   * jogada fora na hora exata em que era necessária.
+   */
+  const i = roteiro.indexOf("suíte reprovada ou incompleta");
+  if (i === -1) throw new Error("não achei a reprovação da suíte");
+  const fim = roteiro.indexOf("exit 1", i);
+  const bloco = roteiro.slice(i, fim === -1 ? i + 600 : fim);
+  if (!/LOG_PORTAO/.test(bloco)) {
+    throw new Error("a reprovação não despeja o log do servidor — o motivo do 404 some com o trap");
+  }
+});
+
 etapa("o portão do origin existe e é um script próprio", () => {
   const p = path.join(RAIZ, "scripts/portao-origin.sh");
   if (!existsSync(p)) {
