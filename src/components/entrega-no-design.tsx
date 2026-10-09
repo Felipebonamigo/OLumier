@@ -7,6 +7,7 @@ import {
   renomearVideoAction,
 } from "@/app/painel/actions";
 import type { FotoDaPasta, PastaNoDesign, VideoNoDesign } from "@/lib/entrega-no-design";
+import { pontoNaFoto } from "@/lib/enquadramento";
 
 /**
  * O CONTEÚDO DAS PASTAS E DO STREAM, NO DESIGN (30/09/2026).
@@ -141,6 +142,19 @@ export function CapasDasPastas({
   aoGravar: () => void;
 }) {
   const [aberta, setAberta] = useState<string | null>(null);
+  /*
+   * ── POR QUE UM CONTADOR, E NÃO SÓ O ID ────────────────────────────────
+   *
+   * Medido no navegador: o `<dialog>` fecha com Esc SEM disparar o evento
+   * `close` — um ouvinte posto direto no elemento contou zero. O React não
+   * tem como saber que fechou, e o estado fica dizendo "aberta".
+   *
+   * Sem isto, reabrir a MESMA pasta não fazia nada: o id não mudava, o efeito
+   * não rodava de novo, e era preciso clicar duas vezes. O contador sobe a
+   * cada clique, então "abrir esta pasta" é sempre um pedido novo — mesmo que
+   * seja a mesma de antes.
+   */
+  const [pedido, setPedido] = useState(0);
   if (pastas.length === 0) {
     return (
       <p className="text-[11px] leading-snug text-texto-faint">
@@ -162,8 +176,10 @@ export function CapasDasPastas({
             <li key={p.secaoId}>
               <button
                 type="button"
-                aria-expanded={ativa}
-                onClick={() => setAberta(ativa ? null : p.secaoId)}
+                onClick={() => {
+                  setAberta(p.secaoId);
+                  setPedido((n) => n + 1);
+                }}
                 className={`group block w-full overflow-hidden rounded-lg border text-left transition ${
                   ativa ? "border-acento" : "border-linha hover:border-acento"
                 }`}
@@ -180,7 +196,7 @@ export function CapasDasPastas({
                 <span className="flex items-baseline justify-between gap-2 px-2 py-1.5">
                   <span className="truncate text-xs font-medium">{p.nome}</span>
                   <span className="shrink-0 text-[10px] text-acento-alto">
-                    {ativa ? "fechar" : "trocar"}
+                    trocar
                   </span>
                 </span>
               </button>
@@ -188,17 +204,196 @@ export function CapasDasPastas({
           );
         })}
       </ul>
-      {aberta && (
-        <FotosParaCapa
-          key={aberta}
-          galeriaId={galeriaId}
-          pasta={pastas.find((p) => p.secaoId === aberta) as PastaNoDesign}
-          escolher={() => {
-            setAberta(null);
-            aoGravar();
-          }}
-        />
+      {/*
+        ── A ESCOLHA VIROU POP-UP (09/10/2026) ──────────────────────────────
+
+        Juan: "a escolha das capas poderia acontecer através de um popup, dando
+        as opções de escolher foto da galeria ou enviar imagem (ao invés de ter
+        que rolar a página, tudo aconteceria por um popup)".
+
+        O painel nascia ABAIXO da grade inteira. Com vinte pastas, clicar na
+        primeira abria a lista a uma tela e meia dali, e quem clicou não via
+        nada acontecer.
+
+        `<dialog>` de verdade, com `showModal`: Esc para sair, foco presoDENTRO
+        e fundo inerte vêm do navegador. É a mesma escolha do enquadramento da
+        capa da galeria, pelo mesmo motivo — reimplementar isso à mão troca
+        quatro comportamentos corretos por quatro defeitos a descobrir.
+
+        UM pop-up, e não um por pasta: vinte `<dialog>` no HTML seriam vinte
+        vezes a mesma marcação para mostrar uma de cada vez.
+      */}
+      <PopUpDaCapa
+        galeriaId={galeriaId}
+        pedido={pedido}
+        pasta={pastas.find((p) => p.secaoId === aberta) ?? null}
+        fechar={() => setAberta(null)}
+        aoGravar={() => {
+          setAberta(null);
+          aoGravar();
+        }}
+      />
+    </div>
+  );
+}
+
+function PopUpDaCapa({
+  galeriaId,
+  pasta,
+  pedido,
+  fechar,
+  aoGravar,
+}: {
+  galeriaId: string;
+  pasta: PastaNoDesign | null;
+  /** Sobe a cada clique no cartão. Ver o porquê em `CapasDasPastas`. */
+  pedido: number;
+  fechar: () => void;
+  aoGravar: () => void;
+}) {
+  const caixa = useRef<HTMLDialogElement>(null);
+
+  /* Abrir e fechar seguem o ESTADO, e não o clique: assim o Esc do navegador
+     (que fecha sem passar por nós) não deixa o estado dizendo "aberta". */
+  useEffect(() => {
+    const d = caixa.current;
+    if (!d) return;
+    if (pasta && !d.open) d.showModal();
+    if (!pasta && d.open) d.close();
+  }, [pasta, pedido]);
+
+  /*
+   * O Esc do navegador fecha o `<dialog>` SEM passar por nós, e o estado ficava
+   * dizendo "aberta". Medido no navegador: depois do Esc o cartão continuava
+   * escrito "fechar", e o clique seguinte FECHAVA em vez de reabrir — era
+   * preciso clicar duas vezes na mesma pasta.
+   *
+   * O ouvinte é posto no elemento, e não no `onClose` do React: é o evento
+   * nativo que o navegador dispara, e foi exatamente ele que o `onClose` não
+   * entregou aqui.
+   */
+  useEffect(() => {
+    const d = caixa.current;
+    if (!d) return;
+    d.addEventListener("close", fechar);
+    return () => d.removeEventListener("close", fechar);
+  }, [fechar]);
+
+  return (
+    <dialog
+      ref={caixa}
+      className="m-auto w-[min(94vw,860px)] max-w-none rounded-xl border border-linha bg-carbon p-4 text-texto backdrop:bg-black/60"
+    >
+      {pasta && (
+        <>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-medium">A capa de {pasta.nome}</h2>
+              <p className="mt-0.5 text-[11px] text-texto-faint">
+                Escolha uma foto do capítulo, envie uma imagem, e ajuste o enquadramento.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => caixa.current?.close()}
+              className="shrink-0 rounded-lg border border-linha px-3 py-1.5 text-xs transition hover:bg-carbon-2"
+            >
+              Fechar
+            </button>
+          </div>
+          <FotosParaCapa key={pasta.secaoId} galeriaId={galeriaId} pasta={pasta} escolher={aoGravar} />
+        </>
       )}
+    </dialog>
+  );
+}
+
+/**
+ * ONDE A CAPA DA PASTA DEVE SER CORTADA.
+ *
+ * A foto aparece INTEIRA aqui — a miniatura do painel mostra o RESULTADO (já
+ * cortado), e é impossível apontar para o noivo se o noivo já foi cortado fora
+ * da imagem em que se clica. São dois quadros com trabalhos opostos.
+ *
+ * A conta mora em `lib/enquadramento.ts`, a mesma da capa da galeria: o
+ * elemento `img` É a foto (proporção natural, sem faixa vazia), e `pontoNaFoto`
+ * recusa o clique enquanto a foto não tem medida — não gravar nada é melhor
+ * que gravar errado.
+ */
+function EnquadrarCapaDaPasta({
+  galeriaId,
+  secaoId,
+  url,
+  x,
+  y,
+}: {
+  galeriaId: string;
+  secaoId: string;
+  url: string;
+  x: number;
+  y: number;
+}) {
+  const [ponto, setPonto] = useState({ x, y });
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+
+  async function apontar(evento: React.MouseEvent<HTMLImageElement>) {
+    const foto = evento.currentTarget;
+    const r = foto.getBoundingClientRect();
+    const novo = pontoNaFoto({
+      quadro: { largura: r.width, altura: r.height },
+      foto: { largura: foto.naturalWidth, altura: foto.naturalHeight },
+      clique: { x: evento.clientX - r.left, y: evento.clientY - r.top },
+    });
+    if (!novo) return;
+
+    const anterior = ponto;
+    setPonto(novo);
+    setSalvando(true);
+    setErro("");
+    try {
+      const resposta = await fetch(`/api/galerias/${galeriaId}/secoes/${secaoId}/foco`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ focoX: novo.x, focoY: novo.y }),
+      });
+      if (!resposta.ok) throw new Error(String(resposta.status));
+    } catch {
+      /* Sem isto a bolinha ficava onde a pessoa clicou e o banco ficava com o
+         ponto velho: a tela mentia até alguém recarregar. */
+      setPonto(anterior);
+      setErro("não deu para salvar — clique de novo");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <span className="block text-xs text-texto-soft">Enquadramento da capa</span>
+      <p className="mt-0.5 text-[11px] text-texto-faint">
+        Clique no que não pode ser cortado. A capa corta o resto em volta deste ponto.
+      </p>
+      <div className="mt-2 flex justify-center">
+        <div className="relative">
+          {/* eslint-disable-next-line @next/next/no-img-element -- URL assinada do armazém */}
+          <img
+            src={url}
+            alt="A capa da pasta inteira: clique no que não pode ser cortado"
+            onClick={apontar}
+            className="block max-h-[46vh] max-w-full cursor-crosshair"
+          />
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute h-7 w-7 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_2px_rgba(0,0,0,.55)]"
+            style={{ left: `${ponto.x}%`, top: `${ponto.y}%` }}
+          />
+        </div>
+      </div>
+      <p className="mt-1 text-[11px] text-texto-faint">
+        {salvando ? "salvando…" : `ponto em ${ponto.x}% ${ponto.y}%`}
+      </p>
+      {erro && <p className="mt-1 text-[11px] text-alerta">{erro}</p>}
     </div>
   );
 }
@@ -364,6 +559,26 @@ function FotosParaCapa({
           if (f) void enviarArquivo(f);
         }}
       />
+      {/*
+        ── O ENQUADRAMENTO (09/10/2026) ─────────────────────────────────────
+
+        Juan: "adicionar opção de escolher o ponto focal da imagem, para poder
+        deixar a capa da pasta também centralizada da forma que eu quiser". É o
+        mesmo pedido que ele fez em 08/09 para a capa da GALERIA — ver a
+        migração 066, e a 031 que veio antes.
+
+        Aparece só quando JÁ existe capa: apontar o centro de uma imagem que
+        ainda não foi escolhida é apontar para o nada.
+      */}
+      {pasta.capa && (
+        <EnquadrarCapaDaPasta
+          galeriaId={galeriaId}
+          secaoId={pasta.secaoId}
+          url={pasta.capa}
+          x={pasta.focoX}
+          y={pasta.focoY}
+        />
+      )}
       <span className="mt-3 block text-xs text-texto-soft">Ou escolha uma foto do capítulo</span>
       {erro && <p className="mt-2 text-xs text-alerta">{erro}</p>}
       {fotos === null ? (

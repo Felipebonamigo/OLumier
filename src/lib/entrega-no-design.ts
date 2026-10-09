@@ -45,6 +45,9 @@ export interface PastaNoDesign {
   escolhida: boolean;
   /** A capa é um ARQUIVO enviado à parte (migração 057), não uma foto da entrega. */
   enviada: boolean;
+  /** Onde a capa é cortada, em porcentagem. 50/50 é o centro (migração 066). */
+  focoX: number;
+  focoY: number;
 }
 
 export interface FotoDaPasta {
@@ -93,11 +96,13 @@ export async function pastasNoDesign(galeriaId: string): Promise<PastaNoDesign[]
     fotos: number;
     escolhida: boolean;
     capa_chave: string | null;
+    capa_foco_x: number;
+    capa_foco_y: number;
     chave: string | null;
     chave_thumb: string | null;
     armazem: string | null;
   }>(
-    `select s.id as secao_id, s.nome, s.capa_chave,
+    `select s.id as secao_id, s.nome, s.capa_chave, s.capa_foco_x, s.capa_foco_y,
             (select count(*)::int from medias f
               where f.secao_id = s.id and f.pronto and f.tipo = 'foto') as fotos,
             (capa.id is not null and capa.id = s.capa_media_id) as escolhida,
@@ -132,6 +137,8 @@ export async function pastasNoDesign(galeriaId: string): Promise<PastaNoDesign[]
         fotos: l.fotos,
         escolhida: l.escolhida,
         enviada: Boolean(l.capa_chave),
+        focoX: l.capa_foco_x ?? 50,
+        focoY: l.capa_foco_y ?? 50,
         capa: l.capa_chave
           ? await urlDeLeitura(l.capa_chave, VALIDADE)
           : await urlDaDerivada(l.chave_thumb, l.chave as string, armazemDe(l.armazem), VALIDADE),

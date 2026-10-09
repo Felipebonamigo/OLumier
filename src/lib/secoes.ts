@@ -24,6 +24,10 @@ export interface Secao {
    */
   slug: string;
   ordem: number;
+  /** Onde cortar a capa desta pasta, em porcentagem. 50/50 é o centro, que é o
+   *  que o `object-cover` já faz sozinho. Ver migração 066. */
+  capa_foco_x: number;
+  capa_foco_y: number;
   total?: number;
   /** Quantas das `total` são vídeo (o resto é foto). Ver `lib/contagem-de-midias.ts`. */
   total_videos?: number;
@@ -77,6 +81,61 @@ export async function listarSecoes(galeriaId: string) {
  * `tenant_id` na condição é a tranca de sempre: foto de outro estúdio não
  * casa, e a resposta é a mesma de uma foto que não existe.
  */
+const pontoValido = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 100;
+
+/** O centro — o que o `object-cover` já faz sozinho. */
+export const FOCO_CENTRAL_DA_PASTA = { x: 50, y: 50 } as const;
+
+/**
+ * Onde a capa DESTA pasta deve ser cortada.
+ *
+ * Juan, 09/10/2026: "adicionar opção de escolher o ponto focal da imagem, para
+ * poder deixar a capa da pasta também centralizada da forma que eu quiser".
+ * Ver a migração 066, e a 031 que fez o mesmo para a capa da galeria.
+ *
+ * A conferência da faixa está AQUI e no banco. Aqui porque o valor vem de um
+ * pedido HTTP e vai parar dentro de um `style`; no banco porque é ele que
+ * garante quando alguém gravar por outro caminho. Duas travas para o mesmo
+ * valor é de propósito: a de dentro é a que não se pode esquecer.
+ *
+ * `tenant_id` na condição é a tranca de sempre — capítulo de outro estúdio
+ * não casa, e a resposta é a mesma de um capítulo que não existe.
+ */
+export async function definirFocoDaPasta(
+  secaoId: string,
+  galeriaId: string,
+  tenantId: string,
+  x: unknown,
+  y: unknown,
+): Promise<boolean> {
+  if (!pontoValido(x) || !pontoValido(y)) return false;
+  const linhas = await consultar(
+    `update secoes s
+        set capa_foco_x = $1, capa_foco_y = $2
+      from galerias g
+      where s.id = $3 and s.galeria_id = g.id and g.id = $4 and g.tenant_id = $5
+      returning s.id`,
+    [x, y, secaoId, galeriaId, tenantId],
+  );
+  return linhas.length > 0;
+}
+
+/**
+ * Devolve o enquadramento da pasta ao centro.
+ *
+ * Chamado sempre que a FOTO da capa dela muda. Um foco calibrado para a foto A
+ * não quer dizer nada na foto B: herdá-lo entrega um corte torto que ninguém
+ * escolheu, sem pista de onde veio. Foi o teste que cobrou isto — a primeira
+ * versão trocava a capa e deixava o foco antigo de pé.
+ */
+export async function centralizarFocoDaPasta(secaoId: string) {
+  await consultar(
+    "update secoes set capa_foco_x = $1, capa_foco_y = $2 where id = $3",
+    [FOCO_CENTRAL_DA_PASTA.x, FOCO_CENTRAL_DA_PASTA.y, secaoId],
+  );
+}
+
 export async function definirCapaDaPasta(
   galeriaId: string,
   tenantId: string,
@@ -108,7 +167,11 @@ export async function definirCapaDaPasta(
   );
   const linhas = await consultar<{ id: string }>(
     `update secoes s
-        set capa_media_id = m.id, capa_chave = null
+        /* O foco volta ao centro NO MESMO update: um enquadramento calibrado
+           para a foto A não quer dizer nada na foto B. Aqui dentro, e não numa
+           chamada à parte, porque assim não há como trocar a capa e esquecer o
+           foco — foi exatamente o que o teste pegou. Ver migração 066. */
+        set capa_media_id = m.id, capa_chave = null, capa_foco_x = 50, capa_foco_y = 50
        from medias m
       where m.id = $1 and m.galeria_id = $2 and m.tenant_id = $3
         and s.id = m.secao_id and s.galeria_id = m.galeria_id

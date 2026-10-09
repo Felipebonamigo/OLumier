@@ -861,6 +861,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
     capaId: string | null;
     /** Capa enviada como arquivo (migração 057) — vence a foto escolhida. */
     capaChave: string | null;
+    foco: { x: number; y: number };
     medias: MediaPublica[];
   }[] = [];
   if (tela !== "galeria") {
@@ -874,6 +875,9 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         /* As soltas não são um capítulo: não há linha em `secoes` onde
            guardar uma capa própria delas. A primeira foto segue valendo. */
         capaChave: null,
+        /* As soltas não são um capítulo: não há linha em `secoes` para guardar
+           um enquadramento, então ficam no centro, como sempre estiveram. */
+        foco: { x: 50, y: 50 },
         medias: soltas,
       });
     }
@@ -886,6 +890,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
           nome: sec.nome,
           capaId: sec.capa_media_id ?? null,
           capaChave: sec.capa_chave ?? null,
+          foco: { x: sec.capa_foco_x ?? 50, y: sec.capa_foco_y ?? 50 },
           medias: doGrupo,
         });
       }
@@ -927,6 +932,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               fotos: fotosDaPasta,
               videos: g.medias.length - fotosDaPasta,
               imagens: imagens.filter((u): u is string => Boolean(u)),
+              foco: g.foco,
             };
           }),
         )

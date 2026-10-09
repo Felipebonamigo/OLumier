@@ -75,6 +75,12 @@ export async function trocarCapaDaPasta(
      ficou sem dono, e objeto sem dono é arquivo pago que ninguém acha. */
   const antes = await capituloParaCapa(secaoId, galeriaId, tenantId);
   if (!antes) return null;
-  await consultarUm("update secoes set capa_chave = $1 where id = $2", [chave, secaoId]);
+  /* O foco volta ao centro junto: a imagem mudou, e o enquadramento era dela.
+     Vale também para TIRAR a capa (chave null) — a pasta passa a mostrar a
+     primeira foto do capítulo, que é outra imagem ainda. Ver migração 066. */
+  await consultarUm(
+    "update secoes set capa_chave = $1, capa_foco_x = 50, capa_foco_y = 50 where id = $2",
+    [chave, secaoId],
+  );
   return antes.capa_chave && antes.capa_chave !== chave ? antes.capa_chave : null;
 }

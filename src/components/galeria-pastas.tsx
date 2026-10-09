@@ -52,7 +52,16 @@ export interface PastaDaEntrega {
       miniaturas do mesmo capítulo. Pode vir vazia (pasta só com vídeos sem
       pôster): aí o desenho usa a cor da superfície no lugar da foto. */
   imagens: string[];
+  /** Onde a CAPA desta pasta deve ser cortada, em porcentagem (migração 066).
+   *  Vale só para a primeira imagem: as de trás são miniaturas pequenas, e um
+   *  enquadramento escolhido para a capa não diz nada sobre elas. */
+  foco: { x: number; y: number };
 }
+
+/** O corte da capa. Separado porque os CINCO desenhos o usam, e porque um deles
+ *  esquecer é o tipo de diferença que ninguém nota até alguém reclamar que "só
+ *  naquele estilo a foto sai torta". */
+const corteDaCapa = (p: PastaDaEntrega) => ({ objectPosition: `${p.foco.x}% ${p.foco.y}%` });
 
 function contagem(fotos: number, videos: number): string {
   const partes: string[] = [];
@@ -72,10 +81,15 @@ function Foto({
   src,
   className = "",
   eager = false,
+  style,
 }: {
   src: string | undefined;
   className?: string;
   eager?: boolean;
+  /* Só o `objectPosition` da capa passa por aqui (migração 066). É um objeto
+     montado por `corteDaCapa`, a partir de dois inteiros que o banco mantém
+     entre 0 e 100 — e não um estilo livre vindo de quem quer que seja. */
+  style?: CSSProperties;
 }) {
   if (!src) return <span className={`block ${className}`} style={{ background: "var(--g-superficie)" }} />;
   return (
@@ -85,6 +99,7 @@ function Foto({
       alt=""
       loading={eager ? "eager" : "lazy"}
       decoding="async"
+      style={style}
       className={`block object-cover ${className}`}
     />
   );
@@ -208,7 +223,7 @@ function PastasEmPilha({
                 className={`absolute inset-0 overflow-hidden rounded-[var(--g-canto,6px)] shadow-[0_18px_40px_-14px_rgba(0,0,0,.55)] group-hover:-translate-y-[3%] group-hover:scale-[1.02] ${SUAVE}`}
                 style={{ background: "var(--g-superficie)" }}
               >
-                <Foto src={p.imagens[0]} eager={i < 4} className="h-full w-full" />
+                <Foto style={corteDaCapa(p)} src={p.imagens[0]} eager={i < 4} className="h-full w-full" />
               </span>
             </div>
 
@@ -251,7 +266,7 @@ function PastasEmCapas({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: L
             className={`group relative block aspect-[4/5] overflow-hidden rounded-[var(--g-canto,6px)] ${CLASSE_FOCO}`}
             style={{ ...FOCO, background: "var(--g-superficie)" }}
           >
-            <Foto src={p.imagens[0]} eager={i < 3} className={`absolute inset-0 h-full w-full group-hover:scale-[1.05] ${SUAVE} !duration-[1200ms]`} />
+            <Foto style={corteDaCapa(p)} src={p.imagens[0]} eager={i < 3} className={`absolute inset-0 h-full w-full group-hover:scale-[1.05] ${SUAVE} !duration-[1200ms]`} />
             <span
               aria-hidden
               className="absolute inset-0"
@@ -328,7 +343,7 @@ function PastasEmIndice({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: 
                       k > 0 ? "self-end opacity-80 group-hover:opacity-100" : ""
                     } ${SUAVE}`}
                   >
-                    <Foto src={p.imagens[k]} eager={i < 3 && k === 0} className="h-full w-full" />
+                    <Foto style={k === 0 ? corteDaCapa(p) : undefined} src={p.imagens[k]} eager={i < 3 && k === 0} className="h-full w-full" />
                   </span>
                 ) : null,
               )}
@@ -383,8 +398,7 @@ function PastasEmFeed({ pastas, letras }: { pastas: PastaDaEntrega[]; letras: Le
             className={`group relative block aspect-square overflow-hidden rounded-[var(--g-canto,6px)] ${CLASSE_FOCO}`}
             style={{ ...FOCO, background: "var(--g-superficie)" }}
           >
-            <Foto
-              src={p.imagens[0]}
+            <Foto style={corteDaCapa(p)} src={p.imagens[0]}
               eager={i < 6}
               className={`absolute inset-0 h-full w-full group-hover:scale-[1.05] ${SUAVE} !duration-[1200ms]`}
             />
@@ -441,11 +455,11 @@ function PastasEmMosaico({ pastas, letras }: { pastas: PastaDaEntrega[]; letras:
                 style={{ background: "var(--g-superficie)", border: "1px solid var(--g-linha)" }}
               >
                 <span className="col-span-2 row-span-2 overflow-hidden rounded-[calc(var(--g-canto,6px)*.6)]">
-                  <Foto src={p.imagens[0]} eager={i < 3} className={`h-full w-full group-hover:scale-[1.03] ${SUAVE}`} />
+                  <Foto style={corteDaCapa(p)} src={p.imagens[0]} eager={i < 3} className={`h-full w-full group-hover:scale-[1.03] ${SUAVE}`} />
                 </span>
                 {[1, 2].map((k) => (
                   <span key={k} className="relative overflow-hidden rounded-[calc(var(--g-canto,6px)*.6)]">
-                    <Foto src={p.imagens[k]} className={`h-full w-full group-hover:scale-[1.06] ${SUAVE}`} />
+                    <Foto style={k === 0 ? corteDaCapa(p) : undefined} src={p.imagens[k]} className={`h-full w-full group-hover:scale-[1.06] ${SUAVE}`} />
                     {k === 2 && faltam > 0 && (
                       <span
                         className="absolute inset-0 grid place-items-center text-xl tabular-nums text-white sm:text-2xl"
