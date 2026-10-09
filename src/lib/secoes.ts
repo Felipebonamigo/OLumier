@@ -25,7 +25,7 @@ export interface Secao {
   slug: string;
   ordem: number;
   /** Onde cortar a capa desta pasta, em porcentagem. 50/50 é o centro, que é o
-   *  que o `object-cover` já faz sozinho. Ver migração 066. */
+   *  que o `object-cover` já faz sozinho. Ver migração 067. */
   capa_foco_x: number;
   capa_foco_y: number;
   total?: number;
@@ -92,7 +92,7 @@ export const FOCO_CENTRAL_DA_PASTA = { x: 50, y: 50 } as const;
  *
  * Juan, 09/10/2026: "adicionar opção de escolher o ponto focal da imagem, para
  * poder deixar a capa da pasta também centralizada da forma que eu quiser".
- * Ver a migração 066, e a 031 que fez o mesmo para a capa da galeria.
+ * Ver a migração 067, e a 031 que fez o mesmo para a capa da galeria.
  *
  * A conferência da faixa está AQUI e no banco. Aqui porque o valor vem de um
  * pedido HTTP e vai parar dentro de um `style`; no banco porque é ele que
@@ -170,7 +170,7 @@ export async function definirCapaDaPasta(
         /* O foco volta ao centro NO MESMO update: um enquadramento calibrado
            para a foto A não quer dizer nada na foto B. Aqui dentro, e não numa
            chamada à parte, porque assim não há como trocar a capa e esquecer o
-           foco — foi exatamente o que o teste pegou. Ver migração 066. */
+           foco — foi exatamente o que o teste pegou. Ver migração 067. */
         set capa_media_id = m.id, capa_chave = null, capa_foco_x = 50, capa_foco_y = 50
        from medias m
       where m.id = $1 and m.galeria_id = $2 and m.tenant_id = $3

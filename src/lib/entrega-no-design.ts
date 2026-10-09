@@ -45,7 +45,7 @@ export interface PastaNoDesign {
   escolhida: boolean;
   /** A capa é um ARQUIVO enviado à parte (migração 057), não uma foto da entrega. */
   enviada: boolean;
-  /** Onde a capa é cortada, em porcentagem. 50/50 é o centro (migração 066). */
+  /** Onde a capa é cortada, em porcentagem. 50/50 é o centro (migração 067). */
   focoX: number;
   focoY: number;
 }

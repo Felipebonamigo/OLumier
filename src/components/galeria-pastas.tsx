@@ -52,7 +52,7 @@ export interface PastaDaEntrega {
       miniaturas do mesmo capítulo. Pode vir vazia (pasta só com vídeos sem
       pôster): aí o desenho usa a cor da superfície no lugar da foto. */
   imagens: string[];
-  /** Onde a CAPA desta pasta deve ser cortada, em porcentagem (migração 066).
+  /** Onde a CAPA desta pasta deve ser cortada, em porcentagem (migração 067).
    *  Vale só para a primeira imagem: as de trás são miniaturas pequenas, e um
    *  enquadramento escolhido para a capa não diz nada sobre elas. */
   foco: { x: number; y: number };
@@ -86,7 +86,7 @@ function Foto({
   src: string | undefined;
   className?: string;
   eager?: boolean;
-  /* Só o `objectPosition` da capa passa por aqui (migração 066). É um objeto
+  /* Só o `objectPosition` da capa passa por aqui (migração 067). É um objeto
      montado por `corteDaCapa`, a partir de dois inteiros que o banco mantém
      entre 0 e 100 — e não um estilo livre vindo de quem quer que seja. */
   style?: CSSProperties;

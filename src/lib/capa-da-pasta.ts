@@ -77,7 +77,7 @@ export async function trocarCapaDaPasta(
   if (!antes) return null;
   /* O foco volta ao centro junto: a imagem mudou, e o enquadramento era dela.
      Vale também para TIRAR a capa (chave null) — a pasta passa a mostrar a
-     primeira foto do capítulo, que é outra imagem ainda. Ver migração 066. */
+     primeira foto do capítulo, que é outra imagem ainda. Ver migração 067. */
   await consultarUm(
     "update secoes set capa_chave = $1, capa_foco_x = 50, capa_foco_y = 50 where id = $2",
     [chave, secaoId],

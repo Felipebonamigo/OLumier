@@ -517,7 +517,7 @@ function FotosParaCapa({
         Juan: "adicionar opção de escolher o ponto focal da imagem, para poder
         deixar a capa da pasta também centralizada da forma que eu quiser". É o
         mesmo pedido que ele fez em 08/09 para a capa da GALERIA — ver a
-        migração 066, e a 031 que veio antes.
+        migração 067, e a 031 que veio antes.
 
         Aparece só quando JÁ existe capa: apontar o centro de uma imagem que
         ainda não foi escolhida é apontar para o nada.
