@@ -27,7 +27,7 @@ import {
   tornarEstiloPadrao,
   type EstiloDoEstudio,
 } from "@/lib/estilos-do-estudio";
-import { aparenciaComFormato, type Aparencia } from "@/config/aparencia";
+import { aparenciaComCapaEmTelaCheia, aparenciaComFormato, type Aparencia } from "@/config/aparencia";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 import { assinarTenant, escolherPlanoAntesDeAssinar } from "@/lib/assinar";
 import { assinarPacote, acrescentarAtomatiza } from "@/lib/pacote";
@@ -95,6 +95,12 @@ export interface EstadoGaleria {
   erro?: string;
   /** Só a edição usa: a tela fecha o formulário quando a gravação confirma. */
   ok?: boolean;
+  /**
+   * A galeria nova, devolvida em vez de redirecionar — só quando o assistente
+   * trouxe uma capa em vídeo para subir (`com_clipe`). O clipe sobe pelo
+   * navegador, e ele precisa do id; quem sobe também leva a pessoa à galeria.
+   */
+  galeriaId?: string;
 }
 
 export async function criarGaleriaAction(
@@ -139,7 +145,15 @@ export async function criarGaleriaAction(
      fila, entre o pronto e o padrão — ver `aparenciaInicialDaGaleria`. */
   /* E o formato (galeria, pastas, stream), escolhido na mesma etapa, por
      cima do estilo — ver `aparenciaComFormato`. */
-  const aparenciaInicial = aparenciaComFormato(
+  const liberado = await formatosLiberadosPara(tenantId);
+  /* A capa em vídeo escolhida no assistente (08/10/2026): o clipe sobe depois,
+     pelo navegador. Mesma regra do formato — sem Pastas e Stream liberados o
+     campo nem aparece, e o formulário é um endpoint. */
+  const comClipe = liberado && String(form.get("com_clipe") ?? "") === "1";
+  /* A capa em tela cheia vale para qualquer conta, com foto ou com clipe: o
+     clipe a implica (sem tela cheia ele tocaria numa capa de 78% da tela). */
+  const telaCheia = comClipe || String(form.get("capa_tela_cheia") ?? "") === "1";
+  const aparenciaDoEstilo = aparenciaComFormato(
     await aparenciaInicialDaGaleria(
       tenantId,
       String(form.get("preset") ?? ""),
@@ -147,8 +161,10 @@ export async function criarGaleriaAction(
     ),
     /* Quem não tem Pastas e Stream liberados não escolhe formato — o campo
        nem aparece, e o formulário é um endpoint. Ver `acesso-formatos`. */
-    (await formatosLiberadosPara(tenantId)) ? String(form.get("formato") ?? "") : "",
+    liberado ? String(form.get("formato") ?? "") : "",
   );
+  /* Capa em tela cheia: Imersa, na altura "Tela toda" — ver `aparenciaComCapaEmTelaCheia`. */
+  const aparenciaInicial = telaCheia ? aparenciaComCapaEmTelaCheia(aparenciaDoEstilo) : aparenciaDoEstilo;
   if (aparenciaInicial) {
     await consultar("update galerias set aparencia = $1 where id = $2 and tenant_id = $3", [
       JSON.stringify(aparenciaInicial),
@@ -168,6 +184,9 @@ export async function criarGaleriaAction(
   }
 
   revalidatePath("/painel");
+  /* Com clipe a pessoa fica no assistente até ele subir: devolve o id, e quem
+     sobe a leva à galeria. Sem clipe, o caminho de sempre. */
+  if (comClipe) return { ok: true, galeriaId: galeria!.id };
   redirect(`/painel/galerias/${galeria!.id}`);
 }
 

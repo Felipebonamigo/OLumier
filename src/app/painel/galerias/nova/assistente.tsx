@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, type ReactNode } from "react";
+import { useActionState, useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { criarGaleriaAction, type EstadoGaleria } from "../../actions";
 import {
@@ -21,6 +22,8 @@ import {
 import type { EstiloDoEstudio } from "@/lib/estilos-do-estudio";
 import { AmostraDoPreset } from "@/components/amostra-do-preset";
 import { EsquemaDoFormato } from "@/components/esquema-do-formato";
+import { CapaEmVideoNaCriacao } from "@/components/capa-em-video-na-criacao";
+import { ErroDoClipe, enviarClipeDaCapa, type ClipePronto } from "@/lib/clipe-da-capa";
 
 /**
  * Criar galeria em três etapas.
@@ -45,7 +48,7 @@ import { EsquemaDoFormato } from "@/components/esquema-do-formato";
 
 const ETAPAS = ["Dados", "Estilo", "Capítulos"] as const;
 
-function Botao({ ultima }: { ultima: boolean }) {
+function Botao({ ultima, bloqueado }: { ultima: boolean; bloqueado: boolean }) {
   const { pending } = useFormStatus();
   /*
    * Na última etapa "Criar galeria" É o caminho, e leva a ênfase. Antes dela,
@@ -53,7 +56,7 @@ function Botao({ ultima }: { ultima: boolean }) {
    * etapas opcionais — secundário, e da mesma altura. Ver `BOTAO_BASE`.
    */
   return (
-    <BotaoEnviar carregando={pending} emLinha variante={ultima ? "primario" : "secundario"}>
+    <BotaoEnviar carregando={pending || bloqueado} emLinha variante={ultima ? "primario" : "secundario"}>
       {ultima ? "Criar galeria" : "Criar mesmo assim"}
     </BotaoEnviar>
   );
@@ -92,6 +95,56 @@ export function AssistenteNovaGaleria({
     padraoDoEstudio?.formato ?? APARENCIA_PADRAO.formato,
   );
 
+  /*
+   * A CAPA EM VÍDEO, escolhida na etapa de estilo (08/10/2026). O clipe é
+   * preparado aqui, no navegador; depois que a ação cria a galeria e devolve o
+   * id, ele sobe — e só então a pessoa é levada a ela. Se o envio falhar a
+   * galeria JÁ existe: a tela diz isso e oferece abri-la, em vez de fingir que
+   * nada nasceu.
+   */
+  const router = useRouter();
+  /* A capa em tela cheia (Felipe: "uma opção 'capa em tela cheia' e aí outra para
+     escolher vídeo ou foto"). A tela cheia é a decisão; foto ou vídeo, o que a
+     ocupa. Foto vale para qualquer conta; vídeo, para quem tem os formatos. */
+  const [telaCheia, setTelaCheia] = useState(false);
+  const [tipoDaCapa, setTipoDaCapa] = useState<"foto" | "video">("foto");
+  const [clipe, setClipe] = useState<ClipePronto | null>(null);
+  const [preparandoClipe, setPreparandoClipe] = useState(false);
+  const [falhaDoClipe, setFalhaDoClipe] = useState<string | null>(null);
+  const galeriaCriada = estado.galeriaId ?? null;
+
+  useEffect(() => {
+    if (!galeriaCriada) return;
+    let cancelado = false;
+    void (async () => {
+      try {
+        if (clipe) await enviarClipeDaCapa(galeriaCriada, clipe);
+      } catch (e) {
+        if (!cancelado) {
+          setFalhaDoClipe(e instanceof ErroDoClipe ? e.message : "O envio do clipe não deu certo.");
+        }
+        return;
+      }
+      if (!cancelado) router.push(`/painel/galerias/${galeriaCriada}`);
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // O clipe é o desta criação e não muda depois do envio; refazer o envio a
+    // cada troca dele mandaria o mesmo arquivo duas vezes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galeriaCriada]);
+
+  const opcoesDaCapa: { id: "foto" | "video"; nome: string; desc: string }[] = [
+    { id: "foto", nome: "Foto", desc: "A foto de capa da galeria — você a escolhe depois, em Design → Capa." },
+    ...(formatosLiberados
+      ? [{ id: "video" as const, nome: "Vídeo", desc: "Um clipe de até 30 segundos, mudo e em laço." }]
+      : []),
+  ];
+  /* O vídeo é a escolha ATIVA: só vale com a tela cheia ligada e "Vídeo" marcado. */
+  const comVideo = telaCheia && tipoDaCapa === "video";
+  /* Entre o "criar" e a galeria abrir — o clipe subindo — nada mais se aperta. */
+  const subindoClipe = Boolean(galeriaCriada) && !falhaDoClipe;
   const semNome = titulo.trim().length === 0;
 
   return (
@@ -206,6 +259,73 @@ export function AssistenteNovaGaleria({
               );
             })}
           </div>
+        </fieldset>
+        {/*
+          ── A CAPA EM TELA CHEIA (08/10/2026) ──────────────────────────────
+
+          Felipe, com o reel de uma capa em vídeo: "é um vídeo na tela toda, e
+          conforme desce, tem uma galeria — coloque essa opção na hora de montar
+          a galeria". E, vendo a primeira versão, que só existia com vídeo: "uma
+          opção 'capa em tela cheia' e aí outra para escolher vídeo ou foto".
+
+          A TELA CHEIA é a decisão (a capa é a tela inteira, e a galeria começa ao
+          rolar); FOTO ou VÍDEO é o que a ocupa. Fica logo depois do formato (a
+          estrutura) e antes dos estilos (a cara): ela decide a capa e a altura, e
+          o resto do estilo continua a escolha de quem monta.
+        */}
+        <input type="hidden" name="capa_tela_cheia" value={telaCheia ? "1" : ""} />
+        <input type="hidden" name="com_clipe" value={comVideo && clipe ? "1" : ""} />
+        <fieldset className="mt-5 max-w-3xl">
+          <legend className="text-xs font-medium text-texto-soft">Capa</legend>
+          <button
+            type="button"
+            aria-pressed={telaCheia}
+            onClick={() => setTelaCheia((v) => !v)}
+            className={`mt-2 block w-full rounded-xl border p-3 text-left transition ${
+              telaCheia ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+            }`}
+          >
+            <span className="block text-sm font-medium">
+              {telaCheia ? "✓ " : ""}Capa em tela cheia
+            </span>
+            <span className="mt-0.5 block text-xs text-texto-faint">
+              A capa ocupa a tela inteira e a galeria começa ao rolar. Nasce com a capa Imersa; o resto
+              do estilo continua o que você escolher. Dá para mudar depois, em Design → Capa.
+            </span>
+          </button>
+          {telaCheia && (
+            <div className="mt-3 pl-1">
+              <p className="text-xs font-medium text-texto-soft">O que ocupa a tela</p>
+              <div className="mt-2 grid max-w-xl gap-3 sm:grid-cols-2">
+                {opcoesDaCapa.map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    aria-pressed={tipoDaCapa === o.id}
+                    onClick={() => setTipoDaCapa(o.id)}
+                    className={`rounded-xl border p-3 text-left transition ${
+                      tipoDaCapa === o.id ? "border-acento bg-carbon-2" : "border-linha hover:bg-carbon"
+                    }`}
+                  >
+                    <span className="block text-sm font-medium">{o.nome}</span>
+                    <span className="mt-0.5 block text-xs text-texto-faint">{o.desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Montado sempre e só escondido: o clipe preparado (e o preparo em
+              andamento) não pode sumir se a pessoa alternar Foto e Vídeo. */}
+          {formatosLiberados && (
+            <div className={comVideo ? "pl-1" : "hidden"}>
+              <CapaEmVideoNaCriacao
+                aoMudar={(pronto, preparando) => {
+                  setClipe(pronto);
+                  setPreparandoClipe(preparando);
+                }}
+              />
+            </div>
+          )}
         </fieldset>
         {formatosLiberados && <p className="mt-6 text-xs font-medium text-texto-soft">Estilo</p>}
         <input type="hidden" name="preset" value={preset} />
@@ -358,6 +478,20 @@ export function AssistenteNovaGaleria({
       </div>
 
       <Erro mensagem={estado.erro} />
+      {subindoClipe && (
+        <p role="status" className="mt-4 text-sm text-texto-soft">
+          Galeria criada. Enviando a capa em vídeo… você é levado a ela em seguida.
+        </p>
+      )}
+      {falhaDoClipe && galeriaCriada && (
+        <p role="alert" className="mt-4 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-sm text-alerta">
+          A galeria foi criada, mas a capa em vídeo não subiu: {falhaDoClipe}{" "}
+          <a href={`/painel/galerias/${galeriaCriada}/design`} className="underline underline-offset-4">
+            Abrir a galeria
+          </a>{" "}
+          e tentar de novo em Design → Capa.
+        </p>
+      )}
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         {etapa > 0 && (
@@ -387,7 +521,14 @@ export function AssistenteNovaGaleria({
           poupar trabalho, não para cobrar. Na última etapa ele muda de rótulo
           porque ali "criar" é o fim natural, não um atalho.
         */}
-        {!semNome && <Botao ultima={etapa === ETAPAS.length - 1} />}
+        {!semNome && (
+          <Botao
+            ultima={etapa === ETAPAS.length - 1}
+            /* O clipe ainda sendo preparado não sobe junto: criar agora faria
+               uma galeria sem a capa que a pessoa acabou de escolher. */
+            bloqueado={(comVideo && preparandoClipe) || subindoClipe || Boolean(falhaDoClipe)}
+          />
+        )}
       </div>
     </form>
   );

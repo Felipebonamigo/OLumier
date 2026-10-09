@@ -1,3 +1,5 @@
+import { desenhoDaCapaUsaClipe } from "@/lib/clipe-da-capa-regras";
+
 /**
  * Aparência da galeria: eixos independentes + presets.
  *
@@ -84,6 +86,56 @@ export type Densidade = "compacta" | "normal" | "arejada";
 export type TamanhoLogo = "nenhuma" | "discreta" | "media" | "grande" | "enorme";
 
 /**
+ * ONDE A LOGO FICA NA PILHA DA CAPA — no início, no meio ou no fim (08/10/2026).
+ *
+ * Pedido de uma aluna, sobre a capa imersa: "seria legal poder escolher se
+ * quero o logo no início, meio ou final da arte. No modo imersivo eu acho lindo,
+ * mas a primeira coisa que aparece na foto é o logo e eu acho que pesa o
+ * layout. Daí tenho que deixar sem."
+ *
+ * A capa é uma pilha de três coisas — a logo, o nome (com a sobrancelha) e a
+ * data. Todas as capas desenhavam a logo na ponta de cima, e a única saída de
+ * quem não gostava era `nenhuma`: perder a assinatura para ganhar leveza. Este
+ * eixo põe a logo em outro degrau da MESMA pilha:
+ *
+ *   inicio  — acima do nome (o que quase toda capa fazia);
+ *   meio    — entre o nome e a data, onde ela assina o que acabou de ser dito;
+ *   fim     — depois de tudo, no pé da capa.
+ *
+ * ── POR QUE `null` EXISTE, E É O PADRÃO ───────────────────────────────────
+ *
+ * Nem toda capa começava pelo mesmo degrau: a cartaz, a redonda e o arco já
+ * punham a logo no FIM. `null` quer dizer "como o desenho da capa faz" — e é o
+ * que toda galeria entregue tem, então nenhuma muda de cara sem alguém escolher.
+ * A tela mostra o degrau que vale (ver `posicaoDaLogo`), e quem clica no que já
+ * está marcado grava a escolha explícita.
+ */
+export type PosicaoLogo = "inicio" | "meio" | "fim";
+
+/** O degrau em que cada desenho de capa põe a logo quando ninguém escolheu. */
+const POSICAO_DA_LOGO_POR_CAPA: Record<Capa, PosicaoLogo> = {
+  imersa: "inicio",
+  jornal: "inicio",
+  dividida: "inicio",
+  minima: "inicio",
+  convite: "inicio",
+  cartaz: "fim",
+  redonda: "fim",
+  arco: "fim",
+};
+
+/** O degrau EM VIGOR: o escolhido, ou o que o desenho da capa sempre usou. */
+export function posicaoDaLogo(ap: Pick<Aparencia, "capa" | "posicaoLogo">): PosicaoLogo {
+  return ap.posicaoLogo ?? POSICAO_DA_LOGO_POR_CAPA[ap.capa];
+}
+
+export const OPCOES_POSICAO_LOGO: readonly { id: PosicaoLogo; nome: string; desc: string }[] = [
+  { id: "inicio", nome: "Início", desc: "Acima do nome — a primeira coisa que se lê" },
+  { id: "meio", nome: "Meio", desc: "Entre o nome e a data" },
+  { id: "fim", nome: "Final", desc: "No pé da capa, depois da data" },
+];
+
+/**
  * A grossura do título da capa.
  *
  * ── POR QUE ISTO É UM EIXO, E POR QUE ELE É TRAVADO EM ALGUMAS FONTES ─────
@@ -113,7 +165,7 @@ export type Peso = "leve" | "normal" | "forte";
  *
  * `cheia` é o valor de antes, para nenhuma galeria entregue mudar de cara.
  */
-export type AlturaCapa = "baixa" | "media" | "cheia";
+export type AlturaCapa = "baixa" | "media" | "cheia" | "tela";
 
 /**
  * O canto das fotos na grade.
@@ -630,6 +682,8 @@ export interface Aparencia {
   tamanhoTitulo: number;
   /** Porcentagem da área de referência da logo, ou `null` para a regra antiga. Ver `TAMANHO_LOGO`. */
   tamanhoLogo: number | null;
+  /** Onde a logo fica na pilha da capa, ou `null` para o que cada desenho faz. Ver `PosicaoLogo`. */
+  posicaoLogo: PosicaoLogo | null;
   /**
    * O QUE é o evento, antes de dizer de QUEM ele é.
    *
@@ -723,6 +777,8 @@ export const APARENCIA_PADRAO: Aparencia = {
   tamanhoTitulo: TAMANHO_TITULO.padrao,
   /* `null` é a regra de sempre, pela altura do eixo `logo`. Ver `TAMANHO_LOGO`. */
   tamanhoLogo: null,
+  /* `null`: cada desenho de capa põe a logo onde sempre pôs. Ver `PosicaoLogo`. */
+  posicaoLogo: null,
   /* `rola` é o que toda capa faz desde sempre. Ver `CapaFixa`. */
   capaFixa: "rola",
   /* Vazia e desligado: galeria entregue não ganha nada no fim sem alguém pedir. */
@@ -881,6 +937,11 @@ export function lerAparencia(bruto: unknown): Aparencia {
     /* O mesmo acerto da barrinha do título; o que não é número é a regra
        antiga (`null`), e não um tamanho inventado. */
     tamanhoLogo: lerTamanhoLogo(o.tamanhoLogo),
+    /* Fora da lista vira `null` (o que o desenho da capa faz), e não um degrau
+       inventado — pela mesma regra de todo eixo. */
+    posicaoLogo: OPCOES_POSICAO_LOGO.some((x) => x.id === o.posicaoLogo)
+      ? (o.posicaoLogo as PosicaoLogo)
+      : null,
     /*
      * O rótulo é TEXTO LIVRE, e por isso não passa por `valida` — não há lista
      * de valores certos para "aniversário de 15 anos". O que existe é um teto:
@@ -1090,6 +1151,14 @@ export const OPCOES = {
     { id: "baixa", nome: "Baixa", desc: "Uma faixa — a galeria começa logo", vh: 42 },
     { id: "media", nome: "Média", desc: "Metade da tela", vh: 60 },
     { id: "cheia", nome: "Cheia", desc: "Quase a tela inteira", vh: 78 },
+    /*
+     * TELA TODA (08/10/2026) — a quarta, e a primeira que nenhuma galeria já
+     * entregue usa. Felipe, mostrando um reel de uma capa em vídeo: "é um vídeo
+     * na tela toda, e conforme desce, tem uma galeria". Fica por ÚLTIMO de
+     * propósito: `alturaCapaVh` cai em `OPCOES.alturaCapa[2]` (a "cheia") quando
+     * não reconhece o id, e esse índice não pode andar.
+     */
+    { id: "tela", nome: "Tela toda", desc: "A tela inteira — a galeria começa ao rolar", vh: 100 },
   ],
   /*
    * ── `pilula`: O CANTO TAMBÉM GOVERNA OS BOTÕES (29/09/2026) ─────────────
@@ -1253,19 +1322,19 @@ export const PRESETS: Preset[] = [
     id: "atomo",
     nome: "Átomo",
     desc: "Escura e cinematográfica. A foto é a única fonte de luz.",
-    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "imersa", tema: "noite", tipografia: "serifada", grade: "editorial", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "revista",
     nome: "Revista",
     desc: "Banca de jornal: fundo claro, letra grande e tudo de canto vivo.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "serifada", grade: "colunas", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "atelie",
     nome: "Ateliê",
     desc: "Terrosa, manuscrita e de cantos macios. Clima de ateliê.",
-    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "dividida", tema: "creme", tipografia: "manuscrita", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     /*
@@ -1301,13 +1370,13 @@ export const PRESETS: Preset[] = [
     id: "marfim",
     nome: "Marfim",
     desc: "Creme e manuscrita, fotos rentes. É o desenho da nossa página inicial.",
-    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "minima", tema: "creme", tipografia: "manuscrita", grade: "colunas", densidade: "normal", logo: "discreta", peso: "normal", alturaCapa: "baixa", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "uma", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "essencial",
     nome: "Essencial",
     desc: "Sem firula: entra direto nas fotos, tudo do mesmo tamanho e de canto vivo.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "moderna", grade: "quadrada", densidade: "compacta", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     /*
@@ -1324,7 +1393,7 @@ export const PRESETS: Preset[] = [
     id: "convite",
     nome: "Convite",
     desc: "Papel branco, serifada de convite e fotos coladas. A capa chama para entrar.",
-    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "convite", tema: "claro", tipografia: "bodoni", grade: "linhas", densidade: "compacta", logo: "discreta", peso: "leve", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   /*
    * ── A SEGUNDA LEVA (27/08/2026) ─────────────────────────────────────────
@@ -1347,25 +1416,25 @@ export const PRESETS: Preset[] = [
     id: "caligrafia",
     nome: "Caligrafia",
     desc: "Caligrafia sobre creme, foto em arco e cantos bem macios. Clima de papel timbrado.",
-    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "arco", tema: "creme", tipografia: "italianno", grade: "linhas", densidade: "arejada", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "muito", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "moda",
     nome: "Moda",
     desc: "Contraste alto, destaques grandes e canto vivo, como editorial de moda.",
-    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "jornal", tema: "claro", tipografia: "bodoni", grade: "editorial", densidade: "normal", logo: "media", peso: "forte", alturaCapa: "cheia", canto: "reto", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "cerimonia",
     nome: "Cerimônia",
     desc: "Maiúsculas romanas sobre fundo escuro, com a foto grande e limpa.",
-    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "cartaz", tema: "noite", tipografia: "cinzel", grade: "colunas", densidade: "normal", logo: "media", peso: "normal", alturaCapa: "cheia", canto: "suave", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
   {
     id: "papel",
     nome: "Papel",
     desc: "Branco, ar déco, muito espaço e cantos arredondados. As fotos respiram.",
-    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
+    aparencia: { capa: "minima", tema: "claro", tipografia: "josefin", grade: "colunas", densidade: "arejada", logo: "media", peso: "leve", alturaCapa: "cheia", canto: "redondo", fonteTexto: "padrao", fonteDetalhe: "mono", alinhamento: "centro", cartao: "sobreposto", rotulo: "", linhasTitulo: "auto", tamanhoTitulo: 100, tamanhoLogo: null, posicaoLogo: null, capaFixa: "rola", formato: "galeria", estiloPastas: "pilha", estiloStream: "cinema", capaStream: "sala", rolagemStream: "lado", nomeDosVideos: "", fraseDosVideos: "", despedida: "", despedidaFonte: "titulo", voltarAoInicio: "nao", glifosNaFoto: "sempre" },
   },
 ];
 
@@ -1394,6 +1463,7 @@ export function presetEquivalente(a: Aparencia): string | null {
     x.peso === y.peso && x.alturaCapa === y.alturaCapa && x.canto === y.canto && x.fonteTexto === y.fonteTexto && x.alinhamento === y.alinhamento && x.rotulo === y.rotulo && x.cartao === y.cartao &&
     x.linhasTitulo === y.linhasTitulo && x.tamanhoTitulo === y.tamanhoTitulo &&
     x.tamanhoLogo === y.tamanhoLogo &&
+    x.posicaoLogo === y.posicaoLogo &&
     x.capaFixa === y.capaFixa;
   return PRESETS.find((p) => igual(p.aparencia, a))?.id ?? null;
 }
@@ -1448,6 +1518,31 @@ export function mesmaAparencia(a: unknown, b: unknown): boolean {
 export function comFormatoDe(estilo: Aparencia, atual: Aparencia): Aparencia {
   const estrutura = Object.fromEntries(EIXOS_DA_ESTRUTURA.map((eixo) => [eixo, atual[eixo]]));
   return { ...estilo, ...estrutura } as Aparencia;
+}
+
+/**
+ * A aparência da galeria que NASCE com a capa em tela cheia (08/10/2026).
+ *
+ * Felipe, com o reel de uma capa em vídeo — o vídeo ocupa a tela e, ao rolar,
+ * vem a galeria — pediu a opção na hora de montar a galeria. E depois, olhando a
+ * primeira versão (que só existia com vídeo): "podemos colocar uma opção 'capa em
+ * tela cheia' e aí outra para escolher vídeo ou foto". A tela cheia é uma decisão
+ * da CAPA; o que a ocupa — foto ou clipe — é outra.
+ *
+ * É a capa Imersa (a foto é o fundo, o título por cima) na altura "Tela toda". O
+ * resto do estilo — cor, letra, grade, formato — continua o que a pessoa
+ * escolheu. Só troca o desenho quando o escolhido não ocupa a tela com a foto
+ * (Convite, Jornal…); Imersa e Cartaz ficam como estão, e só a altura vem junto.
+ * Tudo se desfaz em Design → Capa.
+ */
+export function aparenciaComCapaEmTelaCheia(inicial: unknown | null): unknown {
+  const base: Partial<Aparencia> = inicial === null || inicial === undefined ? {} : lerAparencia(inicial);
+  const capa = base.capa ?? APARENCIA_PADRAO.capa;
+  return {
+    ...base,
+    ...(desenhoDaCapaUsaClipe(capa) ? {} : { capa: "imersa" }),
+    alturaCapa: "tela",
+  };
 }
 
 /**
@@ -1600,7 +1695,10 @@ function luminancia(hex: string): number {
  */
 export function variaveisDeForma(a: Aparencia): Record<string, string> {
   return {
-    "--g-capa-h": `${alturaCapaVh(a.alturaCapa)}vh`,
+    /* `svh` na tela toda: com `vh` o celular conta a barra do navegador, e o pé
+       da capa (o botão "Ver galeria") ficava escondido atrás dela. As outras
+       alturas continuam em `vh` — são frações da tela, e a barra não pesa. */
+    "--g-capa-h": a.alturaCapa === "tela" ? "100svh" : `${alturaCapaVh(a.alturaCapa)}vh`,
     "--g-canto": `${raioDoCantoPx(a.canto)}px`,
     /* O acabamento dos botões e das fichas. Sai do MESMO eixo do canto das
        fotos, de propósito — ver `OPCOES.canto`. */

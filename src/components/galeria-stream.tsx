@@ -18,6 +18,7 @@ import {
 } from "@/lib/formato-da-entrega";
 import { baixarNoComputador } from "@/lib/salvar-client";
 import { AvisoDoVideo, useSaudeDoVideo } from "./aviso-do-video";
+import { ClipeDaCapa } from "./clipe-da-capa-video";
 
 /**
  * A ENTREGA EM STREAM — os vídeos numa tela de cinema, em fileiras, com
@@ -121,6 +122,7 @@ export function GaleriaStream({
   logoLargura = null,
   logoAltura = null,
   fundo,
+  fundoVideo = null,
   focoX,
   focoY,
   fileiras,
@@ -141,6 +143,8 @@ export function GaleriaStream({
   logoLargura?: number | null;
   logoAltura?: number | null;
   fundo: string | null;
+  /** O clipe da capa em vídeo (migração 066): toca mudo, em laço, por cima de `fundo`. */
+  fundoVideo?: string | null;
   focoX: number;
   focoY: number;
   fileiras: FileiraDoStream[];
@@ -216,6 +220,8 @@ export function GaleriaStream({
     meta,
     metaDosVideos,
     fundo,
+    fundoVideo,
+    fundoParado: tocando !== null,
     foco: { objectPosition: `${focoX}% ${focoY}%` },
     fileiras,
     episodios,
@@ -319,6 +325,10 @@ interface Sala {
   /** Só a quantidade e a duração — o que a barra diz embaixo da capa do grupo Capa. */
   metaDosVideos: string[];
   fundo: string | null;
+  /** O clipe da capa em vídeo, ou null. */
+  fundoVideo: string | null;
+  /** O player está aberto por cima: o clipe da capa não precisa tocar atrás dele. */
+  fundoParado: boolean;
   foco: CSSProperties;
   fileiras: FileiraDoStream[];
   episodios: EpisodioDoStream[];
@@ -473,6 +483,7 @@ function SalaCinema({ sala }: { sala: Sala }) {
       ) : (
         <header className="relative isolate flex min-h-[88svh] flex-col overflow-hidden">
           <Imagem src={sala.fundo} prioridade style={sala.foco} className="absolute inset-0 -z-10 h-full w-full" />
+          <ClipeDaCapa src={sala.fundoVideo} parado={sala.fundoParado} style={sala.foco} className="absolute inset-0 -z-10 h-full w-full" />
           <div
             aria-hidden
             className="absolute inset-0 -z-10"
@@ -602,6 +613,7 @@ function SalaEpisodios({ sala }: { sala: Sala }) {
               style={{ background: "var(--g-superficie)" }}
             >
               <Imagem src={sala.fundo} prioridade style={sala.foco} className="h-full w-full transition duration-700 group-hover:scale-[1.03] motion-reduce:transition-none" />
+              <ClipeDaCapa src={sala.fundoVideo} parado={sala.fundoParado} style={sala.foco} className="absolute inset-0 h-full w-full" />
               <span aria-hidden className="absolute inset-0 grid place-items-center bg-black/10 transition group-hover:bg-black/25">
                 <span className="grid h-16 w-16 place-items-center rounded-full bg-white/90 text-black shadow-xl transition group-hover:scale-110 motion-reduce:transition-none">
                   <IconePlay className="ml-1 h-5 w-5" />
@@ -825,6 +837,9 @@ function SalaVitrine({ sala }: { sala: Sala }) {
             style={sala.fundo && !sala.semCapa ? sala.foco : undefined}
             className="absolute inset-0 h-full w-full transition duration-[1200ms] group-hover:scale-[1.03] motion-reduce:transition-none"
           />
+          {!sala.semCapa && (
+            <ClipeDaCapa src={sala.fundoVideo} parado={sala.fundoParado} style={sala.foco} className="absolute inset-0 h-full w-full" />
+          )}
           <span aria-hidden className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(0,0,0,.7), rgba(0,0,0,.1) 50%, transparent 70%)" }} />
           <span className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-4 p-6 text-white sm:p-10">
             <span className="min-w-0">

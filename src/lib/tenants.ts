@@ -129,6 +129,9 @@ export interface Galeria {
   /* Capa enviada como arquivo (migração 029). Vence capa_media_id, e não é uma
      linha em `medias`: não aparece na galeria nem conta como entrega. */
   capa_chave: string | null;
+  /** O clipe da capa do Stream e o primeiro quadro dele (migração 066). */
+  capa_video_chave: string | null;
+  capa_video_poster_chave: string | null;
   /* Onde a capa deve ser cortada, em porcentagem — 50/50 é o centro, que é o
    * que o `object-cover` já fazia sozinho. Ver a migração 031. */
   capa_foco_x: number;
@@ -680,8 +683,11 @@ export async function destruirGaleria(
     tenant_id: string;
     estudio: string;
     capa_chave: string | null;
+    capa_video_chave: string | null;
+    capa_video_poster_chave: string | null;
   }>(
-    `select g.titulo, g.tenant_id, t.nome_estudio as estudio, g.capa_chave
+    `select g.titulo, g.tenant_id, t.nome_estudio as estudio, g.capa_chave,
+            g.capa_video_chave, g.capa_video_poster_chave
        from galerias g join tenants t on t.id = g.tenant_id
       where g.id = $1`,
     [galeriaId],
@@ -721,6 +727,8 @@ export async function destruirGaleria(
   const quantos =
     medias.reduce((n, m) => n + [m.chave, m.chave_thumb, m.chave_preview, m.chave_reproducao].filter(Boolean).length, 0) +
     (antes?.capa_chave ? 1 : 0) +
+    (antes?.capa_video_chave ? 1 : 0) +
+    (antes?.capa_video_poster_chave ? 1 : 0) +
     capasDePasta.length;
 
   const apagou = await consultar<{ id: string }>(
@@ -756,6 +764,9 @@ export async function destruirGaleria(
   }
   const avulsas = [
     ...(antes?.capa_chave ? [antes.capa_chave] : []),
+    /* O clipe da capa do Stream e o primeiro quadro dele (migração 066). */
+    ...(antes?.capa_video_chave ? [antes.capa_video_chave] : []),
+    ...(antes?.capa_video_poster_chave ? [antes.capa_video_poster_chave] : []),
     ...capasDePasta.map((c) => c.capa_chave),
   ];
   if (avulsas.length > 0) {

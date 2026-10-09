@@ -7,6 +7,7 @@ import { EditorAparencia } from "@/components/editor-aparencia";
 import { padraoDoEstudioLido } from "@/lib/aparencia-galeria";
 import { estilosDoEstudio } from "@/lib/estilos-do-estudio";
 import { CapaGaleriaEditor } from "@/components/capa-galeria-editor";
+import { CapaEmVideo } from "@/components/capa-em-video";
 import { lerAparencia } from "@/config/aparencia";
 import { formatosLiberadosPara } from "@/lib/acesso-formatos";
 import { pastasNoDesign, videosNoDesign } from "@/lib/entrega-no-design";
@@ -106,12 +107,20 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
     ? await Promise.all([videosNoDesign(galeria.id), pastasNoDesign(galeria.id)])
     : [[], []];
 
+  /* O primeiro quadro do clipe da capa em vídeo (Stream), quando há um. */
+  const quadroDoClipe =
+    liberado && galeria.capa_video_chave && galeria.capa_video_poster_chave
+      ? await urlDeLeitura(galeria.capa_video_poster_chave, 3600)
+      : null;
+
   /* O nome de cada vídeo e a capa de cada pasta entram na assinatura: eles
      também gravam fora do `?ap=`, e a prévia tem de recarregar quando mudam. */
   const versaoDaCapa = createHash("sha256")
     .update(
       [
         galeria.capa_chave,
+        /* O clipe da capa em vídeo grava fora do `?ap=`, como a capa. */
+        galeria.capa_video_chave,
         galeria.capa_media_id,
         galeria.capa_foco_x,
         galeria.capa_foco_y,
@@ -164,6 +173,12 @@ export default async function DesignPage({ params }: { params: Promise<{ id: str
       videos={videos}
       pastas={pastas}
       logo={logo}
+      slotClipe={
+        liberado ? (
+          <CapaEmVideo galeriaId={galeria.id} quadroAtual={quadroDoClipe} />
+        ) : null
+      }
+      temClipe={Boolean(quadroDoClipe)}
     />
   );
 }

@@ -61,6 +61,7 @@ import { AncoraDeChegada } from "@/components/ancora-de-chegada";
 import { aparenciaPermitida } from "@/lib/acesso-formatos";
 import { configDoRecado } from "@/config/recado";
 import { escolherCapa, urlDaCapa } from "@/lib/capa-publica";
+import { desenhoDaCapaUsaClipe } from "@/lib/clipe-da-capa-regras";
 import { PortaoDeSenha } from "./portao";
 
 export const dynamic = "force-dynamic";
@@ -951,6 +952,29 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
   let fileiras: FileiraDoStream[] = [];
   let amostraDeFotos: string[] = [];
   let fundoDoStream: string | null = null;
+  /*
+   * A capa em vídeo (migração 066) — um clipe mudo em laço, com o primeiro
+   * quadro dele como imagem de baixo (o vídeo não "pula" ao começar).
+   *
+   * Toca em dois lugares: na sala do Stream, quando ela desenha a própria
+   * capa, e nas capas Imersa e Cartaz de QUALQUER formato (Felipe, 08/10/2026:
+   * "tem como fazermos uma capa de galeria de vídeo assim?"). Só se assina o
+   * que vai ser usado: galeria sem clipe, ou com um desenho que não o toca,
+   * não paga nada.
+   */
+  const clipeNaSala = tela === "stream" && aparencia.capaStream === "sala";
+  let clipeDaCapa: { url: string; quadro: string } | null = null;
+  if (
+    galeria.capa_video_chave &&
+    galeria.capa_video_poster_chave &&
+    (clipeNaSala || desenhoDaCapaUsaClipe(aparencia.capa))
+  ) {
+    const [url, quadro] = await Promise.all([
+      urlDeLeitura(galeria.capa_video_chave, VALIDADE),
+      urlDeLeitura(galeria.capa_video_poster_chave, VALIDADE),
+    ]);
+    clipeDaCapa = { url, quadro };
+  }
   const fotosNaGaleria = todasAsMedias.filter((m) => m.tipo === "foto").length;
   if (tela === "stream") {
     let numero = 0;
@@ -997,6 +1021,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
        do primeiro episódio. O pôster tem 640 px — num monitor grande fica
        macio, e por isso a capa vem antes. */
     fundoDoStream = urlCapa ?? fileiras[0]?.episodios.find((e) => e.poster)?.poster ?? null;
+    if (clipeNaSala && clipeDaCapa) fundoDoStream = clipeDaCapa.quadro;
   }
 
   /* A entrega em stream, desenhada com a capa da própria sala ou embaixo da
@@ -1014,6 +1039,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
         logoLargura={galeria.estudio_logo_largura}
         logoAltura={galeria.estudio_logo_altura}
         fundo={fundoDoStream}
+        fundoVideo={clipeNaSala ? (clipeDaCapa?.url ?? null) : null}
         focoX={galeria.capa_foco_x}
         focoY={galeria.capa_foco_y}
         fileiras={fileiras}
@@ -1097,6 +1123,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
               /* No stream sem capa escolhida, o pôster do primeiro vídeo —
                  a mesma régua do fundo da sala (`fundoDoStream`). */
               urlImagem: tela === "stream" ? fundoDoStream : urlCapa,
+              clipe: clipeDaCapa,
               /*
                * ESCOLHIDA, e não herdada.
                *

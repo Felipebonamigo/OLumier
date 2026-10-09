@@ -54,8 +54,12 @@ console.log("Eixos de forma — altura da capa e canto das fotos\n");
  *
  * De propósito NÃO saem de OPCOES: uma tabela lida da própria fonte concorda
  * com qualquer mudança e não confere nada. Estes quatro números são o contrato
- * — mudar um deles muda a cara de galeria entregue, e tem de doer aqui. */
-const ALTURAS = { baixa: 42, media: 60, cheia: 78 };
+ * — mudar um deles muda a cara de galeria entregue, e tem de doer aqui.
+ *
+ * `tela` (08/10/2026) é a quarta altura, nascida da capa em vídeo "na tela
+ * toda". Nenhuma galeria entregue a usa, e ela vem por ÚLTIMO: `alturaCapaVh`
+ * cai em `OPCOES.alturaCapa[2]` (a "cheia") quando não reconhece o id. */
+const ALTURAS = { baixa: 42, media: 60, cheia: 78, tela: 100 };
 const CANTOS = { reto: 0, suave: 6, redondo: 14, muito: 24 };
 
 for (const [id, vh] of Object.entries(ALTURAS)) {
@@ -96,6 +100,16 @@ if (APARENCIA_PADRAO.alturaCapa === "cheia" && APARENCIA_PADRAO.canto === "suave
   erro(
     `o padrão virou ${APARENCIA_PADRAO.alturaCapa}/${APARENCIA_PADRAO.canto} — galeria antiga muda de cara`,
   );
+}
+
+/* A tela toda é `svh`, e as outras continuam `vh`: com `vh` o celular conta a
+   barra do navegador e o pé da capa ficava escondido atrás dela. */
+{
+  const telaToda = variaveisDeForma({ ...APARENCIA_PADRAO, alturaCapa: "tela" })["--g-capa-h"];
+  if (telaToda === "100svh") ok('a altura "tela" vira 100svh, para o pé da capa não sumir atrás da barra do celular');
+  else erro(`a altura "tela" virou ${telaToda}, e não 100svh`);
+  if (alturaCapaVh("nao-existe") === 78) ok("altura desconhecida continua caindo na cheia (78vh)");
+  else erro(`altura desconhecida virou ${alturaCapaVh("nao-existe")}vh`);
 }
 
 const forma = variaveisDeForma(APARENCIA_PADRAO);
