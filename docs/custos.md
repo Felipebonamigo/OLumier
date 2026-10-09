@@ -107,6 +107,59 @@ código desde 03/09/2026.
 (Let's Encrypt, sem custo). Domínio próprio de estúdio não gera custo nosso —
 o DNS é do cliente.
 
+## 9. Mês a mês — a memória dos números (09/10/2026)
+
+Felipe, olhando a Administração: *"aqui vamos separar por mês as contas também,
+para termos o controle dos custos, gastos, etc."* O bloco Dinheiro mostrava o
+mês de HOJE; no dia 1º o número de ontem sumia, e "quanto custou setembro?" não
+tinha resposta. O Caixa dos sócios separa o **dinheiro que caiu** por mês, lendo
+o Asaas — mas o que o Asaas não sabe (quantas contas pagavam, quanto espaço
+estava guardado, quanto era o custo fixo) só existia como retrato do dia.
+
+Agora a Administração tem o bloco **Mês a mês**: uma linha por mês, doze meses,
+do mais novo para o mais antigo.
+
+| Coluna | De onde vem | Exatidão |
+|---|---|---|
+| Novas | `tenants.criado_em`, mês de Brasília | **exata** em todo mês |
+| Total | contas criadas até o fim do mês | **exata** em todo mês |
+| Pagando, Em teste, Inadimpl., Cancel. | o fechamento gravado | só onde há registro |
+| Receita, Guardado, Fixo, Resultado | o fechamento gravado — as mesmas funções do bloco Dinheiro | só onde há registro |
+| Caixa → | link para `/painel/admin/caixa?mes=AAAA-MM` | o recebido de verdade, do Asaas |
+
+**O que "sem registro" quer dizer.** O banco guarda o status de HOJE, não o de
+julho: não dá para saber quantas contas pagavam em julho. Reconstruir daria um
+número que passaria por medido. Então os meses anteriores à primeira gravação
+mostram "sem registro" (travessão), nunca zero e nunca estimativa — a nota da
+tabela diz desde quando há. É a mesma regra deste documento: onde não se
+mediu, está escrito que não se mediu.
+
+**Como a memória é feita** (`fechamentos_mensais`, migração 068):
+
+- O temporizador diário que já roda às 04:50 (`limpar-lixeira.mjs --aplicar`)
+  regrava a linha do mês **corrente**. No último dia do mês ela fica com o
+  retrato da madrugada dele; no dia 1º a escrita passa para a linha seguinte e a
+  anterior nunca mais é tocada (`gravarFechamentoDoMes` só escreve no mês de
+  hoje). Mora no script que já roda porque o deploy não instala unidade nova do
+  systemd — um `.timer` novo ficaria no repositório sem nunca rodar.
+- O mês em andamento mostra os números **de agora**; cada mês fechado, o último
+  retrato gravado nele, com a data da gravação embaixo — para ninguém tomar por
+  número de fim de mês o retrato de uma semana antes.
+- A primeira linha só nasce na próxima madrugada depois da publicação. Para não
+  esperar, no servidor:
+  `node --env-file=/opt/fotonio/.env.production --experimental-strip-types --import /opt/fotonio/scripts/registrar-ts.mjs /opt/fotonio/scripts/limpar-lixeira.mjs --aplicar`
+  (roda também a limpeza do dia, que é o que o temporizador faz de qualquer jeito).
+
+**O que NÃO está aqui.** O recebido do Asaas por mês (é o Caixa, e é a fonte);
+o custo da saída de dados (§2, não medido); e a mudança de preço de um plano
+dentro do mês (a receita é a recorrente de cada retrato). O custo fixo vem da
+lista do Caixa **no dia da gravação** — mudar a lista muda os meses seguintes,
+nunca os fechados, e é isso que deixa ver o custo mudar ao longo do tempo.
+
+Arquivos: `src/lib/fechamento-mensal-regras.ts` (regras puras),
+`src/lib/fechamento-mensal.ts` (banco), `src/components/admin-mes-a-mes.tsx`
+(a tabela), `scripts/testar-fechamento-mensal.mjs`.
+
 ---
 
 ## O que eu faria primeiro

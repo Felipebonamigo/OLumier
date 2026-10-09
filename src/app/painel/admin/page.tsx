@@ -10,6 +10,9 @@ import {
   eventosRecentes,
 } from "@/lib/admin";
 import { resumoDeTrafego } from "@/lib/metricas-entrega";
+import { mesAMes } from "@/lib/fechamento-mensal";
+import { mesDeBrasilia, numerosDoMes } from "@/lib/fechamento-mensal-regras";
+import { TabelaMesAMes } from "@/components/admin-mes-a-mes";
 import { listarCustos } from "@/lib/custos-da-sociedade";
 import { custoFixoDaGaleriaCentavos } from "@/lib/custos-da-sociedade-regras";
 import { zipRemotoConfigurado } from "@/lib/zip-remoto";
@@ -76,6 +79,7 @@ const SECOES = [
   { id: "trafego", nome: "Tráfego" },
   { id: "velocidade", nome: "Velocidade" },
   { id: "meses", nome: "Doze meses" },
+  { id: "mes-a-mes", nome: "Mês a mês" },
   { id: "atencao", nome: "Precisa de atenção" },
   { id: "estudios", nome: "Estúdios" },
   { id: "eventos", nome: "Eventos" },
@@ -138,6 +142,11 @@ export default async function AdminPage({
     agora,
     custos && custos.length > 0 ? custoFixoDaGaleriaCentavos(custos) : undefined,
   );
+  /* "Mês a mês": os números DE AGORA entram no mês corrente, calculados da mesma
+     lista e do mesmo resumo do bloco Dinheiro — são o mesmo número. Sem a tabela
+     de fechamento (migração 068) ainda, a tabela mostra só o que é exato. */
+  const vivo = numerosDoMes(estudios, r, mesDeBrasilia(agora), custoDasCortesiasCentavos(estudios));
+  const linhasMesAMes = await mesAMes(vivo, 12, agora).catch(() => null);
   const trafego = resumoDeTrafego(somasDeZip, {
     bytesGuardados: r.bytesGuardados,
     custoDoGuardadoCentavos: r.custoMensalCentavos,
@@ -561,9 +570,24 @@ export default async function AdminPage({
         </div>
       </Bloco>
 
-      {/* ── 6. QUEM PRECISA DE ATENÇÃO ────────────────────────────────── */}
+      {/* ── 5b. MÊS A MÊS ─────────────────────────────────────────────── */}
       <Bloco
         id={SECOES[7].id}
+        titulo="Mês a mês"
+        explicacao="As contas e o dinheiro de cada mês, lado a lado — para acompanhar o custo e o resultado sem depender do retrato de hoje."
+      >
+        {linhasMesAMes ? (
+          <TabelaMesAMes linhas={linhasMesAMes} />
+        ) : (
+          <p className="rounded-xl border border-linha bg-carbon px-4 py-3 text-xs text-texto-faint">
+            Não consegui ler o fechamento mensal agora. O resto da página não depende dele.
+          </p>
+        )}
+      </Bloco>
+
+      {/* ── 6. QUEM PRECISA DE ATENÇÃO ────────────────────────────────── */}
+      <Bloco
+        id={SECOES[8].id}
         titulo="Precisa de atenção"
         explicacao="Cada linha é uma conversa que vale a pena ter esta semana."
       >
@@ -618,7 +642,7 @@ export default async function AdminPage({
 
       {/* ── 7. TODOS OS ESTÚDIOS ──────────────────────────────────────── */}
       <Bloco
-        id={SECOES[8].id}
+        id={SECOES[9].id}
         titulo={`Estúdios (${estudios.length})`}
         explicacao="Clique num nome para a ficha completa."
       >
@@ -913,7 +937,7 @@ export default async function AdminPage({
 
       {/* ── 8. AUDITORIA ──────────────────────────────────────────────── */}
       <Bloco
-        id={SECOES[9].id}
+        id={SECOES[10].id}
         titulo="Últimos eventos"
         explicacao="Os oito mais recentes. O log inteiro, com filtro por ação, estúdio e período, fica no histórico."
       >

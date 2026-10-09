@@ -29,6 +29,7 @@ import pg from "pg";
 import { galeriasVencidasNaLixeira, destruirGaleria, PRAZO_LIXEIRA_DIAS } from "../src/lib/tenants.ts";
 import { rodarLimpezaDeTestes, TETO_POR_RODADA } from "../src/lib/testes-abandonados.ts";
 import { rodarRetencaoDeContasEncerradas } from "../src/lib/contas-encerradas.ts";
+import { fechamentoDoMes, gravarFechamentoDoMes } from "../src/lib/fechamento-mensal.ts";
 
 const APLICAR = process.argv.includes("--aplicar");
 /* Só à mão, depois de conferir a lista do alerta — ver "o teto" em
@@ -125,6 +126,30 @@ try {
     }
   } catch (e) {
     console.error("  ✗ a limpeza das contas encerradas falhou:", e);
+    process.exitCode = 1;
+  }
+
+  /* ── o fechamento mensal ────────────────────────────────────────────────
+     Regrava a linha do mês CORRENTE da tabela `fechamentos_mensais` (migração
+     068) — a memória da tela "Mês a mês" da Administração. Roda todo dia, e é
+     por isso que a linha de um mês fechado é o retrato da madrugada do último
+     dia dele. Mora AQUI pelo mesmo motivo do teste abandonado: o deploy não
+     instala unidade nova do systemd, e esta já roda todo dia. Bloco próprio:
+     uma falha aqui não desfaz a limpeza de cima. */
+  console.log("\nfechamento mensal");
+  try {
+    if (APLICAR) {
+      const { mes, numeros: n } = await gravarFechamentoDoMes();
+      console.log(
+        `  ✓ ${mes} gravado: ${n.estudios} contas · ${n.pagando} pagando · ${n.emTeste} em teste · ` +
+          `resultado ${(n.resultadoCentavos / 100).toFixed(2).replace(".", ",")}`,
+      );
+    } else {
+      const { mes, numeros: n } = await fechamentoDoMes();
+      console.log(`  (simulação) ${mes}: ${n.estudios} contas · ${n.pagando} pagando — nada foi gravado`);
+    }
+  } catch (e) {
+    console.error("  ✗ o fechamento mensal falhou:", e);
     process.exitCode = 1;
   }
 } finally {
