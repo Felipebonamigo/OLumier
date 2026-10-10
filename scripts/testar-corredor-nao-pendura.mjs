@@ -128,6 +128,29 @@ etapa("quando a espera estoura, ela diz o que viu", () => {
   return "a espera relata";
 });
 
+etapa("quando uma etapa cai, o relato traz a causa do erro", () => {
+  /*
+   * 10/10/2026, quarta reprovação do zip na CI — e a primeira com nome:
+   *
+   *   ✗ pedaço do meio (acelerador de download) é 'trecho', não entrega
+   *     — fetch failed
+   *
+   * "fetch failed" é tudo que o `fetch` do Node diz por si; o motivo mora em
+   * `error.cause` (ECONNREFUSED, ECONNRESET, socket hang up, nome que não
+   * resolve). São diagnósticos opostos: servidor que morreu, servidor que
+   * cortou a conexão no meio, ou porta errada. Imprimir só a mensagem joga
+   * fora justamente a parte que decide, e deixa a próxima rodada no chute —
+   * exatamente o que a espera relatando acabou de resolver.
+   */
+  const zip = readFileSync(path.join(AQUI, "testar-servidor-zip.mjs"), "utf8");
+  const relato = zip.slice(zip.indexOf("async function etapa("), zip.indexOf("const igual ="));
+  if (!relato) throw new Error("não achei o relato da etapa");
+  if (!relato.includes("cause")) {
+    throw new Error("a etapa relata sem a causa — 'fetch failed' sozinho não diz se morreu, cortou ou nem conectou");
+  }
+  return "a causa aparece";
+});
+
 if (vermelhas) {
   console.log(`\n✗ ${vermelhas} vermelha(s)\n`);
   process.exit(1);

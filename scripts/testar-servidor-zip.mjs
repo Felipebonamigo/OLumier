@@ -38,8 +38,39 @@ async function etapa(nome, fn) {
     console.log(`  ✓ ${nome}${detalhe ? ` — ${detalhe}` : ""}`);
   } catch (e) {
     falhou = true;
-    console.log(`  ✗ ${nome} — ${e.message}`);
+    console.log(`  ✗ ${nome} — ${porque(e)}`);
   }
+}
+
+/*
+ * ── O RELATO VAI ATÉ A CAUSA (10/10/2026) ─────────────────────────────────
+ *
+ * Quarta reprovação do zip na CI, a primeira com nome:
+ *
+ *   ✗ pedaço do meio (acelerador de download) é 'trecho', não entrega
+ *     — fetch failed
+ *
+ * "fetch failed" é tudo que o `fetch` do Node diz por si: o motivo mora em
+ * `error.cause`. E os motivos possíveis pedem consertos opostos —
+ * ECONNREFUSED é servidor que morreu antes, ECONNRESET é servidor que cortou
+ * a conexão no meio da resposta, "socket hang up" é resposta que nunca
+ * fechou. Sem a causa, escolher entre eles é chute, e chute já custou três
+ * rodadas desta suíte.
+ *
+ * A cadeia inteira, e não só o primeiro nível: o undici embrulha o erro do
+ * sistema operacional, então o código que importa (`ECONNRESET`) costuma
+ * estar dois níveis abaixo da frase que aparece.
+ */
+function porque(e, fundo = 4) {
+  const partes = [];
+  for (let atual = e; atual && partes.length < fundo; atual = atual.cause) {
+    const codigo = atual.code ? ` (${atual.code})` : EM_BRANCO;
+    const frase = `${atual.message ?? atual}${codigo}`;
+    /* O undici repete a mesma frase em mais de um nível; repetir no log só
+       empurra a parte útil para fora da tela. */
+    if (!partes.includes(frase)) partes.push(frase);
+  }
+  return partes.join(" ← ");
 }
 const igual = (a, b, oque) => {
   if (a !== b) throw new Error(`${oque}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
@@ -223,7 +254,8 @@ try {
     throw new Error(`o servidor não subiu:\n${saidaDoFilho}`);
   });
 } catch (e) {
-  console.log(`  ✗ ${e.message}`);
+  /* Mesma cegueira da etapa: a montagem também cai com "fetch failed". */
+  console.log(`  ✗ ${porque(e)}`);
   encerrar();
   process.exit(1);
 }
