@@ -74,6 +74,34 @@ await etapa("arquivo pequeno continua em envio único", async () => {
   return "PUT único, como antes";
 });
 
+/*
+ * 10/10/2026: o navegador passa a pedir partes acima de 100 MB, para o vídeo
+ * não recomeçar do zero numa queda. Só quem PEDE — o plugin do Lightroom e a
+ * chave de API continuam com o PUT único até os 5 GB, senão quebrariam.
+ */
+await etapa("o navegador que pede partes recebe partes acima de 100 MB", async () => {
+  const MB = 1024 ** 2;
+  const preparar = async (bytes, partes) => {
+    const r = await fetch(`${BASE}/api/galerias/${galeriaId}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", cookie },
+      body: JSON.stringify({ nome: `video-${bytes}.mp4`, mime: "video/mp4", bytes, ...(partes ? { partes: true } : {}) }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro ?? `HTTP ${r.status}`);
+    await fetch(`${BASE}/api/medias/${d.mediaId}/partes`, { method: "DELETE", headers: { cookie } });
+    return d;
+  };
+  const pedindo = await preparar(300 * MB, true);
+  if (!pedindo.emPartes) throw new Error("300 MB pedindo partes veio em PUT único");
+  if (pedindo.tamanhoParte !== 32 * MB) throw new Error(`parte de ${pedindo.tamanhoParte / MB} MB`);
+  const semPedir = await preparar(300 * MB, false);
+  if (semPedir.emPartes || !semPedir.url) throw new Error("quem não pediu partes recebeu partes");
+  const pequeno = await preparar(80 * MB, true);
+  if (pequeno.emPartes) throw new Error("80 MB foi para partes");
+  return "300 MB → partes de 32 MB; sem pedir ou com 80 MB → PUT único";
+});
+
 await etapa("acima de 100 GB é recusado", async () => {
   const r = await fetch(`${BASE}/api/galerias/${galeriaId}/upload`, {
     method: "POST",

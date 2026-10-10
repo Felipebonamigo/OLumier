@@ -50,7 +50,15 @@ function enviarParte(
        */
       const etag = xhr.getResponseHeader("ETag");
       if (!etag) {
-        return reject(new Error("o armazenamento não devolveu o ETag da parte"));
+        /* Definitivo para a PARTE (insistir não faz o cabeçalho aparecer) e
+           marcado `semEtag` para quem enviou o arquivo poder voltar ao PUT
+           único — ver `enviarEmPartes`. */
+        return reject(
+          Object.assign(new Error("o armazenamento não devolveu o ETag da parte"), {
+            definitivo: true,
+            semEtag: true,
+          }),
+        );
       }
       resolve(etag);
     });
@@ -60,11 +68,39 @@ function enviarParte(
   });
 }
 
+/**
+ * Por que um envio em partes caiu, para quem chamou decidir o que fazer.
+ *
+ * - `semEtag`: o CORS do bucket não expõe o ETag, e nenhuma parte vai fechar.
+ *   Abaixo de 5 GB o arquivo cabe no PUT único, e a fila volta ao caminho de
+ *   antes em vez de falhar — ver `envio-em-curso.tsx`.
+ * - `reabrir`: o envio deste `mediaId` não existe mais (o fechamento falhou e
+ *   o servidor apagou a mídia). Insistir com o mesmo id é 404 para sempre; a
+ *   próxima tentativa precisa preparar de novo.
+ *
+ * Nenhum dos dois é `definitivo`: a retentativa do arquivo tem de continuar.
+ */
+export type FalhaDasPartes = Error & { semEtag?: boolean; reabrir?: boolean };
+
+function falha(mensagem: string, marca: { semEtag?: boolean; reabrir?: boolean }): FalhaDasPartes {
+  return Object.assign(new Error(mensagem), marca);
+}
+
 export async function enviarEmPartes(
   mediaId: string,
   arquivo: File,
   tamanhoParte: number,
   aoProgredir: (pct: number) => void,
+  /*
+   * As partes que JÁ SUBIRAM numa tentativa anterior deste mesmo envio.
+   *
+   * Até aqui, uma parte que esgotasse as retentativas derrubava o envio, e a
+   * tentativa seguinte do arquivo recomeçava da parte 1. Quem chama guarda
+   * este mapa entre as tentativas (e o esvazia quando o envio é reaberto), e
+   * as partes prontas não sobem de novo: o upload continua aberto no armazém
+   * até ser fechado ou abortado.
+   */
+  prontas: Map<number, string> = new Map(),
 ): Promise<void> {
   const total = Math.ceil(arquivo.size / tamanhoParte);
   const numeros = Array.from({ length: total }, (_, i) => i + 1);
@@ -97,6 +133,12 @@ export async function enviarEmPartes(
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
+      /* 404: o envio não está mais aberto. Definitivo para a parte — a
+         retentativa dela não traria o envio de volta. */
+      if (r.status === 404) {
+        const perdido = falha(e.erro ?? "o envio em partes não está mais aberto", { reabrir: true });
+        throw Object.assign(perdido, { definitivo: true });
+      }
       throw new Error(e.erro ?? "não consegui preparar as partes");
     }
     const { urls } = (await r.json()) as { urls: { numero: number; url: string }[] };
@@ -104,40 +146,57 @@ export async function enviarEmPartes(
     lotesPedidos.add(lote);
   };
 
-  const enviadas: ParteEnviada[] = [];
-  let bytesEnviados = 0;
+  const tamanhoDa = (numero: number) =>
+    Math.min(numero * tamanhoParte, arquivo.size) - (numero - 1) * tamanhoParte;
+  const faltam = numeros.filter((n) => !prontas.has(n));
+  let bytesEnviados = numeros.filter((n) => prontas.has(n)).reduce((soma, n) => soma + tamanhoDa(n), 0);
+  if (bytesEnviados > 0) aoProgredir(Math.min(99, Math.round((bytesEnviados / arquivo.size) * 100)));
 
-  await emParalelo(numeros, PARTES_PARALELAS, async (numero) => {
-    const inicio = (numero - 1) * tamanhoParte;
-    const pedaco = arquivo.slice(inicio, Math.min(inicio + tamanhoParte, arquivo.size));
-    await pedirLote(numero);
+  try {
+    await emParalelo(faltam, PARTES_PARALELAS, async (numero) => {
+      const inicio = (numero - 1) * tamanhoParte;
+      const pedaco = arquivo.slice(inicio, Math.min(inicio + tamanhoParte, arquivo.size));
+      await pedirLote(numero);
 
-    const avancar = (delta: number) => {
-      bytesEnviados += delta;
-      aoProgredir(Math.min(99, Math.round((bytesEnviados / arquivo.size) * 100)));
-    };
+      const avancar = (delta: number) => {
+        bytesEnviados += delta;
+        aoProgredir(Math.min(99, Math.round((bytesEnviados / arquivo.size) * 100)));
+      };
 
-    // Retentativa por PARTE: uma queda de rede reenvia 100 MB, não o filme todo.
-    const etag = await comRetentativa(async () => {
-      const url = urlPorNumero.get(numero);
-      if (!url) throw new Error(`faltou a URL da parte ${numero}`);
-      try {
-        return await enviarParte(url, pedaco, avancar);
-      } catch (e) {
-        /*
-         * 403 aqui quer dizer assinatura vencida, e insistir com a MESMA URL
-         * falharia para sempre. Renovar o lote e deixar a retentativa seguir é
-         * o que salva um envio longo que já está quase no fim.
-         */
-        if (e instanceof Error && e.message.includes("403")) {
-          await pedirLote(numero, true);
+      // Retentativa por PARTE: uma queda de rede reenvia uma parte, não o filme todo.
+      const etag = await comRetentativa(async () => {
+        const url = urlPorNumero.get(numero);
+        if (!url) throw new Error(`faltou a URL da parte ${numero}`);
+        try {
+          return await enviarParte(url, pedaco, avancar);
+        } catch (e) {
+          /*
+           * 403 aqui quer dizer assinatura vencida, e insistir com a MESMA URL
+           * falharia para sempre. Renovar o lote e deixar a retentativa seguir é
+           * o que salva um envio longo que já está quase no fim.
+           */
+          if (e instanceof Error && e.message.includes("403")) {
+            await pedirLote(numero, true);
+          }
+          throw e;
         }
-        throw e;
-      }
+      });
+      prontas.set(numero, etag);
     });
-    enviadas.push({ numero, etag });
-  });
+  } catch (e) {
+    /* As duas marcas valem para o ARQUIVO, e lá não podem chegar como
+       `definitivo` — senão a fila desistiria do arquivo na hora, e o que se
+       quer é voltar ao PUT único ou preparar de novo. */
+    const marca = e as FalhaDasPartes;
+    if (marca?.semEtag || marca?.reabrir) {
+      throw falha(marca.message, { semEtag: marca.semEtag, reabrir: marca.reabrir });
+    }
+    throw e;
+  }
 
+  const enviadas: ParteEnviada[] = numeros
+    .filter((n) => prontas.has(n))
+    .map((numero) => ({ numero, etag: prontas.get(numero)! }));
   if (enviadas.length !== total) {
     throw new Error(`faltaram partes (${enviadas.length} de ${total})`);
   }
@@ -149,7 +208,15 @@ export async function enviarEmPartes(
   });
   if (!fim.ok) {
     const e = await fim.json().catch(() => ({}));
-    throw new Error(e.erro ?? "não consegui finalizar o envio");
+    const mensagem = e.erro ?? "não consegui finalizar o envio";
+    /* 507: o filme montado não coube no plano — o servidor já apagou, e
+       insistir dá a mesma resposta. 5xx: a remontagem falhou e a rota apagou a
+       mídia; a próxima tentativa prepara de novo. O resto (404 incluído) segue
+       como erro comum: um 404 aqui pode ser o fechamento que DEU CERTO e cuja
+       resposta se perdeu, e preparar de novo subiria o filme em dobro. */
+    if (fim.status === 507) throw Object.assign(new Error(mensagem), { definitivo: true });
+    if (fim.status >= 500) throw falha(mensagem, { reabrir: true });
+    throw new Error(mensagem);
   }
   aoProgredir(100);
 }

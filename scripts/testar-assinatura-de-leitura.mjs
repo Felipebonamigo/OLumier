@@ -79,6 +79,12 @@ if (process.env.ASSINATURA_CENARIO) {
       continue;
     }
     console.log(`\n${nome}`);
+    if (res.estavel) {
+      console.log("  ✓ dois pedidos seguidos dão o mesmo endereço, assinado no começo da janela");
+    } else {
+      falhou = true;
+      console.error("  ✗ o endereço mudou entre dois pedidos — o navegador baixaria a miniatura de novo");
+    }
     if (res.divergencias.length === 0) {
       console.log(`  ✓ ${res.total} URLs idênticas às do getSignedUrl`);
     } else {
@@ -116,7 +122,8 @@ if (process.env.ASSINATURA_CENARIO) {
 async function compararNesteProcesso() {
   const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
   const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-  const { urlDeLeituraAssinadaEm, OPCOES_DO_CLIENTE, BUCKET } = await import("../src/lib/r2.ts");
+  const { urlDeLeitura, urlDeLeituraAssinadaEm, OPCOES_DO_CLIENTE, BUCKET } = await import("../src/lib/r2.ts");
+  const { inicioDaJanela } = await import("../src/lib/janela-de-assinatura.ts");
   const { dispositionSegura } = await import("../src/lib/disposition.ts");
 
   /* O cliente de referência é montado como `r2.ts` monta o dele — é a URL que
@@ -198,5 +205,18 @@ async function compararNesteProcesso() {
   const msSdk = await medir(pelaReferencia);
   const msNossa = await medir(urlDeLeituraAssinadaEm);
 
-  console.log(JSON.stringify({ total, divergencias, lote: LOTE, msSdk, msNossa }));
+  /*
+   * O ENDEREÇO NÃO MUDA DENTRO DA JANELA (10/10/2026). É ele que deixa o
+   * navegador reaproveitar a miniatura — ver `lib/janela-de-assinatura.ts`. E
+   * é a assinatura da referência no começo da janela, não "uma parecida".
+   */
+  const chaveEstavel = chaves[0];
+  const [primeira, segunda] = [
+    await urlDeLeitura(chaveEstavel, 6 * 3600),
+    await urlDeLeitura(chaveEstavel, 6 * 3600),
+  ];
+  const daJanela = await pelaReferencia(inicioDaJanela(6 * 3600), chaveEstavel, 6 * 3600);
+  const estavel = primeira === segunda && primeira === daJanela;
+
+  console.log(JSON.stringify({ total, divergencias, lote: LOTE, msSdk, msNossa, estavel }));
 }

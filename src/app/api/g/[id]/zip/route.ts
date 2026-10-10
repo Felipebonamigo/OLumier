@@ -4,7 +4,8 @@ import { dispositionSegura } from "@/lib/r2";
 import { pessoaAtual } from "@/lib/favoritas";
 import { hashDeIp } from "@/lib/ip";
 import { prepararEntrega } from "@/lib/entrega-da-galeria";
-import { entradasDoZip } from "@/lib/entradas-do-zip";
+import { entradasDaParte } from "@/lib/entradas-do-zip";
+import { lerParte } from "@/lib/partes-do-zip";
 import { tamanhoDoZip, zipEmFluxo, type ArquivoDoZip } from "@/lib/zip-em-fluxo";
 import { assinarPedido, segredoDoZip, urlDoServidorDeZip, zipRemotoConfigurado } from "@/lib/zip-remoto";
 import { criarPedidoDeZip, registrarEntregaDeZip } from "@/lib/pedidos-zip";
@@ -22,6 +23,12 @@ import { criarPedidoDeZip, registrarEntregaDeZip } from "@/lib/pedidos-zip";
  *   /api/g/<id>/zip?cap=<capítulo>  só aquele capítulo
  *   /api/g/<id>/zip?favoritas=1     as favoritas de quem está identificado
  *   /api/g/<id>/zip?fotos=<ids>     as que a busca por rosto achou
+ *   /api/g/<id>/zip?parte=<n>       a parte n da galeria grande (10/10/2026)
+ *
+ * A PARTE: a galeria acima de 4 GB também sai em ZIPs de até 4 GB, que o
+ * navegador baixa ao mesmo tempo — ver `lib/partes-do-zip.ts`. A lista das
+ * partes vem de `/api/g/<id>/zip/partes`; sem `?parte=`, o ZIP inteiro de
+ * sempre continua saindo.
  *
  * ── DOIS CAMINHOS, E QUAL VALE (23/09/2026) ───────────────────────────────
  *
@@ -77,6 +84,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
    * de volta pelo servidor, sem cookie e sem sessão.
    */
   const pessoaId = await pessoaAtual(id);
+  const parte = lerParte(request.nextUrl.searchParams.get("parte"));
 
   /* ── O caminho de produção: o servidor de ZIP ──────────────────────────── */
   if (zipRemotoConfigurado()) {
@@ -87,7 +95,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       { ipHash: ip ? hashDeIp(ip) : null, userAgent, pessoaId },
       /* `sem-capitulo` é o grupo das soltas: capítulo sem id. */
       entrega.tipo === "capitulo" && cap && cap !== "sem-capitulo" ? cap : null,
+      parte,
     );
+    if (!pedido) return parteQueSumiu();
     const destino = `${urlDoServidorDeZip()}/z/${assinarPedido(pedido.id, segredoDoZip())}`;
     return NextResponse.redirect(destino, {
       status: 302,
@@ -96,7 +106,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   /* ── A reserva: o ZIP montado aqui, em fluxo ───────────────────────────── */
-  const { nomeDoZip, arquivos: entradas } = entradasDoZip(entrega);
+  const daParte = entradasDaParte(entrega, parte);
+  if (!daParte) return parteQueSumiu();
+  const { nomeDoZip, arquivos: entradas } = daParte;
   const arquivos: ArquivoDoZip[] = entradas.map((e) => ({
     nome: e.nome,
     tamanho: e.tamanho,
@@ -131,6 +143,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     ip_hash: ip ? hashDeIp(ip) : null,
     user_agent: userAgent,
     pessoa_id: pessoaId,
+    parte: daParte.parte?.numero ?? null,
   };
 
   async function* comRegistro() {
@@ -197,4 +210,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       "Cache-Control": "private, no-store",
     },
   });
+}
+
+/*
+ * A parte pedida não existe mais: a galeria mudou (fotos entraram ou saíram)
+ * entre o menu, que mostrou "parte 4 de 4", e o clique. 404 com o motivo, e
+ * não o ZIP inteiro no lugar: quem pediu 4 GB não pode receber 20 sem aviso.
+ */
+function parteQueSumiu() {
+  return NextResponse.json(
+    { erro: "a galeria mudou desde que o menu abriu — abra o menu de novo para ver as partes" },
+    { status: 404, headers: { "Cache-Control": "private, no-store" } },
+  );
 }

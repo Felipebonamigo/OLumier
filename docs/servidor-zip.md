@@ -66,6 +66,7 @@ compartilhado) para não ser adivinhável. Pedido vale 12 horas.
 |---|---|---|
 | galeria inteira | sim | a mesma pergunta dá a mesma resposta para todo mundo |
 | um capítulo | sim | idem |
+| uma parte da galeria grande | sim | a mesma divisão para todo mundo (ver abaixo) |
 | favoritas | não, em fluxo | cada pessoa marca fotos diferentes |
 | recorte da busca por rosto | não, em fluxo | idem; até 300 fotos |
 
@@ -98,6 +99,19 @@ dentro dele é a do conteúdo, não a da montagem), então o "Retomar" do
 navegador continua funcionando depois de um rodízio. Se por algum motivo a
 identidade não bater (`If-Range`), vai o arquivo inteiro em vez de um pedaço
 errado.
+
+### A galeria grande em partes (10/10/2026)
+
+Acima de 4 GB, o menu do computador oferece também a galeria em ZIPs de até
+4 GB (`src/lib/partes-do-zip.ts`), que o navegador baixa ao mesmo tempo:
+daqui até o Brasil várias conexões rendem mais que uma, e uma queda perde uma
+parte em vez do casamento. O ZIP inteiro continua no primeiro item do menu.
+
+O servidor não sabe que existem partes: cada uma é um pedido com a sua lista
+(`?parte=N` em `/api/g/<id>/zip`), guardável, numa chave de cache só dela. Os
+nomes dentro de cada parte saem do ZIP inteiro antes de dividir, então
+extrair todas na mesma pasta não sobrescreve nada. O disco guarda as partes
+**e** o inteiro quando os dois são pedidos — a mesma galeria ocupa o dobro.
 
 ### Montagem única
 

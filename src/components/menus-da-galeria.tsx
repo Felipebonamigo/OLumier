@@ -43,7 +43,9 @@ const GATILHO =
 
 const PAINEL =
   "absolute left-1/2 top-full z-40 mt-2 w-max min-w-[15rem] max-w-[min(20rem,90vw)] " +
-  "-translate-x-1/2 rounded-2xl p-1.5 shadow-2xl";
+  /* Rola por dentro: com as partes de uma galeria grande o menu de baixar
+     pode passar da altura da tela. */
+  "max-h-[75vh] overflow-y-auto -translate-x-1/2 rounded-2xl p-1.5 shadow-2xl";
 
 const ITEM = "block w-full rounded-xl px-3 py-2 text-left text-sm transition hover:opacity-70";
 
@@ -82,6 +84,11 @@ export type MenuBaixar = {
   baixarZip?: () => void;
   /** Manda o link para a pessoa baixar no computador. Só no celular. */
   enviarParaOComputador?: () => void;
+  /**
+   * A galeria grande em ZIPs de até 4 GB, que baixam ao mesmo tempo — ver
+   * `lib/partes-do-zip.ts`. Só no computador e só acima de uma parte.
+   */
+  partes?: { lista: { numero: number; bytes: number; baixar: () => void }[]; baixarTodas: () => void };
   /** As fotos da tela `?fotos=` (busca por rosto), ou null fora dela. */
   recorte?: { quantas: number; baixar: () => void } | null;
 };
@@ -375,6 +382,35 @@ export function MenusDaGaleria({
                 ? `Todos os arquivos num zip (${baixar.quantasNaGaleria})`
                 : `${baixar.modo === "menu" ? "Salvar" : "Baixar"} os ${baixar.quantasNaGaleria} arquivos no celular`}
             </ItemDoMenu>
+
+            {/*
+              A GALERIA GRANDE EM PARTES (10/10/2026). Logo abaixo do zip
+              inteiro, porque é a mesma entrega dividida: zips de até 4 GB que
+              abrem sozinhos e baixam ao mesmo tempo. O zip inteiro continua no
+              item de cima para quem prefere um arquivo só.
+            */}
+            {baixar.partes && (
+              <>
+                <p
+                  className="px-3 pt-2 pb-1 font-mono text-[10px] uppercase tracking-[0.14em]"
+                  style={{ color: "var(--g-tenue)" }}
+                >
+                  ou em {baixar.partes.lista.length} partes, mais rápido
+                </p>
+                <ItemDoMenu aoTocar={baixar.partes.baixarTodas}>
+                  {`Baixar as ${baixar.partes.lista.length} partes de uma vez`}
+                </ItemDoMenu>
+                {baixar.partes.lista.map((p) => (
+                  <ItemDoMenu key={p.numero} aoTocar={p.baixar}>
+                    {`Parte ${p.numero} de ${baixar.partes!.lista.length} · ${tamanhoLegivel(p.bytes)}`}
+                  </ItemDoMenu>
+                ))}
+                <Rodape>
+                  baixam ao mesmo tempo, e se a internet cair você repete só uma parte · extraia todas na mesma
+                  pasta
+                </Rodape>
+              </>
+            )}
             {/* O tamanho ANTES de começar: 2108 fotos são gigas, e quem está no
                 4G do salão precisa saber disso antes do primeiro toque. */}
             {baixar.modo !== "computador" && baixar.bytesDaGaleria > 0 && (

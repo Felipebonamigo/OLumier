@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 import { gerarDerivadas } from "@/lib/derivadas-client";
 import { dataDaFoto } from "@/lib/exif-client";
 import type { RostoMedido } from "@/lib/rostos-client";
-import { enviarEmPartes } from "@/lib/multipart-client";
+import { enviarEmPartes, type FalhaDasPartes } from "@/lib/multipart-client";
 import {
   PARALELOS,
   MINIATURAS_JUNTAS,
@@ -520,6 +520,22 @@ export function ProvedorDeEnvio({
        */
       let alternativo = false;
       let falhasNoArmazem = 0;
+      /*
+       * O ENVIO EM PARTES (10/10/2026). Arquivo acima de 100 MB — vídeo, na
+       * prática — vai em partes de 32 MB, e não mais num PUT só até os 5 GB
+       * (`tamanhoDaParte`). `partesProntas` sobrevive às tentativas: uma queda
+       * longa derruba o envio, e a tentativa seguinte continua das partes que
+       * já tinham subido. `semPartes` é a rede de segurança: se o armazém não
+       * devolver o ETag (CORS sem `ExposeHeaders`), nenhuma parte fecha, e o
+       * arquivo volta ao PUT único de antes em vez de falhar.
+       */
+      const partesProntas = new Map<number, string>();
+      let semPartes = false;
+      const soltarPartes = async (mediaId: string) => {
+        await fetch(`/api/medias/${mediaId}/partes`, { method: "DELETE" }).catch(() => {});
+        preparado = null;
+        partesProntas.clear();
+      };
 
       try {
         /* Fora da retentativa: um ZIP que não abre este arquivo não abre na
@@ -585,6 +601,7 @@ export function ProvedorDeEnvio({
                      galeria começa depois dela (migração 061). */
                   ate: proximoIndice.current.get(tarefa.galeriaId),
                   alternativo: alternativo || undefined,
+                  partes: !semPartes || undefined,
                 }),
               });
               const corpo = await preparo.json().catch(() => ({}));
@@ -632,9 +649,35 @@ export function ProvedorDeEnvio({
             // Arquivo grande (filme 4K) vai em partes; o resto num envio só.
             const inicioDoEnvio = performance.now();
             if (dados.emPartes) {
-              await enviarEmPartes(dados.mediaId, arquivo, dados.tamanhoParte, (pct) =>
-                atualizar(tarefa.item.id, { progresso: pct }),
-              );
+              try {
+                await enviarEmPartes(
+                  dados.mediaId,
+                  arquivo,
+                  dados.tamanhoParte,
+                  (pct) => atualizar(tarefa.item.id, { progresso: pct }),
+                  partesProntas,
+                );
+              } catch (e) {
+                const marca = e as FalhaDasPartes;
+                if (marca?.semEtag) {
+                  /* O ETag não vem: volta ao PUT único na próxima tentativa. */
+                  semPartes = true;
+                  await soltarPartes(dados.mediaId);
+                } else if (marca?.reabrir) {
+                  /* O servidor já apagou este envio; a próxima prepara outro. */
+                  preparado = null;
+                  partesProntas.clear();
+                } else {
+                  /* O mesmo caminho alternativo do PUT único, lá embaixo. */
+                  falhasNoArmazem++;
+                  if (!alternativo && falhasNoArmazem >= 2) {
+                    await soltarPartes(dados.mediaId);
+                    alternativo = true;
+                    atualizar(tarefa.item.id, { alternativo: true });
+                  }
+                }
+                throw e;
+              }
             } else {
               try {
                 await enviarComProgresso(

@@ -14,6 +14,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { dispositionSegura } from "./r2";
+import { inicioDaJanela } from "./janela-de-assinatura";
 
 /**
  * ARMAZÉM DOS ARQUIVOS PESADOS — o primário no Backblaze B2.
@@ -118,7 +119,9 @@ export function urlDeLeituraArquivo(chave: string, expiraSeg = 3600, baixarComoN
        * regredir justamente no download que o casal abre. */
       ...(baixarComoNome ? { ResponseContentDisposition: dispositionSegura(baixarComoNome) } : {}),
     }),
-    { expiresIn: expiraSeg },
+    /* Assinada no começo de uma janela, como a do R2: o mesmo endereço por um
+       tempo, para o navegador reaproveitar. Ver `lib/janela-de-assinatura.ts`. */
+    { expiresIn: expiraSeg, signingDate: inicioDaJanela(expiraSeg) },
   );
 }
 

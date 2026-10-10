@@ -1,4 +1,5 @@
 import { GRUPO_SEM_CAPITULO } from "./nome-de-arquivo";
+import { dividirEmPartes, nomeDaParte } from "./partes-do-zip";
 import type { Entrega, MediaDaEntrega } from "./entrega-da-galeria";
 
 /**
@@ -79,4 +80,28 @@ export function entradasDoZip(entrega: Entrega): { nomeDoZip: string; arquivos: 
   const nomeDoZip = `${semProibidos(entrega.titulo) || "galeria"}${sufixo ? ` - ${sufixo}` : ""}.zip`;
 
   return { nomeDoZip, arquivos };
+}
+
+/**
+ * As entradas de UMA parte da galeria inteira — ver `lib/partes-do-zip.ts`.
+ *
+ * Os nomes saem do ZIP inteiro e só depois a lista é dividida: a segunda
+ * "DSC_0001.jpg" tem o mesmo nome em qualquer parte. Sem parte pedida, ou com
+ * a galeria cabendo numa parte só, é o ZIP inteiro de sempre (`parte` nula).
+ * Parte além da última devolve `null`: a galeria mudou entre o menu e o clique.
+ */
+export function entradasDaParte(
+  entrega: Entrega,
+  parte: number | null,
+): { nomeDoZip: string; arquivos: EntradaDoZip[]; parte: { numero: number; de: number } | null } | null {
+  const inteiro = entradasDoZip(entrega);
+  if (parte === null || entrega.tipo !== "tudo") return { ...inteiro, parte: null };
+  const partes = dividirEmPartes(inteiro.arquivos);
+  if (partes.length <= 1) return parte === 1 ? { ...inteiro, parte: null } : null;
+  if (parte > partes.length) return null;
+  return {
+    nomeDoZip: nomeDaParte(inteiro.nomeDoZip, parte, partes.length),
+    arquivos: partes[parte - 1],
+    parte: { numero: parte, de: partes.length },
+  };
 }

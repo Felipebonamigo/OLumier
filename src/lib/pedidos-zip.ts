@@ -2,7 +2,7 @@ import "server-only";
 import { consultar, consultarUm } from "./db";
 import { armazemDe, urlDoOriginal } from "./armazem";
 import type { Entrega } from "./entrega-da-galeria";
-import { entradasDoZip } from "./entradas-do-zip";
+import { entradasDaParte } from "./entradas-do-zip";
 import {
   chaveDeCache,
   VALIDADE_DAS_URLS,
@@ -41,6 +41,8 @@ export interface PedidoDeZip {
   user_agent: string | null;
   /** Quem clicou em baixar. Ver migração 041. */
   pessoa_id: string | null;
+  /** Qual parte da galeria grande, ou nulo no ZIP inteiro. Migração 070. */
+  parte: number | null;
   expira_em: string;
 }
 
@@ -49,8 +51,14 @@ export async function criarPedidoDeZip(
   entrega: Entrega,
   quem: { ipHash: string | null; userAgent: string | null; pessoaId?: string | null },
   secaoId: string | null,
-): Promise<{ id: string; nomeDoZip: string }> {
-  const { nomeDoZip, arquivos } = entradasDoZip(entrega);
+  /* A parte da galeria grande (`?parte=`), ou nulo para o ZIP inteiro. Ver
+     `lib/partes-do-zip.ts`. */
+  parte: number | null = null,
+): Promise<{ id: string; nomeDoZip: string } | null> {
+  const daParte = entradasDaParte(entrega, parte);
+  /* A galeria mudou entre o menu e o clique e esta parte não existe mais. */
+  if (!daParte) return null;
+  const { nomeDoZip, arquivos } = daParte;
   const entradas: EntradaGravada[] = arquivos.map((a) => ({
     id: a.media.id,
     nome: a.nome,
@@ -58,8 +66,8 @@ export async function criarPedidoDeZip(
     versao: a.media.versao ?? 1,
   }));
   const linha = await consultarUm<{ id: string }>(
-    `insert into pedidos_zip (galeria_id, tipo, secao_id, entradas, nome_do_zip, ip_hash, user_agent, pessoa_id)
-     values ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)
+    `insert into pedidos_zip (galeria_id, tipo, secao_id, entradas, nome_do_zip, ip_hash, user_agent, pessoa_id, parte, partes)
+     values ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
      returning id`,
     [
       galeriaId,
@@ -70,6 +78,8 @@ export async function criarPedidoDeZip(
       quem.ipHash,
       quem.userAgent?.slice(0, 300) ?? null,
       quem.pessoaId ?? null,
+      daParte.parte?.numero ?? null,
+      daParte.parte?.de ?? null,
     ],
   );
   if (!linha) throw new Error("o pedido de zip não foi gravado");
@@ -79,7 +89,7 @@ export async function criarPedidoDeZip(
 export async function lerPedidoDeZip(id: string): Promise<PedidoDeZip | null> {
   return consultarUm<PedidoDeZip>(
     `select p.id, p.galeria_id, g.tenant_id, p.tipo, p.secao_id, p.entradas,
-            p.nome_do_zip, p.ip_hash, p.user_agent, p.pessoa_id, p.expira_em
+            p.nome_do_zip, p.ip_hash, p.user_agent, p.pessoa_id, p.parte, p.expira_em
        from pedidos_zip p join galerias g on g.id = p.galeria_id
       where p.id = $1`,
     [id],
@@ -185,6 +195,7 @@ async function marcarQuedasRetomadas(pedidoId: string): Promise<void> {
         and antes.galeria_id = agora.galeria_id
         and antes.tipo = agora.tipo
         and antes.secao_id is not distinct from agora.secao_id
+        and antes.parte is not distinct from agora.parte
         and (antes.id = agora.id or antes.ip_hash = agora.ip_hash or antes.pessoa_id = agora.pessoa_id)`,
     [pedidoId],
   );
@@ -206,6 +217,8 @@ export async function registrarEntregaDeZip(
   > & {
     /** Nulo no caminho de reserva: lá não há pedido, o ZIP nasce e morre na rota. */
     id: string | null;
+    /** A parte da galeria grande. Ver migração 070. */
+    parte?: number | null;
   },
   origem: "vps" | "servidor",
   relato: Omit<RelatoDeZip, "pedidoId">,
@@ -235,7 +248,9 @@ export async function registrarEntregaDeZip(
          values ($1, $2, $3, $4, $5)`,
         [
           pedido.galeria_id,
-          pedido.tipo === "tudo" ? "baixou_tudo" : "baixou",
+          /* A parte 1 de 4 não é o casamento inteiro: entra como o zip de um
+             capítulo entra. Ver migração 070. */
+          pedido.tipo === "tudo" && !pedido.parte ? "baixou_tudo" : "baixou",
           pedido.ip_hash,
           pedido.user_agent,
           pedido.pessoa_id,

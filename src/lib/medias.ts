@@ -67,6 +67,28 @@ export const LIMITE_POR_ARQUIVO = 100 * 1024 ** 3;
 export const TAMANHO_PARTE = 100 * 1024 ** 2;
 export const MAX_PARTES = 10_000;
 
+/*
+ * ── O NAVEGADOR PEDE PARTES BEM ANTES DOS 5 GB (10/10/2026) ───────────────
+ *
+ * Até aqui, vídeo de até 5 GB subia num PUT só: uma queda aos 90% de um filme
+ * de 3 GB recomeçava do zero, até seis vezes. Em partes, cada pedaço tem a
+ * própria retentativa, três sobem ao mesmo tempo, e uma queda reenvia 32 MB.
+ *
+ * SÓ PARA QUEM PEDE (`partes: true` no preparo). A fila do painel pede; o
+ * plugin do Lightroom e quem mais usa a chave de API (`docs/chave-de-api.md`)
+ * continuam recebendo o PUT único até os 5 GB, como sempre — mudar a
+ * resposta debaixo deles quebraria um cliente que não sabe mandar partes.
+ */
+export const PARTES_NO_NAVEGADOR_A_PARTIR_DE = 100 * 1024 ** 2;
+export const TAMANHO_PARTE_NO_NAVEGADOR = 32 * 1024 ** 2;
+
+/** O tamanho de cada parte do envio, ou `null` para o PUT único. */
+export function tamanhoDaParte(bytes: number, pediuPartes: boolean): number | null {
+  if (bytes > LIMITE_PUT_UNICO) return TAMANHO_PARTE;
+  if (pediuPartes && bytes > PARTES_NO_NAVEGADOR_A_PARTIR_DE) return TAMANHO_PARTE_NO_NAVEGADOR;
+  return null;
+}
+
 export async function listarMedias(galeriaId: string) {
   return consultar<Media>(
     "select * from medias where galeria_id = $1 and pronto order by ordem, criado_em",
