@@ -291,7 +291,9 @@ try {
         throw new Error("sem o canônico em /bio");
       }
       const mapa = await (await pegar("/sitemap.xml")).text();
-      if (mapa.includes("/bio")) throw new Error("está no sitemap");
+      /* Pelo caminho, e não por "/bio" solto: desde 10/10/2026 o sitemap lista
+         vitrines, e "https://biografia.…" contém "/bio". */
+      if (/<loc>https?:\/\/[^/<]+\/bio\b/.test(mapa)) throw new Error("está no sitemap");
     });
 
     await etapa("o robots.txt fecha os redirecionadores, e deixa a /bio aberta", async () => {

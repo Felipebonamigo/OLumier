@@ -52,6 +52,39 @@ prontidão para buscadores de IA). O que depende do branch
   `/wp-login.php`…) recebe 404 do proxy, sem passar pela rota de galeria. Antes,
   cada sondagem de robô custava uma renderização com consulta ao banco.
 
+### 2.1 O que o próprio sistema faz para trazer gente (10/10/2026)
+
+Felipe: "estou falando do sistema, tudo que o sistema pode fazer" — os posts
+são do Juan. Quatro peças, todas presas em `scripts/testar-seo.mjs`:
+
+- **O selo virou link medido.** O "entregue com Galeria Átomo" do fim de toda
+  galeria e de toda vitrine leva a `galeriaatomo.com.br/selo/<estudio>`, que
+  conta o clique e deixa o mesmo cookie de origem da ponte da bio (`/bio`). A
+  conta que nascer dele grava `origem = selo/galeria/galeria` (ou
+  `selo/vitrine/…`) e o estúdio em `origem_campanha` — é a base de qualquer
+  programa de indicação, que hoje não existe. O desenho do selo não mudou; o
+  número aparece em **Administração → Link da bio → O selo das galerias**.
+  Componente: `components/selo-da-plataforma.tsx`.
+- **"↗ Compartilhar" na galeria do cliente.** O casal manda a galeria para a
+  família pelo menu do celular (sem ele, o link é copiado). Quem recebe vê o
+  cartão do estúdio no WhatsApp e, no fim da galeria, o selo. Não aparece na
+  prévia do dono.
+- **As vitrines no sitemap da casa.** A propriedade de domínio do Search
+  Console cobre os subdomínios, então o `/sitemap.xml` da casa lista
+  `<estudio>.galeriaatomo.com.br` — só as vitrines com alguma galeria à mostra,
+  de conta não cancelada e sem domínio próprio. Regra em
+  `vitrinesParaOSitemap` (`lib/vitrine.ts`), com a mesma condição de galeria
+  que a vitrine usa.
+- **O e-mail de entrega sai como "Estúdio via Galeria Átomo".** A caixa de
+  entrada do cliente mostrava "Galeria Átomo" antes do nome do fotógrafo
+  (`remetenteDoEstudio`, `lib/email.ts`). O endereço continua o nosso.
+
+**Impacto de marca, para alinhar com a camada estratégica (§20 da estratégia):**
+o selo continua com o mesmo tamanho e o mesmo texto que a FAQ da home promete
+("um selo discreto no fim da galeria"); só passou a ser clicável. O botão
+"Compartilhar" é um quinto item na barra de menus que o Juan desenhou. O "via"
+no remetente põe a marca do fotógrafo na frente, como pede o §8.
+
 ## 3. O que depende de alguém — em ordem
 
 ### 3.1 URGENTE, e não é SEO: o `olumier.com.br` não resolve
@@ -123,14 +156,17 @@ texto descritivo ("galerias de entrega para fotógrafos") respeita isso.
 
 ### 3.6 Decisões de produto que movem SEO
 
-- **"entregue com Galeria Átomo" como link, na vitrine.** Hoje é texto. Como
-  link, cada vitrine de estúdio vira um link para a casa — o jeito clássico de
-  uma plataforma ganhar autoridade. Pesa contra o princípio "a marca da tela é a
-  do estúdio"; por isso não foi feito. Na galeria não faz diferença (ela é
-  `nofollow`).
+- **"entregue com Galeria Átomo" como link** — feito em 10/10/2026, ver 2.1.
+  Ficou como estava no desenho; se a camada estratégica preferir texto de novo,
+  é uma linha em `components/selo-da-plataforma.tsx`.
+- **Indicação com recompensa.** O sistema já sabe qual estúdio trouxe cada conta
+  (2.1). Se vale desconto, mês grátis ou nada é decisão de negócio. **Dono:
+  Felipe + Juan.**
 - **A frase da capa e o "sobre" dos estúdios reais.** A vitrine da Caroline
-  está sem frase: o Google recebe "Galerias de fotos de Caroline Tedesco". É o
-  fotógrafo preencher em *Site do estúdio*.
+  está sem frase: o Google recebe "Galerias de fotos de Caroline Tedesco". O
+  editor *Site do estúdio* existe, mas está **desligado**
+  (`SECAO_SITE_NO_AR = false`, `config/site-do-estudio.ts`): hoje nenhum
+  fotógrafo consegue preencher. Ligar é decisão de produto.
 - **Depoimentos, quando existirem de verdade.** Só então entram avaliações nos
   dados estruturados (as estrelas no resultado). Antes disso, seria inventar.
 - **Ligar `VIDEO_LIBERADO` e `DOMINIO_PROPRIO_LIBERADO`** abre duas páginas de

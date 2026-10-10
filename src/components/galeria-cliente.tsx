@@ -27,6 +27,7 @@ import {
   recadoDoFim,
   escopoDasFavoritas,
   enviarParaOComputador,
+  compartilharLink,
   partesPrevistas,
   tamanhoLegivel,
   type FotoParaEntregar,
@@ -204,6 +205,7 @@ export function GaleriaCliente({
   recorte = false,
   eu: euInicial = null,
   recado = null,
+  compartilhavel = false,
 }: {
   itens: ItemGaleria[];
   permiteDownload: boolean;
@@ -256,6 +258,11 @@ export function GaleriaCliente({
    * entregue.
    */
   recado?: ConfigDoRecado | null;
+  /**
+   * Oferece "↗ Compartilhar" na barra. Só a galeria de verdade liga: na prévia
+   * do dono as fotos são de exemplo, e o link levaria a outra coisa.
+   */
+  compartilhavel?: boolean;
   /** Quem se identificou por e-mail nesta galeria. Null = ninguém ainda. */
   eu?: { email: string | null; nome: string | null } | null;
   /**
@@ -730,6 +737,17 @@ export function GaleriaCliente({
     if (r === "falhou") {
       setFimDaEntrega("não consegui abrir o compartilhar — copie o endereço desta página e abra no computador");
     }
+  }
+
+  /**
+   * "↗ Compartilhar": o link da galeria INTEIRA (`enderecoBase`, sem capítulo
+   * nem busca), com o título da aba — que já é "Galeria · Estúdio". A prévia
+   * que o WhatsApp desenha é o cartão do estúdio (`opengraph-image.tsx`).
+   */
+  async function compartilharGaleria() {
+    const r = await compartilharLink(new URL(enderecoBase, window.location.origin).toString(), document.title);
+    if (r === "copiou") setFimDaEntrega("link da galeria copiado — é só colar na conversa");
+    if (r === "falhou") setFimDaEntrega("não consegui abrir o compartilhar — copie o endereço desta página");
   }
 
   /*
@@ -1738,6 +1756,7 @@ export function GaleriaCliente({
         capituloAberto={capituloAtivo}
         tocarSlideshow={ordemVisivel.length > 1 ? tocarSlideshow : null}
         recado={recado?.ativo ? () => setRecadoAberto(true) : null}
+        compartilhar={compartilhavel ? () => void compartilharGaleria() : null}
         favoritas={
           /* Sem escolha aberta e sem nenhuma marcada não há o que oferecer, e
              um menu com só o recado "escolha encerrada" dentro é enfeite. */

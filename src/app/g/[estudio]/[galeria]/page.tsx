@@ -4,7 +4,7 @@ import { VALIDADE_DO_LINK_DA_GALERIA } from "@/config/links-assinados";
 import { cookies, headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import Link from "next/link";
-import { marca } from "@/config/marca";
+import { SeloDaPlataforma } from "@/components/selo-da-plataforma";
 import { CAMINHO_PUBLICO } from "@/proxy";
 import { COOKIE_PREVIA } from "@/config/previa";
 import { urlDeLeitura } from "@/lib/r2";
@@ -1273,6 +1273,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
             bytesDaGaleria={bytesDaGaleria}
             totalNaGaleria={todasAsMedias.length}
             recorte={escolhidas.size > 0 && !amostrando}
+            compartilhavel
             /* O capítulo aberto vale em qualquer galeria, fatiada ou não —
                ver `capituloAberto` em galeria-cliente. */
             capituloAberto={capSecaoId ?? null}
@@ -1292,18 +1293,7 @@ export default async function GaleriaPublicaPage({ params, searchParams }: Props
       </div>
 
       <footer className="mt-20 text-center">
-        <span
-          className="inline-flex items-center gap-2 rounded-[var(--g-pilula,9999px)] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em]"
-          style={{ border: "1px solid var(--g-linha)", color: "var(--g-tenue)" }}
-        >
-          <span
-            className="grid h-4 w-4 place-items-center rounded-[3px] text-[8px] font-bold"
-            style={{ border: "1px solid var(--g-linha)", color: "var(--g-destaque)" }}
-          >
-            {marca.simbolo}
-          </span>
-          entregue com {marca.nome}
-        </span>
+        <SeloDaPlataforma estudio={estudio} lugar="galeria" simbolo />
       </footer>
       </div>
     </main>

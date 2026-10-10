@@ -210,3 +210,30 @@ export function origemDaConsulta(q: URLSearchParams): OrigemDaBio {
     campanha: rotulo(q.get("campanha")),
   };
 }
+
+/* ── o selo das galerias ──────────────────────────────────────────────────── */
+
+/**
+ * O CLIQUE NO SELO "entregue com Galeria Átomo" (10/10/2026).
+ *
+ * O selo mora no fim de toda galeria e de toda vitrine — é a única vez em que a
+ * casa aparece para quem não é fotógrafo, e também para o fotógrafo que está
+ * olhando a galeria de um colega. Até aqui era texto: ninguém chegava por ele,
+ * e se chegasse não haveria como saber. Agora é um link para a casa que passa
+ * pelo mesmo caminho da ponte da bio — conta o clique e deixa o cookie de
+ * origem —, então a conta que nascer dele diz no admin "selo/galeria/galeria",
+ * com o estúdio de onde veio como campanha.
+ *
+ * É a base de qualquer indicação futura: saber QUAL estúdio trouxe a conta. A
+ * recompensa (se houver) é decisão de negócio, e não está aqui.
+ */
+export const EVENTO_SELO = "click_selo";
+
+/** Onde o selo estava: o fim da galeria ou o da vitrine. Qualquer outra coisa vira galeria. */
+export const LUGARES_DO_SELO = ["galeria", "vitrine"] as const;
+export type LugarDoSelo = (typeof LUGARES_DO_SELO)[number];
+
+export function origemDoSelo(estudio: string, lugar: string | null): OrigemDaBio {
+  const no = (LUGARES_DO_SELO as readonly string[]).includes(lugar ?? "") ? (lugar as LugarDoSelo) : "galeria";
+  return { fonte: "selo", meio: no, campanha: rotulo(estudio) };
+}

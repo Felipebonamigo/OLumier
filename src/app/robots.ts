@@ -21,6 +21,10 @@ export default function robots(): MetadataRoute.Robots {
        * `/bio/ir` são os redirecionadores da página-ponte do Instagram: cada
        * visita é um clique contado, e robô não clica. A própria `/bio` fica
        * aberta, e o `noindex` dela é o que a tira do Google.
+       *
+       * `/selo` (o "entregue com" das vitrines) fica ABERTO, ao contrário: é por
+       * ele que o robô vai de cada vitrine indexada até a home, e o clique de
+       * robô já não conta (`ehRobo`). Fechar aqui cortaria esse caminho.
        */
       disallow: ["/painel", "/api", "/bio/ir"],
     },
