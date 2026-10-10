@@ -60,6 +60,28 @@ if [ -n "$(git status --porcelain)" ]; then
   confirmar "Continuar mesmo assim? [s/N]" || exit 1
 fi
 
+# ── A SUITE QUE JA PASSOU NESTA ARVORE (10/10/2026) ─────────────────────────
+#
+# A suite inteira custa ~8 minutos de Actions por publicacao, e a cota do mes
+# acabou no dia 10. Quando o `Verificar` de um PR passa, ele deixa um recibo com
+# a ARVORE que testou (`git rev-parse HEAD^{tree}`); o publicar.yml procura esse
+# recibo e, se achar, passa a arvore em SUITE_VERIFICADA_NA_ARVORE.
+#
+# So vale se for EXATAMENTE a arvore deste commit e a arvore de trabalho estiver
+# limpa. Arvore igual e conteudo igual byte a byte: o mesmo codigo, a mesma suite
+# e o mesmo verificar.yml que a rodou. Qualquer merge no meio do caminho muda a
+# arvore, e ai a suite roda aqui como sempre.
+#
+# O que NAO e pulado: tipos, lint, a trava, o portao e o dump da migracao, o
+# build e a troca atomica. So a bancada, o servidor do portao e a suite.
+# Sem a variavel -- toda publicacao feita da maquina de alguem --, nada muda.
+SUITE_JA_VERIFICADA=""
+if [ -n "${SUITE_VERIFICADA_NA_ARVORE:-}" ] \
+   && [ "$SUITE_VERIFICADA_NA_ARVORE" = "$(git rev-parse 'HEAD^{tree}')" ] \
+   && [ -z "$(git status --porcelain)" ]; then
+	SUITE_JA_VERIFICADA=1
+fi
+
 # O portao do origin vem ANTES de tudo que custa tempo: conferir e um fetch, e
 # recusar aqui poupa os sete minutos do portao de qualidade. A regra e o porque
 # estao em scripts/portao-origin.sh -- resumo: `git archive HEAD` empacota a
@@ -230,6 +252,10 @@ if ! npx tsc --noEmit; then
 fi
 echo "  tipos ok"
 
+if [ -n "$SUITE_JA_VERIFICADA" ]; then
+	echo "  suíte: já passou no Verificar com esta mesma árvore ($SUITE_VERIFICADA_NA_ARVORE) — não roda de novo"
+else
+
 # ── A BANCADA EM DIA, ANTES DA SUITE (16/09/2026) ───────────────────────────
 #
 # O portao de migracao la em cima pergunta ao banco de PRODUCAO. Ninguem
@@ -385,6 +411,8 @@ if ! BASE_URL="$BASE_PORTAO" npm test -- --exigir-tudo; then
   fi
   exit 1
 fi
+
+fi # SUITE_JA_VERIFICADA
 
 # ATALHO DELIBERADO: o lint PERGUNTA em vez de bloquear, porque hoje há 14 erros
 # conhecidos (react-hooks e um <a> no error.tsx) e travar a publicação agora

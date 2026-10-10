@@ -277,6 +277,29 @@ jobs:
       - name: Build de produção
         run: npm run build
 
+      # ── O RECIBO (10/10/2026) ───────────────────────────────────────────────
+      #
+      # O `Publicar` roda a mesma suíte antes de ir ao ar (~8 min de Actions).
+      # Se a árvore que vai ao ar for IDÊNTICA à que passou aqui, rodar de novo
+      # não acrescenta nada — então este passo deixa um artefato com o nome da
+      # árvore testada (no pull_request, o commit de merge que o GitHub monta), e
+      # o `publicar.yml` procura por ele. Só chega aqui com tudo verde.
+      #
+      # Árvore igual é conteúdo igual byte a byte, inclusive este arquivo e a
+      # suíte: um recibo não serve para código que não passou por aqui.
+      - name: Recibo da suíte (árvore verificada)
+        run: |
+          arvore=$(git rev-parse 'HEAD^{tree}')
+          echo "$arvore" > recibo-da-suite.txt
+          echo "ARVORE_VERIFICADA=$arvore" >> "$GITHUB_ENV"
+          echo "árvore verificada: $arvore"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: verificado-${{ env.ARVORE_VERIFICADA }}
+          path: recibo-da-suite.txt
+          retention-days: 14
+
       # O log do servidor só interessa quando algo deu errado — e aí interessa
       # muito, porque a falha da suíte costuma ser o sintoma e não a causa.
       - name: Log do servidor (só quando falha)

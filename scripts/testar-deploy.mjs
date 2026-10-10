@@ -27,7 +27,9 @@
  * E isto NÃO é problema de coordenação entre sessões: um deploy solitário, de
  * madrugada, com um teste quebrado, produz exatamente o mesmo estado.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 
 const RAIZ = path.resolve(import.meta.dirname, "..");
@@ -351,6 +353,65 @@ etapa("a trava é solta ao fim, mesmo se o portão reprovar", () => {
     );
   }
   return `soltura no trap "${nome}"`;
+});
+
+/*
+ * ── O ATALHO DA SUÍTE SÓ VALE PARA A MESMA ÁRVORE (10/10/2026) ─────────────
+ *
+ * O publicar.yml passa SUITE_VERIFICADA_NA_ARVORE quando o Verificar de um PR
+ * já passou com a árvore que vai ao ar, e o deploy.sh pula a bancada, o
+ * servidor do portão e a suíte. Errar esta regra é publicar código que nenhuma
+ * suíte viu — então o teste RODA o trecho do deploy.sh num repositório de
+ * mentira, em vez de procurar texto, e confere as quatro situações.
+ */
+etapa("o atalho da suíte exige a mesma árvore e a árvore de trabalho limpa", () => {
+  const cru = readFileSync(path.join(RAIZ, "deploy.sh"), "utf8");
+  const ini = cru.indexOf('SUITE_JA_VERIFICADA=""');
+  const fimDoIf = cru.indexOf("\nfi\n", ini);
+  if (ini < 0 || fimDoIf < 0) throw new Error("não achei o bloco SUITE_JA_VERIFICADA no deploy.sh");
+  const trecho = cru.slice(ini, fimDoIf + 4) + 'printf %s "$SUITE_JA_VERIFICADA"';
+
+  const dir = mkdtempSync(path.join(os.tmpdir(), "atalho-suite-"));
+  try {
+    const git = (...a) => execFileSync("git", ["-C", dir, ...a], { encoding: "utf8" }).trim();
+    git("init", "-q");
+    writeFileSync(path.join(dir, "a.txt"), "um");
+    git("add", ".");
+    git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "c");
+    const arvore = git("rev-parse", "HEAD^{tree}");
+    const roda = (valor) =>
+      execFileSync("bash", ["-c", trecho], {
+        cwd: dir,
+        encoding: "utf8",
+        env: { ...process.env, SUITE_VERIFICADA_NA_ARVORE: valor },
+      });
+
+    if (roda(arvore) !== "1") throw new Error("a mesma árvore, limpa, deveria pular a suíte");
+    if (roda("") !== "") throw new Error("sem a variável a suíte tem de rodar");
+    if (roda("0".repeat(40)) !== "") throw new Error("árvore diferente pulou a suíte");
+    writeFileSync(path.join(dir, "a.txt"), "dois");
+    if (roda(arvore) !== "") throw new Error("árvore de trabalho suja pulou a suíte");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  return "mesma árvore e limpa pula; vazia, outra árvore ou suja rodam";
+});
+
+etapa("o atalho não pula tipos, lint nem a migração", () => {
+  const ini = roteiro.indexOf('if [ -n "$SUITE_JA_VERIFICADA" ]; then');
+  const fimBloco = roteiro.indexOf("fi # SUITE_JA_VERIFICADA");
+  if (ini < 0 || fimBloco < 0) throw new Error("não achei o bloco que pula a suíte");
+  const dentro = (chave) => {
+    const i = onde(chave);
+    return i > ini && i < fimBloco;
+  };
+  for (const chave of ["tipos", "dump", "migracao", "empacotamento"]) {
+    if (dentro(chave)) throw new Error(`"${chave}" ficou dentro do bloco que o atalho pula`);
+  }
+  if (!dentro("suite")) throw new Error("a suíte não está dentro do bloco do atalho");
+  const lint = roteiro.indexOf("npx eslint --format json");
+  if (lint > ini && lint < fimBloco) throw new Error("o lint ficou dentro do bloco que o atalho pula");
+  return "só bancada, servidor do portão e suíte ficam de fora";
 });
 
 console.log(falhou ? "\n✗ a ordem do deploy tem problema" : "\n✓ ordem do deploy ok");

@@ -59,8 +59,11 @@ on:
 
 # Só leitura: este job faz `npm ci` e build com o token do repositório ao
 # alcance. Mesma regra do `verificar.yml`.
+# `actions: read` só para procurar o recibo do `Verificar` (os artefatos do
+# repositório); não dá poder de disparar nem de apagar nada.
 permissions:
   contents: read
+  actions: read
 
 # Uma publicação por vez. A trava que vale é a do servidor
 # (scripts/trava-publicacao.sh), porque duas máquinas diferentes passariam por
@@ -166,6 +169,33 @@ jobs:
           # HEAD` empacota a árvore: os dois precisam do histórico.
           fetch-depth: 0
 
+      # ── A SUÍTE JÁ PASSOU NESTA ÁRVORE? (10/10/2026) ───────────────────────
+      #
+      # O `Verificar` deixa um artefato `verificado-<árvore>` quando passa. Se
+      # existe um para a árvore deste commit, vindo de uma rodada BEM-SUCEDIDA do
+      # verificar.yml, a suíte não precisa rodar de novo: o deploy.sh recebe a
+      # árvore e pula bancada, servidor do portão e suíte — tipos, lint, trava,
+      # migração e build continuam. Sem recibo, tudo roda como sempre. A regra de
+      # verdade (mesma árvore e árvore limpa) mora no deploy.sh, que confere de
+      # novo; aqui é só a procura.
+      - name: Recibo da suíte
+        id: recibo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          arvore=$(git rev-parse 'HEAD^{tree}')
+          for run in $(gh api "repos/${{ github.repository }}/actions/artifacts?name=verificado-$arvore&per_page=20" \
+                         --jq '.artifacts[] | select(.expired | not) | .workflow_run.id'); do
+            ok=$(gh api "repos/${{ github.repository }}/actions/runs/$run" \
+                   --jq '(.path | startswith(".github/workflows/verificar.yml")) and .conclusion == "success"')
+            if [ "$ok" = "true" ]; then
+              echo "a suíte já passou nesta árvore ($arvore), na rodada $run do Verificar"
+              echo "arvore=$arvore" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "sem recibo para a árvore $arvore — a suíte roda aqui"
+
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
@@ -188,12 +218,14 @@ jobs:
       # rodadas seguintes quase instantâneas. O commit é FIXO para a bancada não
       # mudar sozinha entre uma publicação e outra.
       - name: Go (para compilar o MinIO)
+        if: steps.recibo.outputs.arvore == ''
         uses: actions/setup-go@v5
         with:
           go-version: "1.24"
           cache: false
 
       - name: Cache do MinIO compilado
+        if: steps.recibo.outputs.arvore == ''
         id: cache-minio
         uses: actions/cache@v4
         with:
@@ -201,10 +233,11 @@ jobs:
           key: minio-7aac2a2c5b7c
 
       - name: Compilar o MinIO
-        if: steps.cache-minio.outputs.cache-hit != 'true'
+        if: steps.recibo.outputs.arvore == '' && steps.cache-minio.outputs.cache-hit != 'true'
         run: GOTOOLCHAIN=auto go install github.com/minio/minio@v0.0.0-20260212201848-7aac2a2c5b7c
 
       - name: Subir o armazém (MinIO, que fala S3 como o R2)
+        if: steps.recibo.outputs.arvore == ''
         run: |
           mkdir -p /tmp/minio-dados
           MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=minioadmin \
@@ -263,6 +296,7 @@ jobs:
       # coisas diferentes — aqui a bancada é VAZIA, na máquina do Felipe ela é
       # VELHA.
       - name: Levantar o banco (retrato + migrações)
+        if: steps.recibo.outputs.arvore == ''
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d fotonio_teste \
             -v ON_ERROR_STOP=1 -q -f db/schema.sql
@@ -335,6 +369,8 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       - name: Publicar
+        env:
+          SUITE_VERIFICADA_NA_ARVORE: ${{ steps.recibo.outputs.arvore }}
         run: bash deploy.sh --sim
 
       # O portão reprovado é o caso em que o log interessa mais, e é justamente
