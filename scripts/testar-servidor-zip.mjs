@@ -45,7 +45,26 @@ const igual = (a, b, oque) => {
   if (a !== b) throw new Error(`${oque}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
-async function ate(cond, ms = 5000) {
+
+/*
+ * ── O PRAZO ACOMPANHA A MÁQUINA (09/10/2026) ──────────────────────────────
+ *
+ * Esta suíte reprovou DUAS publicações com "esperou demais" e passou na mesa
+ * de quem escreve todas as vezes. Não era defeito: ela monta um ZIP de
+ * verdade e espera o servidor servir. No runner a máquina é mais lenta e o
+ * armazém é um MinIO ao lado, não o R2 — cinco segundos que sobram aqui
+ * faltam lá.
+ *
+ * Prazo curto demais não encontra defeito nenhum: só reprova quem está
+ * certo, e o preço é a publicação inteira parada. Prazo largo não custa nada
+ * quando o teste passa, porque a espera termina na condição, não no relógio.
+ *
+ * `CI` é posto pelo GitHub Actions. Na mesa ele não existe, e o prazo curto
+ * continua — ali a espera longa seria só demora para descobrir um defeito.
+ */
+const PRAZO_DE_ESPERA = process.env.CI ? 30000 : 5000;
+
+async function ate(cond, ms = PRAZO_DE_ESPERA) {
   const fim = Date.now() + ms;
   while (Date.now() < fim) {
     if (cond()) return;

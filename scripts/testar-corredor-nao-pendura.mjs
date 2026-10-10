@@ -81,6 +81,26 @@ etapa("o corredor confere se o servidor ainda tem as rotas", () => {
   return "confere";
 });
 
+etapa("quem espera o armazém dá mais prazo na CI", () => {
+  /*
+   * 09/10/2026, depois de `testar-servidor-zip` reprovar DUAS publicações com
+   * "esperou demais" — e passar aqui todas as vezes.
+   *
+   * Não era defeito: ela monta um ZIP e espera. No runner a máquina é mais
+   * lenta e o armazém é um MinIO ao lado, não o R2; cinco segundos que sobram
+   * nesta mesa faltam lá. Prazo curto demais não encontra defeito nenhum, só
+   * reprova quem está certo — e o preço é a publicação inteira parada.
+   *
+   * Prazo largo não custa nada quando o teste passa: ele só é esperado até a
+   * condição acontecer.
+   */
+  const zip = readFileSync(path.join(AQUI, "testar-servidor-zip.mjs"), "utf8");
+  if (!/process.env.CI/.test(zip)) {
+    throw new Error("o prazo de espera do zip não olha a CI — vai reprovar de novo por lentidão");
+  }
+  return "prazo por ambiente";
+});
+
 if (vermelhas) {
   console.log(`\n✗ ${vermelhas} vermelha(s)\n`);
   process.exit(1);
