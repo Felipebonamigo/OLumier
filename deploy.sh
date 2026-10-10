@@ -20,8 +20,8 @@ set -euo pipefail
 # ── PUBLICAR SEM NINGUEM NA FRENTE (16/09/2026) ─────────────────────────────
 #
 # Felipe pediu que publicar deixasse de depender de alguem com um terminal
-# aberto: o merge no master publica. Quem faz isso e o GitHub Actions
-# (.github/workflows/publicar.yml), e runner nao tem TTY -- os tres `read`
+# aberto. Quem publica e o GitHub Actions (.github/workflows/publicar.yml,
+# pelo botao desde 10/10/2026), e runner nao tem TTY -- os tres `read`
 # deste script recebem EOF, o `set -e` ve um comando falhando e a publicacao
 # aborta antes de comecar.
 #

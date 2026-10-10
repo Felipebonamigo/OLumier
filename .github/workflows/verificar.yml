@@ -216,19 +216,45 @@ jobs:
       # abrem páginas e batem em rotas. Sem ele o corredor as pula, e pular
       # metade em silêncio é o que o `--exigir-tudo` lá embaixo existe para
       # impedir.
+      #
+      # Saudável não basta: duas vezes (10/10/2026) o `next dev` RECÉM-LIGADO
+      # respondeu o healthz e devolveu 404 em HTML para uma rota de API que
+      # existe — a checagem do `testar-tudo.mjs` reprova isso com "pare o next
+      # dev e suba de novo". Aqui o CI faz exatamente o que a mensagem pede:
+      # confere a mesma rota de prova e, se ela não responder JSON, derruba e
+      # sobe outro servidor, até três vezes. `setsid` dá ao servidor um grupo
+      # de processos próprio, e é o grupo inteiro (npm + next) que cai.
       - name: Subir o servidor de desenvolvimento
         run: |
-          npm run dev > /tmp/dev.log 2>&1 &
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:3040/api/healthz > /dev/null; then
-              echo "servidor no ar e saudável"
-              exit 0
+          PROVA=/api/galerias/00000000-0000-0000-0000-000000000000/secoes/00000000-0000-0000-0000-000000000000/capa
+          for servidor in 1 2 3; do
+            setsid npm run dev > /tmp/dev.log 2>&1 &
+            PID=$!
+            saudavel=""
+            for i in $(seq 1 60); do
+              if curl -sf http://localhost:3040/api/healthz > /dev/null; then saudavel=sim; break; fi
+              sleep 2
+            done
+            if [ -z "$saudavel" ]; then
+              echo "✗ o servidor não ficou saudável a tempo"
+              echo "--- healthz:"; curl -s http://localhost:3040/api/healthz || true
+              echo; echo "--- log:"; tail -60 /tmp/dev.log
+              exit 1
             fi
-            sleep 2
+            for tentativa in 1 2 3 4; do
+              tipo=$(curl -s -o /dev/null -w '%{content_type}' --max-time 60 -X POST \
+                -H 'content-type: application/json' -d '{}' "http://localhost:3040$PROVA" || true)
+              case "$tipo" in
+                *json*) echo "servidor no ar, saudável e com as rotas de API (servidor $servidor)"; exit 0 ;;
+              esac
+              sleep 5
+            done
+            echo "! servidor $servidor respondeu o healthz sem a rota de prova (\"$tipo\") — subindo outro"
+            kill -- -"$PID" 2>/dev/null || true
+            sleep 3
           done
-          echo "✗ o servidor não ficou saudável a tempo"
-          echo "--- healthz:"; curl -s http://localhost:3040/api/healthz || true
-          echo; echo "--- log:"; tail -60 /tmp/dev.log
+          echo "✗ três servidores seguidos sem as rotas de API"
+          tail -60 /tmp/dev.log
           exit 1
 
       # `--exigir-tudo` transforma "pulado" em REPROVAÇÃO.

@@ -207,7 +207,26 @@ try {
 const ROTA_DE_PROVA =
   "/api/galerias/00000000-0000-0000-0000-000000000000/secoes/00000000-0000-0000-0000-000000000000/capa";
 
+/*
+ * UMA resposta em HTML não basta para condenar o servidor (10/10/2026). Duas
+ * vezes no CI, com o `next dev` RECÉM-LIGADO, a primeira chamada à rota de
+ * prova compilou `/_not-found` e devolveu 404 em HTML: no `master` do merge do
+ * #109 e no PR #113, com a mesma checagem passando em outra rodada do mesmo
+ * commit. Servidor que perdeu a rota de verdade continua devolvendo HTML; o que
+ * se resolve sozinho, não. Por isso pergunta algumas vezes antes de reprovar —
+ * ~20 s no pior caso, contra a suíte inteira desperdiçada.
+ */
+const TENTATIVAS_DA_PROVA = 4;
+
 async function rotasInteiras() {
+  for (let tentativa = 1; tentativa <= TENTATIVAS_DA_PROVA; tentativa++) {
+    if (await rotaDeProvaResponde()) return true;
+    if (tentativa < TENTATIVAS_DA_PROVA) await new Promise((r) => setTimeout(r, 5000));
+  }
+  return false;
+}
+
+async function rotaDeProvaResponde() {
   try {
     const r = await fetch(`${BASE}${ROTA_DE_PROVA}`, {
       method: "POST",

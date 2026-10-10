@@ -1,4 +1,14 @@
-# PUBLICAR: o merge no master vai para produção.
+# PUBLICAR: pelo botão — Actions → Publicar → Run workflow, com o branch master.
+#
+# ── POR BOTÃO, E NÃO A CADA MERGE (10/10/2026) ─────────────────────────────
+#
+# Até aqui todo merge no master publicava sozinho. Cada publicação roda a suíte
+# inteira (~13 min de Actions), e com ~3,5 merges por dia o Publicar sozinho
+# comia ~1.400 dos 2.000 minutos do mês do repositório privado — a cota
+# acabou no dia 10. Agora os merges se acumulam e o Felipe publica o lote de
+# uma vez, do celular. Os portões são os mesmos: só muda QUANDO roda.
+#
+# Publica o HEAD do branch escolhido no "Run workflow" — quase sempre master.
 #
 # Felipe, 16/09/2026: "vc sempre publicou, o que aconteceu q n consegue agora".
 # O que aconteceu é que a sessão mudou de lugar. O `deploy.sh` fala SSH com o
@@ -45,8 +55,6 @@
 name: Publicar
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 # Só leitura: este job faz `npm ci` e build com o token do repositório ao

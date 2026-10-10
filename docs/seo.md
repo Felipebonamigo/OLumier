@@ -104,8 +104,9 @@ os da Cloudflare?), o DS publicado lá contra a chave DNSSEC da Cloudflare, e
 
 ### 3.2 Publicar este branch
 
-Merge em `master` publica sozinho (`.github/workflows/publicar.yml`). Nada de
-SEO desta lista existe no ar antes disso.
+Merge em `master` e depois o botão **Actions → Publicar → Run workflow**
+(`.github/workflows/publicar.yml`; desde 10/10/2026 o merge não publica
+sozinho). Nada de SEO desta lista existe no ar antes disso.
 
 ### 3.3 Google Search Console e Bing — 20 minutos, uma vez
 
