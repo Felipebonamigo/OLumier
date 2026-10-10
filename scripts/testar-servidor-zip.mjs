@@ -44,6 +44,7 @@ async function etapa(nome, fn) {
 const igual = (a, b, oque) => {
   if (a !== b) throw new Error(`${oque}: esperava ${JSON.stringify(b)}, veio ${JSON.stringify(a)}`);
 };
+const EM_BRANCO = "";
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /*
@@ -64,13 +65,26 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
  */
 const PRAZO_DE_ESPERA = process.env.CI ? 30000 : 5000;
 
-async function ate(cond, ms = PRAZO_DE_ESPERA) {
+/*
+ * ── QUANDO A ESPERA ESTOURA, ELA CONTA O QUE VIU (10/10/2026) ────────────
+ *
+ * "esperou demais" não diz nada, e isso custou três reprovações seguidas na
+ * CI. Na terceira a etapa que caiu esperava por `...length === 3` —
+ * igualdade EXATA —, e uma condição dessas também falha PASSANDO de 3, onde
+ * dar mais tempo nunca resolve.
+ *
+ * Sem o número que ela viu, escolher entre "dar mais prazo" e "a conta está
+ * errada" é chute. Duas tentativas foram gastas nisso antes de a espera
+ * passar a falar.
+ */
+async function ate(cond, ms = PRAZO_DE_ESPERA, oQueVi) {
   const fim = Date.now() + ms;
   while (Date.now() < fim) {
     if (cond()) return;
     await espera(50);
   }
-  throw new Error("esperou demais");
+  const visto = oQueVi ? ` — vi ${oQueVi()}` : `${EM_BRANCO}`;
+  throw new Error(`esperou demais (${ms} ms)${visto}`);
 }
 
 const SEGREDO = "t".repeat(48);
@@ -289,7 +303,11 @@ await etapa("o terceiro clique sai do disco: o balde não é tocado", async () =
   igual(corpo.equals(zipTudo), true, "mesmos bytes");
   igual(cabecalhos.get("accept-ranges"), "bytes", "aceita Range");
   for (const [i, n] of antes) igual(pedidosAoBalde.get(i), n, `original ${i} não foi buscado de novo`);
-  await ate(() => relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length === 3);
+  await ate(
+    () => relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length === 3,
+    undefined,
+    () => `${relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").length} relato(s) de "servido", esperando exatamente 3`,
+  );
   const ultimo = relatos.filter((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "servido").at(-1);
   igual(ultimo.doCache, true, "relatado como servido do cache");
   igual(ultimo.bytes, zipTudo.length, "bytes do relato");
@@ -314,7 +332,11 @@ await etapa("pedaço do meio (acelerador de download) é 'trecho', não entrega"
   const { status, corpo } = await baixar(tokenTudo, { Range: "bytes=0-99999" });
   igual(status, 206, "status");
   igual(corpo.equals(zipTudo.subarray(0, 100_000)), true, "os bytes do começo");
-  await ate(() => relatos.some((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "trecho"));
+  await ate(
+    () => relatos.some((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "trecho"),
+    undefined,
+    () => `eventos deste pedido: ${relatos.filter((r) => r.pedidoId === PEDIDO_TUDO).map((r) => r.evento).join(", ") || "nenhum"}`,
+  );
   const trecho = relatos.find((r) => r.pedidoId === PEDIDO_TUDO && r.evento === "trecho");
   igual(trecho.bytes, 100_000, "bytes do trecho");
   igual(

@@ -15,6 +15,8 @@
  * cinco minutos para medir um número que está escrito ali.
  */
 import { readFileSync } from "node:fs";
+
+const NL_BUSCA = String.fromCharCode(10);
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -99,6 +101,31 @@ etapa("quem espera o armazém dá mais prazo na CI", () => {
     throw new Error("o prazo de espera do zip não olha a CI — vai reprovar de novo por lentidão");
   }
   return "prazo por ambiente";
+});
+
+etapa("quando a espera estoura, ela diz o que viu", () => {
+  /*
+   * 10/10/2026, terceira reprovação seguida do zip na CI.
+   *
+   * "esperou demais" não diz nada. A etapa que caiu espera por
+   * `...length === 3` — igualdade EXATA — e uma condição dessas também falha
+   * passando de 3, onde esperar mais nunca resolve. Sem saber o número que
+   * ela viu, a escolha entre "dar mais tempo" e "a conta está errada" é
+   * chute, e eu já gastei duas tentativas nele.
+   */
+  const zip = readFileSync(path.join(AQUI, "testar-servidor-zip.mjs"), "utf8");
+  /* A linha do THROW, e não qualquer linha: a primeira ocorrência da frase
+     está no comentário que explica o porquê, e procurar por ela ali fazia o
+     guarda reprovar o código certo. */
+  const linha = zip
+    .split(NL_BUSCA)
+    .find((l) => l.includes("throw new Error") && l.includes("esperou demais"));
+  if (!linha) throw new Error("não achei o estouro da espera");
+  /* Interpolação na linha quer dizer que ela conta o que viu. */
+  if (!linha.includes("${")) {
+    throw new Error("a espera estoura sem dizer o que viu — a próxima falha na CI vai ser outro chute");
+  }
+  return "a espera relata";
 });
 
 if (vermelhas) {
