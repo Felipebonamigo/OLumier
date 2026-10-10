@@ -20,3 +20,22 @@ busca por ela. O estado, o que falta e de quem é cada parte estão em
 - página do estúdio (vitrine, galeria) mostra a marca DELE, não a nossa;
 - `scripts/testar-seo.mjs` tem de continuar verde, e muda junto quando a regra
   muda — nunca afrouxado para passar.
+
+# E o CI custa minuto
+
+A cota de Actions do repositório privado (2.000 min/mês) acabou em 10/10/2026.
+O `Verificar` roda a suíte inteira, ~10 min por rodada; cada push num PR pronto
+paga isso de novo.
+
+- **PR nasce rascunho** (`draft: true`). Push em rascunho não roda o `Verificar`.
+- Antes de marcar pronto, rode **na própria sessão** `npm run lint` e
+  `npm run typecheck`, e as suítes da área mexida que a sessão conseguir subir
+  (`scripts/testar-<area>.mjs`). Na sessão é de graça; no CI, não.
+- **Marque pronto uma vez, no fim**, com o trabalho inteiro já empurrado. Um push
+  depois disso roda a suíte de novo.
+- **Uma tarefa, um PR.** Ajuste, correção ou pedido novo dentro da mesma tarefa
+  entra no PR que já existe, não num PR novo. Cada PR custa ao menos uma suíte.
+- **PR só com o trabalho terminado.** Explorar, testar hipótese e perguntar se é
+  isso mesmo acontecem na sessão, antes do PR.
+- **Merge não publica.** Publicar é o workflow `Publicar` (`workflow_dispatch`),
+  disparado só quando o Felipe pede.
