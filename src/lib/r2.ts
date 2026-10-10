@@ -12,6 +12,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl, S3RequestPresigner } from "@aws-sdk/s3-request-presigner";
 import { dispositionSegura } from "./disposition";
+import { inicioDaJanela } from "./janela-de-assinatura";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 /**
@@ -216,9 +217,13 @@ export { dispositionSegura };
 /**
  * URL temporária de leitura. Galeria privada nunca expõe o objeto direto:
  * o link é assinado, curto e só vale para quem já passou pela senha.
+ *
+ * Assinada no começo de uma janela, e não agora: dentro dela o endereço não
+ * muda, e o navegador reaproveita a miniatura que já baixou. A validade nunca
+ * passa de `expiraSeg`. Ver `lib/janela-de-assinatura.ts`.
  */
 export function urlDeLeitura(chave: string, expiraSeg = 3600, baixarComoNome?: string) {
-  return urlDeLeituraAssinadaEm(new Date(), chave, expiraSeg, baixarComoNome);
+  return urlDeLeituraAssinadaEm(inicioDaJanela(expiraSeg), chave, expiraSeg, baixarComoNome);
 }
 
 /*

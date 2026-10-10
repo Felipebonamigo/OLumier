@@ -9,8 +9,7 @@ import { precisaConfirmarEmail, RECADO_EMAIL_PENDENTE } from "@/lib/confirmacao-
 import {
   reconhecerArquivo,
   LIMITE_POR_ARQUIVO,
-  LIMITE_PUT_UNICO,
-  TAMANHO_PARTE,
+  tamanhoDaParte,
   bytesUsados,
   criarMediaPendente,
 } from "@/lib/medias";
@@ -96,6 +95,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     lote?: string;
     ate?: number;
     alternativo?: boolean;
+    /* Quem chama sabe mandar partes: o arquivo acima de 100 MB vai em partes
+       também abaixo dos 5 GB. Ver `tamanhoDaParte`. */
+    partes?: boolean;
   };
   try {
     corpo = await request.json();
@@ -289,15 +291,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     comPreview ? urlDeUpload(chaves.preview, FORMATOS_DERIVADA[formato].mime) : Promise.resolve(null),
   ]);
 
-  // Acima de 5 GB o PUT único não serve: abre o envio em partes e o navegador
-  // pede as URLs de cada pedaço conforme avança.
-  if (bytes > LIMITE_PUT_UNICO) {
+  // Acima de 5 GB o PUT único não serve; abaixo, vai em partes quem pediu
+  // (`tamanhoDaParte`). O navegador pede as URLs de cada pedaço conforme avança.
+  const parte = tamanhoDaParte(bytes, corpo.partes === true);
+  if (parte) {
     const uploadId = await abrirEnvioDoOriginal(chaves.original, mime, armazem);
     await consultarUm("update medias set upload_id = $1 where id = $2", [uploadId, media!.id]);
     return NextResponse.json({
       mediaId: media!.id,
       emPartes: true,
-      tamanhoParte: TAMANHO_PARTE,
+      tamanhoParte: parte,
       urlThumb,
       urlPreview,
       /* O mime RESOLVIDO — ver `reconhecerArquivo`. A URL é assinada com ele, e

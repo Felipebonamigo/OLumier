@@ -460,11 +460,18 @@ export default async function AdminPage({
           Felipe: "temos que ter velocidade e funcionar". Numa manhã chegaram
           um download a 270–470 KB/s e um envio caindo, e os dois só apareceram
           porque alguém mandou foto. Aqui a velocidade que os clientes de fato
-          tiveram, e as desistências do envio antes da reclamação. */}
+          tiveram, e as desistências do envio antes da reclamação.
+
+          09/10/2026 (migração 069): o envio passou a ser medido pela PASTA
+          inteira, que é o que o fotógrafo sente — o número por arquivo, com
+          outros cinco subindo junto, não dizia se a internet dele estava
+          cheia. E a recusa do servidor (teto do teste, sessão, tipo) saiu das
+          desistências: cada foto de um estúdio no teto dos 10 GB virava uma
+          "queda" no cartão vermelho. */}
       <Bloco
         id={SECOES[5].id}
         titulo="Velocidade real"
-        explicacao="Medida em cada download de ZIP (30 dias) e em cada foto enviada (7 dias). A mediana é o caso típico; os 10% mais lentos são quem reclama."
+        explicacao="Medida em cada download de ZIP (30 dias) e em cada envio de fotos (7 dias). A mediana é o caso típico; os 10% mais lentos são quem reclama."
       >
         {!velocidade ? (
           <p className="text-sm text-texto-faint">Sem medidas ainda.</p>
@@ -489,22 +496,30 @@ export default async function AdminPage({
                     : "nenhum ZIP montado no período"
                 }
               />
-              <Cartao
-                rotulo="Envio de fotos"
-                valor={velocidade.envio ? formatarVelocidade(velocidade.envio.mediana) : "—"}
-                nota={
-                  velocidade.envio
-                    ? `por arquivo, 3 ao mesmo tempo · 10% abaixo de ${formatarVelocidade(velocidade.envio.p10)}`
-                    : "medindo desde 30/09/2026"
-                }
-              />
+              {velocidade.leva ? (
+                <Cartao
+                  rotulo="Envio de uma pasta"
+                  valor={formatarVelocidade(velocidade.leva.mediana)}
+                  nota={`do primeiro ao último arquivo · 10% abaixo de ${formatarVelocidade(velocidade.leva.p10)} · ${velocidade.leva.n} envio${velocidade.leva.n === 1 ? "" : "s"}${velocidade.envio ? ` · por arquivo ${formatarVelocidade(velocidade.envio.mediana)}` : ""}`}
+                />
+              ) : (
+                <Cartao
+                  rotulo="Envio, por arquivo"
+                  valor={velocidade.envio ? formatarVelocidade(velocidade.envio.mediana) : "—"}
+                  nota={
+                    velocidade.envio
+                      ? `com outros subindo junto · 10% abaixo de ${formatarVelocidade(velocidade.envio.p10)} · a pasta inteira, medindo desde 09/10/2026`
+                      : "medindo desde 30/09/2026"
+                  }
+                />
+              )}
               <Cartao
                 rotulo="Envios que desistiram"
                 valor={velocidade.falhas.n}
                 nota={
                   velocidade.falhas.n
-                    ? `em ${velocidade.falhas.estudios} estúdio${velocidade.falhas.estudios === 1 ? "" : "s"}, 7 dias`
-                    : "nenhum em 7 dias"
+                    ? `de rede, em ${velocidade.falhas.estudios} estúdio${velocidade.falhas.estudios === 1 ? "" : "s"}, 7 dias`
+                    : "nenhum por rede em 7 dias"
                 }
                 tom={velocidade.falhas.n > 0 ? "erro" : "ok"}
               />
@@ -520,6 +535,29 @@ export default async function AdminPage({
                   </li>
                 ))}
               </ul>
+            )}
+            {velocidade.recusas.n > 0 && (
+              <div className="mt-4 text-xs">
+                <p className="text-texto-soft">
+                  <span className="font-medium text-texto">
+                    {velocidade.recusas.n} recusado{velocidade.recusas.n === 1 ? "" : "s"} pelo servidor
+                  </span>{" "}
+                  em {velocidade.recusas.estudios} estúdio{velocidade.recusas.estudios === 1 ? "" : "s"}, 7 dias —
+                  plano, sessão ou tipo de arquivo, não velocidade.
+                </p>
+                <ul className="mt-1 space-y-1">
+                  {velocidade.recusas.grupos.map((g, i) => (
+                    <li key={i} className="flex flex-wrap gap-x-2 text-texto-soft">
+                      <span className="font-medium text-texto">{g.estudio}</span>
+                      <span>{g.erro ?? "recusado"}</span>
+                      <span className="tabular-nums text-texto-faint">
+                        {g.n} arquivo{g.n === 1 ? "" : "s"}
+                      </span>
+                      <span className="text-texto-faint">a última em {dataHora(g.ultima)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </>
         )}

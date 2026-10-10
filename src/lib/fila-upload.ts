@@ -140,7 +140,12 @@ export function erroDefinitivo(mensagem: string): Error {
   return Object.assign(new Error(mensagem), { definitivo: true });
 }
 
-function ehDefinitivo(e: unknown): boolean {
+/**
+ * O erro é do tipo que tentar de novo não resolve? Fora daqui, é o que separa
+ * no painel a RECUSA do servidor (teto do plano, sessão, tipo de arquivo) da
+ * queda de rede — ver a migração 069.
+ */
+export function ehDefinitivo(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as { definitivo?: unknown }).definitivo === true;
 }
 

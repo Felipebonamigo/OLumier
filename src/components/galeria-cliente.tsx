@@ -42,6 +42,7 @@ import { capitulosComOsExtras } from "@/lib/capitulos-da-rolagem";
 import { recortarParaDesenhar, PRIMEIRA_LEVA, LEVA } from "@/lib/grade-por-partes";
 import { nomeComCapitulo, GRUPO_SEM_CAPITULO } from "@/lib/nome-de-arquivo";
 import { AvisoDoVideo, useSaudeDoVideo } from "./aviso-do-video";
+import { LIMITE_DA_PARTE } from "@/lib/partes-do-zip";
 
 export interface ItemGaleria {
   id: string;
@@ -722,6 +723,41 @@ export function GaleriaCliente({
   async function baixarZip(consulta: string) {
     if (!(await exigirIdentidade())) return;
     baixarNoComputador(`/api/g/${galeriaId}/zip${consulta}`, "galeria.zip");
+  }
+
+  /*
+   * ── A GALERIA GRANDE EM PARTES (10/10/2026) ─────────────────────────────
+   *
+   * Acima de 4 GB, o menu do computador oferece também a galeria em ZIPs de
+   * até 4 GB, que o navegador baixa ao mesmo tempo — mais rápido de longe, e
+   * uma queda perde uma parte. Ver `lib/partes-do-zip.ts`. A divisão vem do
+   * servidor, que é quem a recalcula no clique; pedida uma vez, só quando a
+   * galeria passa do tamanho de uma parte. Falhar aqui só deixa o menu como
+   * era: o ZIP inteiro continua no primeiro item.
+   */
+  const [partesDoZip, setPartesDoZip] = useState<{ numero: number; arquivos: number; bytes: number }[]>([]);
+  useEffect(() => {
+    if (modo !== "computador" || !permiteDownload || bytesDaGaleria <= LIMITE_DA_PARTE) return;
+    let vivo = true;
+    fetch(`/api/g/${galeriaId}/zip/partes`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { partes?: { numero: number; arquivos: number; bytes: number }[] } | null) => {
+        if (vivo && d?.partes && d.partes.length > 1) setPartesDoZip(d.partes);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, [modo, permiteDownload, bytesDaGaleria, galeriaId]);
+
+  /* Todas de uma vez: um link por parte, com um respiro entre eles — o
+     navegador pode perguntar uma vez se aceita vários downloads do site. */
+  async function baixarTodasAsPartes() {
+    if (!(await exigirIdentidade())) return;
+    for (const [i, p] of partesDoZip.entries()) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 800));
+      baixarNoComputador(`/api/g/${galeriaId}/zip?parte=${p.numero}`, `galeria-parte-${p.numero}.zip`);
+    }
   }
 
   /**
@@ -1823,6 +1859,17 @@ export function GaleriaCliente({
                 baixarZip: modo !== "computador" ? () => baixarZip("") : undefined,
                 enviarParaOComputador:
                   modo !== "computador" ? () => void mandarParaOComputador() : undefined,
+                partes:
+                  modo === "computador" && partesDoZip.length > 1
+                    ? {
+                        lista: partesDoZip.map((p) => ({
+                          numero: p.numero,
+                          bytes: p.bytes,
+                          baixar: () => void baixarZip(`?parte=${p.numero}`),
+                        })),
+                        baixarTodas: () => void baixarTodasAsPartes(),
+                      }
+                    : undefined,
                 pastas: pastasParaBaixar,
                 favoritas: favoritas.size,
                 /* As favoritas de QUEM ESTÁ ESCOLHENDO, de todos os capítulos —

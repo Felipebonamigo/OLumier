@@ -84,6 +84,12 @@ export interface MedidaDeEnvio {
   ms: number | null;
   ok: boolean;
   erro: string | null;
+  /**
+   * O SERVIDOR recusou (espaço do plano, teste vencido, sessão, tipo de
+   * arquivo) — não foi a rede. Só vale em falha. Ver a migração 069: sem esta
+   * marca, um estúdio no teto dos 10 GB virava 150 "desistências" no painel.
+   */
+  recusa: boolean;
 }
 
 export const LOTE_MAXIMO_DE_MEDIDAS = 100;
@@ -106,7 +112,45 @@ export function lerMedidas(bruto: unknown): MedidaDeEnvio[] | null {
       ms,
       ok,
       erro: !ok && typeof o.erro === "string" ? o.erro.slice(0, 200) : null,
+      recusa: !ok && o.recusa === true,
     });
   }
   return saida.length ? saida : null;
+}
+
+/**
+ * A LEVA — a fila inteira, do primeiro ao último arquivo (09/10/2026).
+ *
+ * A medida de cada arquivo cronometra só o PUT do original, com outros
+ * subindo junto: 3 MB/s por arquivo pode ser a internet inteira do fotógrafo
+ * ocupada, e daquele número não dá para saber. A leva mede o que ele sente —
+ * "a pasta levou quanto?" — com miniatura, preparo, confirmação e retentativa
+ * dentro. Ver a migração 069.
+ */
+export interface MedidaDeLeva {
+  /** Só o que subiu. */
+  bytes: number;
+  /** Relógio de parede, do começo da fila até ela secar. */
+  ms: number;
+  arquivos: number;
+  /** Desistências de rede; recusa do servidor não conta. */
+  falhas: number;
+  paralelos: number;
+}
+
+/** Lixo vira `null`. Leva sem arquivo enviado não mede nada. */
+export function lerLeva(bruto: unknown): MedidaDeLeva | null {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;
+  const o = bruto as Record<string, unknown>;
+  const inteiro = (v: unknown, min: number, max: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= min && n <= max ? Math.round(n) : null;
+  };
+  const bytes = inteiro(o.bytes, 1, 1e14);
+  const ms = inteiro(o.ms, 1, 2 ** 31 - 1);
+  const arquivos = inteiro(o.arquivos, 1, 1_000_000);
+  const falhas = inteiro(o.falhas ?? 0, 0, 1_000_000);
+  const paralelos = inteiro(o.paralelos, 1, 64);
+  if (bytes === null || ms === null || arquivos === null || falhas === null || paralelos === null) return null;
+  return { bytes, ms, arquivos, falhas, paralelos };
 }
