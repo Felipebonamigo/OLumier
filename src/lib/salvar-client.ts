@@ -776,10 +776,20 @@ export const TEXTO_PARA_O_COMPUTADOR =
  * iCloud grátis e levam horas pelo menu. No computador é um zip só.
  */
 export async function enviarParaOComputador(url: string, titulo: string): Promise<ResultadoDoEnvio> {
+  return compartilharLink(url, titulo, TEXTO_PARA_O_COMPUTADOR);
+}
+
+/**
+ * Um link pelo menu do sistema (WhatsApp, e-mail, AirDrop…); sem ele, copiado.
+ *
+ * Serve ao "Baixar no computador" acima e ao "Compartilhar" da barra da
+ * galeria — o mesmo gesto, com outro recado junto.
+ */
+export async function compartilharLink(url: string, titulo: string, texto?: string): Promise<ResultadoDoEnvio> {
   if (typeof navigator === "undefined") return "falhou";
   if (typeof navigator.share === "function") {
     try {
-      await navigator.share({ title: titulo, text: TEXTO_PARA_O_COMPUTADOR, url });
+      await navigator.share({ title: titulo, ...(texto ? { text: texto } : {}), url });
       return "compartilhou";
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return "cancelou";

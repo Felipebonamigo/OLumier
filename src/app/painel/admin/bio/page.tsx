@@ -4,6 +4,7 @@ import { exigirAdmin, metadataDeAdmin } from "@/lib/portao-admin";
 import { marca } from "@/config/marca";
 import { PRODUTOS_DA_BIO } from "@/config/bio";
 import { resumoDaBio } from "@/lib/bio";
+import { EVENTO_SELO } from "@/lib/bio-regras";
 import { Bloco, Barra, Cartao, porcento } from "@/components/admin-pecas";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -116,9 +117,24 @@ export default async function BioAdminPage({
         </ul>
       </Bloco>
 
+      {/* O selo do fim das galerias e das vitrines (10/10/2026) passa pelo
+          mesmo caminho da ponte — ver `EVENTO_SELO` em `lib/bio-regras.ts`.
+          Fica fora dos "cliques nos produtos" de cima: não é a página da bio. */}
+      <Bloco
+        titulo="O selo das galerias"
+        explicacao='Cliques no "entregue com" do fim das galerias e das vitrines. Quem clica vai para a home; se criar conta em até 30 dias, ela aparece abaixo como "selo/…", com o estúdio de onde veio. Por estúdio, na tabela "De onde vieram" (fonte "selo").'
+      >
+        <p className="text-sm">
+          <span className="text-2xl font-bold tabular-nums">
+            {(r.cliques[EVENTO_SELO] ?? 0).toLocaleString("pt-BR")}
+          </span>{" "}
+          <span className="text-texto-soft">cliques no período</span>
+        </p>
+      </Bloco>
+
       <Bloco
         titulo="Contas criadas vindas da bio"
-        explicacao='Só a Galeria Átomo: quem clicou num produto na ponte e, até 30 dias depois, criou conta no mesmo navegador. "instagram/bio/atomatiza" é quem clicou na Atomatiza e acabou criando conta aqui.'
+        explicacao='Só a Galeria Átomo: quem clicou num produto na ponte (ou no selo de uma galeria) e, até 30 dias depois, criou conta no mesmo navegador. "instagram/bio/atomatiza" é quem clicou na Atomatiza e acabou criando conta aqui.'
       >
         {r.contas.length === 0 ? (
           <p className="text-sm text-texto-faint">Nenhuma conta com origem neste período.</p>

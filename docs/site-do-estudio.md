@@ -109,7 +109,11 @@ de link dizia "Galeria Átomo", a aba terminava em "· Galeria Átomo", e
 - **Robots e sitemap do estúdio.** O proxy reescreve os dois para
   `app/e/[estudio]/regras-para-robos` e `mapa-do-site` — nomes neutros porque o
   Next trata caminho terminado em `/sitemap.xml` como rota especial. O sitemap
-  lista só a vitrine.
+  lista só a vitrine. E desde 10/10/2026 o sitemap DA CASA lista as vitrines
+  que têm galeria à mostra (`vitrinesParaOSitemap`), para o Google achá-las
+  sem esperar alguém linkar.
+- **O selo é link (10/10/2026).** "entregue com Galeria Átomo" leva à casa por
+  `/selo/<estudio>`, que mede o clique — ver `docs/seo.md` §2.1.
 - **Ícone da aba.** A logo do estúdio quando ela existe; sem logo, o favicon de
   sempre — a aba não pode ficar sem ícone (`testar-app-instalado.mjs`), e o
   ícone de APP da plataforma nunca vai para a página do estúdio

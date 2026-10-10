@@ -36,6 +36,33 @@ function remetente(): string | null {
 }
 
 /**
+ * O remetente de um e-mail QUE O ESTÚDIO MANDA — "Sirius Fotografia via
+ * Galeria Átomo" (10/10/2026).
+ *
+ * O e-mail de entrega já era todo do estúdio por dentro (logo, cor, rodapé "este
+ * e-mail é de…"), mas a caixa de entrada mostrava "Galeria Átomo" — o casal
+ * via o nome do fornecedor do fotógrafo na lista, antes do dele. O endereço
+ * continua o nosso (é o domínio verificado no Resend; ver `remetente`): só o
+ * NOME muda, e o "via" é a forma que as caixas de entrada já ensinaram a ler.
+ * E a casa continua lá, atrás, em toda caixa de entrada que recebe uma entrega.
+ *
+ * O nome do estúdio é texto do fotógrafo indo para um cabeçalho: aspas, `<`,
+ * `>`, barra invertida e caractere de controle (quebra de linha é injeção de
+ * cabeçalho) saem antes. Sobrando nada, vale o remetente de sempre.
+ */
+export function remetenteDoEstudio(base: string, estudio: string): string {
+  const nome = estudio
+    .replace(/[\u0000-\u001f\u007f"<>\\]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 60)
+    .trim();
+  if (!nome) return base;
+  const endereco = base.match(/<([^>]+)>/)?.[1] ?? base;
+  return `"${nome} via ${marca.nome}" <${endereco}>`;
+}
+
+/**
  * Chave do Resend, só se for plausível.
  *
  * Toda chave do Resend começa com `re_`. Conferir o prefixo parece
@@ -93,6 +120,8 @@ export interface Email {
    * linha da fila), nunca um aleatório.
    */
   idempotencia?: string;
+  /** O e-mail é do estúdio para o cliente dele: o nome do estúdio vai na frente. Ver `remetenteDoEstudio`. */
+  estudio?: string;
 }
 
 /**
@@ -120,7 +149,7 @@ export async function enviarEmail(email: Email): Promise<boolean> {
         ...(email.idempotencia ? { "Idempotency-Key": email.idempotencia } : {}),
       },
       body: JSON.stringify({
-        from: de,
+        from: email.estudio ? remetenteDoEstudio(de, email.estudio) : de,
         to: [email.para],
         subject: email.assunto,
         html: email.html,

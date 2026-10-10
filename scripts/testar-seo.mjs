@@ -103,7 +103,9 @@ await etapa("sitemap.xml lista as páginas públicas no domínio canônico", asy
     if (!r.corpo.includes(precisa)) throw new Error(`não lista ${precisa}`);
   }
   /* Página de login não é conteúdo: sitemap só carrega o que merece ranquear. */
-  if (r.corpo.includes("/entrar")) throw new Error("lista /entrar — sitemap não é menu");
+  /* Pelo endereço inteiro: desde 10/10/2026 o sitemap lista vitrines, e um
+     estúdio chamado "entrar-…" casaria com um "/entrar" solto. */
+  if (r.corpo.includes(`<loc>https://${marca.dominio}/entrar`)) throw new Error("lista /entrar — sitemap não é menu");
   return `domínio ${marca.dominio}`;
 });
 
@@ -118,7 +120,7 @@ await etapa("a página-ponte do Instagram é a exceção: fora do sitemap e fora
    * visita é um clique contado.
    */
   const mapa = await pegar("/sitemap.xml");
-  if (mapa.corpo.includes("/bio")) throw new Error("a /bio entrou no sitemap");
+  if (mapa.corpo.includes(`<loc>https://${marca.dominio}/bio`)) throw new Error("a /bio entrou no sitemap");
   const p = await pegar("/bio");
   if (p.status !== 200) throw new Error(`HTTP ${p.status}`);
   if (!/noindex/.test(meta(p.corpo, "robots") ?? "")) throw new Error("a /bio não é noindex");
@@ -696,6 +698,118 @@ await etapa("o link de um capítulo desdobra com o cartão da galeria", async ()
   if (!imagem.includes(`/g/${g.tslug}/${g.gslug}/opengraph-image`)) {
     throw new Error(`og:image do capítulo é "${imagem}"`);
   }
+});
+
+/*
+ * ── O QUE O PRÓPRIO SISTEMA FAZ PARA SER ACHADO (10/10/2026) ──────────────
+ *
+ * Felipe: "estou falando do sistema, tudo que o sistema pode fazer". Quatro
+ * peças, cada uma com a sua etapa: o selo que vira link medido, o botão de
+ * compartilhar do cliente, as vitrines no sitemap da casa e o nome do estúdio
+ * na caixa de entrada.
+ */
+console.log("\no que leva gente até a casa");
+
+const NAVEGADOR =
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
+const { lerCookieDaBio, origemDoCadastro } = await import("../src/lib/bio-regras.ts");
+
+await etapa("o selo do fim da galeria e da vitrine é um link medido para a casa", async () => {
+  const seloEm = (html, lugar) =>
+    html.match(new RegExp(`<a [^>]*data-selo="${lugar}"[^>]*>`))?.[0] ?? null;
+  const naGaleria = seloEm((await pegarComo(`/${g.gslug}`, hostEstudio)).corpo, "galeria");
+  const naVitrine = seloEm((await pegarComo("/", hostEstudio)).corpo, "vitrine");
+  for (const [lugar, a] of [["galeria", naGaleria], ["vitrine", naVitrine]]) {
+    if (!a) throw new Error(`o selo da ${lugar} não é link`);
+    /* Absoluto no domínio da casa: relativo, cairia na rota de galeria do estúdio. */
+    if (!a.includes(`href="https://${marca.dominio}/selo/${g.tslug}?no=${lugar}"`)) {
+      throw new Error(`href do selo da ${lugar}: ${a}`);
+    }
+    /* Nova aba (a pessoa está no meio das fotos) e sem levar o endereço da galeria junto. */
+    if (!a.includes('target="_blank"') || !/rel="[^"]*noreferrer/.test(a)) {
+      throw new Error(`o selo da ${lugar} não abre à parte, ou leva o endereço da galeria`);
+    }
+  }
+});
+
+await etapa("o clique no selo leva à home, conta, e deixa a origem para o cadastro", async () => {
+  const contar = async () =>
+    Number(
+      (
+        await db.query("select count(*) from bio_eventos where evento = 'click_selo' and campanha = $1", [
+          g.tslug,
+        ])
+      ).rows[0].count,
+    );
+  const antes = await contar();
+  const r = await fetch(`${BASE}/selo/${g.tslug}?no=vitrine`, {
+    redirect: "manual",
+    headers: { "user-agent": NAVEGADOR, connection: "close" },
+  });
+  if (r.status !== 302) throw new Error(`HTTP ${r.status}`);
+  if (new URL(r.headers.get("location") ?? "", BASE).pathname !== "/") {
+    throw new Error(`foi para ${r.headers.get("location")}, e não para a home`);
+  }
+  const cookie = r.headers.getSetCookie().find((c) => c.startsWith("origem_bio="));
+  if (!cookie) throw new Error("não deixou o cookie de origem");
+  const lido = lerCookieDaBio(decodeURIComponent(cookie.split(";")[0].slice("origem_bio=".length)));
+  if (!lido) throw new Error(`o cadastro não leria o cookie: ${cookie}`);
+  const conta = origemDoCadastro(lido);
+  if (conta.origem !== "selo/vitrine/galeria" || conta.campanha !== g.tslug) {
+    throw new Error(`a conta nasceria com ${JSON.stringify(conta)}`);
+  }
+  /* O clique é gravado DEPOIS da resposta (`after`). */
+  for (let i = 0; i < 30 && (await contar()) === antes; i++) await new Promise((ok) => setTimeout(ok, 100));
+  if ((await contar()) !== antes + 1) throw new Error("o clique não foi contado");
+
+  /* A prévia do link no WhatsApp é robô: redireciona igual, sem cookie e sem número. */
+  const robo = await fetch(`${BASE}/selo/${g.tslug}?no=galeria`, {
+    redirect: "manual",
+    headers: { "user-agent": "WhatsApp/2.23.20.0", connection: "close" },
+  });
+  if (robo.status !== 302) throw new Error(`robô: HTTP ${robo.status}`);
+  if (robo.headers.getSetCookie().some((c) => c.startsWith("origem_bio="))) {
+    throw new Error("a prévia do WhatsApp ganhou cookie de origem");
+  }
+  await new Promise((ok) => setTimeout(ok, 500));
+  if ((await contar()) !== antes + 1) throw new Error("a prévia do WhatsApp virou clique");
+  await db.query("delete from bio_eventos where campanha = $1", [g.tslug]);
+});
+
+await etapa("o cliente tem um botão para compartilhar a galeria", async () => {
+  const html = (await pegarComo(`/${g.gslug}`, hostEstudio)).corpo;
+  if (!html.includes("↗ Compartilhar")) throw new Error("a barra da galeria não oferece compartilhar");
+});
+
+await etapa("o sitemap da casa lista as vitrines que têm o que mostrar", async () => {
+  const doEstudio = `<loc>https://${hostEstudio}/</loc>`;
+  const mapa = async () => (await pegar("/sitemap.xml")).corpo;
+  if (!(await mapa()).includes(doEstudio)) throw new Error("a vitrine do estúdio não está no sitemap da casa");
+  /* Com a única galeria atrás de senha, a vitrine não mostra nada — e página
+     vazia no índice é o "conteúdo raso" que o buscador cobra do domínio. */
+  await db.query("update galerias set senha_hash = 'x' where id = $1", [g.id]);
+  try {
+    const sem = await mapa();
+    if (sem.includes(doEstudio)) throw new Error("listou vitrine sem nenhuma galeria à mostra");
+    if (sem.includes(g.gslug)) throw new Error("listou uma galeria");
+  } finally {
+    await db.query("update galerias set senha_hash = null where id = $1", [g.id]);
+  }
+});
+
+await etapa("o e-mail da entrega chega com o nome do estúdio na frente", async () => {
+  const { remetenteDoEstudio } = await import("../src/lib/email.ts");
+  const base = `${marca.nome} <entregas@${marca.dominio}>`;
+  const certo = remetenteDoEstudio(base, "Sirius Fotografia");
+  if (certo !== `"Sirius Fotografia via ${marca.nome}" <entregas@${marca.dominio}>`) {
+    throw new Error(`saiu ${certo}`);
+  }
+  /* Nome do estúdio é texto do fotógrafo indo para um cabeçalho. */
+  const torto = remetenteDoEstudio(base, 'Estúdio "X" <a@b.c>\r\nBcc: todos@golpe.net');
+  if (/[\r\n]/.test(torto) || (torto.match(/"/g) ?? []).length !== 2 || (torto.match(/</g) ?? []).length !== 1) {
+    throw new Error(`cabeçalho injetável: ${JSON.stringify(torto)}`);
+  }
+  if (remetenteDoEstudio(base, ' "" ') !== base) throw new Error("nome vazio não voltou ao remetente de sempre");
 });
 
 await limparRodada(db);

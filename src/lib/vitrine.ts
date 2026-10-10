@@ -103,13 +103,49 @@ export async function galeriasDaVitrine(tenantId: string) {
           order by ordem limit 1
        ) pm on true
       where g.tenant_id = $1
-        and g.publicada
-        and g.estado = 'online'
-        and g.senha_hash is null
-        and (g.expira_em is null or g.expira_em > now())
+        and ${NA_VITRINE}
       order by coalesce(g.data_evento, g.criado_em::date) desc
       limit 60`,
     [tenantId],
+  );
+}
+
+/**
+ * Quais galerias a vitrine pode mostrar — publicada, no ar, sem senha, no
+ * prazo. Num lugar só porque agora são DOIS leitores (a vitrine e o sitemap da
+ * casa), e a cópia esquecida de uma regra que protege a entrega de um casal é
+ * exatamente o que não pode existir. `g` é o apelido de `galerias`.
+ */
+const NA_VITRINE = `g.publicada
+        and g.estado = 'online'
+        and g.senha_hash is null
+        and (g.expira_em is null or g.expira_em > now())`;
+
+/**
+ * AS VITRINES NO SITEMAP DA CASA (10/10/2026).
+ *
+ * Cada estúdio já tinha o seu `/sitemap.xml`, mas ninguém dizia ao Google que
+ * ele existe: vitrine nova só era achada se alguém linkasse. A propriedade do
+ * Search Console é de DOMÍNIO, e cobre todos os subdomínios — então o sitemap
+ * da casa pode listar `<estudio>.galeriaatomo.com.br`, e o Google aceita.
+ *
+ * Só entra a vitrine que tem o que mostrar (ao menos uma galeria que ela
+ * exibe): uma página com o nome e mais nada é o "conteúdo raso" que o buscador
+ * pune — e pune o domínio inteiro, não só ela. Conta cancelada fica de fora.
+ * Domínio próprio também: ele não é da nossa propriedade no Search Console, e
+ * o sitemap dele é o dele.
+ */
+export async function vitrinesParaOSitemap() {
+  return consultar<{ slug: string; atualizada: Date }>(
+    `select t.slug, max(greatest(g.criado_em, g.atualizado_em)) as atualizada
+       from tenants t
+       join galerias g on g.tenant_id = t.id
+      where t.status <> 'cancelado'
+        and not (t.dominio_proprio is not null and t.dominio_verificado_em is not null)
+        and ${NA_VITRINE}
+      group by t.slug
+      order by atualizada desc
+      limit 5000`,
   );
 }
 
