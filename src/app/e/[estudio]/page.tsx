@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FUSO } from "@/config/fuso";
 import { notFound, permanentRedirect } from "next/navigation";
 import { resolverEstudio } from "@/lib/endereco";
-import { marca } from "@/config/marca";
+import { SeloDaPlataforma } from "@/components/selo-da-plataforma";
 import { armazemDe, urlDaDerivada } from "@/lib/armazem";
 import { iconeDoEstudio } from "@/lib/icone-do-estudio";
 import { jsonLd } from "@/lib/metadados";
@@ -196,12 +196,7 @@ export default async function EstudioPage({ params }: Props) {
       )}
 
       <footer className="px-6 pb-16 pt-8 text-center">
-        <span
-          className="inline-flex items-center gap-2 rounded-full px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em]"
-          style={{ border: "1px solid var(--g-linha)", color: "var(--g-tenue)" }}
-        >
-          entregue com {marca.nome}
-        </span>
+        <SeloDaPlataforma estudio={t.slug} lugar="vitrine" arredondado="9999px" />
       </footer>
     </main>
   );

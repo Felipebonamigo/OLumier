@@ -95,6 +95,7 @@ export function MenusDaGaleria({
   favoritas,
   baixar,
   tocarSlideshow,
+  compartilhar = null,
 }: {
   capitulos: CapituloGaleria[];
   /** O endereço público da galeria, sem capítulo. Ver `enderecoNaGaleria`. */
@@ -126,6 +127,16 @@ export function MenusDaGaleria({
    * slideshow: há uma escolha só — escrever.
    */
   recado?: (() => void) | null;
+  /**
+   * Manda o link da galeria pelo menu do sistema, ou null onde não cabe (a
+   * prévia do dono, com fotos de exemplo).
+   *
+   * 10/10/2026: a galeria é o que o casal mais quer mostrar — para a mãe, para
+   * os padrinhos — e até aqui o único jeito era copiar o endereço da barra do
+   * navegador, que no celular quase ninguém acha. Botão e não menu, como o
+   * slideshow: há uma escolha só.
+   */
+  compartilhar?: (() => void) | null;
 }) {
   const barraRef = useRef<HTMLElement | null>(null);
   const busca = useSearchParams();
@@ -271,7 +282,7 @@ export function MenusDaGaleria({
     };
   }, [capitulos, fatia]);
 
-  if (!favoritas && !baixar && !tocarSlideshow && !recado && capitulos.length < 2) return null;
+  if (!favoritas && !baixar && !tocarSlideshow && !recado && !compartilhar && capitulos.length < 2) return null;
 
   return (
     <nav
@@ -458,6 +469,14 @@ export function MenusDaGaleria({
                   : "sem limite de downloads — baixe quantas vezes quiser"}
             </Rodape>
           </Menu>
+        )}
+
+        {/* Por último: ver, escolher e baixar são o que a pessoa veio fazer;
+            mandar para alguém é o que ela faz depois. */}
+        {compartilhar && (
+          <button type="button" onClick={compartilhar} className={GATILHO} style={{ color: "var(--g-suave)" }}>
+            ↗ Compartilhar
+          </button>
         )}
       </div>
 

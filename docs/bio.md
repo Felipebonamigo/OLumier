@@ -94,6 +94,12 @@ O cookie nasce também no clique da Atomatiza (`instagram/bio/atomatiza`): uma
 conta da Galeria com essa origem é alguém que veio da ponte, clicou na Atomatiza
 e acabou criando conta aqui. É um dado, e o admin mostra separado.
 
+E nasce no **selo das galerias** (10/10/2026): o "entregue com Galeria Átomo"
+leva a `/selo/<estudio>`, que grava o evento `click_selo` e o cookie
+`selo~galeria~<estudio>~galeria` (ou `~vitrine~`). A conta sai com
+`origem = selo/galeria/galeria` e o estúdio em `origem_campanha`. Mesma tabela,
+mesmo cookie, mesmo filtro de robô — ver `docs/seo.md` §2.1.
+
 **Não pega:** quem abre o link no navegador de dentro do Instagram e cria a conta
 depois, no Safari/Chrome (o cookie de um não é o do outro), ou volta depois de 30
 dias. É a limitação de qualquer atribuição por cookie.

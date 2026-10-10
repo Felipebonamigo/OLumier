@@ -174,7 +174,15 @@ for (const e of pendentes) {
   /* A chave de idempotência é o ID DA LINHA: estável entre rodadas, então um
      Resend lento que aceitou e respondeu depois do nosso timeout não manda a
      mesma mensagem duas vezes no dia seguinte. */
-  const ok = await enviarEmail({ para: e.para, assunto, html, texto, idempotencia: e.id });
+  const ok = await enviarEmail({
+    para: e.para,
+    assunto,
+    html,
+    texto,
+    idempotencia: e.id,
+    /* "Estúdio via Galeria Átomo" na caixa de entrada — ver `remetenteDoEstudio`. */
+    estudio: e.estudioNome,
+  });
   if (ok) {
     await marcarEnviado(e.id);
     enviados += 1;
