@@ -26,10 +26,19 @@
 name: Verificar
 
 on:
-  push:
-    branches: [master]
+  # Sem `push: master` desde 10/10/2026. Todo merge no master dispara o `Publicar`,
+  # cujo `deploy.sh` roda o MESMO portão (suíte com --exigir-tudo) no mesmo commit, e
+  # o PR já passou por aqui antes do merge. Rodar a suíte inteira uma terceira vez
+  # gastava ~364 min em 10 dias, com a cota de Actions (2.000 min/mês) a 90%.
   pull_request:
   workflow_dispatch:
+
+# UMA RODADA POR BRANCH, e a nova cancela a anterior. Só vale porque esta workflow
+# não PUBLICA nada: ela só confere. O `Publicar` não ganha esta linha — cancelar
+# uma publicação no meio deixaria o servidor pela metade.
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
 
 # Só precisa ler o código: esta workflow roda em `pull_request`, ou seja, faz
 # `npm ci` e build de código vindo de fora com o token do repositório ao alcance.
