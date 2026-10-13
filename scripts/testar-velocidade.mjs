@@ -19,6 +19,15 @@
  *   - lote torto ou grande demais é recusado inteiro;
  *   - o painel lê o que a rota gravou.
  *
+ * 13/10/2026 (migração 075), depois da Melannie (8,8 GB, 30 minutos mais lenta
+ * que o Pixieset): o PUT do original ocupou 43% do tempo das seis vagas da fila
+ * e o resto não tinha dono. O que esta suíte prende:
+ *
+ *   - as ETAPAS de cada foto (miniatura, preparo, original, confirmação,
+ *     tentativas) são peneiradas, gravadas, e o painel as lê em média por
+ *     estúdio, com o "perdido" que sobra do total;
+ *   - navegador antigo, que não manda etapas, continua sendo gravado.
+ *
  * 09/10/2026 (migração 069), depois de 153 "desistências" que eram quase todas
  * um estúdio no teto dos 10 GB do teste:
  *
@@ -33,8 +42,18 @@ import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 
 exigirBancoDeTeste();
 
-const { resumoDeVelocidade, formatarVelocidade, navegadorResumido, lerMedidas, lerLeva, LOTE_MAXIMO_DE_MEDIDAS } =
-  await import("../src/lib/velocidade-regras.ts");
+const {
+  resumoDeVelocidade,
+  formatarVelocidade,
+  navegadorResumido,
+  lerMedidas,
+  lerLeva,
+  lerEtapas,
+  formatarDuracaoCurta,
+  tempoPerdido,
+  SEM_ETAPAS,
+  LOTE_MAXIMO_DE_MEDIDAS,
+} = await import("../src/lib/velocidade-regras.ts");
 
 const BASE = process.env.BASE_URL ?? "http://localhost:3040";
 const { DATABASE_URL, SESSION_SECRET } = process.env;
@@ -163,6 +182,68 @@ await etapa("a peneira da leva", () => {
     igual(lerLeva(torta), null, JSON.stringify(torta));
   }
   return "1 boa, 9 tortas";
+});
+
+await etapa("as etapas: lixo vira \"não medi\", o resto entra arredondado", () => {
+  const boa = lerEtapas({
+    esperaMs: 12.4,
+    miniaturaMs: 800,
+    preparoMs: 250.6,
+    derivadasMs: 0,
+    confirmarMs: 310,
+    totalMs: 9000,
+    tentativas: 2,
+    semRede: true,
+  });
+  igual(boa.esperaMs, 12, "ms arredondado");
+  igual(boa.preparoMs, 251, "ms arredondado para cima");
+  igual(boa.derivadasMs, 0, "zero é uma medida");
+  igual(boa.tentativas, 2, "tentativas");
+  igual(boa.semRede, true, "sem rede");
+  const torta = lerEtapas({
+    esperaMs: -5,
+    miniaturaMs: "muito",
+    preparoMs: Infinity,
+    derivadasMs: 1e12,
+    confirmarMs: null,
+    totalMs: "",
+    tentativas: 0,
+    semRede: "sim",
+  });
+  for (const [campo, valor] of Object.entries(torta)) igual(valor, null, `${campo} torto vira nulo`);
+  for (const nada of [null, undefined, [], "etapas", 42]) {
+    igual(JSON.stringify(lerEtapas(nada)), JSON.stringify(SEM_ETAPAS), `${JSON.stringify(nada)} vira sem etapas`);
+  }
+  return "1 boa, 8 campos tortos, 5 entradas sem etapas";
+});
+
+await etapa("o navegador antigo, sem etapas, continua entrando", () => {
+  const [m] = lerMedidas([{ bytes: 5 * MB, ms: 1000, ok: true }]);
+  igual(JSON.stringify(m.etapas), JSON.stringify(SEM_ETAPAS), "etapas ausentes");
+  const [c] = lerMedidas([{ bytes: 5 * MB, ms: 1000, ok: true, etapas: { miniaturaMs: 700, totalMs: 2500, tentativas: 1 } }]);
+  igual(c.etapas.miniaturaMs, 700, "etapa que veio");
+  igual(c.etapas.preparoMs, null, "etapa que não veio");
+  igual(c.etapas.semRede, null, "sem rede não veio");
+  return "sem etapas e com etapas parciais";
+});
+
+await etapa("o tempo perdido é o que sobra, nunca negativo", () => {
+  igual(tempoPerdido(12_900, [1000, 2000, 300, 5000, 400, 200]), 4000, "o que sobra");
+  igual(tempoPerdido(12_900, [1000, null, null, 5000, null, null]), 6900, "etapa não medida não desconta");
+  igual(tempoPerdido(1000, [900, 200]), 0, "soma passou do total por arredondamento");
+  igual(tempoPerdido(null, [1, 2]), null, "sem total não há perdido");
+  return "4 contas";
+});
+
+await etapa("a duração curta fala a língua da tela", () => {
+  igual(formatarDuracaoCurta(420), "0,4 s", "décimos abaixo de 10 s");
+  igual(formatarDuracaoCurta(9_960), "10,0 s", "arredonda sem virar 9,9");
+  igual(formatarDuracaoCurta(12_400), "12 s", "segundos inteiros");
+  igual(formatarDuracaoCurta(65_000), "1 min 5 s", "minuto e segundo");
+  igual(formatarDuracaoCurta(120_000), "2 min", "minuto redondo");
+  igual(formatarDuracaoCurta(119_600), "2 min", "59,6 s não vira 60 s");
+  igual(formatarDuracaoCurta(-1), "—", "negativo");
+  return "7 formas";
 });
 
 /* ── A rota e o painel ─────────────────────────────────────────────────── */
@@ -318,6 +399,71 @@ try {
     return "4 recusas e 1 sem sessão, nada gravado";
   });
 
+  await etapa("as etapas são gravadas junto da medida", async () => {
+    const etapas = (extra = {}) => ({
+      esperaMs: 1000,
+      miniaturaMs: 2000,
+      preparoMs: 300,
+      derivadasMs: 400,
+      confirmarMs: 200,
+      totalMs: 12_900,
+      tentativas: 1,
+      semRede: false,
+      ...extra,
+    });
+    /* Seis fotos que subiram (o piso do painel é de cinco), duas delas com a
+       tentativa refeita, uma delas depois de ficar sem rede. O PUT de cada
+       uma foi de 5 s; o total, 12,9 s: sobram 4 s perdidos em todas. */
+    const fotos = [
+      etapas(),
+      etapas(),
+      etapas(),
+      etapas(),
+      etapas({ tentativas: 2 }),
+      etapas({ tentativas: 3, semRede: true }),
+    ].map((e) => ({ galeriaId: minha.id, bytes: 8 * MB, ms: 5000, ok: true, etapas: e }));
+    const r = await mandar(fotos);
+    igual(r.status, 200, "status");
+    const { rows } = await db.query(
+      `select espera_ms, miniatura_ms, preparo_ms, derivadas_ms, confirmar_ms, total_ms, tentativas, sem_rede
+         from envios_medidos where tenant_id = $1 and total_ms is not null order by id`,
+      [estudio.id],
+    );
+    igual(rows.length, 6, "linhas com etapas");
+    igual(rows[0].miniatura_ms, 2000, "miniatura");
+    igual(rows[0].total_ms, 12_900, "total");
+    igual(rows[0].tentativas, 1, "tentativas");
+    igual(rows[0].sem_rede, false, "sem rede");
+    igual(rows[5].tentativas, 3, "foto refeita duas vezes");
+    igual(rows[5].sem_rede, true, "ficou sem rede");
+    /* As do começo do arquivo, de antes das etapas, ficaram sem elas. */
+    const antigas = await db.query(
+      "select count(*)::int as n from envios_medidos where tenant_id = $1 and total_ms is null",
+      [estudio.id],
+    );
+    if (antigas.rows[0].n < 3) throw new Error(`as linhas de antes deviam seguir sem etapas: ${antigas.rows[0].n}`);
+    return "6 fotos com etapas; as de antes seguem sem";
+  });
+
+  await etapa("etapa torta não derruba a medida", async () => {
+    const r = await mandar([
+      {
+        galeriaId: minha.id,
+        bytes: 4 * MB,
+        ms: 2000,
+        ok: true,
+        etapas: { esperaMs: "dois", miniaturaMs: -1, totalMs: 1e15, tentativas: "x", semRede: "talvez" },
+      },
+    ]);
+    igual(r.status, 200, "status");
+    const { rows } = await db.query(
+      "select espera_ms, miniatura_ms, total_ms, tentativas, sem_rede from envios_medidos where tenant_id = $1 order by id desc limit 1",
+      [estudio.id],
+    );
+    for (const [campo, valor] of Object.entries(rows[0])) igual(valor, null, `${campo} torto vira nulo`);
+    return "a medida entra, as etapas tortas viram nulas";
+  });
+
   await etapa("o painel lê o que a rota gravou", async () => {
     const { velocidadeReal } = await import("../src/lib/velocidade.ts");
     const v = await velocidadeReal();
@@ -334,6 +480,28 @@ try {
     if (!grupo || grupo.n !== 2) throw new Error(`recusas agrupadas: ${JSON.stringify(v.recusas)}`);
     /* A leva de 250 MB em 50 s passa do piso (20 MB, 3 arquivos). */
     if (!v.leva || v.leva.n < 2) throw new Error(`leva: ${JSON.stringify(v.leva)}`);
+    /* As etapas: seis fotos com 1 s de espera, 2 s de miniatura, 0,3 s de
+       preparo, 5 s de PUT, 0,4 s de miniaturas e 0,2 s de confirmação em 12,9 s
+       — sobram 4 s perdidos em cada uma. */
+    const tabela = await velocidadeReal(30, 7, 1000);
+    const dele = tabela.etapas.porEstudio.find((e) => e.estudio === estudio.nome_estudio);
+    if (!dele) throw new Error(`o estúdio não aparece nas etapas: ${JSON.stringify(tabela.etapas.porEstudio.map((e) => e.estudio))}`);
+    igual(dele.n, 6, "fotos nas etapas");
+    igual(Math.round(dele.esperaMs), 1000, "espera média");
+    igual(Math.round(dele.miniaturaMs), 2000, "miniatura média");
+    igual(Math.round(dele.preparoMs), 300, "preparo médio");
+    igual(Math.round(dele.envioMs), 5000, "PUT médio");
+    igual(Math.round(dele.derivadasMs), 400, "miniaturas médias");
+    igual(Math.round(dele.confirmarMs), 200, "confirmação média");
+    igual(Math.round(dele.perdidoMs), 4000, "perdido médio");
+    igual(Math.round(dele.totalMs), 12_900, "total médio");
+    igual(Math.round(dele.comRetentativa * 100), 33, "fotos com 2ª tentativa (2 de 6)");
+    igual(Math.round(dele.comQuedaDeRede * 100), 17, "fotos que ficaram sem rede (1 de 6)");
+    if (!tabela.etapas.geral || tabela.etapas.geral.n < 6) throw new Error(`geral: ${JSON.stringify(tabela.etapas.geral)}`);
+    /* O estúdio do vizinho não tem foto medida por etapa: abaixo do piso, fora. */
+    if (tabela.etapas.porEstudio.some((e) => e.estudio === vizinho.nome_estudio)) {
+      throw new Error("estúdio sem fotos medidas apareceu nas etapas");
+    }
     return `envio ${formatarVelocidade(v.envio.mediana)} (n=${v.envio.n}) · pasta ${formatarVelocidade(v.leva.mediana)} (n=${v.leva.n}) · ${v.falhas.n} queda(s) · ${v.recusas.n} recusa(s)`;
   });
 } finally {

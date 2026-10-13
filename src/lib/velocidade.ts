@@ -15,6 +15,35 @@ const PISO_ENVIO = 1024 * 1024;
 const PISO_LEVA = 20 * 1024 * 1024;
 const ARQUIVOS_MINIMOS_DA_LEVA = 3;
 
+/**
+ * ONDE O TEMPO DE CADA FOTO VAI (13/10/2026, migração 075).
+ *
+ * Médias por foto, em ms, só de quem SUBIU e mandou as etapas. A soma das
+ * partes mais `perdidoMs` é `totalMs`: o perdido é o que as tentativas
+ * refeitas e as esperas entre elas levaram (ou o que ninguém cronometrou).
+ * Média e não mediana de propósito: uma foto em cada quatro perdendo um
+ * minuto e meio some numa mediana e pesa na conta de quem espera a pasta.
+ */
+export interface EtapasDoEstudio {
+  /** O estúdio, ou "Todos" na linha geral. */
+  estudio: string;
+  /** Quantas fotos entram na média. */
+  n: number;
+  totalMs: number;
+  esperaMs: number;
+  miniaturaMs: number;
+  preparoMs: number;
+  /** O PUT do original — a única parte que depende só da rede. */
+  envioMs: number;
+  derivadasMs: number;
+  confirmarMs: number;
+  perdidoMs: number;
+  /** Fração (0 a 1) das fotos que precisaram de mais de uma tentativa. */
+  comRetentativa: number;
+  /** Fração (0 a 1) das fotos em que o navegador ficou sem rede. */
+  comQuedaDeRede: number;
+}
+
 export interface VelocidadeReal {
   /** ZIP que já estava pronto no disco do servidor: é a velocidade da entrega. */
   downloadDoDisco: ResumoDeVelocidade | null;
@@ -27,6 +56,8 @@ export interface VelocidadeReal {
    * Ver `MedidaDeLeva` e a migração 069.
    */
   leva: ResumoDeVelocidade | null;
+  /** Onde o tempo de cada foto vai: a linha geral e os estúdios que mais enviaram. */
+  etapas: { geral: EtapasDoEstudio | null; porEstudio: EtapasDoEstudio[] };
   /** Desistências de REDE. A recusa do servidor fica em `recusas`. */
   falhas: {
     n: number;
@@ -46,8 +77,69 @@ export interface VelocidadeReal {
   };
 }
 
-export async function velocidadeReal(diasDownload = 30, diasEnvio = 7): Promise<VelocidadeReal> {
-  const [zips, envios, levas, falhas, ultimas, recusas, grupos] = await Promise.all([
+/*
+ * As médias das etapas, em SQL: uma semana de envio são milhares de linhas, e
+ * trazê-las para somar aqui custaria mais que o resultado. O "perdido" é o total
+ * menos a soma do que foi medido, nunca abaixo de zero (a soma pode passar do
+ * total por arredondamento).
+ */
+const MEDIAS_DAS_ETAPAS = `
+  count(*)::int                                               as n,
+  avg(e.total_ms)::float8                                     as total_ms,
+  avg(coalesce(e.espera_ms, 0))::float8                       as espera_ms,
+  avg(coalesce(e.miniatura_ms, 0))::float8                    as miniatura_ms,
+  avg(coalesce(e.preparo_ms, 0))::float8                      as preparo_ms,
+  avg(coalesce(e.ms, 0))::float8                              as envio_ms,
+  avg(coalesce(e.derivadas_ms, 0))::float8                    as derivadas_ms,
+  avg(coalesce(e.confirmar_ms, 0))::float8                    as confirmar_ms,
+  avg(greatest(0, e.total_ms - coalesce(e.espera_ms, 0) - coalesce(e.miniatura_ms, 0)
+                 - coalesce(e.preparo_ms, 0) - coalesce(e.ms, 0)
+                 - coalesce(e.derivadas_ms, 0) - coalesce(e.confirmar_ms, 0)))::float8 as perdido_ms,
+  (count(*) filter (where e.tentativas > 1))::float8 / count(*) as com_retentativa,
+  (count(*) filter (where e.sem_rede))::float8 / count(*)       as com_queda_de_rede`;
+
+/* Menos que isto é amostra, não retrato: a média de três fotos não diz de um estúdio. */
+const FOTOS_MINIMAS_POR_ESTUDIO = 5;
+const ESTUDIOS_NA_TABELA = 8;
+
+interface LinhaDeEtapas {
+  estudio: string;
+  n: number;
+  total_ms: number;
+  espera_ms: number;
+  miniatura_ms: number;
+  preparo_ms: number;
+  envio_ms: number;
+  derivadas_ms: number;
+  confirmar_ms: number;
+  perdido_ms: number;
+  com_retentativa: number;
+  com_queda_de_rede: number;
+}
+
+const doEstudio = (l: LinhaDeEtapas): EtapasDoEstudio => ({
+  estudio: l.estudio,
+  n: l.n,
+  totalMs: l.total_ms,
+  esperaMs: l.espera_ms,
+  miniaturaMs: l.miniatura_ms,
+  preparoMs: l.preparo_ms,
+  envioMs: l.envio_ms,
+  derivadasMs: l.derivadas_ms,
+  confirmarMs: l.confirmar_ms,
+  perdidoMs: l.perdido_ms,
+  comRetentativa: l.com_retentativa,
+  comQuedaDeRede: l.com_queda_de_rede,
+});
+
+export async function velocidadeReal(
+  diasDownload = 30,
+  diasEnvio = 7,
+  /* Quantos estúdios entram na tabela de etapas; o teste pede mais, porque o
+     banco dele é compartilhado e o dele precisa aparecer. */
+  estudiosNaTabela = ESTUDIOS_NA_TABELA,
+): Promise<VelocidadeReal> {
+  const [zips, envios, levas, falhas, ultimas, recusas, grupos, etapasGeral, etapasPorEstudio] = await Promise.all([
     consultar<{ bytes: string; duracao_ms: number; do_cache: boolean }>(
       `select bytes, duracao_ms, do_cache from entregas_zip
         where evento = 'servido' and origem = 'servidor' and duracao_ms > 0
@@ -89,6 +181,22 @@ export async function velocidadeReal(diasDownload = 30, diasEnvio = 7): Promise<
         order by max(e.criado_em) desc limit 5`,
       [diasEnvio],
     ),
+    consultar<LinhaDeEtapas>(
+      `select 'Todos' as estudio, ${MEDIAS_DAS_ETAPAS}
+         from envios_medidos e
+        where e.ok and e.total_ms is not null and e.criado_em > now() - make_interval(days => $1)
+       having count(*) > 0`,
+      [diasEnvio],
+    ),
+    consultar<LinhaDeEtapas>(
+      `select t.nome_estudio as estudio, ${MEDIAS_DAS_ETAPAS}
+         from envios_medidos e join tenants t on t.id = e.tenant_id
+        where e.ok and e.total_ms is not null and e.criado_em > now() - make_interval(days => $1)
+        group by t.id, t.nome_estudio
+       having count(*) >= $2
+        order by count(*) desc limit $3`,
+      [diasEnvio, FOTOS_MINIMAS_POR_ESTUDIO, estudiosNaTabela],
+    ),
   ]);
   const amostra = (bytes: string, ms: number) => ({ bytes: Number(bytes), ms });
   return {
@@ -102,6 +210,10 @@ export async function velocidadeReal(diasDownload = 30, diasEnvio = 7): Promise<
     ),
     envio: resumoDeVelocidade(envios.map((e) => amostra(e.bytes, e.ms)), PISO_ENVIO),
     leva: resumoDeVelocidade(levas.map((l) => amostra(l.bytes, l.ms)), PISO_LEVA),
+    etapas: {
+      geral: etapasGeral[0] ? doEstudio(etapasGeral[0]) : null,
+      porEstudio: etapasPorEstudio.map(doEstudio),
+    },
     falhas: { n: falhas[0]?.n ?? 0, estudios: falhas[0]?.estudios ?? 0, ultimas },
     recusas: { n: recusas[0]?.n ?? 0, estudios: recusas[0]?.estudios ?? 0, grupos },
   };
