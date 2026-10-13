@@ -28,6 +28,18 @@
  *     estúdio, com o "perdido" que sobra do total;
  *   - navegador antigo, que não manda etapas, continua sendo gravado.
  *
+ * Ainda em 13/10/2026, olhando "Velocidade real": oito linhas iguais da Sara
+ * Feitosa — "No período de teste o espaço é de 10 GB…" — dentro dos 1.038 "envios
+ * que desistiram". Era a aba dela, aberta desde antes da migração 069, mandando
+ * as medidas sem a marca `recusa`. E o Felipe pediu a última velocidade e a
+ * média de envio e de download de cada estúdio:
+ *
+ *   - o servidor reconhece a recusa também pelo TEXTO (e a migração 076 corrige
+ *     as linhas de antes), e queda de rede de verdade continua sendo queda;
+ *   - falha repetida vira UMA linha com a contagem;
+ *   - a última velocidade e a média de 30 dias de cada estúdio saem do que já
+ *     está gravado (pastas, fotos e ZIPs), por estúdio e para a plataforma.
+ *
  * 09/10/2026 (migração 069), depois de 153 "desistências" que eram quase todas
  * um estúdio no teto dos 10 GB do teste:
  *
@@ -49,6 +61,8 @@ const {
   lerMedidas,
   lerLeva,
   lerEtapas,
+  ehRecusaDoServidor,
+  PADROES_DE_RECUSA,
   formatarDuracaoCurta,
   tempoPerdido,
   SEM_ETAPAS,
@@ -244,6 +258,47 @@ await etapa("a duração curta fala a língua da tela", () => {
   igual(formatarDuracaoCurta(119_600), "2 min", "59,6 s não vira 60 s");
   igual(formatarDuracaoCurta(-1), "—", "negativo");
   return "7 formas";
+});
+
+await etapa("recusa do servidor se reconhece pelo texto, e queda de rede não", () => {
+  const recusas = [
+    "No período de teste o espaço é de 10 GB. Assine para liberar o espaço completo do seu plano.",
+    "Espaço insuficiente no plano. Libere espaço ou mude de plano.",
+    "Sua assinatura foi cancelada. Ative de novo em Conta para voltar a enviar arquivos.",
+    '"FER01515.ARW": tipo não aceito. Envie fotos (JPG, PNG, WEBP, HEIC) ou vídeos (MP4, MOV, WEBM).',
+    "filme.mov passa de 100 GB, o limite por arquivo.",
+    "Sessão expirada. Entre de novo.",
+  ];
+  for (const t of recusas) if (!ehRecusaDoServidor(t)) throw new Error(`devia ser recusa: ${t}`);
+  const quedas = [
+    "conexão interrompida",
+    "o armazenamento recusou (HTTP 403 · SignatureDoesNotMatch)",
+    "envio cancelado",
+    "não foi possível preparar o envio (HTTP 502)",
+    "Sessão",
+    "",
+    null,
+    undefined,
+  ];
+  for (const t of quedas) if (ehRecusaDoServidor(t)) throw new Error(`devia ser queda de rede: ${t}`);
+  /* O começo tem de ser o começo: a mesma frase no meio de outra mensagem não vale. */
+  if (ehRecusaDoServidor("falhou: No período de teste o espaço é de 10 GB.")) throw new Error("o padrão de começo casou no meio");
+  if (PADROES_DE_RECUSA.length !== 11) throw new Error(`${PADROES_DE_RECUSA.length} padrões; a migração 076 tem 11`);
+  return `${recusas.length} recusas, ${quedas.length} que não são`;
+});
+
+await etapa("o lote antigo (sem a marca) entra já classificado pelo texto", () => {
+  const r = lerMedidas([
+    { bytes: MB, ok: false, erro: "No período de teste o espaço é de 10 GB. Assine para liberar." },
+    { bytes: MB, ok: false, erro: "conexão interrompida" },
+    { bytes: MB, ok: false, erro: "conexão interrompida", recusa: true },
+    { bytes: MB, ms: 1000, ok: true, erro: "No período de teste o espaço é de 10 GB." },
+  ]);
+  igual(r[0].recusa, true, "recusa sem a marca, pelo texto");
+  igual(r[1].recusa, false, "queda de rede continua queda");
+  igual(r[2].recusa, true, "o navegador novo diz, e vale");
+  igual(r[3].recusa, false, "sucesso nunca é recusa");
+  return "1 pelo texto, 1 queda, 1 pela marca, 1 sucesso";
 });
 
 /* ── A rota e o painel ─────────────────────────────────────────────────── */
@@ -464,6 +519,63 @@ try {
     return "a medida entra, as etapas tortas viram nulas";
   });
 
+  await etapa("falha repetida vira uma linha com a contagem, e recusa antiga sai das quedas", async () => {
+    const teto = "No período de teste o espaço é de 10 GB. Assine para liberar o espaço completo do seu plano.";
+    /* O navegador ANTIGO não manda `recusa`: oito do teto, duas quedas iguais. */
+    const antigas = [
+      ...Array.from({ length: 8 }, () => ({ galeriaId: minha.id, bytes: 9 * MB, ok: false, erro: teto })),
+      ...Array.from({ length: 2 }, () => ({ galeriaId: minha.id, bytes: 9 * MB, ok: false, erro: "sinal caiu" })),
+    ];
+    const r = await mandar(antigas);
+    igual(r.status, 200, "status");
+    const { rows } = await db.query(
+      "select recusa, count(*)::int as n from envios_medidos where tenant_id = $1 and erro = $2 group by 1",
+      [estudio.id, teto],
+    );
+    igual(rows.length, 1, "uma classificação só");
+    igual(rows[0].recusa, true, "o texto de recusa foi marcado pelo servidor");
+    const { velocidadeReal } = await import("../src/lib/velocidade.ts");
+    const v = await velocidadeReal();
+    const quedas = v.falhas.ultimas.filter((f) => f.estudio === estudio.nome_estudio && f.erro === "sinal caiu");
+    igual(quedas.length, 1, "as duas quedas iguais viram uma linha");
+    igual(quedas[0].n, 2, "a contagem");
+    if (v.falhas.ultimas.some((f) => f.erro?.startsWith("No período de teste"))) {
+      throw new Error("recusa do plano apareceu entre as quedas de rede");
+    }
+    return "8 recusas fora das quedas; 2 quedas iguais = 1 linha com n=2";
+  });
+
+  await etapa("a última velocidade e a média de cada estúdio, e a da plataforma", async () => {
+    /* Dois ZIPs entregues pelo servidor: 200 MB em 20 s (pronto) e, depois,
+       100 MB em 20 s (montando). Último = 5 MB/s; conjunto = 300 MB / 40 s. */
+    await db.query(
+      `insert into entregas_zip (tenant_id, tipo, origem, evento, bytes, do_cache, duracao_ms, criado_em)
+       values ($1, 'tudo', 'servidor', 'servido', $2, true, 20000, now() - interval '2 hours'),
+              ($1, 'tudo', 'servidor', 'servido', $3, false, 20000, now() - interval '1 hour'),
+              ($1, 'tudo', 'servidor', 'servido', $4, false, 50, now())`,
+      [estudio.id, 200 * MB, 100 * MB, 500 * MB],
+    );
+    const { ultimasVelocidadesDosEstudios } = await import("../src/lib/velocidade.ts");
+    const { porEstudio, geral } = await ultimasVelocidadesDosEstudios();
+    const dele = porEstudio.get(estudio.id);
+    if (!dele) throw new Error("o estúdio não aparece");
+    if (!dele.envio) throw new Error("sem última velocidade de envio");
+    igual(dele.download?.origem, "zip-montando", "o último ZIP foi o montado");
+    igual(Math.round(dele.download.bytesPorSegundo / MB), 5, "último download, MB/s (o de 50 ms não conta: mede a ida e volta)");
+    igual(dele.downloadMedio?.n, 2, "ZIPs na média");
+    igual(Math.round(dele.downloadMedio.bytesPorSegundo / MB * 100) / 100, 7.5, "média = 300 MB / 40 s");
+    /* As duas levas gravadas acima: 250 MB em 50 s e 60 MB em 30 s → 310 MB / 80 s. */
+    igual(dele.envioMedio?.origem, "pasta", "a média de envio é a da pasta");
+    igual(dele.envioMedio.n, 2, "pastas na média");
+    igual(Math.round(dele.envioMedio.bytesPorSegundo / MB * 1000) / 1000, 3.875, "média = 310 MB / 80 s");
+    if (!geral.envioMedio || !geral.downloadMedio) throw new Error(`geral: ${JSON.stringify(geral)}`);
+    /* O vizinho não enviou nem baixou nada medido: não entra no mapa com número. */
+    const dele2 = porEstudio.get(vizinho.id);
+    if (dele2?.envio || dele2?.download) throw new Error("estúdio sem medida apareceu com velocidade");
+    await db.query("delete from entregas_zip where tenant_id = $1", [estudio.id]);
+    return `último download ${formatarVelocidade(dele.download.bytesPorSegundo)} · média ${formatarVelocidade(dele.downloadMedio.bytesPorSegundo)} · envio médio ${formatarVelocidade(dele.envioMedio.bytesPorSegundo)}`;
+  });
+
   await etapa("o painel lê o que a rota gravou", async () => {
     const { velocidadeReal } = await import("../src/lib/velocidade.ts");
     const v = await velocidadeReal();
@@ -477,7 +589,8 @@ try {
       throw new Error("recusa do plano apareceu entre as quedas de rede");
     }
     const grupo = v.recusas.grupos.find((g) => g.estudio === estudio.nome_estudio);
-    if (!grupo || grupo.n !== 2) throw new Error(`recusas agrupadas: ${JSON.stringify(v.recusas)}`);
+    /* As 2 do passo da recusa mais as 8 do navegador antigo, que o servidor reconheceu pelo texto. */
+    if (!grupo || grupo.n !== 10) throw new Error(`recusas agrupadas: ${JSON.stringify(v.recusas)}`);
     /* A leva de 250 MB em 50 s passa do piso (20 MB, 3 arquivos). */
     if (!v.leva || v.leva.n < 2) throw new Error(`leva: ${JSON.stringify(v.leva)}`);
     /* As etapas: seis fotos com 1 s de espera, 2 s de miniatura, 0,3 s de

@@ -17,31 +17,30 @@ import { TabelaOndeOTempoVai } from "@/components/admin-onde-o-tempo-vai";
 import { listarCustos } from "@/lib/custos-da-sociedade";
 import { custoFixoDaGaleriaCentavos } from "@/lib/custos-da-sociedade-regras";
 import { zipRemotoConfigurado } from "@/lib/zip-remoto";
-import { velocidadeReal } from "@/lib/velocidade";
+import { velocidadeReal, ultimasVelocidadesDosEstudios, type VelocidadesDosEstudios } from "@/lib/velocidade";
 import { formatarVelocidade } from "@/lib/velocidade-regras";
+import { CelulasDoEstudio, MediaDaPlataforma } from "@/components/admin-celulas-do-estudio";
 import {
   resumoDaPlataforma,
   trialsVencendo,
   trialsVencidos,
-  precoMensalDoEstudio,
-  mensalEquivalenteCentavos,
-  custoMensalDoEstudioCentavos,
   custoDasCortesiasCentavos,
   totaisDosEstudios,
   SITUACOES,
 } from "@/lib/metricas-admin";
-import { planoPorId, formatarReais, cicloDe, GB } from "@/config/planos";
-import { espacoSemLimite, quotaEfetivaBytes } from "@/config/trial";
+import { formatarReais, GB } from "@/config/planos";
+import { quotaEfetivaBytes } from "@/config/trial";
 import {
   COLUNAS_DOS_ESTUDIOS,
-  enderecoDaOrdem,
+  chavesDoEstudio,
   lerOrdem,
-  ordenarEstudios,
+  type ExtrasDoEstudio,
 } from "@/lib/ordem-dos-estudios";
+import { TabelaDeEstudios } from "@/components/admin-tabela-de-estudios";
+import { ControleDasSecoes } from "@/components/admin-controle-das-secoes";
 import {
   Cartao,
   Bloco,
-  Situacao,
   Barra,
   data,
   dataHora,
@@ -110,7 +109,7 @@ export default async function AdminPage({
 }) {
   await exigirAdmin();
 
-  const [estudios, meses, entrega, somasDeZip, eventos, custos, velocidade] = await Promise.all([
+  const [estudios, meses, entrega, somasDeZip, eventos, custos, velocidade, velocidadesDosEstudios] = await Promise.all([
     panoramaDosEstudios(),
     crescimentoMensal(12),
     entregaRecente(30),
@@ -130,12 +129,21 @@ export default async function AdminPage({
        `lib/velocidade.ts`. Sem a tabela nova (migração 053), o bloco se cala
        em vez de derrubar a página. */
     velocidadeReal().catch(() => null),
+    /* A última velocidade de envio e de download de cada estúdio, lida do que
+       já está gravado. Sem as tabelas, as duas colunas ficam "sem medida". */
+    ultimasVelocidadesDosEstudios().catch(
+      (): VelocidadesDosEstudios => ({ porEstudio: new Map(), geral: { envioMedio: null, downloadMedio: null } }),
+    ),
   ]);
 
   /* Só a TABELA muda de ordem; os totais e as listas de cima leem `estudios`.
-     Ver `lib/ordem-dos-estudios.ts`. */
+     A ordem do endereço sai pronta no HTML; os cliques seguintes são do
+     navegador. Ver `lib/ordem-dos-estudios.ts`. */
   const ordem = lerOrdem(await searchParams);
-  const naTabela = ordenarEstudios(estudios, ordem);
+  const extrasDe = (id: string): ExtrasDoEstudio => {
+    const v = velocidadesDosEstudios.porEstudio.get(id);
+    return { envioBps: v?.envio?.bytesPorSegundo ?? null, downloadBps: v?.download?.bytesPorSegundo ?? null };
+  };
 
   const agora = new Date();
   const r = resumoDaPlataforma(
@@ -234,11 +242,14 @@ export default async function AdminPage({
             {s.nome}
           </a>
         ))}
+        {/* Recolher e expandir as seções, e lembrar o que ficou fechado. */}
+        <ControleDasSecoes />
       </nav>
 
       {/* ── 1. DINHEIRO ───────────────────────────────────────────────── */}
       <Bloco
         id={SECOES[0].id}
+        recolhivel
         titulo="Dinheiro"
         explicacao="Receita conta só quem está ativo. Custo conta todo mundo que ocupa disco, inclusive quem cancelou — o Backblaze cobra por byte guardado, não por situação."
       >
@@ -288,7 +299,7 @@ export default async function AdminPage({
       </Bloco>
 
       {/* ── 2. CONTAS ─────────────────────────────────────────────────── */}
-      <Bloco id={SECOES[1].id} titulo="Contas" explicacao="Quem existe hoje, e quem chegou agora.">
+      <Bloco id={SECOES[1].id} recolhivel titulo="Contas" explicacao="Quem existe hoje, e quem chegou agora.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           <Cartao rotulo="Estúdios" valor={r.estudios} nota={`+${r.novos30} em 30 dias`} />
           <Cartao rotulo="Pagando" valor={r.porStatus.ativo} tom="ok" />
@@ -319,6 +330,7 @@ export default async function AdminPage({
       {/* ── 3. ESPAÇO ─────────────────────────────────────────────────── */}
       <Bloco
         id={SECOES[2].id}
+        recolhivel
         titulo="Espaço"
         explicacao="O que está guardado agora, contra o que foi vendido. A quota de quem está em teste é o teto do período gratuito, não a do plano escolhido."
       >
@@ -348,6 +360,7 @@ export default async function AdminPage({
       {/* ── 4. USO E ENTREGA ──────────────────────────────────────────── */}
       <Bloco
         id={SECOES[3].id}
+        recolhivel
         titulo="Uso e entrega"
         explicacao="Acessos dos últimos 30 dias. É a prova de que a entrega chegou ao cliente final — e de que o produto está sendo usado, não só contratado."
       >
@@ -365,6 +378,7 @@ export default async function AdminPage({
       {/* ── 4b. TRÁFEGO E CUSTO DA ENTREGA ────────────────────────────── */}
       <Bloco
         id={SECOES[4].id}
+        recolhivel
         titulo="Tráfego e custo da entrega"
         explicacao="O mês corrente. É a tela que responde se o desenho da entrega está custando o previsto — e o que fazer quando não estiver. Download avulso é estimativa pelo tamanho médio de uma mídia."
       >
@@ -471,6 +485,7 @@ export default async function AdminPage({
           "queda" no cartão vermelho. */}
       <Bloco
         id={SECOES[5].id}
+        recolhivel
         titulo="Velocidade real"
         explicacao="Medida em cada download de ZIP (30 dias) e em cada envio de fotos (7 dias). A mediana é o caso típico; os 10% mais lentos são quem reclama."
       >
@@ -527,12 +542,26 @@ export default async function AdminPage({
             </div>
             {velocidade.falhas.ultimas.length > 0 && (
               <ul className="mt-3 space-y-1 text-xs">
+                {/* Mensagem repetida vira UMA linha com a contagem — "3× a mesma
+                    mensagem" (Felipe, 13/10/2026): oito iguais da mesma conta
+                    tomavam a tela inteira e escondiam as diferentes. */}
                 {velocidade.falhas.ultimas.map((f, i) => (
-                  <li key={i} className="flex flex-wrap gap-x-2 text-texto-soft">
+                  <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-texto-soft">
                     <span className="font-medium text-texto">{f.estudio}</span>
+                    {f.n > 1 && (
+                      <span
+                        className="rounded border border-linha-forte px-1 font-mono text-[10px] tabular-nums text-texto"
+                        title={`${f.n} vezes a mesma mensagem, no mesmo estúdio e navegador`}
+                      >
+                        {f.n}×
+                      </span>
+                    )}
                     <span className="text-erro">{f.erro ?? "falhou"}</span>
                     <span className="text-texto-faint">{f.navegador ?? "—"}</span>
-                    <span className="text-texto-faint">{dataHora(f.quando)}</span>
+                    <span className="text-texto-faint">
+                      {f.n > 1 ? "a última em " : ""}
+                      {dataHora(f.quando)}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -578,6 +607,7 @@ export default async function AdminPage({
       {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
       <Bloco
         id={SECOES[6].id}
+        recolhivel
         titulo="Doze meses"
         explicacao="Cadastros e envio, mês a mês. A escala de cada série é o maior mês dela — as duas não se comparam entre si."
       >
@@ -623,6 +653,7 @@ export default async function AdminPage({
       {/* ── 5b. MÊS A MÊS ─────────────────────────────────────────────── */}
       <Bloco
         id={SECOES[7].id}
+        recolhivel
         titulo="Mês a mês"
         explicacao="As contas e o dinheiro de cada mês, lado a lado — para acompanhar o custo e o resultado sem depender do retrato de hoje."
       >
@@ -638,6 +669,7 @@ export default async function AdminPage({
       {/* ── 6. QUEM PRECISA DE ATENÇÃO ────────────────────────────────── */}
       <Bloco
         id={SECOES[8].id}
+        recolhivel
         titulo="Precisa de atenção"
         explicacao="Cada linha é uma conversa que vale a pena ter esta semana."
       >
@@ -693,238 +725,88 @@ export default async function AdminPage({
       {/* ── 7. TODOS OS ESTÚDIOS ──────────────────────────────────────── */}
       <Bloco
         id={SECOES[9].id}
+        recolhivel
         titulo={`Estúdios (${estudios.length})`}
         explicacao="Clique num nome para a ficha completa."
       >
         {estudios.length === 0 ? (
           <p className="text-sm text-texto-faint">Nenhum estúdio cadastrado ainda.</p>
         ) : (
-          /* A tabela rola sozinha em vez de empurrar a página: num celular,
-             tabela larga sem isto arrasta o layout inteiro para o lado. */
-          <div className="overflow-x-auto rounded-xl border border-linha">
-            <table className="w-full min-w-[1000px] text-sm">
-              <thead>
-                <tr className="border-b border-linha bg-carbon text-left">
-                  {/*
-                    ── OS CABEÇALHOS ORDENAM (30/09/2026) ─────────────────
-                    Felipe: "permita ordenar essa lista pelas colunas". Cada
-                    título é um link para a mesma página na ordem dele; clicar
-                    de novo inverte. As colunas e o que cada uma ordena moram
-                    em `lib/ordem-dos-estudios.ts`.
-                  */}
-                  {/*
-                      ── DOIS NOMES QUE FALTAVAM (29/09/2026) ──────────────
+          /* A tabela rola dentro da própria caixa, com o cabeçalho e o total
+             sempre à vista, e ORDENA NO NAVEGADOR: o servidor manda as células
+             de cada estúdio e as chaves de cada coluna uma vez só. Ver
+             `components/admin-tabela-de-estudios.tsx`. */
+          <>
+            {/*
+              ── OS CABEÇALHOS ORDENAM (30/09/2026) ─────────────────
+              Felipe: "permita ordenar essa lista pelas colunas". Cada
+              título é um link para a mesma página na ordem dele; clicar
+              de novo inverte. As colunas e o que cada uma ordena moram
+              em `lib/ordem-dos-estudios.ts`.
 
-                      Felipe: "último acesso, última alteração também".
+              ── NO NAVEGADOR, NÃO NO SERVIDOR (13/10/2026) ─────────
+              Felipe, com 44 estúdios: "está bem bugado para mexer aqui e
+              reordenar". Cada clique refazia a página inteira e saltava
+              para a âncora. O link continua valendo (sem JavaScript, em
+              outra aba, no "copiar endereço"), mas o clique simples ordena
+              ali mesmo, sem recarregar nem mexer na rolagem.
+            */}
+            {/*
+                ── DOIS NOMES QUE FALTAVAM (29/09/2026) ──────────────
 
-                      O último acesso do CLIENTE já estava nesta tabela — mas
-                      debaixo de um cabeçalho chamado "Entrega", que não diz que
-                      ali mora uma data. Quem procura "quando isto foi aberto
-                      pela última vez" não encontra uma coluna que se chama
-                      outra coisa. Agora a coluna tem o nome do que ela guarda.
+                Felipe: "último acesso, última alteração também".
 
-                      A última alteração é nova, e é sobre o ESTÚDIO: o mais
-                      recente entre editar galeria, subir foto e mexer na conta
-                      (ver `ultima_alteracao` em `lib/admin.ts`). As duas juntas
-                      respondem a pergunta que a tabela existe para responder —
-                      esta conta está viva dos dois lados?
+                O último acesso do CLIENTE já estava nesta tabela — mas
+                debaixo de um cabeçalho chamado "Entrega", que não diz que
+                ali mora uma data. Quem procura "quando isto foi aberto
+                pela última vez" não encontra uma coluna que se chama
+                outra coisa. Agora a coluna tem o nome do que ela guarda.
 
-                      ── AS DATAS AGRUPADAS POR QUEM AGIU (29/09/2026) ──────
+                A última alteração é nova, e é sobre o ESTÚDIO: o mais
+                recente entre editar galeria, subir foto e mexer na conta
+                (ver `ultima_alteracao` em `lib/admin.ts`). As duas juntas
+                respondem a pergunta que a tabela existe para responder —
+                esta conta está viva dos dois lados?
 
-                      Eram duas colunas com nome de MOMENTO ("Último acesso",
-                      "Última alteração"), e o carimbo do fotógrafo (migração
-                      047) pediria uma terceira — três colunas de data seguidas,
-                      todas dizendo "29 de set.", sem dizer de quem.
+                ── AS DATAS AGRUPADAS POR QUEM AGIU (29/09/2026) ──────
 
-                      Agora o cabeçalho diz QUEM: o cliente de um lado, o
-                      estúdio do outro. Cada um leva a sua segunda linha — os
-                      acessos de 30 dias com o cliente, a última alteração com o
-                      estúdio, que é quem altera. A tabela não cresceu e as três
-                      perguntas continuam respondidas.
-                  */}
-                  {COLUNAS_DOS_ESTUDIOS.map((c) => {
-                    const ativa = ordem.coluna === c.id;
-                    return (
-                      <th
-                        key={c.id}
-                        aria-sort={ativa ? (ordem.sentido === "asc" ? "ascending" : "descending") : undefined}
-                        className="px-4 py-3 font-mono text-[10px] uppercase tracking-widest text-texto-faint"
-                      >
-                        <Link
-                          href={enderecoDaOrdem(ordem, c.id)}
-                          className={`inline-flex items-center gap-1 transition hover:text-texto ${ativa ? "text-texto" : ""}`}
-                        >
-                          {c.titulo}
-                          <span aria-hidden="true" className={ativa ? "" : "opacity-0"}>
-                            {ativa && ordem.sentido === "asc" ? "↑" : "↓"}
-                          </span>
-                        </Link>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {naTabela.map((e) => {
-                  const plano = planoPorId(e.plano_id);
-                  const ciclo = cicloDe(e.ciclo_cobranca);
-                  const noAr = BigInt(e.bytes_no_ar);
-                  const guardado = BigInt(e.bytes_no_cofre);
-                  const usado = noAr + guardado;
-                  const quota = quotaEfetivaBytes(e);
-                  const semLimite = espacoSemLimite(e);
-                  const fracao =
-                    semLimite || quota === BigInt(0) ? 0 : Number(usado) / Number(quota);
-                  const custa = custoMensalDoEstudioCentavos(e);
-                  const paga =
-                    e.status === "ativo"
-                      ? mensalEquivalenteCentavos(precoMensalDoEstudio(e), e.ciclo_cobranca)
-                      : 0;
+                Eram duas colunas com nome de MOMENTO ("Último acesso",
+                "Última alteração"), e o carimbo do fotógrafo (migração
+                047) pediria uma terceira — três colunas de data seguidas,
+                todas dizendo "29 de set.", sem dizer de quem.
 
-                  return (
-                    <tr key={e.id} className="border-b border-linha align-top last:border-0">
-                      <td className="px-4 py-3">
-                        <Link
-                          href={`/painel/admin/estudios/${e.id}`}
-                          className="block font-medium hover:text-acento"
-                        >
-                          {e.nome_estudio}
-                        </Link>
-                        <span className="block text-xs text-texto-faint">{e.email}</span>
-                        <span className="block font-mono text-[11px] text-texto-faint">
-                          /{e.slug}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Situacao status={e.status} />
-                        {e.status === "trial" && (
-                          <span className="mt-1 block text-[11px] text-texto-faint">
-                            até {data(e.trial_ate)}
-                          </span>
-                        )}
-                        {/* A data do teste não some com o status: conta que
-                            aparece como inadimplente mas ainda tem teste pela
-                            frente é a primeira coisa a conferir. */}
-                        {e.status !== "trial" &&
-                          e.status !== "ativo" &&
-                          e.trial_ate &&
-                          new Date(e.trial_ate).getTime() > agora.getTime() && (
-                            <span className="mt-1 block text-[11px] text-alerta">
-                              teste até {data(e.trial_ate)}
-                            </span>
-                          )}
-                        {!e.cpf_cnpj && !e.tem_assinatura && (
-                          <span className="mt-1 block text-[11px] text-alerta">sem CPF/CNPJ</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        {plano?.nome ?? e.plano_id}
-                        <span className="mt-0.5 block text-[11px] text-texto-faint">{ciclo}</span>
-                      </td>
-                      <td className="px-4 py-3 text-xs tabular-nums">
-                        {paga > 0 ? (
-                          <span className="text-ok">{formatarReais(paga)}</span>
-                        ) : (
-                          <span className="text-texto-faint">—</span>
-                        )}
-                        {plano && e.status !== "ativo" && (
-                          <span className="mt-0.5 block text-[11px] text-texto-faint">
-                            plano vale {formatarReais(plano.precoCentavos)}
-                          </span>
-                        )}
-                      </td>
-                      {/* O custo de CADA conta: o que Backblaze e Cloudflare cobram
-                          pelo que ela guarda. Nas cortesias é o valor a cobrar. */}
-                      <td className="px-4 py-3 text-xs tabular-nums">
-                        {formatarReais(custa)}
-                        {e.status === "cortesia" && (
-                          <span className="mt-0.5 block text-[11px] text-alerta">a cobrar por fora</span>
-                        )}
-                      </td>
-                      <td className="w-40 px-4 py-3 font-mono text-xs tabular-nums">
-                        <span className={fracao > 0.85 ? "text-alerta" : ""}>
-                          {formatarBytes(usado)}
-                        </span>
-                        <span className="text-texto-faint">
-                          {semLimite ? " · sem limite" : ` / ${formatarBytes(quota)}`}
-                        </span>
-                        {!semLimite && (
-                          <span className="mt-1 block">
-                            <Barra fracao={fracao} tom={fracao > 0.85 ? "alerta" : "acento"} />
-                          </span>
-                        )}
-                        <span className="mt-1 block text-[11px] text-texto-faint">
-                          {formatarBytes(guardado)} no cofre
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs tabular-nums">
-                        {e.galerias} galeria{e.galerias === 1 ? "" : "s"}
-                        <span className="block text-[11px] text-texto-faint">
-                          {e.publicadas} no ar · {e.fotos} fotos · {e.videos} vídeos
-                        </span>
-                        {e.na_lixeira > 0 && (
-                          <span className="block text-[11px] text-texto-faint">
-                            {e.na_lixeira} na lixeira
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs tabular-nums">
-                        {e.ultimo_acesso ? (
-                          data(e.ultimo_acesso)
-                        ) : e.medias > 0 ? (
-                          <span className="text-alerta">nunca abriram</span>
-                        ) : (
-                          <span className="text-texto-faint">sem envio</span>
-                        )}
-                        <span className="block text-[11px] text-texto-faint">
-                          {e.acessos_30d} acesso{e.acessos_30d === 1 ? "" : "s"} em 30d
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs tabular-nums">
-                        {e.ultimo_acesso_estudio ? (
-                          data(e.ultimo_acesso_estudio)
-                        ) : (
-                          /*
-                            Nulo NÃO é conta abandonada: a coluna nasceu em
-                            29/09/2026 e toda conta anterior começa sem marca.
-                            Um travessão aqui leria como ausência, e a primeira
-                            leitura da tabela acusaria a plataforma inteira de
-                            estar parada.
-                          */
-                          <span className="text-texto-faint">sem registro</span>
-                        )}
-                        <span className="block text-[11px] text-texto-faint">
-                          {e.ultima_alteracao
-                            ? `alterou ${data(e.ultima_alteracao)}`
-                            : "nunca alterou"}
-                        </span>
-                        <span className="block text-[11px] text-texto-faint">
-                          {e.ultimo_envio ? `enviou ${data(e.ultimo_envio)}` : "nunca enviou"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs">{data(e.criado_em)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              {/*
-                ── A LINHA DE TOTAL ────────────────────────────────────────
+                Agora o cabeçalho diz QUEM: o cliente de um lado, o
+                estúdio do outro. Cada um leva a sua segunda linha — os
+                acessos de 30 dias com o cliente, a última alteração com o
+                estúdio, que é quem altera. A tabela não cresceu e as três
+                perguntas continuam respondidas.
+            */}
+            <TabelaDeEstudios
+              colunas={COLUNAS_DOS_ESTUDIOS.map((c) => ({ id: c.id, titulo: c.titulo, primeiro: c.primeiro, dica: c.dica }))}
+              ordemInicial={ordem}
+              linhas={estudios.map((e) => ({
+                id: e.id,
+                chaves: chavesDoEstudio(e, extrasDe(e.id)),
+                celulas: <CelulasDoEstudio e={e} agora={agora} velocidades={velocidadesDosEstudios.porEstudio.get(e.id) ?? null} />,
+              }))}
+              rodape={
+                /*
+                  ── A LINHA DE TOTAL ────────────────────────────────────────
 
-                Felipe: "tenha uma linha com o 'total' de cada coluna".
+                  Felipe: "tenha uma linha com o 'total' de cada coluna".
 
-                Em `<tfoot>` e não na última linha do `<tbody>`: é o elemento
-                que existe para isto, o leitor de tela o anuncia como rodapé da
-                tabela, e ele não entra em nenhuma ordenação futura do corpo.
+                  Em `<tfoot>` e não na última linha do `<tbody>`: é o elemento
+                  que existe para isto, o leitor de tela o anuncia como rodapé da
+                  tabela, e ele não entra em nenhuma ordenação futura do corpo.
 
-                A aritmética mora em `totaisDosEstudios` (`lib/metricas-admin.ts`),
-                e não aqui, porque três colunas não somam do jeito óbvio — Paga
-                conta só quem está ativo, Custa conta todo mundo, e a quota de
-                quem é sem limite não pode entrar no total. `testar-totais-do-admin.mjs`
-                prende as três, com o estúdio sem limite e o cancelado com disco
-                cheio na mesma tabela.
-              */}
-              <tfoot>
-                <tr className="border-t-2 border-linha bg-carbon text-xs font-medium tabular-nums">
+                  A aritmética mora em `totaisDosEstudios` (`lib/metricas-admin.ts`),
+                  e não aqui, porque três colunas não somam do jeito óbvio — Paga
+                  conta só quem está ativo, Custa conta todo mundo, e a quota de
+                  quem é sem limite não pode entrar no total. `testar-totais-do-admin.mjs`
+                  prende as três, com o estúdio sem limite e o cancelado com disco
+                  cheio na mesma tabela.
+                */
+                <tr className="text-xs font-medium tabular-nums">
                   <td className="px-4 py-3">
                     {totais.estudios} estúdio{totais.estudios === 1 ? "" : "s"}
                   </td>
@@ -977,17 +859,35 @@ export default async function AdminPage({
                         : "nunca alterou"}
                     </span>
                   </td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <MediaDaPlataforma m={velocidadesDosEstudios.geral.envioMedio} />
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3">
+                    <MediaDaPlataforma m={velocidadesDosEstudios.geral.downloadMedio} />
+                  </td>
                   <td className="px-4 py-3 text-texto-faint">—</td>
                 </tr>
-              </tfoot>
-            </table>
-          </div>
+              }
+            />
+            <p className="mt-2 max-w-3xl text-[11px] leading-snug text-texto-faint">
+              <strong className="font-medium text-texto-soft">Envio</strong> é a última pasta inteira que o estúdio
+              subiu (do primeiro ao último arquivo) — a coluna ordena por ela; quando a fila não fechou (foi parada ou
+              a aba foi fechada), vale a mediana das últimas fotos, dita “por arquivo”, que sobe seis ao mesmo tempo
+              e por isso parece menor. <strong className="font-medium text-texto-soft">Download</strong> é o último
+              ZIP que o servidor de ZIP entregou a um cliente do estúdio. Embaixo de cada um, a{" "}
+              <strong className="font-medium text-texto-soft">média dos últimos 30 dias</strong>: todos os bytes
+              divididos por todo o tempo, e não a média das velocidades — uma pasta pequena e lenta não pesa o mesmo
+              que uma de 8 GB. A linha de total traz a média da plataforma. A navegação da galeria (ver as fotos) não é
+              medida.
+            </p>
+          </>
         )}
       </Bloco>
 
       {/* ── 8. AUDITORIA ──────────────────────────────────────────────── */}
       <Bloco
         id={SECOES[10].id}
+        recolhivel
         titulo="Últimos eventos"
         explicacao="Os oito mais recentes. O log inteiro, com filtro por ação, estúdio e período, fica no histórico."
       >

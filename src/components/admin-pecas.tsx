@@ -40,11 +40,28 @@ export function Cartao({
   );
 }
 
-/** Título de bloco, com uma linha de explicação — o painel é lido por uma pessoa só. */
+/**
+ * Título de bloco, com uma linha de explicação — o painel é lido por uma pessoa só.
+ *
+ * ── RECOLHÍVEL (13/10/2026) ───────────────────────────────────────────────
+ *
+ * Felipe: "permita minimizar os menus dessa página, separando por seção".
+ * A Administração tem onze blocos e passa de 9.000 px; quem só quer a tabela de
+ * estúdios rola por dez telas de dinheiro, espaço e tráfego. Com `recolhivel`,
+ * o título vira um botão que fecha o bloco.
+ *
+ * `<details>`, e não um estado de React: fecha e abre sem JavaScript, o leitor
+ * de tela anuncia o estado, e o bloco continua sendo uma peça de SERVIDOR —
+ * marcar `"use client"` mandaria a tabela de estúdios inteira em JSON para o
+ * navegador, dentro do HTML. Quem LEMBRA do que ficou fechado (e quem tem os
+ * botões "recolher tudo" e "expandir tudo") é `ControleDasSecoes`, que age
+ * sobre o `data-secao` daqui.
+ */
 export function Bloco({
   id,
   titulo,
   explicacao,
+  recolhivel = false,
   children,
 }: {
   /**
@@ -57,13 +74,37 @@ export function Bloco({
   id?: string;
   titulo: string;
   explicacao?: string;
+  /** O título fecha e abre o bloco. Precisa de `id`, que é como o bloco é lembrado. */
+  recolhivel?: boolean;
   children: ReactNode;
 }) {
+  if (!recolhivel || !id) {
+    return (
+      <section id={id} className="mt-10 scroll-mt-4">
+        <h2 className="text-sm font-semibold">{titulo}</h2>
+        {explicacao && <p className="mt-0.5 text-xs text-texto-faint">{explicacao}</p>}
+        <div className="mt-3">{children}</div>
+      </section>
+    );
+  }
   return (
     <section id={id} className="mt-10 scroll-mt-4">
-      <h2 className="text-sm font-semibold">{titulo}</h2>
-      {explicacao && <p className="mt-0.5 text-xs text-texto-faint">{explicacao}</p>}
-      <div className="mt-3">{children}</div>
+      <details open data-secao={id} className="group">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-sm outline-none marker:hidden focus-visible:ring-2 focus-visible:ring-acento [&::-webkit-details-marker]:hidden">
+          <span
+            aria-hidden="true"
+            className="inline-block w-3 text-[10px] text-texto-faint transition-transform group-open:rotate-90"
+          >
+            ▸
+          </span>
+          <h2 className="text-sm font-semibold">{titulo}</h2>
+          <span className="font-mono text-[10px] uppercase tracking-widest text-texto-faint group-open:hidden">
+            recolhido
+          </span>
+        </summary>
+        {explicacao && <p className="mt-0.5 pl-[18px] text-xs text-texto-faint">{explicacao}</p>}
+        <div className="mt-3">{children}</div>
+      </details>
     </section>
   );
 }

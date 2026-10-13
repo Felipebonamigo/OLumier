@@ -13,9 +13,17 @@
  *   - endereço torto cai na ordem de sempre, em vez de quebrar a página;
  *   - o cabeçalho da coluna ativa inverte, o das outras começa pelo preferido;
  *   - a lista original não é mexida (os totais da página leem dela).
+ *
+ * 13/10/2026, depois de "está bem bugado para mexer aqui e reordenar" (44
+ * estúdios: cada clique refazia a Administração inteira no servidor): a ordem
+ * passa a ser feita no navegador, sobre chaves que o servidor manda junto de
+ * cada linha. Esta suíte prende que o navegador e o servidor ordenam IGUAL —
+ * as duas leem de `lib/ordem-por-chaves.ts` — e as duas colunas novas, a última
+ * velocidade de envio e de download.
  */
-const { COLUNAS_DOS_ESTUDIOS, ORDEM_PADRAO, lerOrdem, ordenarEstudios, enderecoDaOrdem } =
+const { COLUNAS_DOS_ESTUDIOS, ORDEM_PADRAO, SEM_EXTRAS, lerOrdem, ordenarEstudios, enderecoDaOrdem, chavesDoEstudio } =
   await import("../src/lib/ordem-dos-estudios.ts");
+const { ordenarPorChaves, proximaOrdem } = await import("../src/lib/ordem-por-chaves.ts");
 
 let falhou = false;
 const etapa = (nome, fn) => {
@@ -82,8 +90,8 @@ console.log("A ordem da tabela de estúdios\n");
 etapa("toda coluna do cabeçalho tem ordem, e os ids não se repetem", () => {
   const ids = COLUNAS_DOS_ESTUDIOS.map((c) => c.id);
   if (new Set(ids).size !== ids.length) throw new Error(`ids repetidos: ${ids}`);
-  if (ids.length !== 10) throw new Error(`${ids.length} colunas, a tabela tem 10`);
-  for (const c of COLUNAS_DOS_ESTUDIOS) for (const e of lista) c.valor(e);
+  if (ids.length !== 12) throw new Error(`${ids.length} colunas, a tabela tem 12`);
+  for (const c of COLUNAS_DOS_ESTUDIOS) for (const e of lista) c.valor(e, SEM_EXTRAS);
   return ids.join(" · ");
 });
 
@@ -158,6 +166,57 @@ etapa("o cabeçalho ativo inverte; os outros começam pelo preferido", () => {
   const custo = enderecoDaOrdem(atual, "custo");
   if (custo !== "?ordem=custo&sentido=desc#estudios") throw new Error(custo);
   return `${mesmo} · ${nome}`;
+});
+
+etapa("a ordem do navegador é a do servidor, em toda coluna e nos dois sentidos", () => {
+  const extras = new Map([
+    ["Santarem", { envioBps: 9_000_000, downloadBps: null }],
+    ["Vitoria", { envioBps: 2_000_000, downloadBps: 8_000_000 }],
+    ["Bia", { envioBps: null, downloadBps: 1_000_000 }],
+  ]);
+  let conferidas = 0;
+  for (const c of COLUNAS_DOS_ESTUDIOS) {
+    for (const sentido of ["asc", "desc"]) {
+      const doServidor = nomes(ordenarEstudios(lista, { coluna: c.id, sentido }, extras));
+      const itens = lista.map((e) => ({ e, chaves: chavesDoEstudio(e, extras.get(e.id)) }));
+      const doNavegador = ordenarPorChaves(itens, { coluna: c.id, sentido })
+        .map((x) => x.e.nome_estudio)
+        .join(", ");
+      if (doServidor !== doNavegador) throw new Error(`${c.id} ${sentido}: servidor ${doServidor} ≠ navegador ${doNavegador}`);
+      conferidas++;
+    }
+  }
+  return `${conferidas} ordens conferidas`;
+});
+
+etapa("última velocidade: a mais rápida primeiro, e quem não mediu vai para o fim", () => {
+  const extras = new Map([
+    ["Santarem", { envioBps: 9_000_000, downloadBps: null }],
+    ["Vitoria", { envioBps: 2_000_000, downloadBps: 8_000_000 }],
+    ["Bia", { envioBps: null, downloadBps: 1_000_000 }],
+  ]);
+  const envio = ordenarEstudios(lista, { coluna: "envio", sentido: "desc" }, extras);
+  if (nomes(envio.slice(0, 2)) !== "Santarem, Vitoria") throw new Error(nomes(envio));
+  const devagar = ordenarEstudios(lista, { coluna: "envio", sentido: "asc" }, extras);
+  if (nomes(devagar.slice(0, 2)) !== "Vitoria, Santarem") throw new Error(`asc: ${nomes(devagar)}`);
+  const dl = ordenarEstudios(lista, { coluna: "download", sentido: "desc" }, extras);
+  if (nomes(dl.slice(0, 2)) !== "Vitoria, Bia") throw new Error(`download: ${nomes(dl)}`);
+  /* Sem extras nenhuns, ninguém mediu: tudo empata e a ordem de chegada fica. */
+  const vazio = ordenarEstudios(lista, { coluna: "envio", sentido: "desc" });
+  if (nomes(vazio) !== nomes(lista)) throw new Error(`sem medida: ${nomes(vazio)}`);
+  return `${nomes(envio.slice(0, 2))} · ${nomes(dl.slice(0, 2))}`;
+});
+
+etapa("o clique no navegador faz o mesmo que o link do servidor", () => {
+  const atual = { coluna: "espaco", sentido: "desc" };
+  for (const c of COLUNAS_DOS_ESTUDIOS) {
+    const prox = proximaOrdem(atual, c.id, c.primeiro);
+    const link = enderecoDaOrdem(atual, c.id);
+    if (link !== `?ordem=${prox.coluna}&sentido=${prox.sentido}#estudios`) throw new Error(`${c.id}: ${link} ≠ ${JSON.stringify(prox)}`);
+  }
+  const volta = proximaOrdem(proximaOrdem(atual, "espaco", "desc"), "espaco", "desc");
+  if (volta.sentido !== "desc") throw new Error("duas vezes na mesma coluna devia voltar ao começo");
+  return "12 colunas, link e clique concordam";
 });
 
 console.log(falhou ? "\n✗ a ordem da tabela tem problema" : "\n✓ a tabela ordena por qualquer coluna");

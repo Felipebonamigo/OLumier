@@ -115,6 +115,59 @@ export const SEM_ETAPAS: EtapasDoEnvio = {
   semRede: null,
 };
 
+/**
+ * AS RECUSAS DO SERVIDOR, RECONHECIDAS PELO TEXTO (13/10/2026).
+ *
+ * A marca `recusa` (migração 069) vem do navegador, que a decide ao receber o
+ * erro. Só que a Administração mostrou oito linhas iguais da Sara Feitosa —
+ * "No período de teste o espaço é de 10 GB…" — dentro dos "envios que
+ * desistiram" (1.038 no total): a aba dela estava aberta desde ANTES da 069 e
+ * seguia mandando as medidas no formato antigo, sem a marca. Cada foto
+ * recusada virava uma "queda de rede" e escondia as quedas de verdade.
+ *
+ * O servidor reconhece a recusa pelo começo da mensagem, que é fixa — os mesmos
+ * textos que a migração 069 usou nas linhas de antes. Navegador antigo e
+ * navegador novo passam a cair no mesmo lugar.
+ *
+ * Fica em padrões `like` para a migração 076 e as consultas usarem a MESMA
+ * lista: `%` é "qualquer coisa", como no SQL.
+ */
+export const PADROES_DE_RECUSA = [
+  "No período de teste o espaço é de %",
+  "Espaço insuficiente no plano%",
+  "Seu teste grátis terminou%",
+  "Há uma cobrança em aberto%",
+  "Sua assinatura foi cancelada%",
+  "Confirme seu e-mail para começar%",
+  "Sessão expirada%",
+  "Esta galeria está no cofre%",
+  "Galeria não encontrada%",
+  "%: tipo não aceito.%",
+  "% passa de 100 GB, o limite por arquivo.%",
+] as const;
+
+/** O texto é de uma recusa do servidor (e não de uma queda de rede)? */
+export function ehRecusaDoServidor(erro: string | null | undefined): boolean {
+  if (!erro) return false;
+  return PADROES_DE_RECUSA.some((padrao) => {
+    const partes = padrao.split("%");
+    /* `a%b%`: cada pedaço fixo tem de aparecer, na ordem; o primeiro, no começo
+       quando o padrão não abre com `%`. */
+    let de = 0;
+    for (let i = 0; i < partes.length; i++) {
+      const parte = partes[i];
+      if (parte === "") continue;
+      const achou = erro.indexOf(parte, de);
+      if (achou < 0) return false;
+      if (i === 0 && achou !== 0) return false;
+      de = achou + parte.length;
+    }
+    /* Sem `%` no fim, o texto tem de terminar no último pedaço. */
+    const ultima = partes[partes.length - 1];
+    return ultima === "" || erro.endsWith(ultima);
+  });
+}
+
 /** Uma medida como o navegador manda. Peneirada antes de virar linha. */
 export interface MedidaDeEnvio {
   galeriaId: string | null;
@@ -197,13 +250,15 @@ export function lerMedidas(bruto: unknown): MedidaDeEnvio[] | null {
     if (!Number.isFinite(bytes) || bytes < 0 || bytes > 1e13) continue;
     const ok = o.ok === true;
     const ms = ok && Number.isFinite(Number(o.ms)) && Number(o.ms) >= 0 ? Math.min(2 ** 31 - 1, Math.round(Number(o.ms))) : null;
+    const erro = !ok && typeof o.erro === "string" ? o.erro.slice(0, 200) : null;
     saida.push({
       galeriaId: typeof o.galeriaId === "string" && uuid.test(o.galeriaId) ? o.galeriaId : null,
       bytes: Math.round(bytes),
       ms,
       ok,
-      erro: !ok && typeof o.erro === "string" ? o.erro.slice(0, 200) : null,
-      recusa: !ok && o.recusa === true,
+      erro,
+      /* O navegador diz; e, se ele for antigo e não disser, o texto diz. */
+      recusa: !ok && (o.recusa === true || ehRecusaDoServidor(erro)),
       etapas: lerEtapas(o.etapas),
     });
   }
