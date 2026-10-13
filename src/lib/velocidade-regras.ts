@@ -77,6 +77,44 @@ export function navegadorResumido(ua: string | null | undefined): string {
   return `${nav} · ${so}`;
 }
 
+/**
+ * ONDE O TEMPO DE UMA FOTO VAI (13/10/2026, migração 075).
+ *
+ * `ms` de cada medida é só o PUT do original. Na Melannie, 8,8 GB, esse PUT
+ * ocupou 43% do tempo das seis vagas da fila — e os outros 57% não tinham
+ * dono. Cada campo é o tempo, em ms, de uma etapa da tentativa que deu certo;
+ * `null` é "não medi" (navegador antigo, ou etapa que o arquivo não tem).
+ */
+export interface EtapasDoEnvio {
+  /** Esperando a vez do processador de miniaturas (`MINIATURAS_JUNTAS`). */
+  esperaMs: number | null;
+  /** Decodificar a foto e gerar miniatura, preview e EXIF. */
+  miniaturaMs: number | null;
+  /** O pedido que reserva o arquivo e assina o envio. */
+  preparoMs: number | null;
+  /** O que as miniaturas ainda demoraram depois de o original chegar. */
+  derivadasMs: number | null;
+  /** O servidor conferindo que o arquivo chegou. */
+  confirmarMs: number | null;
+  /** Da vaga ocupada ao fim, com todas as tentativas e as esperas entre elas. */
+  totalMs: number | null;
+  /** Quantas vezes o arquivo foi tentado; 1 é "de primeira". */
+  tentativas: number | null;
+  /** O navegador ficou sem rede em algum momento do arquivo. */
+  semRede: boolean | null;
+}
+
+export const SEM_ETAPAS: EtapasDoEnvio = {
+  esperaMs: null,
+  miniaturaMs: null,
+  preparoMs: null,
+  derivadasMs: null,
+  confirmarMs: null,
+  totalMs: null,
+  tentativas: null,
+  semRede: null,
+};
+
 /** Uma medida como o navegador manda. Peneirada antes de virar linha. */
 export interface MedidaDeEnvio {
   galeriaId: string | null;
@@ -90,9 +128,62 @@ export interface MedidaDeEnvio {
    * marca, um estúdio no teto dos 10 GB virava 150 "desistências" no painel.
    */
   recusa: boolean;
+  etapas: EtapasDoEnvio;
 }
 
 export const LOTE_MAXIMO_DE_MEDIDAS = 100;
+
+/* Um dia de relógio: mais que isso numa etapa de UM arquivo é relógio quebrado
+   (o computador dormiu, a aba ficou escondida), e uma média com ele dentro diz
+   o que ninguém viveu. */
+const TETO_DE_ETAPA_MS = 24 * 60 * 60 * 1000;
+
+/** O que o navegador mandou, peneirado; qualquer lixo vira "não medi". */
+export function lerEtapas(bruto: unknown): EtapasDoEnvio {
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return SEM_ETAPAS;
+  const o = bruto as Record<string, unknown>;
+  const ms = (v: unknown) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 && n <= TETO_DE_ETAPA_MS ? Math.round(n) : null;
+  };
+  const tentativas = Number(o.tentativas);
+  return {
+    esperaMs: ms(o.esperaMs),
+    miniaturaMs: ms(o.miniaturaMs),
+    preparoMs: ms(o.preparoMs),
+    derivadasMs: ms(o.derivadasMs),
+    confirmarMs: ms(o.confirmarMs),
+    totalMs: ms(o.totalMs),
+    tentativas: Number.isFinite(tentativas) && tentativas >= 1 && tentativas <= 100 ? Math.round(tentativas) : null,
+    semRede: typeof o.semRede === "boolean" ? o.semRede : null,
+  };
+}
+
+/**
+ * "0,4 s", "12 s", "1 min 5 s" — o tempo de uma etapa para a tela do admin.
+ * Abaixo de 10 s mostra a casa decimal, porque é ali que as etapas se parecem.
+ */
+export function formatarDuracaoCurta(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return "—";
+  const s = ms / 1000;
+  if (s < 10) return `${s.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} s`;
+  if (s < 60) return `${Math.round(s)} s`;
+  const min = Math.floor(s / 60);
+  const resto = Math.round(s - min * 60);
+  return resto === 60 ? `${min + 1} min` : resto === 0 ? `${min} min` : `${min} min ${resto} s`;
+}
+
+/**
+ * O que sobra do tempo total depois de descontar as etapas medidas: tentativas
+ * refeitas, esperas entre elas e o que ninguém cronometrou. Nunca negativo — a
+ * soma das etapas pode passar do total por arredondamento.
+ */
+export function tempoPerdido(total: number | null, etapas: (number | null)[]): number | null {
+  if (total === null) return null;
+  const medido = etapas.reduce<number>((soma, e) => soma + (e ?? 0), 0);
+  return Math.max(0, total - medido);
+}
 
 /** Lixo vira `null`; o que sobra entra. Texto de erro com teto — é da tela, não um log. */
 export function lerMedidas(bruto: unknown): MedidaDeEnvio[] | null {
@@ -113,6 +204,7 @@ export function lerMedidas(bruto: unknown): MedidaDeEnvio[] | null {
       ok,
       erro: !ok && typeof o.erro === "string" ? o.erro.slice(0, 200) : null,
       recusa: !ok && o.recusa === true,
+      etapas: lerEtapas(o.etapas),
     });
   }
   return saida.length ? saida : null;

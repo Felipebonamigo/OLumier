@@ -13,6 +13,10 @@ import { lerLeva, lerMedidas, navegadorResumido } from "@/lib/velocidade-regras"
  * A galeria só entra se for DESTE estúdio; de outro, a medida fica sem galeria
  * (a velocidade continua valendo, o vínculo não).
  *
+ * `etapas` (migração 075) é onde o tempo de CADA arquivo foi: miniatura,
+ * preparo, envio, confirmação e as tentativas refeitas. Ausente em navegador
+ * antigo — a medida entra do mesmo jeito, só sem as etapas.
+ *
  * `leva` (migração 069) é a fila inteira, mandada uma vez quando ela seca.
  * Pode vir sozinha, sem medidas: a última foto já foi no lote anterior. O que
  * vier torto recusa o pedido inteiro, como sempre foi.
@@ -56,10 +60,14 @@ export async function POST(request: NextRequest) {
     : new Set<string>();
 
   await consultar(
-    `insert into envios_medidos (tenant_id, galeria_id, bytes, ms, ok, erro, recusa, navegador)
-     select $1, g, b, m, o, e, r, $8
-       from unnest($2::uuid[], $3::bigint[], $4::int[], $5::boolean[], $6::text[], $7::boolean[])
-         as t(g, b, m, o, e, r)`,
+    `insert into envios_medidos (tenant_id, galeria_id, bytes, ms, ok, erro, recusa, navegador,
+                                espera_ms, miniatura_ms, preparo_ms, derivadas_ms, confirmar_ms,
+                                total_ms, tentativas, sem_rede)
+     select $1, g, b, m, o, e, r, $8, esp, mini, prep, der, conf, tot, tent, sr
+       from unnest($2::uuid[], $3::bigint[], $4::int[], $5::boolean[], $6::text[], $7::boolean[],
+                   $9::int[], $10::int[], $11::int[], $12::int[], $13::int[], $14::int[],
+                   $15::smallint[], $16::boolean[])
+         as t(g, b, m, o, e, r, esp, mini, prep, der, conf, tot, tent, sr)`,
     [
       tenantId,
       medidas.map((m) => (m.galeriaId && minhas.has(m.galeriaId) ? m.galeriaId : null)),
@@ -69,6 +77,14 @@ export async function POST(request: NextRequest) {
       medidas.map((m) => m.erro),
       medidas.map((m) => m.recusa),
       navegador,
+      medidas.map((m) => m.etapas.esperaMs),
+      medidas.map((m) => m.etapas.miniaturaMs),
+      medidas.map((m) => m.etapas.preparoMs),
+      medidas.map((m) => m.etapas.derivadasMs),
+      medidas.map((m) => m.etapas.confirmarMs),
+      medidas.map((m) => m.etapas.totalMs),
+      medidas.map((m) => m.etapas.tentativas),
+      medidas.map((m) => m.etapas.semRede),
     ],
   );
   return NextResponse.json({ ok: true, gravadas: medidas.length });

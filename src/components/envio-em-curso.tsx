@@ -32,7 +32,12 @@ import {
   linhasDaFila,
 } from "@/lib/fila-upload";
 import { capitulosDaPasta } from "@/lib/capitulos-pasta";
-import { LOTE_MAXIMO_DE_MEDIDAS, type MedidaDeEnvio, type MedidaDeLeva } from "@/lib/velocidade-regras";
+import {
+  LOTE_MAXIMO_DE_MEDIDAS,
+  type EtapasDoEnvio,
+  type MedidaDeEnvio,
+  type MedidaDeLeva,
+} from "@/lib/velocidade-regras";
 import { encaixarNaOrdemDaPastaAction, garantirSecoesAction } from "@/app/painel/actions";
 import { prepararVideoParaAssistir } from "@/lib/versao-leve";
 import { reconhecerArquivo } from "@/lib/tipos-de-arquivo";
@@ -511,6 +516,32 @@ export function ProvedorDeEnvio({
          depende da rede. Ver `medidas`. */
       let envioMs: number | null = null;
       /*
+       * ONDE O TEMPO DESTE ARQUIVO FOI (13/10/2026, migração 075).
+       *
+       * O PUT do original ocupou 43% do tempo das vagas da Melannie (8,8 GB, 30
+       * minutos mais lenta que o Pixieset); o resto não tinha dono. Cada etapa
+       * é cronometrada na tentativa que deu certo — a de uma tentativa que caiu
+       * é descartada, e o que ela custou aparece como a diferença entre o total
+       * e a soma das etapas.
+       */
+      const etapas = {
+        esperaMs: null as number | null,
+        miniaturaMs: null as number | null,
+        preparoMs: null as number | null,
+        derivadasMs: null as number | null,
+        confirmarMs: null as number | null,
+      };
+      let tentativasFeitas = 0;
+      let semRedeVista = false;
+      let inicioDoArquivo = performance.now();
+      /* O que vai à medida, com o total até este instante. */
+      const etapasMedidas = (): EtapasDoEnvio => ({
+        ...etapas,
+        totalMs: Math.round(performance.now() - inicioDoArquivo),
+        tentativas: Math.max(1, tentativasFeitas),
+        semRede: semRedeVista,
+      });
+      /*
        * O CAMINHO ALTERNATIVO (30/09/2026). A Alícia ficou com "0 de 38": o
        * PUT do original para o B2 caía SEMPRE na máquina dela, com 675 fotos
        * já enviadas antes. Depois de duas falhas no armazém, a mídia pendente é
@@ -544,8 +575,13 @@ export function ProvedorDeEnvio({
           atualizar(tarefa.item.id, { situacao: "preparando", progresso: 0 });
           arquivo = await tarefa.abrir();
         }
+        /* O relógio do arquivo conta do que é NOSSO: abrir o ZIP não entra. */
+        inicioDoArquivo = performance.now();
         await comRetentativa(
           async () => {
+            tentativasFeitas++;
+            /* Cada tentativa mede de novo — o preparo fica, que só acontece uma vez. */
+            etapas.esperaMs = etapas.miniaturaMs = etapas.derivadasMs = etapas.confirmarMs = null;
             atualizar(tarefa.item.id, { situacao: "preparando", progresso: 0 });
             /*
              * A data da câmera sai do EXIF junto com as derivadas — mesmo
@@ -556,16 +592,24 @@ export function ProvedorDeEnvio({
              * Em paralelo com a derivada porque são trabalhos independentes: um
              * lê 128 KB do começo do arquivo, o outro decodifica a imagem.
              */
+            const pediuAVez = performance.now();
+            let comecouAGerar = pediuAVez;
             const [derivadas, tiradaEm] = await Promise.all([
               /* Na vez do processador: seis no ar, três gerando miniatura. */
-              vezDaMiniatura(() => gerarDerivadas(arquivo, { medirRostos: tarefa.medidor })),
+              vezDaMiniatura(() => {
+                comecouAGerar = performance.now();
+                return gerarDerivadas(arquivo, { medirRostos: tarefa.medidor });
+              }),
               dataDaFoto(arquivo),
             ]);
+            etapas.esperaMs = Math.round(comecouAGerar - pediuAVez);
+            etapas.miniaturaMs = Math.round(performance.now() - comecouAGerar);
             saiuSemCapa = !derivadas;
 
             atualizar(tarefa.item.id, { situacao: "enviando" });
 
             if (!preparado) {
+              const pediuOPreparo = performance.now();
               const preparo = await fetch(`/api/galerias/${tarefa.galeriaId}/upload`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -605,6 +649,7 @@ export function ProvedorDeEnvio({
                 }),
               });
               const corpo = await preparo.json().catch(() => ({}));
+              etapas.preparoMs = Math.round(performance.now() - pediuOPreparo);
               if (!preparo.ok) {
                 /* Sem espaço (507), tipo recusado, grande demais, e-mail por
                    confirmar, assinatura vencida, galeria no cofre, sessão
@@ -700,13 +745,17 @@ export function ProvedorDeEnvio({
               }
             }
             envioMs = performance.now() - inicioDoEnvio;
+            const esperouAsDerivadas = performance.now();
             await derivadasSubindo;
+            etapas.derivadasMs = Math.round(performance.now() - esperouAsDerivadas);
 
             // O envio em partes já se confirma ao fechar; o simples precisa deste passo.
             if (!dados.emPartes) {
+              const pediuAConfirmacao = performance.now();
               const conf = await fetch(`/api/medias/${dados.mediaId}/confirmar`, {
                 method: "POST",
               });
+              etapas.confirmarMs = Math.round(performance.now() - pediuAConfirmacao);
               if (!conf.ok) {
                 const c = await conf.json();
                 throw new Error(c.erro ?? "o arquivo não foi confirmado");
@@ -733,7 +782,10 @@ export function ProvedorDeEnvio({
             }
           },
           (tentativa, semRede, erro) => {
-            if (semRede) leva.current.descartar = true;
+            if (semRede) {
+              leva.current.descartar = true;
+              semRedeVista = true;
+            }
             atualizar(tarefa.item.id, {
               tentativa,
               semRede,
@@ -745,7 +797,15 @@ export function ProvedorDeEnvio({
         );
 
         atualizar(tarefa.item.id, { situacao: "pronto", progresso: 100, semRede: false, motivo: undefined });
-        anotar({ galeriaId: tarefa.galeriaId, bytes: arquivo.size, ms: envioMs, ok: true, erro: null, recusa: false });
+        anotar({
+          galeriaId: tarefa.galeriaId,
+          bytes: arquivo.size,
+          ms: envioMs,
+          ok: true,
+          erro: null,
+          recusa: false,
+          etapas: etapasMedidas(),
+        });
         leva.current.bytes += arquivo.size;
         leva.current.arquivos++;
         if (preparado && reconhecerArquivo(arquivo.name, arquivo.type)?.tipo === "video") {
@@ -789,6 +849,8 @@ export function ProvedorDeEnvio({
              caminhos falharam) de um problema só do B2. */
           erro: `${e instanceof Error ? e.message : "falhou"}${alternativo ? " (também pelo R2)" : ""}`,
           recusa,
+          /* Quanto tempo gastou até desistir: é o que as tentativas custaram. */
+          etapas: etapasMedidas(),
         });
       }
     },

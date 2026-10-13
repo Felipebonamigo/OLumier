@@ -13,6 +13,7 @@ import { resumoDeTrafego } from "@/lib/metricas-entrega";
 import { mesAMes } from "@/lib/fechamento-mensal";
 import { mesDeBrasilia, numerosDoMes } from "@/lib/fechamento-mensal-regras";
 import { TabelaMesAMes } from "@/components/admin-mes-a-mes";
+import { TabelaOndeOTempoVai } from "@/components/admin-onde-o-tempo-vai";
 import { listarCustos } from "@/lib/custos-da-sociedade";
 import { custoFixoDaGaleriaCentavos } from "@/lib/custos-da-sociedade-regras";
 import { zipRemotoConfigurado } from "@/lib/zip-remoto";
@@ -559,6 +560,17 @@ export default async function AdminPage({
                 </ul>
               </div>
             )}
+            {/* 13/10/2026 (migração 075): a Melannie subiu 8,8 GB, levou 30
+                minutos a mais que no Pixieset, e o envio do original ocupou só
+                43% do tempo das vagas. Aqui está o resto. */}
+            <div className="mt-6">
+              <h3 className="text-sm font-medium">Onde o tempo de cada foto vai</h3>
+              <p className="mt-1 mb-3 max-w-2xl text-xs text-texto-faint">
+                O envio do original é só uma das etapas de cada foto. Aqui as outras: gerar a miniatura, o preparo, a
+                confirmação e as tentativas que caíram e foram refeitas.
+              </p>
+              <TabelaOndeOTempoVai geral={velocidade.etapas.geral} porEstudio={velocidade.etapas.porEstudio} />
+            </div>
           </>
         )}
       </Bloco>
