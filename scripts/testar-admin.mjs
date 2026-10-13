@@ -185,15 +185,47 @@ try {
 
   console.log("\nas séries do painel");
 
-  await etapa("o crescimento devolve um mês por mês pedido, sem buraco", async () => {
+  await etapa("a série começa no primeiro mês que teve dado, sem buraco depois", async () => {
+    // Pedido do Felipe (13/10/2026): os meses anteriores ao primeiro cadastro
+    // não entram. Eram barras rasas que ocupavam metade do gráfico e não
+    // diziam "vendi pouco" — diziam "a plataforma não existia", que ninguém
+    // precisa ler num gráfico de crescimento.
+    //
+    // MÊS VAZIO NO MEIO CONTINUA APARECENDO: ali o zero é informação (houve
+    // mês e não houve cadastro). Só o começo é cortado — por isso a conta
+    // abaixo compara o primeiro mês da série com o primeiro mês COM dado, e
+    // não com "o primeiro mês não vazio".
     const meses = await crescimentoMensal(12);
-    igual(meses.length, 12, "quantidade de meses");
+    const { rows } = await db.query(`
+      select to_char(date_trunc('month', now()) - make_interval(months => 11), 'YYYY-MM') as janela,
+             to_char(least(
+               (select min(date_trunc('month', criado_em)) from tenants),
+               (select min(date_trunc('month', criado_em)) from medias where pronto)
+             ), 'YYYY-MM') as primeiro,
+             to_char(now(), 'YYYY-MM') as agora
+    `);
+    const { janela, primeiro, agora } = rows[0];
+    // Dado mais velho que a janela não encurta nada: aí os doze meses têm história.
+    const esperado = primeiro && primeiro > janela ? primeiro : janela;
+
+    igual(meses[0].mes, esperado, "primeiro mês da série");
+    igual(meses.at(-1).mes, agora, "último mês da série");
+    if (esperado === primeiro && meses[0].cadastros === 0 && meses[0].bytes_enviados === "0") {
+      throw new Error("a série ainda começa num mês vazio");
+    }
     for (const m of meses) {
       if (!/^\d{4}-\d{2}$/.test(m.mes)) throw new Error(`mês fora do formato: ${m.mes}`);
-      // Mês sem cadastro e sem envio precisa vir zerado, não ausente: buraco na
-      // série vira barra faltando no gráfico, que se lê como mês que não houve.
       if (typeof m.cadastros !== "number") throw new Error(`${m.mes} sem cadastros`);
       if (typeof m.bytes_enviados !== "string") throw new Error(`${m.mes} sem bytes em texto`);
+    }
+    // Mês a mês consecutivo: buraco no MEIO vira barra faltando, que se lê
+    // como mês que não houve.
+    for (let i = 1; i < meses.length; i++) {
+      const [a, mA] = meses[i - 1].mes.split("-").map(Number);
+      const [b, mB] = meses[i].mes.split("-").map(Number);
+      if (b * 12 + mB - (a * 12 + mA) !== 1) {
+        throw new Error(`buraco entre ${meses[i - 1].mes} e ${meses[i].mes}`);
+      }
     }
     return meses.map((m) => m.mes).join(" ");
   });

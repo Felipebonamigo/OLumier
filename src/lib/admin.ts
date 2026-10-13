@@ -166,20 +166,46 @@ export interface MesDoCrescimento {
 }
 
 /**
- * Doze meses de cadastros e de envio, lado a lado.
+ * Até doze meses de cadastros e de envio, lado a lado.
  *
  * As duas séries vêm de tabelas diferentes e quase nunca cobrem os mesmos
  * meses: um mês pode ter envio sem cadastro nenhum, e o contrário também. Um
  * `full outer join` sobre a lista de meses gerada resolve isso sem buraco — a
  * alternativa (dois arrays alinhados no TypeScript) erra calada no primeiro mês
  * em que só uma das duas tem linha.
+ *
+ * ── O COMEÇO VAZIO NÃO ENTRA (13/10/2026) ─────────────────────────────────
+ *
+ * Pedido do Felipe. A janela era sempre de doze meses, e na primeira vez que
+ * alguém abriu isto nove das doze barras estavam no chão — não porque o mês
+ * foi ruim, mas porque a plataforma não existia. Metade do gráfico de
+ * crescimento gastava espaço dizendo "ainda não tinha nada", que é a única
+ * coisa que ninguém precisa ler ali.
+ *
+ * `primeiro` é o mês do dado mais antigo das DUAS tabelas (`least` ignora o
+ * nulo de uma tabela vazia), e a série começa nele ou no início da janela, o
+ * que vier depois: dado mais velho que doze meses não encurta nada.
+ *
+ * MÊS VAZIO NO MEIO CONTINUA APARECENDO. Ali o zero é informação — houve mês
+ * e não houve cadastro —, e tirá-lo encostaria dois meses distantes um no
+ * outro, o que se lê como crescimento que não houve. Só o começo é cortado.
  */
 export async function crescimentoMensal(meses = 12): Promise<MesDoCrescimento[]> {
   return consultar<MesDoCrescimento>(
     `
-    with calendario as (
+    with primeiro as (
+      select least(
+        (select min(date_trunc('month', criado_em)) from tenants),
+        (select min(date_trunc('month', criado_em)) from medias where pronto)
+      ) as mes
+    ),
+    calendario as (
       select generate_series(
-        date_trunc('month', now()) - make_interval(months => $1::int - 1),
+        greatest(
+          date_trunc('month', now()) - make_interval(months => $1::int - 1),
+          -- Banco sem nada nenhum: nada a cortar, mostra a janela inteira.
+          coalesce((select mes from primeiro), date_trunc('month', now()) - make_interval(months => $1::int - 1))
+        ),
         date_trunc('month', now()),
         interval '1 month'
       ) as mes

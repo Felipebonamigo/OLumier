@@ -78,7 +78,10 @@ const SECOES = [
   { id: "uso", nome: "Uso e entrega" },
   { id: "trafego", nome: "Tráfego" },
   { id: "velocidade", nome: "Velocidade" },
-  { id: "meses", nome: "Doze meses" },
+  /* "Doze meses" até 13/10/2026, quando o começo vazio deixou de entrar: a
+     série tem no MÁXIMO doze meses, e enquanto a plataforma for nova tem
+     menos. O id fica como está para não quebrar link salvo. */
+  { id: "meses", nome: "Crescimento" },
   { id: "mes-a-mes", nome: "Mês a mês" },
   { id: "atencao", nome: "Precisa de atenção" },
   { id: "estudios", nome: "Estúdios" },
@@ -566,15 +569,19 @@ export default async function AdminPage({
       {/* ── 5. CRESCIMENTO ────────────────────────────────────────────── */}
       <Bloco
         id={SECOES[6].id}
-        titulo="Doze meses"
-        explicacao="Cadastros e envio, mês a mês. A escala de cada série é o maior mês dela — as duas não se comparam entre si."
+        titulo="Crescimento"
+        explicacao="Cadastros e envio, mês a mês, desde o primeiro cadastro — no máximo doze meses. A escala de cada série é o maior mês dela — as duas não se comparam entre si."
       >
         <div className="overflow-x-auto rounded-xl border border-linha bg-carbon p-4">
-          <div className="flex min-w-[560px] items-end gap-2">
+          {/* Largura por COLUNA, e não largura fixa do bloco: com o começo
+              vazio fora, a série pode ter três meses, e três colunas dividindo
+              560px viram lajes de 180px. O mínimo mantém a barra legível com
+              doze, e o máximo evita a laje com três. */}
+          <div className="flex items-end justify-start gap-2">
             {meses.map((m) => {
               const gb = Number(m.bytes_enviados) / GB;
               return (
-                <div key={m.mes} className="flex flex-1 flex-col items-center gap-1">
+                <div key={m.mes} className="flex min-w-[38px] max-w-[72px] flex-1 flex-col items-center gap-1">
                   <span className="text-[10px] tabular-nums text-texto-faint">
                     {m.cadastros > 0 ? m.cadastros : ""}
                   </span>

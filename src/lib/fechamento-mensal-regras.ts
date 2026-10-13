@@ -148,7 +148,7 @@ export function montarMesAMes(
     corrido += cadastrosPorMes[mes] ?? 0;
     acumulado.set(mes, corrido);
   }
-  return meses.map((mes) => {
+  const linhas = meses.map((mes) => {
     const aoVivo = mes === mesAtual;
     const gravada = doMes.get(mes) ?? null;
     return {
@@ -160,4 +160,26 @@ export function montarMesAMes(
       registradoEm: aoVivo || !gravada ? null : new Date(gravada.registrado_em),
     };
   });
+
+  /*
+   * ── O COMEÇO VAZIO NÃO ENTRA (13/10/2026) ───────────────────────────────
+   *
+   * Pedido do Felipe. A janela era sempre de doze meses, e os de antes da
+   * primeira conta vinham como linhas de travessão. "Zero conta, zero receita,
+   * zero resultado" não é um mês ruim — é um mês que não houve, e ocupava
+   * metade da tabela dizendo isso.
+   *
+   * O CORTE OLHA `contasNoFim`, E NÃO `cadastros`: o total é soma corrida, e
+   * zero ali quer dizer que nada existia ainda. Um mês sem cadastro NOVO no
+   * meio da história tem contas de pé, e tem de continuar aparecendo — tirá-lo
+   * encostaria dois meses distantes um no outro.
+   *
+   * `meses` vem do mais novo para o mais antigo, então o começo da história
+   * está no FIM da lista. Uma linha gravada nunca é cortada: alguém a
+   * escreveu, e mês registrado é fato. E o mês corrente sempre sobra — numa
+   * plataforma de um dia a tabela tem uma linha, não nenhuma.
+   */
+  let ate = linhas.length;
+  while (ate > 1 && linhas[ate - 1].contasNoFim === 0 && !linhas[ate - 1].numeros) ate--;
+  return linhas.slice(0, ate);
 }

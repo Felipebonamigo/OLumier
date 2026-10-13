@@ -130,6 +130,38 @@ await etapa("a tabela: cadastros e total exatos; mês sem linha é null, e o cor
   igual(linhas[3].numeros, null, "julho idem");
 });
 
+await etapa("os meses anteriores à primeira conta não entram na tabela", () => {
+  /*
+   * Pedido do Felipe (13/10/2026), junto com o gráfico acima: a janela de doze
+   * meses enchia a tela de linhas de travessão nos meses em que a plataforma
+   * não existia. "Zero conta, zero receita, zero resultado" não é um mês ruim
+   * — é um mês que não houve.
+   *
+   * `contasNoFim` é soma corrida, então zero ali quer dizer que NADA existia
+   * ainda. Por isso o corte olha esse total, e não `cadastros`: um mês sem
+   * cadastro NOVO no meio da história tem contas de pé e precisa aparecer.
+   */
+  const meses = mesesAte("2026-10", 6); // 10, 09, 08, 07, 06, 05
+  const r = resumoDaPlataforma(estudiosDeMentira, hoje, 0);
+  const vivo = numerosDoMes(estudiosDeMentira, r, "2026-10", 0);
+  /* Primeira conta em agosto, e NENHUMA antes da janela. */
+  const linhas = montarMesAMes(meses, { "2026-10": 1, "2026-08": 3 }, 0, [], vivo, "2026-10");
+  igual(linhas.map((l) => l.mes), ["2026-10", "2026-09", "2026-08"], "só de agosto para cá");
+  /* Setembro ficou: não houve cadastro novo, mas as três contas de agosto
+     estavam de pé. É o "mês vazio no meio" que tem de continuar visível. */
+  igual(linhas[1].cadastros, 0, "setembro sem cadastro novo");
+  igual(linhas[1].contasNoFim, 3, "e com as contas de agosto de pé");
+});
+
+await etapa("conta anterior à janela não corta nada: os doze meses têm história", () => {
+  const meses = mesesAte("2026-10", 4);
+  const r = resumoDaPlataforma(estudiosDeMentira, hoje, 0);
+  const vivo = numerosDoMes(estudiosDeMentira, r, "2026-10", 0);
+  const linhas = montarMesAMes(meses, {}, 2, [], vivo, "2026-10");
+  igual(linhas.length, 4, "nenhum mês cortado");
+  igual(linhas.at(-1).contasNoFim, 2, "as duas contas já existiam antes");
+});
+
 await etapa("o mês corrente NÃO usa a linha gravada, mesmo que exista: a tela mostra o dia", () => {
   const r = resumoDaPlataforma(estudiosDeMentira, hoje, 0);
   const vivo = numerosDoMes(estudiosDeMentira, r, "2026-10", 0);
@@ -282,10 +314,24 @@ if (!servidor || donos.length === 0) {
     if (!/href="#mes-a-mes"/.test(html)) throw new Error("o bloco não está no índice do topo");
   });
 
-  await etapa("a tabela mostra doze meses, o corrente 'em andamento' e o aviso de sem registro", () => {
+  await etapa("a tabela começa na primeira conta, marca o corrente e avisa o sem registro", async () => {
     const bloco = html.slice(html.indexOf('<section id="mes-a-mes"'), html.indexOf("</section>", html.indexOf('<section id="mes-a-mes"')));
     const linhas = [...bloco.matchAll(/<tr class="border-t/g)];
-    igual(linhas.length, 12, "linhas da tabela");
+    /* Doze era o número fixo até 13/10/2026, quando o começo vazio deixou de
+       entrar. O número agora depende do banco: conta da janela até a primeira
+       conta, ou doze se a primeira é mais velha que a janela. */
+    const { rows } = await db.query(`
+      select to_char(date_trunc('month', now() at time zone 'America/Sao_Paulo') - make_interval(months => 11), 'YYYY-MM') as janela,
+             to_char(min(date_trunc('month', criado_em at time zone 'America/Sao_Paulo')), 'YYYY-MM') as primeiro
+        from tenants
+    `);
+    const { janela, primeiro } = rows[0];
+    const de = primeiro && primeiro > janela ? primeiro : janela;
+    const [ya, ma] = de.split("-").map(Number);
+    const agora = new Date();
+    const esperado = agora.getFullYear() * 12 + (agora.getMonth() + 1) - (ya * 12 + ma) + 1;
+    igual(linhas.length, esperado, "linhas da tabela");
+    if (linhas.length > 12) throw new Error("a janela de doze meses estourou");
     if (!bloco.includes("em andamento")) throw new Error("o mês corrente não está marcado");
     if (!bloco.includes("sem registro")) throw new Error("os meses sem linha não dizem 'sem registro'");
     if (!/\/painel\/admin\/caixa\?mes=\d{4}-\d{2}/.test(bloco)) throw new Error("falta o atalho para o Caixa do mês");
