@@ -193,7 +193,9 @@ await etapa("o painel diz 'sem limite', não um número absurdo", () => {
   const faltam = [
     "src/app/painel/layout.tsx",
     "src/app/painel/conta/page.tsx",
-    "src/app/painel/admin/page.tsx",
+    /* A célula de espaço de cada estúdio mora aqui desde que a tabela passou a
+       ordenar no navegador (13/10/2026); antes morava na própria página. */
+    "src/components/admin-celulas-do-estudio.tsx",
     "src/app/painel/admin/estudios/[id]/page.tsx",
   ].filter((p) => !/espacoSemLimite\(/.test(ler(p)) || !/sem limite/.test(ler(p)));
   if (faltam.length) throw new Error(`sem o tratamento: ${faltam.join(", ")}`);
@@ -203,17 +205,20 @@ await etapa("o painel diz 'sem limite', não um número absurdo", () => {
 await etapa("o admin mostra o custo de cada conta, e o que cobrar por fora", () => {
   const admin = readFileSync(new URL("../src/app/painel/admin/page.tsx", import.meta.url), "utf8");
   /* Os títulos das colunas moram em `lib/ordem-dos-estudios.ts` desde que a
-     tabela passou a ordenar por coluna (30/09/2026); a célula continua na
-     página, e a coluna só existe se as duas partes existirem. */
+     tabela passou a ordenar por coluna (30/09/2026), e as células de cada
+     estúdio em `components/admin-celulas-do-estudio.tsx` desde que ela passou a
+     ordenar no navegador (13/10/2026); a página monta a tabela. A coluna só
+     existe se as três partes existirem. */
   const colunas = readFileSync(new URL("../src/lib/ordem-dos-estudios.ts", import.meta.url), "utf8");
+  const celulas = readFileSync(new URL("../src/components/admin-celulas-do-estudio.tsx", import.meta.url), "utf8");
   if (
     !/"Custa por mês"/.test(colunas) ||
     !/COLUNAS_DOS_ESTUDIOS\.map/.test(admin) ||
-    !/custoMensalDoEstudioCentavos\(/.test(admin)
+    !/custoMensalDoEstudioCentavos\(/.test(celulas)
   ) {
     throw new Error("a tabela de estúdios não tem a coluna de custo");
   }
-  if (!/a cobrar por fora/.test(admin) || !/custoDasCortesiasCentavos\(/.test(admin)) {
+  if (!/a cobrar por fora/.test(celulas) || !/custoDasCortesiasCentavos\(/.test(admin)) {
     throw new Error("o admin não destaca o que cobrar das cortesias");
   }
 });
