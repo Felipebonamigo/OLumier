@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  copiarParaOutraGaleriaAction,
   galeriasParaMoverAction,
   moverParaOutraGaleriaAction,
   opcoesDoDestinoAction,
@@ -24,6 +25,10 @@ const dataPorExtenso = (iso: string | null) => {
 
 type Passo = "galeria" | "capitulo" | "pronto";
 
+/** "1,2 GB", "340 MB" — só para dizer quanto espaço a cópia ocupou. */
+const pesoPorExtenso = (b: number) =>
+  b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1).replace(".", ",")} GB` : `${Math.max(1, Math.round(b / 1024 ** 2))} MB`;
+
 /**
  * Mover fotos para OUTRA galeria — o modal.
  *
@@ -39,6 +44,15 @@ type Passo = "galeria" | "capitulo" | "pronto";
  * saem da grade no instante em que o servidor confirma, e quem acabou de mover
  * quer ver para ONDE elas foram, com o caminho para abrir a galeria.
  *
+ * ── COPIAR, NO MESMO MODAL (14/10/2026) ──────────────────────────────────
+ *
+ * Felipe: a galeria com todas as fotos analógicas da vida, e as fotos de cada
+ * cliente também na galeria DELE — "sem catar em HD". Mesmos dois passos (qual
+ * galeria, qual capítulo); muda o verbo e o que a tela promete. Copiar cria um
+ * arquivo novo, que ocupa espaço de novo, e a tela diz isso ANTES do botão — o
+ * contrário de mover, que não gasta nada. A cópia anda em lotes por peso (o
+ * servidor devolve o que sobrou), com a contagem na tela.
+ *
  * `<dialog>` de verdade, com `showModal`: Esc, foco preso e fundo inerte vêm do
  * navegador (a mesma escolha de `capa-galeria-editor.tsx`).
  */
@@ -47,9 +61,12 @@ export function MoverParaOutraGaleria({
   escopo,
   resumo,
   quantidade,
+  modo = "mover",
   aoFechar,
 }: {
   origemId: string;
+  /** "mover" tira da galeria de origem; "copiar" deixa a foto nas duas (só com `escopo.tipo === "ids"`). */
+  modo?: "mover" | "copiar";
   escopo: EscopoDoMovimento;
   /** O que vai ser movido, por extenso e sem artigo (foto e vídeo discordam em gênero): "12 fotos da seleção", "34 fotos de “Festa”". */
   resumo: string;
@@ -69,7 +86,9 @@ export function MoverParaOutraGaleria({
      para "Outras fotos". */
   const [secaoId, setSecaoId] = useState("");
   const [erro, setErro] = useState<string | null>(null);
-  const [resultado, setResultado] = useState<{ movidas: number; favoritas: number } | null>(null);
+  const copiando = modo === "copiar";
+  const [resultado, setResultado] = useState<{ movidas: number; favoritas: number; bytes: number } | null>(null);
+  const [andamento, setAndamento] = useState<{ feitas: number; total: number } | null>(null);
   const [movendo, iniciar] = useTransition();
   const moveu = useRef(false);
   /* Qual pedido de capítulos é o ATUAL: quem clica numa galeria, volta e clica
@@ -133,6 +152,49 @@ export function MoverParaOutraGaleria({
     setErro(null);
     iniciar(async () => {
       try {
+        if (copiando) {
+          if (escopo.tipo !== "ids") {
+            setErro("Só dá para copiar fotos marcadas na grade.");
+            return;
+          }
+          /* A cópia anda por peso: o servidor devolve o que sobrou, e a tela
+             pede de novo até acabar. Se um lote falha, o que já foi copiado
+             fica (e a mensagem diz quanto), o resto não é tentado. */
+          let fila = escopo.ids;
+          const total = fila.length;
+          let feitas = 0;
+          let bytes = 0;
+          setAndamento({ feitas: 0, total });
+          while (fila.length > 0) {
+            const r = await copiarParaOutraGaleriaAction({
+              origemId,
+              destinoId: destino.id,
+              secaoDestinoId: secaoId || null,
+              ids: fila,
+            });
+            if (!r.ok) {
+              setErro(
+                feitas > 0
+                  ? `${r.erro} Já foram copiadas ${feitas} de ${total}; as outras não foram.`
+                  : r.erro,
+              );
+              moveu.current = feitas > 0;
+              setAndamento(null);
+              return;
+            }
+            feitas += r.copiadas;
+            bytes += r.bytesCopiados;
+            /* Sem progresso nem fila menor: sai, em vez de pedir para sempre. */
+            if (r.copiadas === 0 && r.restantes.length >= fila.length) break;
+            fila = r.restantes;
+            setAndamento({ feitas, total });
+          }
+          setAndamento(null);
+          moveu.current = feitas > 0;
+          setResultado({ movidas: feitas, favoritas: 0, bytes });
+          setPasso("pronto");
+          return;
+        }
         const r = await moverParaOutraGaleriaAction({
           origemId,
           destinoId: destino.id,
@@ -144,10 +206,15 @@ export function MoverParaOutraGaleria({
           return;
         }
         moveu.current = r.movidas > 0;
-        setResultado({ movidas: r.movidas, favoritas: r.favoritasMantidas });
+        setResultado({ movidas: r.movidas, favoritas: r.favoritasMantidas, bytes: 0 });
         setPasso("pronto");
       } catch {
-        setErro("Não foi possível mover agora. Nada foi alterado — tente de novo.");
+        setAndamento(null);
+        setErro(
+          copiando
+            ? "Não foi possível copiar agora. Se algum lote já tinha passado, ele ficou na galeria — confira o destino antes de tentar de novo."
+            : "Não foi possível mover agora. Nada foi alterado — tente de novo.",
+        );
       }
     });
   }
@@ -177,12 +244,20 @@ export function MoverParaOutraGaleria({
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 id={idDoTitulo} className="text-sm font-semibold">
-              {passo === "pronto" ? "Fotos movidas" : "Mover para outra galeria"}
+              {passo === "pronto"
+                ? copiando
+                  ? "Fotos copiadas"
+                  : "Fotos movidas"
+                : copiando
+                  ? "Copiar para outra galeria"
+                  : "Mover para outra galeria"}
             </h2>
             <p className="mt-0.5 text-xs text-texto-faint">
               {passo === "galeria" && `${resumo} — para qual galeria?`}
               {passo === "capitulo" && destino && `${resumo} → ${destino.titulo}`}
-              {passo === "pronto" && destino && `Agora em “${destino.titulo}”.`}
+              {passo === "pronto" &&
+                destino &&
+                `${copiando ? "Agora também em" : "Agora em"} “${destino.titulo}”.`}
             </p>
           </div>
           <button
@@ -328,7 +403,10 @@ export function MoverParaOutraGaleria({
 
                 <p className="mt-3 text-[11px] text-texto-faint">
                   As fotos entram no fim{temCapitulos ? " do capítulo" : " da galeria"}, na mesma ordem em
-                  que estão agora. O arquivo não sobe de novo e continua ocupando o mesmo espaço.
+                  que estão agora.{" "}
+                  {copiando
+                    ? "Elas continuam também nesta galeria. Cada cópia é um arquivo novo: não sobe de novo, mas ocupa espaço de novo no seu plano."
+                    : "O arquivo não sobe de novo e continua ocupando o mesmo espaço."}
                 </p>
                 <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
                   <span className="mr-auto text-[11px] text-texto-faint">
@@ -340,7 +418,13 @@ export function MoverParaOutraGaleria({
                     onClick={mover}
                     className="rounded-lg bg-acento px-4 py-2 text-xs font-semibold text-void transition hover:opacity-90 disabled:opacity-50"
                   >
-                    {movendo ? "movendo…" : `Mover ${quantidade}`}
+                    {movendo
+                      ? copiando
+                        ? andamento
+                          ? `copiando ${andamento.feitas} de ${andamento.total}…`
+                          : "copiando…"
+                        : "movendo…"
+                      : `${copiando ? "Copiar" : "Mover"} ${quantidade}`}
                   </button>
                 </div>
               </>
@@ -353,11 +437,21 @@ export function MoverParaOutraGaleria({
           <div className="mt-4">
             <p role="status" className="text-sm">
               {resultado.movidas === 0
-                ? "Nenhuma foto foi movida — elas já não estão mais aqui."
-                : `${resultado.movidas} ${resultado.movidas === 1 ? "arquivo movido" : "arquivos movidos"} para “${destino.titulo}”${
-                    nomeDoDestinoFinal ? ` · ${nomeDoDestinoFinal}` : ""
-                  }.`}
+                ? copiando
+                  ? "Nenhuma foto foi copiada — elas já não estão mais aqui."
+                  : "Nenhuma foto foi movida — elas já não estão mais aqui."
+                : `${resultado.movidas} ${
+                    copiando
+                      ? resultado.movidas === 1 ? "arquivo copiado" : "arquivos copiados"
+                      : resultado.movidas === 1 ? "arquivo movido" : "arquivos movidos"
+                  } para “${destino.titulo}”${nomeDoDestinoFinal ? ` · ${nomeDoDestinoFinal}` : ""}.`}
             </p>
+            {copiando && resultado.bytes > 0 && (
+              <p className="mt-1 text-[11px] text-texto-faint">
+                As cópias ocupam mais {pesoPorExtenso(resultado.bytes)} do seu espaço. As originais
+                seguem em “esta galeria”.
+              </p>
+            )}
             {resultado.favoritas > 0 && (
               <p className="mt-1 text-[11px] text-texto-faint">
                 {resultado.favoritas === 1

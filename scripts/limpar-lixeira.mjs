@@ -28,6 +28,7 @@
 import pg from "pg";
 import { galeriasVencidasNaLixeira, destruirGaleria, PRAZO_LIXEIRA_DIAS } from "../src/lib/tenants.ts";
 import { rodarLimpezaDeTestes, TETO_POR_RODADA } from "../src/lib/testes-abandonados.ts";
+import { rodarLembretesDoTeste } from "../src/lib/lembretes-do-teste.ts";
 import { rodarRetencaoDeContasEncerradas } from "../src/lib/contas-encerradas.ts";
 import { fechamentoDoMes, gravarFechamentoDoMes } from "../src/lib/fechamento-mensal.ts";
 
@@ -77,6 +78,28 @@ try {
       }
       console.log(`\n✓ ${destruidas} galeria(s) destruída(s) depois de ${PRAZO_LIXEIRA_DIAS} dias`);
     }
+  }
+
+  /* ── o lembrete do teste ────────────────────────────────────────────────
+     Avisa por e-mail, UMA vez, quando o teste está a poucos dias do fim e
+     quando o espaço dele (10 GB) está enchendo (src/lib/lembretes-do-teste.ts).
+     Vem antes da limpeza porque é o aviso que evita que ela um dia importe.
+     Bloco próprio: falha aqui não desfaz o resto. */
+  console.log("\nlembrete do teste");
+  try {
+    const r = await rodarLembretesDoTeste({ aplicar: APLICAR });
+    if (!r.ligada) {
+      console.log("  desligado — precisa do e-mail E da cobrança ligados; ninguém foi avisado");
+    } else {
+      for (const l of r.linhas) console.log(`  ${l}`);
+      console.log(
+        `  ${APLICAR ? "✓" : "(simulação)"} avisos de tempo: ${r.tempo} · avisos de espaço: ${r.espaco}` +
+          (r.falhasDeEnvio ? ` · e-mails que não saíram: ${r.falhasDeEnvio} (tentam amanhã)` : ""),
+      );
+    }
+  } catch (e) {
+    console.error("  ✗ o lembrete do teste falhou:", e);
+    process.exitCode = 1;
   }
 
   /* ── o teste abandonado ─────────────────────────────────────────────────

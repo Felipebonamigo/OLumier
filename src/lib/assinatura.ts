@@ -51,7 +51,7 @@ export interface Situacao {
 
 const RECADOS: Record<MotivoBloqueio, string> = {
   trial_vencido:
-    "Seu teste grátis terminou. Ative a assinatura em Conta para voltar a enviar arquivos. " +
+    "Seu teste grátis terminou, por isso não é possível enviar novos arquivos. Ative a assinatura em Conta para voltar a enviar. " +
     "As galerias já publicadas ficam no ar por mais 15 dias — depois disso saem do ar, e os arquivos continuam guardados. " +
     "Sem assinatura, eles são apagados 60 dias depois do fim do teste, sempre com dois avisos por e-mail antes. Assinar até lá devolve tudo.",
   /* Os dois abaixo prometiam galeria no ar sem prazo. Desde 30/09/2026 a

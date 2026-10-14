@@ -27,6 +27,13 @@
 
 const GB = BigInt(1024) ** BigInt(3);
 
+/**
+ * Quantos dias dura o teste. É o `default` da coluna `tenants.trial_ate`
+ * (db/schema.sql) escrito em texto, para a tela e o e-mail dizerem o número
+ * certo — mudar um sem o outro faz o aviso mentir.
+ */
+export const DIAS_DE_TESTE = 14;
+
 export const TETO_TRIAL_GB = 10;
 
 /**

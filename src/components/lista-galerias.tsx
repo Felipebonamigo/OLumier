@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { apagarGaleriaAction, salvarPublicacaoAction } from "@/app/painel/actions";
+import { alternarFavoritaAction, apagarGaleriaAction, salvarPublicacaoAction } from "@/app/painel/actions";
 import { useFecharMenuAoClicarFora } from "@/lib/fechar-menu-client";
 import { VISOES, agruparPorMes, guardarVisao, type Visao } from "@/config/visao-galerias";
 
@@ -18,6 +18,8 @@ export interface GaleriaDaLista {
   /** De onde a galeria veio, quando não nasceu no painel — migração 047.
    *  `"atomatiza"` é a criada a partir de um contrato, pela chave de API. */
   origem: string | null;
+  /** Está na faixa de favoritas do topo (migração 078). */
+  favorita: boolean;
   /** Dias até o cofre; `null` quando não há prazo. */
   diasAteCofre: number | null;
   dataFormatada: string | null;
@@ -76,14 +78,20 @@ export interface GaleriaDaLista {
 export function ListaGalerias({
   visaoInicial,
   galerias,
+  favoritas,
   busca: buscaAtual,
   pagina,
   paginas,
   total,
+  totalGeral,
 }: {
   /** A forma de ver que o cookie trouxe — ver `config/visao-galerias.ts`. */
   visaoInicial: Visao;
   galerias: GaleriaDaLista[];
+  /** A faixa do topo; vazia durante uma busca. Ver `listarFavoritas`. */
+  favoritas: GaleriaDaLista[];
+  /** Todas as galerias do estúdio, favoritas incluídas — decide se a busca aparece. */
+  totalGeral: number;
   /** O termo que o SERVIDOR aplicou — ver `listarGalerias`. */
   busca: string;
   pagina: number;
@@ -150,6 +158,18 @@ export function ListaGalerias({
   const [apagando, setApagando] = useState<string | null>(null);
   const [digitado, setDigitado] = useState("");
   const [copiada, setCopiada] = useState<string | null>(null);
+  const [avisoFavorita, setAvisoFavorita] = useState<string | null>(null);
+
+  /* Favoritar não pede confirmação: é o gesto do dia a dia e desfaz com o
+     mesmo clique. O servidor segura o teto da faixa e diz o motivo. */
+  function alternarFavorita(g: GaleriaDaLista) {
+    setAvisoFavorita(null);
+    iniciar(async () => {
+      const r = await alternarFavoritaAction(g.id, !g.favorita);
+      if (!r.ok) setAvisoFavorita(r.erro);
+      router.refresh();
+    });
+  }
 
   async function copiarLink(g: GaleriaDaLista) {
     const url = `${location.origin}/g/${g.estudioSlug}/${g.slug}`;
@@ -175,7 +195,37 @@ export function ListaGalerias({
     });
   }
 
-  const alvo = galerias.find((g) => g.id === apagando) ?? null;
+  /* A estrela é a mesma nas quatro formas de ver e na faixa de favoritas. */
+  const estrelaDe = (g: GaleriaDaLista, claro = false) => (
+    <button
+      type="button"
+      onClick={() => alternarFavorita(g)}
+      disabled={enviando}
+      aria-pressed={g.favorita}
+      aria-label={g.favorita ? `Tirar ${g.titulo} das favoritas` : `Marcar ${g.titulo} como favorita`}
+      title={g.favorita ? "Tirar das favoritas" : "Marcar como favorita"}
+      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border transition disabled:opacity-50 ${
+        claro
+          ? "border-white/40 bg-black/40 backdrop-blur hover:bg-black/60"
+          : "border-linha hover:border-acento hover:bg-acento/5"
+      } ${g.favorita ? "text-acento" : claro ? "text-white" : "text-texto-soft hover:text-texto"}`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="17"
+        height="17"
+        aria-hidden="true"
+        fill={g.favorita ? "currentColor" : "none"}
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      >
+        <path d="m12 3.2 2.7 5.5 6 .9-4.4 4.2 1 6-5.3-2.8-5.4 2.8 1.1-6L3.3 9.6l6-.9L12 3.2Z" />
+      </svg>
+    </button>
+  );
+
+  const alvo = galerias.find((g) => g.id === apagando) ?? favoritas.find((g) => g.id === apagando) ?? null;
   const confere = alvo != null && digitado.trim() === alvo.titulo.trim();
 
   /* A busca viaja junto na paginação: sem isto, ir para a página 2 de uma
@@ -215,6 +265,17 @@ export function ListaGalerias({
         </svg>
       </summary>
       <div className="absolute right-0 z-20 mt-1 flex w-52 flex-col rounded-lg border border-linha bg-carbon-2 p-1 shadow-lg">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.currentTarget.closest("details")?.removeAttribute("open");
+            alternarFavorita(g);
+          }}
+          disabled={enviando}
+          className="rounded-md px-3 py-2 text-left text-xs text-texto-soft transition hover:bg-acento/10 hover:text-texto disabled:opacity-50"
+        >
+          {g.favorita ? "Tirar das favoritas" : "Marcar como favorita"}
+        </button>
         <button
           type="button"
           onClick={() => copiarLink(g)}
@@ -357,7 +418,7 @@ export function ListaGalerias({
         sem lupa, com o texto de exemplo apagado, não se anuncia como busca.
         Agora tem os dois, e o botão busca na hora.
       */}
-      {(total > 1 || busca !== "") && (
+      {(totalGeral > 1 || busca !== "") && (
         <div className="mt-6 flex flex-col gap-3 md:flex-row md:items-center">
           <form role="search" onSubmit={buscarAgora} className="flex min-w-0 flex-1 gap-2">
             <label className="relative min-w-0 flex-1">
@@ -411,6 +472,74 @@ export function ListaGalerias({
         </div>
       )}
 
+      {avisoFavorita && (
+        <p role="alert" className="mt-4 rounded-lg border border-alerta/40 bg-alerta/10 px-3 py-2 text-xs text-alerta">
+          {avisoFavorita}
+        </p>
+      )}
+
+      {/*
+        ── A FAIXA DE FAVORITAS (14/10/2026) ───────────────────────────────
+        O pedido, lembrando do Pixieset: o portfólio, o acervo analógico, as
+        galerias do Movimento Átomo — as que se abre toda semana não podem
+        depender de ordem de data nem de busca. Ficam num espaço de destaque
+        ACIMA da lista, sempre com capa (reconhece-se pela foto), qualquer que
+        seja a forma de ver escolhida lá embaixo. Não aparece durante a busca:
+        os resultados já mostram a estrela de quem é favorita.
+      */}
+      {favoritas.length > 0 && busca === "" && (
+        <section aria-labelledby="titulo-favoritas" className="mt-6">
+          <h2 id="titulo-favoritas" className="mb-3 flex items-baseline gap-2 text-sm font-semibold">
+            <span aria-hidden className="text-acento">★</span>
+            Favoritas
+            <span className="text-xs font-normal tabular-nums text-texto-faint">{favoritas.length}</span>
+          </h2>
+          <ul className="grid grid-cols-2 items-start gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {favoritas.map((g) => (
+              <li key={g.id} className="min-w-0">
+                <div className="group relative rounded-xl border border-acento/30 bg-carbon-2">
+                  <Link
+                    href={`/painel/galerias/${g.id}`}
+                    className="block aspect-[4/3] overflow-hidden rounded-xl"
+                    aria-label={g.titulo}
+                  >
+                    {g.capa ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={g.capa.url}
+                        alt=""
+                        loading="lazy"
+                        className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+                        style={{ objectPosition: `${g.capa.focoX}% ${g.capa.focoY}%` }}
+                      />
+                    ) : (
+                      <span className="grid h-full w-full place-items-center text-3xl font-light text-texto-faint">
+                        {g.titulo.trim().charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </Link>
+                  <div className="absolute left-2 top-2 rounded-full bg-carbon/95 shadow-sm">
+                    <Etiqueta galeria={g} />
+                  </div>
+                  <div className="absolute right-2 top-2">{menuDe(g, true)}</div>
+                  <div className="absolute bottom-2 right-2">{estrelaDe(g, true)}</div>
+                </div>
+                <Link href={`/painel/galerias/${g.id}`} className="group mt-2 block min-w-0">
+                  <span className="block truncate text-sm font-medium group-hover:text-acento">{g.titulo}</span>
+                  <span className="block truncate text-xs text-texto-faint" title={infoDe(g)}>
+                    {infoDe(g) || "sem data"}
+                  </span>
+                </Link>
+                {confirmacaoDe(g) && <div className="mt-2">{confirmacaoDe(g)}</div>}
+              </li>
+            ))}
+          </ul>
+          {galerias.length > 0 && (
+            <h2 className="mt-8 text-sm font-semibold text-texto-soft">Todas as galerias</h2>
+          )}
+        </section>
+      )}
+
       <div aria-busy={buscando} className={buscando ? "opacity-60 transition-opacity" : ""}>
         {/*
           CARTÕES — a forma de sempre. UMA COLUNA NO CELULAR, DUAS EM `sm`,
@@ -455,6 +584,7 @@ export function ListaGalerias({
                     </span>
                   </Link>
 
+                  {estrelaDe(g)}
                   {menuDe(g)}
                 </div>
 
@@ -511,7 +641,7 @@ export function ListaGalerias({
           <ul className="mt-4 divide-y divide-linha overflow-visible rounded-xl border border-linha bg-carbon">
             {galerias.map((g) => (
               <li key={g.id} className="min-w-0">
-                <LinhaDaGaleria g={g} info={infoDe(g)} menu={menuDe(g)} />
+                <LinhaDaGaleria g={g} info={infoDe(g)} menu={menuDe(g)} estrela={estrelaDe(g)} />
                 {confirmacaoDe(g) && <div className="px-4 pb-3">{confirmacaoDe(g)}</div>}
               </li>
             ))}
@@ -557,6 +687,7 @@ export function ListaGalerias({
                     <Etiqueta galeria={g} />
                   </div>
                   <div className="absolute right-2 top-2">{menuDe(g, true)}</div>
+                  <div className="absolute bottom-2 right-2">{estrelaDe(g, true)}</div>
                 </div>
                 <Link href={`/painel/galerias/${g.id}`} className="group mt-2 block min-w-0">
                   <span className="block truncate text-sm font-medium group-hover:text-acento">{g.titulo}</span>
@@ -588,7 +719,7 @@ export function ListaGalerias({
                 <ul className="divide-y divide-linha rounded-xl border border-linha bg-carbon">
                   {grupo.itens.map((g) => (
                     <li key={g.id} className="min-w-0">
-                      <LinhaDaGaleria g={g} info={infoDe(g)} menu={menuDe(g)} comCapa />
+                      <LinhaDaGaleria g={g} info={infoDe(g)} menu={menuDe(g)} estrela={estrelaDe(g)} comCapa />
                       {confirmacaoDe(g) && <div className="px-4 pb-3">{confirmacaoDe(g)}</div>}
                     </li>
                   ))}
@@ -670,11 +801,13 @@ function LinhaDaGaleria({
   g,
   info,
   menu,
+  estrela,
   comCapa = false,
 }: {
   g: GaleriaDaLista;
   info: string;
   menu: React.ReactNode;
+  estrela: React.ReactNode;
   comCapa?: boolean;
 }) {
   return (
@@ -716,6 +849,7 @@ function LinhaDaGaleria({
         {g.arquivos} {g.arquivos === 1 ? "arquivo" : "arquivos"}
         <span className="text-texto-faint"> · {g.tamanho}</span>
       </span>
+      {estrela}
       {menu}
     </div>
   );

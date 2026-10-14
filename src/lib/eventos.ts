@@ -46,6 +46,10 @@ export const ACOES = {
    * lugar em que o SISTEMA apaga arquivo sem o fotógrafo ter pedido, e numa
    * disputa a pergunta vai ser "fui avisado? quando?". */
   AVISO_LIMPEZA_ENVIADO: "conta.aviso_limpeza",
+  /* O lembrete de que o teste está acabando ou o espaço dele enchendo
+   * (migração 077). Não apaga nada — só avisa, para ninguém descobrir o limite
+   * no dia em que o envio recusa. */
+  AVISO_TESTE_ENVIADO: "conta.aviso_teste",
   ARQUIVOS_DO_TESTE_APAGADOS: "conta.arquivos_apagados",
   /* A conta encerrada (migração 052): cancelada ou inadimplente, três meses
    * depois do fim do período pago, com quatro avisos antes. Mesma pergunta de

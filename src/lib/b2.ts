@@ -15,6 +15,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { dispositionSegura } from "./r2";
 import { inicioDaJanela } from "./janela-de-assinatura";
+import { copiarNoBalde } from "./copia-no-balde";
 
 /**
  * ARMAZÉM DOS ARQUIVOS PESADOS — o primário no Backblaze B2.
@@ -144,6 +145,11 @@ export function urlDeUploadArquivo(chave: string, mime: string, expiraSeg = 3600
 export async function conferirArquivo(chave: string) {
   const r = await s3().send(new HeadObjectCommand({ Bucket: ARQUIVOS_BUCKET, Key: chave }));
   return { bytes: Number(r.ContentLength ?? 0), mime: r.ContentType ?? "application/octet-stream" };
+}
+
+/** Copia um arquivo para outra chave do mesmo balde, dentro do armazém. `false`: a origem não existe. */
+export function copiarArquivo(de: string, para: string): Promise<boolean> {
+  return copiarNoBalde(s3(), ARQUIVOS_BUCKET, de, para);
 }
 
 export async function apagarArquivo(chave: string) {

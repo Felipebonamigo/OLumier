@@ -143,6 +143,8 @@ export interface Galeria {
   /* Como o grupo das fotos sem capítulo se chama nesta galeria (migração 037).
      Nulo — o normal — quer dizer "Outras fotos". Ver `nomeDoGrupoSolto`. */
   grupo_solto: string | null;
+  /** Quando o estúdio a marcou como favorita (migração 078). Nulo: não é. */
+  favorita_em: Date | null;
   criado_em: Date;
   total_medias?: number;
 }
@@ -319,6 +321,7 @@ export const GALERIAS_POR_TELA = 24;
  */
 const ONDE_A_BUSCA_CASA = `
       where g.tenant_id = $1 and g.estado <> 'lixeira'
+        and (not $4::boolean or g.favorita_em is null)
         and ($2 = ''
              or sem_acento(g.titulo) ilike sem_acento($3)
              or sem_acento(coalesce(g.subtitulo, '')) ilike sem_acento($3)
@@ -363,7 +366,18 @@ const ONDE_A_BUSCA_CASA = `
  */
 export async function listarGalerias(
   tenantId: string,
-  opcoes: { busca?: string; pagina?: number; porTela?: number } = {},
+  opcoes: {
+    busca?: string;
+    pagina?: number;
+    porTela?: number;
+    /**
+     * Deixa as favoritas de fora: a tela inicial as mostra numa faixa própria,
+     * e repeti-las na lista de baixo seria a mesma galeria duas vezes na mesma
+     * tela. Com busca elas voltam — quem procura um nome quer achá-lo onde
+     * estiver.
+     */
+    semFavoritas?: boolean;
+  } = {},
 ): Promise<{ itens: Galeria[]; total: number; pagina: number; paginas: number }> {
   const porTela = Math.max(1, opcoes.porTela ?? GALERIAS_POR_TELA);
   const busca = (opcoes.busca ?? "").trim();
@@ -371,6 +385,7 @@ export async function listarGalerias(
      "50%", e não "qualquer coisa começando com 50". */
   const termo = `%${busca.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const pagina = Math.max(1, Math.floor(opcoes.pagina ?? 1));
+  const semFavoritas = Boolean(opcoes.semFavoritas) && busca === "";
 
   const linhas = await consultar<Galeria & { total_filtrado: number }>(
     `select g.*,
@@ -379,8 +394,8 @@ export async function listarGalerias(
        from galerias g
       ${ONDE_A_BUSCA_CASA}
       order by coalesce(g.data_evento, g.criado_em::date) desc, g.criado_em desc, g.id desc
-      limit $4 offset $5`,
-    [tenantId, busca, termo, porTela, (pagina - 1) * porTela],
+      limit $5 offset $6`,
+    [tenantId, busca, termo, semFavoritas, porTela, (pagina - 1) * porTela],
   );
 
   /* A página fora do fim (um `?p=99` digitado à mão, ou a última galeria da
@@ -393,7 +408,7 @@ export async function listarGalerias(
   if (linhas.length === 0 && pagina > 1) {
     const conta = await consultarUm<{ n: number }>(
       `select count(*)::int as n from galerias g ${ONDE_A_BUSCA_CASA}`,
-      [tenantId, busca, termo],
+      [tenantId, busca, termo, semFavoritas],
     );
     total = conta?.n ?? 0;
   }
@@ -403,6 +418,62 @@ export async function listarGalerias(
     pagina,
     paginas: Math.max(1, Math.ceil(total / porTela)),
   };
+}
+
+/** O teto da faixa de favoritas: passou disso, deixa de ser atalho e vira outra lista. */
+export const MAXIMO_DE_FAVORITAS = 12;
+
+/**
+ * As galerias favoritas do estúdio, na ordem em que foram marcadas — a faixa
+ * do topo da tela inicial (migração 078). Vêm no máximo `MAXIMO_DE_FAVORITAS`.
+ */
+export async function listarFavoritas(tenantId: string): Promise<Galeria[]> {
+  return consultar<Galeria>(
+    `select g.*,
+            (select count(*)::int from medias m where m.galeria_id = g.id and m.pronto) as total_medias
+       from galerias g
+      where g.tenant_id = $1 and g.estado <> 'lixeira' and g.favorita_em is not null
+      order by g.favorita_em, g.id
+      limit $2`,
+    [tenantId, MAXIMO_DE_FAVORITAS],
+  );
+}
+
+/**
+ * Marca ou desmarca. `tenant_id` no where é a autorização.
+ *
+ * Marcar passa pelo teto na MESMA instrução (`count` dentro do `where`): duas
+ * abas favoritando ao mesmo tempo não furam o limite por uma corrida entre a
+ * conta e o update. Devolve `false` quando não marcou — galeria que não existe
+ * ou faixa cheia (`cheia` distingue as duas para a tela dizer o motivo).
+ */
+export async function definirFavorita(
+  tenantId: string,
+  galeriaId: string,
+  favorita: boolean,
+): Promise<{ ok: boolean; cheia?: boolean }> {
+  if (!favorita) {
+    const r = await consultar(
+      "update galerias set favorita_em = null where id = $1 and tenant_id = $2 returning id",
+      [galeriaId, tenantId],
+    );
+    return { ok: r.length > 0 };
+  }
+  const r = await consultar(
+    `update galerias set favorita_em = coalesce(favorita_em, now())
+      where id = $1 and tenant_id = $2 and estado <> 'lixeira'
+        and (favorita_em is not null
+             or (select count(*) from galerias
+                  where tenant_id = $2 and favorita_em is not null and estado <> 'lixeira') < $3)
+      returning id`,
+    [galeriaId, tenantId, MAXIMO_DE_FAVORITAS],
+  );
+  if (r.length > 0) return { ok: true };
+  const existe = await consultarUm(
+    "select 1 from galerias where id = $1 and tenant_id = $2 and estado <> 'lixeira'",
+    [galeriaId, tenantId],
+  );
+  return existe ? { ok: false, cheia: true } : { ok: false };
 }
 
 export async function criarGaleria(dados: {

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarSessao, sessaoAtual } from "@/lib/auth";
 import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
-import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
+import { criarGaleria, apagarGaleria, restaurarGaleria, definirFavorita, MAXIMO_DE_FAVORITAS } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 /* O aviso ao outro lado. `avisarEntrega` NUNCA lança — ver lib/avisos.ts —, e é
@@ -41,6 +41,10 @@ import { buscarTenantPorId } from "@/lib/tenants";
 import { cancelarAssinatura } from "@/lib/asaas";
 import { enviarConfirmacao } from "@/lib/confirmacao-email";
 import { situacaoDoTenant } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
+import { precisaConfirmarEmail, RECADO_EMAIL_PENDENTE } from "@/lib/confirmacao-email";
+import { quotaEfetivaBytes } from "@/config/trial";
+import { copiarMediasParaOutraGaleria, type ResultadoDaCopia } from "@/lib/copiar-entre-galerias";
 import { anotarDevolucao, cotarCancelamento, PRAZO_DA_DEVOLUCAO } from "@/lib/devolucao";
 import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
@@ -194,6 +198,28 @@ export async function criarGaleriaAction(
  * Salva os controles de entrega. Recebe só o que mudou: a tela alterna uma coisa
  * por vez, e campo ausente significa "não mexer" — não "apagar".
  */
+/**
+ * Favorita ou não — a faixa do topo da tela inicial (migração 078).
+ * Devolve o motivo quando não marcou, para a estrela poder dizê-lo.
+ */
+export async function alternarFavoritaAction(
+  galeriaId: string,
+  favorita: boolean,
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const tenantId = await exigirTenant();
+  const r = await definirFavorita(tenantId, String(galeriaId ?? ""), favorita === true);
+  if (r.ok) {
+    revalidatePath("/painel");
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    erro: r.cheia
+      ? `A faixa de favoritas guarda até ${MAXIMO_DE_FAVORITAS} galerias. Tire uma para marcar esta.`
+      : "Não encontrei essa galeria.",
+  };
+}
+
 export async function salvarPublicacaoAction(form: FormData) {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");
@@ -1898,6 +1924,46 @@ export async function moverParaOutraGaleriaAction(dados: {
       revalidatePath(`/painel/galerias/${id}`);
       revalidatePath(`/painel/galerias/${id}/fotos`);
     }
+  }
+  return r;
+}
+
+/**
+ * COPIAR as fotos marcadas para outra galeria (14/10/2026). Ver
+ * `lib/copiar-entre-galerias.ts` — o arquivo vira dois e ocupa espaço de novo.
+ *
+ * Passa pelos MESMOS portões do envio: copiar é adicionar arquivo, e teste
+ * vencido, assinatura em atraso e e-mail por confirmar não adicionam nada. Sem
+ * isso a cópia seria um desvio do paywall e da quota.
+ *
+ * Devolve `restantes`: a cópia anda por peso, e a tela chama de novo com eles
+ * até acabar.
+ */
+export async function copiarParaOutraGaleriaAction(dados: {
+  origemId: string;
+  destinoId: string;
+  secaoDestinoId: string | null;
+  ids: string[];
+}): Promise<ResultadoDaCopia> {
+  const tenantId = await exigirTenant();
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { ok: false, erro: "Conta não encontrada." };
+
+  const situacao = situacaoDoTenant(tenant, asaasConfigurado());
+  if (!situacao.podeEnviar) return { ok: false, erro: situacao.recado ?? "Sua assinatura não permite adicionar arquivos." };
+  if (precisaConfirmarEmail(tenant)) return { ok: false, erro: RECADO_EMAIL_PENDENTE };
+
+  const r = await copiarMediasParaOutraGaleria({
+    tenantId,
+    origemId: String(dados?.origemId ?? ""),
+    destinoId: String(dados?.destinoId ?? ""),
+    secaoDestinoId: dados?.secaoDestinoId ? String(dados.secaoDestinoId) : null,
+    ids: Array.isArray(dados?.ids) ? dados.ids.map(String) : [],
+    quotaBytes: quotaEfetivaBytes(tenant),
+  });
+  if (r.ok && r.copiadas > 0) {
+    revalidatePath(`/painel/galerias/${dados.destinoId}`);
+    revalidatePath(`/painel/galerias/${dados.destinoId}/fotos`);
   }
   return r;
 }
