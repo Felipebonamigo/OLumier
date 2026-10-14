@@ -13,6 +13,7 @@ import {
 import { getSignedUrl, S3RequestPresigner } from "@aws-sdk/s3-request-presigner";
 import { dispositionSegura } from "./disposition";
 import { inicioDaJanela } from "./janela-de-assinatura";
+import { copiarNoBalde } from "./copia-no-balde";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 
 /**
@@ -342,6 +343,11 @@ export async function urlDeLeituraAssinadaEm(
 export async function conferirObjeto(chave: string) {
   const r = await s3().send(new HeadObjectCommand({ Bucket: BUCKET, Key: chave }));
   return { bytes: Number(r.ContentLength ?? 0), mime: r.ContentType ?? "application/octet-stream" };
+}
+
+/** Copia um objeto para outra chave do mesmo balde, dentro do armazém. `false`: a origem não existe. */
+export function copiarObjeto(de: string, para: string): Promise<boolean> {
+  return copiarNoBalde(s3(), BUCKET, de, para);
 }
 
 export async function apagarObjeto(chave: string) {

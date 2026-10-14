@@ -7,6 +7,7 @@ import {
   fecharEnvioEmPartes,
   abortarEnvioEmPartes,
   apagarObjetos,
+  copiarObjeto,
 } from "./r2";
 import {
   urlDeLeituraArquivo,
@@ -18,6 +19,7 @@ import {
   fecharEnvioEmPartesArquivo,
   abortarEnvioEmPartesArquivo,
   apagarArquivos,
+  copiarArquivo,
 } from "./b2";
 
 /**
@@ -204,6 +206,21 @@ export function abortarEnvioDoOriginal(
   return armazem === "b2"
     ? abortarEnvioEmPartesArquivo(chave, uploadId)
     : abortarEnvioEmPartes(chave, uploadId);
+}
+
+/**
+ * Copia o ORIGINAL para outra chave, dentro do fornecedor onde ele mora — a
+ * cópia nasce no mesmo armazém (copiar entre fornecedores seria baixar e subir
+ * de novo, que é justamente o que a cópia no armazém evita). `false`: o
+ * original não está lá.
+ */
+export function copiarOriginal(de: string, para: string, armazem: Armazem): Promise<boolean> {
+  return armazem === "b2" ? copiarArquivo(de, para) : copiarObjeto(de, para);
+}
+
+/** As derivadas moram sempre no R2 (regra deste módulo). `false`: nunca foi gerada. */
+export function copiarDerivada(de: string, para: string): Promise<boolean> {
+  return copiarObjeto(de, para);
 }
 
 /**

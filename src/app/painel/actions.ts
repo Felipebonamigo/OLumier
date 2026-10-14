@@ -41,6 +41,10 @@ import { buscarTenantPorId } from "@/lib/tenants";
 import { cancelarAssinatura } from "@/lib/asaas";
 import { enviarConfirmacao } from "@/lib/confirmacao-email";
 import { situacaoDoTenant } from "@/lib/assinatura";
+import { asaasConfigurado } from "@/lib/asaas";
+import { precisaConfirmarEmail, RECADO_EMAIL_PENDENTE } from "@/lib/confirmacao-email";
+import { quotaEfetivaBytes } from "@/config/trial";
+import { copiarMediasParaOutraGaleria, type ResultadoDaCopia } from "@/lib/copiar-entre-galerias";
 import { anotarDevolucao, cotarCancelamento, PRAZO_DA_DEVOLUCAO } from "@/lib/devolucao";
 import { RETENCAO_POR_EXTENSO } from "@/config/retencao";
 import { normalizarCor, normalizarNomeEstudio } from "@/lib/marca-estudio";
@@ -1920,6 +1924,46 @@ export async function moverParaOutraGaleriaAction(dados: {
       revalidatePath(`/painel/galerias/${id}`);
       revalidatePath(`/painel/galerias/${id}/fotos`);
     }
+  }
+  return r;
+}
+
+/**
+ * COPIAR as fotos marcadas para outra galeria (14/10/2026). Ver
+ * `lib/copiar-entre-galerias.ts` — o arquivo vira dois e ocupa espaço de novo.
+ *
+ * Passa pelos MESMOS portões do envio: copiar é adicionar arquivo, e teste
+ * vencido, assinatura em atraso e e-mail por confirmar não adicionam nada. Sem
+ * isso a cópia seria um desvio do paywall e da quota.
+ *
+ * Devolve `restantes`: a cópia anda por peso, e a tela chama de novo com eles
+ * até acabar.
+ */
+export async function copiarParaOutraGaleriaAction(dados: {
+  origemId: string;
+  destinoId: string;
+  secaoDestinoId: string | null;
+  ids: string[];
+}): Promise<ResultadoDaCopia> {
+  const tenantId = await exigirTenant();
+  const tenant = await buscarTenantPorId(tenantId);
+  if (!tenant) return { ok: false, erro: "Conta não encontrada." };
+
+  const situacao = situacaoDoTenant(tenant, asaasConfigurado());
+  if (!situacao.podeEnviar) return { ok: false, erro: situacao.recado ?? "Sua assinatura não permite adicionar arquivos." };
+  if (precisaConfirmarEmail(tenant)) return { ok: false, erro: RECADO_EMAIL_PENDENTE };
+
+  const r = await copiarMediasParaOutraGaleria({
+    tenantId,
+    origemId: String(dados?.origemId ?? ""),
+    destinoId: String(dados?.destinoId ?? ""),
+    secaoDestinoId: dados?.secaoDestinoId ? String(dados.secaoDestinoId) : null,
+    ids: Array.isArray(dados?.ids) ? dados.ids.map(String) : [],
+    quotaBytes: quotaEfetivaBytes(tenant),
+  });
+  if (r.ok && r.copiadas > 0) {
+    revalidatePath(`/painel/galerias/${dados.destinoId}`);
+    revalidatePath(`/painel/galerias/${dados.destinoId}/fotos`);
   }
   return r;
 }

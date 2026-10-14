@@ -117,6 +117,7 @@ export function GradeMedias({
   /* A foto aberta em tela cheia (id), ou nada. Ver `ampliar-foto.tsx`. */
   const [ampliando, setAmpliando] = useState<string | null>(null);
   const [mover, setMover] = useState<{
+    modo: "mover" | "copiar";
     escopo: EscopoDoMovimento;
     resumo: string;
     quantidade: string;
@@ -325,12 +326,13 @@ export function GradeMedias({
    * Vão os ids que estão À VISTA (`marcadas`), pela mesma razão do apagar: a
    * seleção escondida em outro recorte fica guardada, mas não age.
    */
-  function abrirMoverParaOutraGaleria() {
+  function abrirMoverParaOutraGaleria(modo: "mover" | "copiar" = "mover") {
     const ids = [...marcadas];
     if (ids.length === 0) return;
     const videos = medias.reduce((n, m) => n + (marcadas.has(m.id) && m.tipo === "video" ? 1 : 0), 0);
     const quantidade = textoDaContagem(contagemDe(ids.length, videos));
     setMover({
+      modo,
       escopo: { tipo: "ids", ids },
       quantidade,
       resumo: `${quantidade} da seleção`,
@@ -733,6 +735,7 @@ export function GradeMedias({
   const modalDeMover = mover && (
     <MoverParaOutraGaleria
       origemId={galeriaId}
+      modo={mover.modo}
       escopo={mover.escopo}
       resumo={mover.resumo}
       quantidade={mover.quantidade}
@@ -1028,8 +1031,12 @@ export function GradeMedias({
               desabilitado={ocupado || apagandoSelecao}
               itens={[
                 {
+                  rotulo: "Copiar selecionadas para outra galeria…",
+                  aoEscolher: () => abrirMoverParaOutraGaleria("copiar"),
+                },
+                {
                   rotulo: "Mover selecionadas para outra galeria…",
-                  aoEscolher: abrirMoverParaOutraGaleria,
+                  aoEscolher: () => abrirMoverParaOutraGaleria("mover"),
                 },
               ]}
             />
