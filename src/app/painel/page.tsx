@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { FUSO } from "@/config/fuso";
 import Link from "next/link";
 import { sessaoAtual } from "@/lib/auth";
-import { listarGalerias, listarLixeira, formatarBytes, PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
+import { listarGalerias, listarFavoritas, listarLixeira, formatarBytes, PRAZO_LIXEIRA_DIAS } from "@/lib/tenants";
 import { Lixeira } from "@/components/lixeira";
 import { ListaGalerias } from "@/components/lista-galerias";
 import { buscarTenantPorId } from "@/lib/tenants";
@@ -11,6 +11,10 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { capasDoPainel } from "@/lib/capas-do-painel";
 import { COOKIE_VISAO, lerVisao } from "@/config/visao-galerias";
+import { usoDoEstudio } from "@/lib/medias";
+import { asaasConfigurado } from "@/lib/asaas";
+import { lembreteDoTeste } from "@/lib/lembrete-do-teste";
+import { AvisoDoTeste } from "@/components/aviso-do-teste";
 
 export const metadata: Metadata = { title: "Galerias" };
 export const dynamic = "force-dynamic";
@@ -39,11 +43,15 @@ export default async function PainelPage({
 
   const { q, p } = await searchParams;
   const busca = (q ?? "").slice(0, 120);
-  const tela = await listarGalerias(tenantId, { busca, pagina: Number(p) || 1 });
+  const tela = await listarGalerias(tenantId, { busca, pagina: Number(p) || 1, semFavoritas: true });
+  /* A faixa de favoritas só existe fora da busca: quem busca quer achar o nome,
+     esteja ele onde estiver, e a lista de resultados já traz as favoritas. */
+  const favoritas = busca ? [] : await listarFavoritas(tenantId);
   const galerias = tela.itens;
+  const totalGeral = tela.total + favoritas.length;
   /* "Nenhuma galeria ainda" e "nada encontrado" são telas diferentes: a
      primeira é o começo do produto, a segunda é uma busca que não achou. */
-  const vazioDeVerdade = tela.total === 0 && !busca;
+  const vazioDeVerdade = totalGeral === 0 && !busca;
   /* O slug do estúdio entra por causa do atalho "copiar link": o endereço do
      cliente é /g/{estudio}/{galeria}, e sem a primeira metade o botão copiaria
      um link quebrado. Uma consulta a mais nesta página, não por galeria. */
@@ -53,9 +61,31 @@ export default async function PainelPage({
      na tela, sem voltar aqui. Ver `lib/capas-do-painel.ts`. */
   const capas = await capasDoPainel(
     tenantId,
-    galerias.map((g) => g.id),
+    [...favoritas, ...galerias].map((g) => g.id),
   );
+  const paraALista = (g: (typeof galerias)[number]) => ({
+    id: g.id,
+    titulo: g.titulo,
+    subtitulo: g.subtitulo,
+    slug: g.slug,
+    estudioSlug: estudio?.slug ?? "",
+    publicada: g.publicada,
+    estado: g.estado,
+    origem: g.origem,
+    favorita: g.favorita_em !== null,
+    diasAteCofre: diasAteArquivar(g.expira_em),
+    dataFormatada: formatarData(g.data_evento),
+    mes: rotuloDoMes(g.data_evento ?? g.criado_em),
+    capa: capas.get(g.id) ?? null,
+    arquivos: g.total_medias ?? 0,
+    tamanho: formatarBytes(g.bytes_total),
+  });
   const visao = lerVisao((await cookies()).get(COOKIE_VISAO)?.value);
+  /* Os dois limites do teste (tempo e espaço), à vista. Só para quem está no
+     teste; para os demais `lembreteDoTeste` devolve null. */
+  const lembrete = estudio
+    ? lembreteDoTeste(estudio, (await usoDoEstudio(tenantId)).noAr, asaasConfigurado())
+    : null;
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10">
@@ -75,9 +105,9 @@ export default async function PainelPage({
         <div>
           <h1 className="flex items-baseline gap-2.5 text-2xl font-bold tracking-tight">
             Galerias
-            {tela.total > 0 && (
+            {totalGeral > 0 && (
               <span className="text-base font-normal tabular-nums text-texto-faint">
-                {tela.total}
+                {totalGeral}
               </span>
             )}
           </h1>
@@ -103,6 +133,8 @@ export default async function PainelPage({
           </Link>
         </div>
       </div>
+
+      {lembrete && <AvisoDoTeste lembrete={lembrete} />}
 
       {vazioDeVerdade ? (
         <div className="mt-10 rounded-xl border border-dashed border-linha-forte bg-carbon px-6 py-14 text-center">
@@ -132,22 +164,9 @@ export default async function PainelPage({
           pagina={tela.pagina}
           paginas={tela.paginas}
           total={tela.total}
-          galerias={galerias.map((g) => ({
-            id: g.id,
-            titulo: g.titulo,
-            subtitulo: g.subtitulo,
-            slug: g.slug,
-            estudioSlug: estudio?.slug ?? "",
-            publicada: g.publicada,
-            estado: g.estado,
-            origem: g.origem,
-            diasAteCofre: diasAteArquivar(g.expira_em),
-            dataFormatada: formatarData(g.data_evento),
-            mes: rotuloDoMes(g.data_evento ?? g.criado_em),
-            capa: capas.get(g.id) ?? null,
-            arquivos: g.total_medias ?? 0,
-            tamanho: formatarBytes(g.bytes_total),
-          }))}
+          totalGeral={totalGeral}
+          galerias={galerias.map(paraALista)}
+          favoritas={favoritas.map(paraALista)}
         />
       )}
 

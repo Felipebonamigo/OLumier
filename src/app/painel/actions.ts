@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarSessao, sessaoAtual } from "@/lib/auth";
 import { gerarChave, listarChaves, revogarChave } from "@/lib/chaves-api";
-import { criarGaleria, apagarGaleria, restaurarGaleria } from "@/lib/tenants";
+import { criarGaleria, apagarGaleria, restaurarGaleria, definirFavorita, MAXIMO_DE_FAVORITAS } from "@/lib/tenants";
 import { consultar, consultarUm } from "@/lib/db";
 import { gerarHashSenhaGaleria } from "@/lib/galerias-publicas";
 /* O aviso ao outro lado. `avisarEntrega` NUNCA lança — ver lib/avisos.ts —, e é
@@ -194,6 +194,28 @@ export async function criarGaleriaAction(
  * Salva os controles de entrega. Recebe só o que mudou: a tela alterna uma coisa
  * por vez, e campo ausente significa "não mexer" — não "apagar".
  */
+/**
+ * Favorita ou não — a faixa do topo da tela inicial (migração 078).
+ * Devolve o motivo quando não marcou, para a estrela poder dizê-lo.
+ */
+export async function alternarFavoritaAction(
+  galeriaId: string,
+  favorita: boolean,
+): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const tenantId = await exigirTenant();
+  const r = await definirFavorita(tenantId, String(galeriaId ?? ""), favorita === true);
+  if (r.ok) {
+    revalidatePath("/painel");
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    erro: r.cheia
+      ? `A faixa de favoritas guarda até ${MAXIMO_DE_FAVORITAS} galerias. Tire uma para marcar esta.`
+      : "Não encontrei essa galeria.",
+  };
+}
+
 export async function salvarPublicacaoAction(form: FormData) {
   const tenantId = await exigirTenant();
   const galeriaId = String(form.get("galeria_id") ?? "");
