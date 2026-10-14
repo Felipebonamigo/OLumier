@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SUBDOMINIOS_RESERVADOS } from "@/config/subdominios";
 import { ehDominioPrincipal, estudioDoHost } from "@/config/dominios";
-import { estudioDoDominioProprio } from "@/lib/dominio-proprio";
+import { estudioDoDominioProprio, enderecoDoEstudio } from "@/lib/dominio-proprio";
 import { marca } from "@/config/marca";
 import { COOKIE_PREVIA, VALIDADE_PREVIA_S, baseDaGaleria } from "@/config/previa";
 
@@ -231,6 +231,64 @@ export async function proxy(request: NextRequest) {
         maxAge: VALIDADE_PREVIA_S,
       });
       return resposta;
+    }
+  }
+
+  /*
+   * ── UM ENDEREÇO POR GALERIA (14/10/2026) ─────────────────────────────────
+   *
+   * Juan apareceu com as duas formas da mesma galeria no mesmo dia:
+   *
+   *     galeriaatomo.com.br/g/sirius/nataliavolk-tisejp
+   *     sirius.galeriaatomo.com.br/vitoria-joaoc
+   *
+   * Nenhuma tela entrega a forma longa desde 19/08/2026 — o painel, o e-mail do
+   * casal e o que o Atomatiza recebe saem todos de `enderecoDaGaleria`. Mas ela
+   * RESPONDIA, com 200, em vez de redirecionar: quem pegou uma vez (barra do
+   * navegador depois da prévia, link de antes de agosto, mensagem
+   * reencaminhada) seguia espalhando. Para o buscador eram dois sites com o
+   * conteúdo copiado — o mesmo problema que o bloco do `www` resolveu.
+   *
+   * 308, como o `www`: permanente, para o buscador juntar as duas numa só.
+   *
+   * ── O QUE FICA DE FORA, E POR QUE CADA UM ────────────────────────────────
+   *
+   * O DOMÍNIO LEGADO. Ele serve a rota interna de propósito, por causa de link
+   * já entregue, e `testar-subdominio.mjs` guarda isso em duas etapas. Só o
+   * canônico redireciona.
+   *
+   * A PRÉVIA DO FOTÓGRAFO. O cookie de sessão sai sem `domain`, então é
+   * host-only: no subdomínio ele não chega. É por isso que o bloco da prévia
+   * logo acima já diz "só no domínio principal, que é onde mora a sessão".
+   * Redirecionar mandaria o dono para um endereço onde ele não está logado, e
+   * uma galeria fora do ar devolveria 404 para quem a fez. O `?previa=1` sai da
+   * barra no primeiro salto e vira cookie, então a partir do segundo pedido só
+   * o COOKIE distingue a prévia de uma visita comum — os dois são conferidos.
+   *
+   * `opengraph-image`. É o endereço que vai nos metadados da página, e o que o
+   * WhatsApp busca ao montar o cartão do link. Robô de rede social não é
+   * navegador e muitos não seguem redirecionamento em imagem: redirecionar
+   * tiraria a foto do cartão de todo link compartilhado, e nada na tela
+   * denunciaria.
+   *
+   * ESTÚDIO QUE NÃO EXISTE. `enderecoDoEstudio` devolve nulo, e o 404 sai aqui
+   * como sempre — em vez de um salto para o curinga só para receber o mesmo 404
+   * do outro lado.
+   */
+  if (
+    hostPedido === marca.dominio &&
+    (pathname.startsWith("/g/") || pathname.startsWith("/e/")) &&
+    !pathname.endsWith("/opengraph-image") &&
+    !request.nextUrl.searchParams.has("previa") &&
+    !request.cookies.get(COOKIE_PREVIA)
+  ) {
+    const [, tipo, dono, ...resto] = pathname.split("/");
+    const base = dono ? await enderecoDoEstudio(dono) : null;
+    if (base) {
+      /* A vitrine é a RAIZ do endereço do estúdio, e a galeria o caminho curto
+         — o mesmo par que a reescrita lá em cima monta ao contrário. */
+      const curto = tipo === "g" && resto.length ? `/${resto.join("/")}` : "/";
+      return NextResponse.redirect(new URL(curto + search, base), 308);
     }
   }
 

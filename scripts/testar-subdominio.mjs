@@ -11,6 +11,7 @@ import { exigirBancoDeTeste } from "./guarda-producao.mjs";
 import { galeriaDaRodada, limparRodada } from "./fixture-de-teste.mjs";
 import { DOMINIOS_ATENDIDOS } from "../src/config/dominios.ts";
 import { marca } from "../src/config/marca.ts";
+import { COOKIE_PREVIA } from "../src/config/previa.ts";
 import http from "node:http";
 
 // Os testes abaixo publicam galeria, removem senha e apagam midia.
@@ -74,7 +75,7 @@ const etapa = async (nome, fn) => {
  * proibido e o descarta em silêncio — o servidor receberia "localhost" e o teste
  * falharia sem que o app tivesse problema algum. Já me enganou uma vez.
  */
-const pedir = (caminho, host = HOST) =>
+const pedir = (caminho, host = HOST, cabecalhos = {}) =>
   new Promise((resolve, reject) => {
     const url = new URL(BASE + caminho);
     const req = http.request(
@@ -82,7 +83,7 @@ const pedir = (caminho, host = HOST) =>
         hostname: url.hostname,
         port: url.port,
         path: url.pathname + url.search,
-        headers: { Host: host },
+        headers: { Host: host, ...cabecalhos },
       },
       (res) => {
         // Sem isto, um acento pode ser partido entre dois pedaços e chegar corrompido.
@@ -131,12 +132,107 @@ await etapa("o endereço bonito é mantido (reescrita, não redirecionamento)", 
   return "sem redirecionamento";
 });
 
-await etapa("o domínio canônico continua servindo a rota interna", async () => {
+/*
+ * ── UM ENDEREÇO POR GALERIA (14/10/2026) ──────────────────────────────────
+ *
+ * Até aqui o canônico SERVIA a rota interna, com 200. As duas formas abriam a
+ * mesma página, e Juan apareceu com as duas na mão no mesmo dia:
+ *
+ *     galeriaatomo.com.br/g/sirius/nataliavolk-tisejp
+ *     sirius.galeriaatomo.com.br/vitoria-joaoc
+ *
+ * Nenhuma tela entrega a forma longa desde 19/08/2026 — mas ela respondia em
+ * vez de redirecionar, então quem pegou uma vez (barra do navegador depois da
+ * prévia, link de antes de agosto, mensagem reencaminhada) seguia espalhando.
+ * Para o buscador eram dois sites com o conteúdo copiado, o mesmo problema que
+ * o `www` já resolveu logo acima.
+ *
+ * Agora o canônico manda para o endereço do estúdio. O LEGADO não: as duas
+ * etapas logo abaixo guardam a promessa de que link já entregue segue abrindo.
+ */
+await etapa("o domínio canônico manda a rota interna para o endereço do estúdio", async () => {
   const r = await pedir(`/g/${tslug}/${gslug}`, marca.dominio);
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const t = await texto(r);
-  if (!t.includes(titulo)) throw new Error("a rota interna quebrou no canônico");
-  return `/g/estudio/galeria intacto em ${marca.dominio}`;
+  if (r.status !== 308) throw new Error(`HTTP ${r.status} — esperava 308`);
+  const destino = r.headers.get("location");
+  const esperado = `https://${tslug}.${marca.dominio}/${gslug}`;
+  if (destino !== esperado) throw new Error(`foi para ${destino}, esperava ${esperado}`);
+  return `/g/… → ${esperado}`;
+});
+
+await etapa("a consulta vai junto no redirecionamento", async () => {
+  /* `?fotos=` é o recorte da busca por rosto, e perdê-lo manda o convidado para
+     a galeria inteira em vez das fotos dele. */
+  const r = await pedir(`/g/${tslug}/${gslug}?fotos=abc`, marca.dominio);
+  const destino = r.headers.get("location");
+  if (destino !== `https://${tslug}.${marca.dominio}/${gslug}?fotos=abc`) {
+    throw new Error(`perdeu a consulta: ${destino}`);
+  }
+  return "?fotos=abc preservado";
+});
+
+await etapa("o capítulo também vai para o endereço curto", async () => {
+  const r = await pedir(`/g/${tslug}/${gslug}/cerimonia`, marca.dominio);
+  const destino = r.headers.get("location");
+  if (destino !== `https://${tslug}.${marca.dominio}/${gslug}/cerimonia`) {
+    throw new Error(`capítulo foi para ${destino}`);
+  }
+  return "/galeria/capitulo";
+});
+
+await etapa("a imagem do cartão do link NÃO é redirecionada", async () => {
+  /*
+   * `opengraph-image` mora no canônico de propósito: é o endereço que vai nos
+   * metadados da página (`lib/vitrine.ts`) e o que o WhatsApp busca ao montar o
+   * cartão. Robô de rede social não é navegador e muitos não seguem
+   * redirecionamento em imagem — redirecionar aqui tiraria a foto do cartão de
+   * todo link compartilhado, e nada na tela denunciaria.
+   */
+  const r = await pedir(`/g/${tslug}/${gslug}/opengraph-image`, marca.dominio);
+  if (r.status >= 300 && r.status < 400) {
+    throw new Error(`redirecionou para ${r.headers.get("location")} — o cartão perderia a foto`);
+  }
+  return `HTTP ${r.status}, servido no canônico`;
+});
+
+await etapa("a vitrine no canônico vai para o endereço do estúdio", async () => {
+  const r = await pedir(`/e/${tslug}`, marca.dominio);
+  const destino = r.headers.get("location");
+  if (destino !== `https://${tslug}.${marca.dominio}/`) {
+    throw new Error(`vitrine foi para ${destino}`);
+  }
+  return "/e/estudio → raiz do estúdio";
+});
+
+await etapa("estúdio que não existe NÃO é redirecionado: segue o 404 de sempre", async () => {
+  /* Sem isto, `/g/qualquercoisa/x` jogaria o robô num host do curinga só para
+     ele receber o mesmo 404 um salto depois. */
+  const r = await pedir(`/g/estudio-que-nao-existe/${gslug}`, marca.dominio);
+  if (r.status >= 300 && r.status < 400) {
+    throw new Error(`redirecionou para ${r.headers.get("location")}`);
+  }
+  return `HTTP ${r.status}`;
+});
+
+await etapa("a prévia do fotógrafo NÃO é redirecionada: a sessão mora no canônico", async () => {
+  /*
+   * A prévia é do domínio principal por construção — o comentário dela no
+   * proxy já dizia "só no domínio principal, que é onde mora a sessão". O
+   * cookie de sessão sai sem `domain`, então é host-only: no subdomínio do
+   * estúdio ele simplesmente não chega.
+   *
+   * E o `?previa=1` sai da barra no primeiro salto, virando cookie. Quer
+   * dizer que a partir do segundo pedido a prévia é indistinguível de uma
+   * visita comum pela URL — quem decide é o COOKIE. Sem esta etapa, o
+   * redirecionamento mandaria o fotógrafo para um endereço onde ele não está
+   * logado, e uma galeria ainda fora do ar responderia 404 para o dono dela.
+   */
+  const r = await pedir(`/g/${tslug}/${gslug}`, marca.dominio, {
+    Cookie: `${COOKIE_PREVIA}=1`,
+  });
+  if (r.status >= 300 && r.status < 400) {
+    throw new Error(`redirecionou para ${r.headers.get("location")} — a prévia morreria`);
+  }
+  return `HTTP ${r.status} no canônico`;
 });
 
 /*

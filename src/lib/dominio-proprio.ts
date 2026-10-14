@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
 import { consultar, consultarUm } from "./db";
 import { DOMINIOS_ATENDIDOS } from "@/config/dominios";
+import { marca } from "@/config/marca";
 
 /**
  * DOMÍNIO PRÓPRIO DO ESTÚDIO — `carolinetedesco.com.br` no lugar do subdomínio.
@@ -305,6 +306,51 @@ export function consultasAoBanco(): number {
 /** Esvazia o cache. Chamado por toda escrita daqui, e pelo teste. */
 export function limparCacheDominios(): void {
   cache.clear();
+  porSlug.clear();
+}
+
+/*
+ * ── O CAMINHO INVERSO: SLUG → ENDEREÇO (14/10/2026) ───────────────────────
+ *
+ * `estudioDoDominioProprio` responde "de quem é este host". Isto responde o
+ * contrário, "onde mora este estúdio", e existe porque o proxy passou a mandar
+ * a forma interna `/g/<estudio>/<galeria>` para o endereço do estúdio.
+ *
+ * Cache separado, e não o mesmo mapa: as duas perguntas têm chaves de tipos
+ * diferentes (host e slug), e um estúdio chamado como um domínio faria uma
+ * responder pela outra.
+ */
+const porSlug = new Map<string, { base: string | null; ate: number }>();
+
+/**
+ * O endereço público do estúdio, ou `null` se o estúdio não existe.
+ *
+ * A régua do domínio próprio é a de `enderecoDaVitrine` e a do porteiro do
+ * certificado: ele só vence VERIFICADO. Domínio pedido e não provado não
+ * responde, e mandar o visitante para lá seria trocar uma página que abre por
+ * uma que não.
+ *
+ * `null` para estúdio inexistente é o que impede o proxy de jogar
+ * `/g/qualquercoisa/x` num host do curinga só para receber o mesmo 404 um salto
+ * depois — e de transformar varredura de robô em redirecionamento nosso.
+ */
+export async function enderecoDoEstudio(slug: string): Promise<string | null> {
+  if (!/^[a-z0-9-]{1,63}$/.test(slug)) return null;
+
+  const agora = Date.now();
+  const guardado = porSlug.get(slug);
+  if (guardado && guardado.ate > agora) return guardado.base;
+
+  consultas++;
+  const linha = await consultarUm<{ dominio: string | null }>(
+    `select case when dominio_verificado_em is not null then dominio_proprio end as dominio
+       from tenants where slug = $1`,
+    [slug],
+  );
+
+  const base = linha ? `https://${linha.dominio ?? `${slug}.${marca.dominio}`}` : null;
+  porSlug.set(slug, { base, ate: agora + (base ? VALIDADE_ACERTO_MS : VALIDADE_ERRO_MS) });
+  return base;
 }
 
 /**
