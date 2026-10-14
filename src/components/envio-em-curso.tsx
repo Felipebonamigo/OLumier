@@ -95,6 +95,8 @@ export interface ItemFila {
   /** O original foi pelo caminho alternativo (R2), porque o B2 não aceitou. */
   alternativo?: boolean;
   erro?: string;
+  /** A recusa foi de cobrança (402): teste vencido, assinatura cancelada ou em atraso. */
+  cobranca?: boolean;
   /** Quantos rostos a busca por rosto guardou desta foto. */
   rostos?: number;
   /** A versão leve do vídeo, que o navegador converte depois do envio. */
@@ -660,7 +662,10 @@ export function ProvedorDeEnvio({
                   preparo.status === 507 ||
                   (preparo.status >= 400 && preparo.status < 500 && preparo.status !== 408 && preparo.status !== 429);
                 const mensagem = corpo.erro ?? `não foi possível preparar o envio (HTTP ${preparo.status})`;
-                throw definitivo ? erroDefinitivo(mensagem) : new Error(mensagem);
+                /* 402 é a recusa de cobrança: marcada para a barra mandar a pessoa à
+                   Conta em vez de deixá-la com uma lista vermelha. */
+                const recusa = definitivo ? erroDefinitivo(mensagem) : new Error(mensagem);
+                throw preparo.status === 402 ? Object.assign(recusa, { cobranca: true }) : recusa;
               }
               preparado = corpo;
             }
@@ -834,6 +839,7 @@ export function ProvedorDeEnvio({
           situacao: "erro",
           semRede: false,
           erro: e instanceof Error ? e.message : "falhou",
+          cobranca: (e as { cobranca?: unknown } | null)?.cobranca === true,
         });
         falhas.current.set(tarefa.item.id, tarefa);
         /* Recusa do servidor (teto do plano, sessão, tipo) não é a rede de
@@ -1060,7 +1066,7 @@ export function ProvedorDeEnvio({
         setFila((f) =>
           f.map((i) =>
             ids.has(i.id)
-              ? { ...i, situacao: "esperando", progresso: 0, tentativa: 0, semRede: false, motivo: undefined, alternativo: false, erro: undefined }
+              ? { ...i, situacao: "esperando", progresso: 0, tentativa: 0, semRede: false, motivo: undefined, alternativo: false, erro: undefined, cobranca: false }
               : i,
           ),
         );
@@ -1165,6 +1171,12 @@ function BarraDeEnvio({
      "Envio concluído", sem esta linha ninguém saberia que ainda há trabalho. */
   const aPreparar = fila.filter((i) => i.leve?.estado === "fila" || i.leve?.estado === "convertendo");
   const agora = aPreparar.find((i) => i.leve?.estado === "convertendo");
+  /* O MOTIVO NÃO PODE FICAR ESCONDIDO (14/10/2026). Um estúdio com o teste
+     vencido viu "0 de 38 · 38 com erro" numa barra recolhida e disse que "dava
+     erro ao subir", sem saber por quê: o recado do servidor só aparecia com a
+     barra aberta, espremido ao lado do nome do arquivo. Quando o envio para, o
+     primeiro motivo definitivo sobe para um aviso próprio, sempre à vista. */
+  const recusa = !rodando ? fila.find((i) => i.situacao === "erro" && i.cobranca) : undefined;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-linha bg-carbon/95 backdrop-blur">
@@ -1240,6 +1252,24 @@ function BarraDeEnvio({
           </div>
         </div>
 
+        {recusa && (
+          <div
+            role="alert"
+            className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-erro/40 bg-erro/10 px-3 py-2 text-xs"
+          >
+            <p className="min-w-0 flex-1 basis-72 leading-relaxed">
+              <strong className="font-semibold">O envio parou por causa da assinatura, não por erro no arquivo.</strong>{" "}
+              {recusa.erro}
+            </p>
+            <a
+              href="/painel/conta"
+              className="shrink-0 rounded-lg bg-acento px-3 py-1.5 font-semibold text-void transition hover:bg-acento-alto"
+            >
+              Ir para Conta
+            </a>
+          </div>
+        )}
+
         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-carbon-2">
           <div
             className={`h-full rounded-full transition-[width] ${pausado ? "bg-alerta" : "bg-acento"}`}
@@ -1255,7 +1285,9 @@ function BarraDeEnvio({
                   <span className="min-w-0 flex-1 truncate">{item.nome}</span>
                   <span className="shrink-0 tabular-nums text-texto-faint">
                     {item.situacao === "erro" ? (
-                      <span className="text-erro">{item.erro}</span>
+                      <span className="text-erro">
+                        {item.cobranca ? "assinatura necessária" : item.erro}
+                      </span>
                     ) : item.situacao === "pronto" ? (
                       <span className="text-ok">
                         enviado
