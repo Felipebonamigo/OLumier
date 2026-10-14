@@ -226,6 +226,12 @@ const chamar = async (rota, caminho, corpo, autorizacao = `Bearer ${SEGREDO}`) =
   return { status: r.status, corpo: await r.json() };
 };
 
+/* Uma data FUTURA calculada, e não escrita à mão: o código troca vencimento no
+ * passado por "hoje" (um cartão não vence ontem), e "2026-10-13" fixo virou
+ * passado no dia 14/10/2026 — o teste passou a falhar sem que nada tivesse
+ * mudado. Cinco dias à frente cabem em qualquer janela do pedido. */
+const VENCIMENTO = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
+
 const pedido = (extra = {}) => ({
   documento: DOC_A,
   email: `pacote-${MARCA}@teste.local`,
@@ -233,7 +239,7 @@ const pedido = (extra = {}) => ({
   plano: { gb: 500 },
   ciclo: "mensal",
   forma: "cartao",
-  vencimento: "2026-10-13",
+  vencimento: VENCIMENTO,
   pacote: true,
   parceiro: { faixa: "solo" },
   aceitouTermos: true,
@@ -342,7 +348,7 @@ try {
     const dias = (new Date(conv.rows[0].expira_em) - Date.now()) / 86_400_000;
     if (conv.rows[0]?.origem !== "pacote" || dias < 6.9) throw new Error(`convite: ${JSON.stringify(conv.rows[0])}`);
     const sub = asaas.assinaturas.find((a) => a.id === t.asaas_assinatura_id);
-    igual([sub.value, sub.nextDueDate, sub.billingType], [68.56, "2026-10-13", "CREDIT_CARD"], "assinatura");
+    igual([sub.value, sub.nextDueDate, sub.billingType], [68.56, VENCIMENTO, "CREDIT_CARD"], "assinatura");
     if (!C.ehDoPacote(sub.description)) throw new Error(`sem a marca: ${sub.description}`);
     return "R$ 68,56 com o Solo, vencendo junto";
   });
